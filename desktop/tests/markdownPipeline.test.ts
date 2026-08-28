@@ -8,7 +8,7 @@ function task(provider: MinerUTask['translationProvider'] = 'qwen'): MinerUTask 
   return {
     id: 'task-1', name: 'paper.pdf', sourcePath: 'paper.pdf', sourceHash: 'hash', outputDir: '.',
     status: 'translating', progress: 0, parserModel: 'pipeline', translationProvider: provider,
-    remoteTaskId: null, remoteStatusUrl: null, remoteResultUrl: null, error: null,
+    remoteBatchId: null, remoteDataId: null, remoteResultUrl: null, error: null,
     createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z'
   }
 }

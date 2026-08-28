@@ -1,6 +1,8 @@
 import type { AppSettings, TranslationProviderId } from './types'
 
-export const API_PROTOCOL_VERSION = '2'
+export const MINERU_API_ORIGIN = 'https://mineru.net'
+export const MINERU_BATCH_SIZE = 50
+export const MAX_PDF_BYTES = 200 * 1024 * 1024
 export const CREDENTIAL_SERVICE = 'MinerU-Translation'
 
 export const FALLBACK_PROVIDER_ORDER: TranslationProviderId[] = [
@@ -11,11 +13,9 @@ export const FALLBACK_PROVIDER_ORDER: TranslationProviderId[] = [
 ]
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  parserBaseUrl: 'http://127.0.0.1:8000',
   hasParserToken: false,
   outputRoot: '',
-  parserModel: 'hybrid-engine',
-  parserEffort: 'medium',
+  parserModel: 'vlm',
   forceOcr: false,
   formulaEnabled: true,
   tableEnabled: true,

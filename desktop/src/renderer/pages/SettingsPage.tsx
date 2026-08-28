@@ -54,10 +54,10 @@ export default function SettingsPage(props: {
 
   const testParser = React.useCallback(async () => {
     setTesting('parser')
-    const result = await window.mineru.testParserConnection({ parserBaseUrl: draft.parserBaseUrl, parserToken: parserToken || undefined })
+    const result = await window.mineru.testParserConnection(parserToken || undefined)
     setTesting(null)
     result.ok ? messageApi.success(result.message) : messageApi.error(result.message)
-  }, [draft.parserBaseUrl, messageApi, parserToken])
+  }, [messageApi, parserToken])
 
   const testProvider = React.useCallback(async (provider: TranslationProviderId) => {
     setTesting(provider)
@@ -66,8 +66,6 @@ export default function SettingsPage(props: {
     setTesting(null)
     result.ok ? messageApi.success(result.message) : messageApi.error(result.message)
   }, [deepseekKey, messageApi, qwenKey, save])
-
-  const insecure = /^http:\/\//i.test(draft.parserBaseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(draft.parserBaseUrl)
 
   return (
     <section className="page settings-page">
@@ -83,13 +81,12 @@ export default function SettingsPage(props: {
             <>
               <Typography.Title level={4}>MinerU API</Typography.Title>
               <SettingField label="服务地址">
-                <Input value={draft.parserBaseUrl} onChange={(event) => update('parserBaseUrl', event.target.value)} placeholder="http://127.0.0.1:8000" />
+                <Input value="https://mineru.net" readOnly />
               </SettingField>
-              {insecure ? <Alert type="warning" showIcon message="该公网地址使用明文 HTTP，Token 和文档可能被窃听。" /> : null}
-              <SettingField label={`Bearer Token${draft.hasParserToken ? '（已保存）' : '（可选）'}`}>
-                <Input.Password value={parserToken} onChange={(event) => setParserToken(event.target.value)} placeholder={draft.hasParserToken ? '留空则保留现有 Token' : '输入 Token'} />
+              <SettingField label={`Bearer Token${draft.hasParserToken ? '（已保存）' : '（必填）'}`}>
+                <Input.Password value={parserToken} onChange={(event) => setParserToken(event.target.value)} placeholder={draft.hasParserToken ? '留空则使用已保存 Token' : '输入 MinerU API Token'} />
               </SettingField>
-              <Button loading={testing === 'parser'} onClick={() => void testParser()}>测试连接</Button>
+              <Button loading={testing === 'parser'} disabled={!parserToken && !draft.hasParserToken} onClick={() => void testParser()}>验证 Token</Button>
               <Typography.Title level={4} className="settings-subtitle">结果保存</Typography.Title>
               <SettingField label="解析结果保存至">
                 <Space.Compact block><Input readOnly value={draft.outputRoot} /><Button icon={<FolderOpenOutlined />} onClick={() => void chooseOutput()}>更换</Button></Space.Compact>
@@ -100,7 +97,7 @@ export default function SettingsPage(props: {
               <Typography.Title level={4}>解析参数</Typography.Title>
               <SettingField label="模型版本">
                 <Radio.Group value={draft.parserModel} onChange={(event) => update('parserModel', event.target.value)}>
-                  <Radio value="hybrid-engine">MinerU VLM</Radio><Radio value="pipeline">MinerU</Radio>
+                  <Radio value="vlm">MinerU VLM</Radio><Radio value="pipeline">MinerU</Radio>
                 </Radio.Group>
               </SettingField>
               <ToggleField label="强制开启 OCR" checked={draft.forceOcr} onChange={(value) => update('forceOcr', value)} />

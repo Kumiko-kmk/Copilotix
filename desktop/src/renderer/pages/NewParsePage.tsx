@@ -1,12 +1,13 @@
 import React from 'react'
 import { CloudUploadOutlined, FilePdfOutlined, InboxOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Modal, Select, Space, Tag, Typography, message } from 'antd'
-import { PROVIDER_LABELS } from '@shared/constants'
+import { MAX_PDF_BYTES, PROVIDER_LABELS } from '@shared/constants'
 import type { AppSettings, ParserModel, SelectedPdf, TranslationProviderId } from '@shared/types'
 
 export default function NewParsePage(props: {
   settings: AppSettings
   onCreated(): void
+  onOpenSettings(): void
 }): React.JSX.Element {
   const [files, setFiles] = React.useState<SelectedPdf[]>([])
   const [parserModel, setParserModel] = React.useState<ParserModel>(props.settings.parserModel)
@@ -42,6 +43,7 @@ export default function NewParsePage(props: {
   }, [createDuplicates, files, messageApi, parserModel, props.onCreated, provider])
 
   const duplicateCount = files.filter((file) => file.duplicateTask).length
+  const oversizedFiles = files.filter((file) => file.size > MAX_PDF_BYTES)
 
   return (
     <section className="page new-parse-page">
@@ -67,6 +69,16 @@ export default function NewParsePage(props: {
         </Button>
       </div>
 
+      {!props.settings.hasParserToken ? (
+        <Alert
+          className="token-required"
+          type="warning"
+          showIcon
+          message="需要先配置 MinerU API Token"
+          description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置</Button>}
+        />
+      ) : null}
+
       <Modal
         title="确认解析任务"
         open={files.length > 0}
@@ -74,6 +86,7 @@ export default function NewParsePage(props: {
         okText="开始解析"
         cancelText="重新选择"
         confirmLoading={submitting}
+        okButtonProps={{ disabled: !props.settings.hasParserToken || oversizedFiles.length > 0 }}
         onOk={() => void start()}
         onCancel={() => setFiles([])}
       >
@@ -84,6 +97,7 @@ export default function NewParsePage(props: {
               <span className="selected-name">{file.name}</span>
               <small>{formatBytes(file.size)}</small>
               {file.duplicateTask ? <Tag color="warning">已有任务</Tag> : null}
+              {file.size > MAX_PDF_BYTES ? <Tag color="error">超过 200MB</Tag> : null}
             </div>
           ))}
         </div>
@@ -95,13 +109,14 @@ export default function NewParsePage(props: {
             description={<Checkbox checked={createDuplicates} onChange={(event) => setCreateDuplicates(event.target.checked)}>仍为重复文件创建新任务</Checkbox>}
           />
         ) : null}
+        {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="MinerU 官方 API 不接受超过 200MB 的单个文件" /> : null}
         <Space className="confirm-options" size="large">
           <label>
             <span>解析模型</span>
             <Select<ParserModel>
               value={parserModel}
               onChange={setParserModel}
-              options={[{ value: 'hybrid-engine', label: 'MinerU VLM' }, { value: 'pipeline', label: 'MinerU' }]}
+              options={[{ value: 'vlm', label: 'MinerU VLM' }, { value: 'pipeline', label: 'MinerU' }]}
             />
           </label>
           <label>

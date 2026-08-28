@@ -16,10 +16,10 @@ interface TaskRow {
   output_dir: string
   status: TaskStatus
   progress: number
-  parser_model: MinerUTask['parserModel']
+  parser_model: string
   translation_provider: TranslationProviderId
-  remote_task_id: string | null
-  remote_status_url: string | null
+  remote_batch_id: string | null
+  remote_data_id: string | null
   remote_result_url: string | null
   error: string | null
   created_at: string
@@ -55,8 +55,8 @@ export class TaskRepository {
         progress INTEGER NOT NULL DEFAULT 0,
         parser_model TEXT NOT NULL,
         translation_provider TEXT NOT NULL,
-        remote_task_id TEXT,
-        remote_status_url TEXT,
+        remote_batch_id TEXT,
+        remote_data_id TEXT,
         remote_result_url TEXT,
         error TEXT,
         created_at TEXT NOT NULL,
@@ -91,6 +91,11 @@ export class TaskRepository {
         created_at TEXT NOT NULL
       );
     `)
+    const taskColumns = new Set(
+      (this.db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>).map((column) => column.name)
+    )
+    if (!taskColumns.has('remote_batch_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN remote_batch_id TEXT')
+    if (!taskColumns.has('remote_data_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN remote_data_id TEXT')
     this.db
       .prepare("UPDATE tasks SET status = 'failed', error = ?, updated_at = ? WHERE status IN ('uploading','parsing','translating')")
       .run('应用在任务完成前退出，请手动重试。', new Date().toISOString())
@@ -101,11 +106,23 @@ export class TaskRepository {
       key: string
       value: string
     }>
-    const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value)]))
+    const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value)])) as Partial<AppSettings> & {
+      parserModel?: AppSettings['parserModel'] | 'hybrid-engine'
+    }
+    const parserModel = stored.parserModel === 'pipeline' ? 'pipeline' : 'vlm'
     return {
       ...DEFAULT_SETTINGS,
-      outputRoot,
-      ...stored,
+      outputRoot: stored.outputRoot ?? outputRoot,
+      forceOcr: stored.forceOcr ?? DEFAULT_SETTINGS.forceOcr,
+      formulaEnabled: stored.formulaEnabled ?? DEFAULT_SETTINGS.formulaEnabled,
+      tableEnabled: stored.tableEnabled ?? DEFAULT_SETTINGS.tableEnabled,
+      ocrLanguage: stored.ocrLanguage ?? DEFAULT_SETTINGS.ocrLanguage,
+      translationProvider: stored.translationProvider ?? DEFAULT_SETTINGS.translationProvider,
+      qwenBaseUrl: stored.qwenBaseUrl ?? DEFAULT_SETTINGS.qwenBaseUrl,
+      qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
+      deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
+      deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
+      parserModel,
       hasParserToken: false,
       qwenHasApiKey: false,
       deepseekHasApiKey: false
@@ -151,15 +168,26 @@ export class TaskRepository {
       .prepare(`
         INSERT INTO tasks(
           id,name,source_path,source_hash,output_dir,status,progress,parser_model,
-          translation_provider,remote_task_id,remote_status_url,remote_result_url,
+          translation_provider,remote_batch_id,remote_data_id,remote_result_url,
           error,created_at,updated_at
         ) VALUES(
           @id,@name,@sourcePath,@sourceHash,@outputDir,@status,@progress,@parserModel,
-          @translationProvider,@remoteTaskId,@remoteStatusUrl,@remoteResultUrl,
+          @translationProvider,@remoteBatchId,@remoteDataId,@remoteResultUrl,
           @error,@createdAt,@updatedAt
         )
       `)
       .run({ ...task })
+  }
+
+  insertTasks(tasks: MinerUTask[]): void {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const task of tasks) this.insertTask(task)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   updateTask(id: string, patch: Partial<MinerUTask>): MinerUTask {
@@ -172,11 +200,26 @@ export class TaskRepository {
           name=@name, source_path=@sourcePath, source_hash=@sourceHash,
           output_dir=@outputDir, status=@status, progress=@progress,
           parser_model=@parserModel, translation_provider=@translationProvider,
-          remote_task_id=@remoteTaskId, remote_status_url=@remoteStatusUrl,
+          remote_batch_id=@remoteBatchId, remote_data_id=@remoteDataId,
           remote_result_url=@remoteResultUrl, error=@error, updated_at=@updatedAt
         WHERE id=@id
       `)
-      .run({ ...next })
+      .run({
+        id: next.id,
+        name: next.name,
+        sourcePath: next.sourcePath,
+        sourceHash: next.sourceHash,
+        outputDir: next.outputDir,
+        status: next.status,
+        progress: next.progress,
+        parserModel: next.parserModel,
+        translationProvider: next.translationProvider,
+        remoteBatchId: next.remoteBatchId,
+        remoteDataId: next.remoteDataId,
+        remoteResultUrl: next.remoteResultUrl,
+        error: next.error,
+        updatedAt: next.updatedAt
+      })
     return next
   }
 
@@ -253,10 +296,10 @@ function toTask(row: TaskRow): MinerUTask {
     outputDir: row.output_dir,
     status: row.status,
     progress: row.progress,
-    parserModel: row.parser_model,
+    parserModel: row.parser_model === 'pipeline' ? 'pipeline' : 'vlm',
     translationProvider: row.translation_provider,
-    remoteTaskId: row.remote_task_id,
-    remoteStatusUrl: row.remote_status_url,
+    remoteBatchId: row.remote_batch_id,
+    remoteDataId: row.remote_data_id,
     remoteResultUrl: row.remote_result_url,
     error: row.error,
     createdAt: row.created_at,

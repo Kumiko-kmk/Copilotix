@@ -16,7 +16,7 @@ import type {
 const api: MinerUDesktopApi = {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<AppSettings>,
   saveSettings: (update: SettingsUpdate) => ipcRenderer.invoke('settings:save', update) as Promise<AppSettings>,
-  testParserConnection: (settings) => ipcRenderer.invoke('settings:test-parser', settings) as Promise<HealthResult>,
+  testParserConnection: (parserToken) => ipcRenderer.invoke('settings:test-parser', parserToken) as Promise<HealthResult>,
   testTranslationProvider: (provider: TranslationProviderId) =>
     ipcRenderer.invoke('settings:test-translation', provider) as Promise<HealthResult>,
   chooseOutputDirectory: () => ipcRenderer.invoke('dialog:output-directory') as Promise<string | null>,

@@ -65,7 +65,11 @@ export default function App(): React.JSX.Element {
       </aside>
       <main className="main-surface">
         {view.name === 'new' && settings ? (
-          <NewParsePage settings={settings} onCreated={() => setView({ name: 'tasks' })} />
+          <NewParsePage
+            settings={settings}
+            onCreated={() => setView({ name: 'tasks' })}
+            onOpenSettings={() => setView({ name: 'settings' })}
+          />
         ) : null}
         {view.name === 'tasks' ? <TasksPage tasks={tasks} onOpen={openTask} /> : null}
         {view.name === 'settings' && settings ? (

@@ -41,7 +41,7 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
     <section className="reader-page">
       {contextHolder}
       <header className="reader-header">
-        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.task.name}</Typography.Text><Tag>{document.task.parserModel === 'hybrid-engine' ? 'MinerU VLM' : 'MinerU'}</Tag></Space>
+        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.task.name}</Typography.Text><Tag>{document.task.parserModel === 'vlm' ? 'MinerU VLM' : 'MinerU'}</Tag></Space>
         <Space>
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.mineru.openOutputDirectory(document.task.id)} aria-label="打开输出目录" />
           <Button type="text" icon={<CopyOutlined />} onClick={() => void copyCurrent()} aria-label="复制当前内容" />

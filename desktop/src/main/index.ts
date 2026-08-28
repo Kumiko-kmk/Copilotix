@@ -1,6 +1,5 @@
 import { copyFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import {
   app,
   BrowserWindow,
@@ -17,7 +16,9 @@ import {
 import { TaskRepository } from './database'
 import { WindowsCredentialVault } from './credentialVault'
 import { SettingsService } from './settingsService'
-import { MinerUApiV2Client } from './parserClient'
+import { OfficialMinerUClient } from './parserClient'
+import { ElectronFileUploader } from './fileUploader'
+import { createAssetResponse } from './assetProtocol'
 import { TaskService } from './taskService'
 import { createTranslationProviders } from './translation/providers'
 import type { CreateTasksRequest, DeleteTaskRequest, SaveAsRequest, SettingsUpdate, TranslationProviderId } from '@shared/types'
@@ -25,12 +26,13 @@ import type { CreateTasksRequest, DeleteTaskRequest, SaveAsRequest, SettingsUpda
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'mineru-asset',
-    privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true }
+    privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true, stream: true }
   }
 ])
 
 app.setName('MinerU')
-app.setPath('userData', join(app.getPath('appData'), 'MinerU-Translation'))
+const isolatedUserData = process.env.NODE_ENV === 'test' ? process.env.MINERU_E2E_USER_DATA : undefined
+app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'MinerU-Translation'))
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -46,18 +48,10 @@ async function bootstrap(): Promise<void> {
   const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'MinerU'))
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
     net.fetch(input instanceof URL ? input.toString() : input, init)
-  const parserClient = new MinerUApiV2Client(fetcher)
+  const parserClient = new OfficialMinerUClient(fetcher, new ElectronFileUploader())
   const tasks = new TaskService(repository, settings, vault, parserClient, fetcher)
 
-  protocol.handle('mineru-asset', async (request) => {
-    try {
-      const url = new URL(request.url)
-      const filePath = tasks.resolveAsset(url.hostname, url.pathname)
-      return net.fetch(pathToFileURL(filePath).toString())
-    } catch (error) {
-      return new Response(error instanceof Error ? error.message : 'Not found', { status: 404 })
-    }
-  })
+  protocol.handle('mineru-asset', (request) => createAssetResponse(request, (taskId, path) => tasks.resolveAsset(taskId, path)))
 
   registerIpc(tasks, settings, vault, parserClient, fetcher)
   createMainWindow()
@@ -145,15 +139,14 @@ function registerIpc(
   tasks: TaskService,
   settings: SettingsService,
   vault: WindowsCredentialVault,
-  parserClient: MinerUApiV2Client,
+  parserClient: OfficialMinerUClient,
   fetcher: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 ): void {
   ipcMain.handle('settings:get', () => settings.get())
   ipcMain.handle('settings:save', (_event, update: SettingsUpdate) => settings.save(update))
-  ipcMain.handle('settings:test-parser', async (_event, input?: Pick<SettingsUpdate, 'parserBaseUrl' | 'parserToken'>) => {
-    const current = await settings.get()
-    const token = input?.parserToken?.trim() || (await vault.get('parser-token'))
-    return parserClient.health(input?.parserBaseUrl || current.parserBaseUrl, token)
+  ipcMain.handle('settings:test-parser', async (_event, inputToken?: string) => {
+    const token = inputToken?.trim() || (await vault.get('parser-token'))
+    return parserClient.verifyToken(token)
   })
   ipcMain.handle('settings:test-translation', async (_event, providerId: TranslationProviderId) => {
     try {

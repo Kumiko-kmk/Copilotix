@@ -28,6 +28,7 @@ jobs:
       - run: pnpm desktop:typecheck
       - run: pnpm desktop:test
       - run: pnpm desktop:dist
+      - run: pnpm desktop:test:e2e
       - uses: actions/upload-artifact@v4
         with:
           name: MinerU-Windows-x64

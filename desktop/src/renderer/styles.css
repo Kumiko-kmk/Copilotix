@@ -69,6 +69,7 @@ button, input, select { font: inherit; }
 .upload-entry.dragging { border-color: var(--primary); background: var(--primary-soft); transform: translateY(-2px); }
 .upload-entry h2 { margin: 18px 0 6px; font-size: 22px; }
 .upload-entry p { margin: 0 0 26px; color: var(--muted); }
+.token-required { max-width: 900px; margin: -12px auto 24px; }
 .upload-icon { color: var(--primary); font-size: 58px; }
 .selected-files { max-height: 280px; margin-bottom: 18px; overflow: auto; }
 .selected-file { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--border); }
@@ -115,7 +116,9 @@ button, input, select { font: inherit; }
 .pdf-block { position: absolute; padding: 0; border: 1px solid transparent; background: transparent; cursor: pointer; }
 .pdf-block:hover { border-color: rgba(66, 99, 255, .55); background: rgba(66, 99, 255, .08); }
 .pdf-block.active { border: 2px solid #4465ff; background: rgba(68, 101, 255, .13); }
-.pdf-loading { display: grid; min-height: 500px; place-items: center; color: var(--muted); }
+.pdf-loading { display: grid; min-height: 500px; place-items: center; gap: 14px; padding: 48px; color: var(--muted); }
+.pdf-loading .ant-progress { width: min(320px, 80%); }
+.pdf-error { max-width: 560px; margin: 48px auto; }
 .text-pane { display: grid; grid-template-rows: 64px minmax(0, 1fr); background: var(--surface); }
 .text-toolbar { gap: 12px; }
 .text-toolbar .ant-input-affix-wrapper { max-width: 230px; }

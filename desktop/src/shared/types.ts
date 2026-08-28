@@ -1,4 +1,4 @@
-export type ParserModel = 'hybrid-engine' | 'pipeline'
+export type ParserModel = 'vlm' | 'pipeline'
 export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart'
 
 export type TaskStatus =
@@ -10,11 +10,9 @@ export type TaskStatus =
   | 'failed'
 
 export interface AppSettings {
-  parserBaseUrl: string
   hasParserToken: boolean
   outputRoot: string
   parserModel: ParserModel
-  parserEffort: 'medium' | 'high'
   forceOcr: boolean
   formulaEnabled: boolean
   tableEnabled: boolean
@@ -48,8 +46,8 @@ export interface MinerUTask {
   progress: number
   parserModel: ParserModel
   translationProvider: TranslationProviderId
-  remoteTaskId: string | null
-  remoteStatusUrl: string | null
+  remoteBatchId: string | null
+  remoteDataId: string | null
   remoteResultUrl: string | null
   error: string | null
   createdAt: string
@@ -78,8 +76,8 @@ export interface DeleteTaskRequest {
 export interface HealthResult {
   ok: boolean
   message: string
-  protocolVersion?: string
-  maxConcurrentRequests?: number
+  code?: string | number
+  traceId?: string
 }
 
 export interface BlockBox {
@@ -134,7 +132,7 @@ export interface SaveAsRequest {
 export interface MinerUDesktopApi {
   getSettings(): Promise<AppSettings>
   saveSettings(update: SettingsUpdate): Promise<AppSettings>
-  testParserConnection(settings?: Pick<SettingsUpdate, 'parserBaseUrl' | 'parserToken'>): Promise<HealthResult>
+  testParserConnection(parserToken?: string): Promise<HealthResult>
   testTranslationProvider(provider: TranslationProviderId): Promise<HealthResult>
   chooseOutputDirectory(): Promise<string | null>
   choosePdfs(): Promise<SelectedPdf[]>
