@@ -31,19 +31,27 @@ import { MinerUApiError, type BatchResult, type MinerUClient } from './parserCli
 import { buildBlockMappings } from './blockMapping'
 import { createTranslationProviders } from './translation/providers'
 import { translateMarkdown } from './translation/markdownPipeline'
+import type { TaskLogger } from './logger'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+
+const silentLogger: TaskLogger = {
+  info: () => undefined,
+  error: () => undefined
+}
 
 export class TaskService extends EventEmitter {
   private readonly queue = new PQueue({ concurrency: 2 })
   private readonly resultQueue = new PQueue({ concurrency: 3 })
+  private readonly remoteSnapshots = new Map<string, string>()
 
   constructor(
     private readonly repository: TaskRepository,
     private readonly settingsService: SettingsService,
     private readonly vault: CredentialVault,
     private readonly parserClient: MinerUClient,
-    private readonly fetcher: Fetcher
+    private readonly fetcher: Fetcher,
+    private readonly logger: TaskLogger = silentLogger
   ) {
     super()
   }
@@ -188,11 +196,13 @@ export class TaskService extends EventEmitter {
   private async processNewBatch(taskIds: string[]): Promise<void> {
     const tasks = taskIds.map((taskId) => this.repository.getTask(taskId)).filter((task): task is MinerUTask => Boolean(task))
     if (tasks.length === 0) return
+    this.logger.info('batch.start', { taskIds })
     try {
       const settings = await this.settingsService.get()
       const token = await this.vault.get('parser-token')
       if (!token) throw new Error('未配置 MinerU API Token')
       const submission = await this.parserClient.createUploadBatch(tasks, settings, token)
+      this.logger.info('batch.created', { batchId: submission.batchId, taskIds })
       for (const upload of submission.uploads) {
         this.repository.updateTask(upload.taskId, {
           status: 'uploading',
@@ -213,6 +223,7 @@ export class TaskService extends EventEmitter {
           if (!task) return
           let lastProgress = -1
           try {
+            this.logger.info('upload.start', { taskId: task.id, batchId: submission.batchId, bytes: (await stat(task.sourcePath)).size })
             await this.parserClient.uploadFile(task.sourcePath, upload.uploadUrl, (sent, total) => {
               const progress = Math.min(8, Math.max(1, Math.round((sent / total) * 8)))
               if (progress === lastProgress) return
@@ -222,7 +233,9 @@ export class TaskService extends EventEmitter {
             })
             uploadedTaskIds.add(task.id)
             this.repository.updateTask(task.id, { status: 'parsing', progress: 10 })
+            this.logger.info('upload.completed', { taskId: task.id, batchId: submission.batchId })
           } catch (error) {
+            this.logger.error('upload.failed', error, { taskId: task.id, batchId: submission.batchId })
             this.markTaskFailed(task.id, error)
           }
         }))
@@ -238,6 +251,7 @@ export class TaskService extends EventEmitter {
       )
       await this.finishBatch(finalResult, uploadedTaskIds, settings)
     } catch (error) {
+      this.logger.error('batch.failed', error, { taskIds })
       for (const task of tasks) {
         const current = this.repository.getTask(task.id)
         if (current && !['completed', 'partial', 'failed'].includes(current.status)) this.markTaskFailed(task.id, error)
@@ -258,7 +272,8 @@ export class TaskService extends EventEmitter {
     try {
       const initial = await this.parserClient.getBatchResult(task.remoteBatchId, token)
       const entry = initial.entries.find((item) => item.dataId === task.remoteDataId)
-      if (entry?.state === 'failed') {
+      if (entry?.state === 'failed' || entry?.state === 'waiting-file') {
+        this.logger.info('batch.retry-upload', { taskId, batchId: task.remoteBatchId, remoteState: entry.state })
         this.clearRemoteTask(taskId)
         await this.processNewBatch([taskId])
         return
@@ -286,16 +301,37 @@ export class TaskService extends EventEmitter {
   }
 
   private applyBatchProgress(result: BatchResult, taskIds: Set<string>): void {
+    const changedEntries: Array<{ dataId: string; state: string; progress: BatchResult['entries'][number]['progress'] }> = []
     for (const entry of result.entries) {
       if (!entry.dataId || !taskIds.has(entry.dataId)) continue
+      const snapshot = JSON.stringify([entry.state, entry.progress])
+      if (this.remoteSnapshots.get(entry.dataId) !== snapshot) {
+        this.remoteSnapshots.set(entry.dataId, snapshot)
+        changedEntries.push({ dataId: entry.dataId, state: entry.state, progress: entry.progress })
+      }
       const task = this.repository.getTask(entry.dataId)
       if (!task || ['completed', 'partial', 'failed'].includes(task.status)) continue
       if (entry.state === 'failed') continue
       const ratio = entry.progress ? entry.progress.extractedPages / entry.progress.totalPages : 0
-      const progress = entry.state === 'done' ? 42 : entry.state === 'running' ? 12 + Math.round(ratio * 28) : 10
-      this.repository.updateTask(task.id, { status: 'parsing', progress, error: null })
+      const progress =
+        entry.state === 'waiting-file'
+          ? 9
+          : entry.state === 'done'
+            ? 42
+            : entry.state === 'converting'
+              ? 40
+              : entry.state === 'running'
+                ? 12 + Math.round(ratio * 28)
+                : 10
+      const status = entry.state === 'waiting-file' ? 'uploading' : 'parsing'
+      if (task.status !== status || task.progress !== progress || task.error !== null) {
+        this.repository.updateTask(task.id, { status, progress, error: null })
+      }
     }
-    this.emitTasks()
+    if (changedEntries.length > 0) {
+      this.logger.info('batch.polled', { batchId: result.batchId, entries: changedEntries })
+      this.emitTasks()
+    }
   }
 
   private async finishBatch(result: BatchResult, taskIds: Set<string>, settings: Awaited<ReturnType<SettingsService['get']>>): Promise<void> {
@@ -333,6 +369,7 @@ export class TaskService extends EventEmitter {
       const task = this.repository.getTask(taskId)
       if (!task) return
       this.repository.updateTask(taskId, { status: 'parsing', progress: 42, remoteResultUrl: resultUrl })
+      this.logger.info('result.download-start', { taskId })
       const zip = await this.parserClient.downloadResult(resultUrl)
       const zipPath = join(task.outputDir, '.mineru-result.zip')
       const extractedDir = join(task.outputDir, '.parsed')
@@ -341,11 +378,13 @@ export class TaskService extends EventEmitter {
       await extract(zipPath, { dir: extractedDir })
       await rm(zipPath, { force: true })
       await this.normalizeParserOutput(task, extractedDir)
+      this.logger.info('result.normalized', { taskId })
 
       const markdown = await readFile(join(task.outputDir, 'full.md'), 'utf8')
       const mappings = await this.loadMappings(task)
       const providers = createTranslationProviders(settings, this.vault, this.fetcher)
       this.repository.updateTask(taskId, { status: 'translating', progress: 45 })
+      this.logger.info('translation.start', { taskId, preferredProvider: task.translationProvider })
       this.emitTasks()
       const result = await translateMarkdown({
         task,
@@ -381,8 +420,10 @@ export class TaskService extends EventEmitter {
         progress: 100,
         error: result.failedBlockIds.length > 0 ? `${result.failedBlockIds.length} 个区块翻译失败` : null
       })
+      this.remoteSnapshots.delete(taskId)
       this.emitTasks()
       this.emit('notification', taskId, result.failedBlockIds.length > 0 ? 'partial' : 'completed')
+      this.logger.info('translation.completed', { taskId, failedBlocks: result.failedBlockIds.length })
   }
 
   private clearRemoteTask(taskId: string): void {
@@ -400,6 +441,8 @@ export class TaskService extends EventEmitter {
     const task = this.repository.getTask(taskId)
     if (!task) return
     this.repository.updateTask(taskId, { status: 'failed', error: readableError(error) })
+    this.remoteSnapshots.delete(taskId)
+    this.logger.error('task.failed', error, { taskId })
     this.emit('notification', taskId, 'failed')
   }
 

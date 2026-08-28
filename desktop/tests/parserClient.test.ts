@@ -154,4 +154,32 @@ describe('OfficialMinerUClient', () => {
     await expect(client.downloadResult('https://cdn.example.test/result.zip')).resolves.toEqual(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
     expect(fetcher.mock.calls[0]?.[1]?.headers).toBeUndefined()
   })
+
+  it('turns an unregistered waiting-file upload into a recoverable file failure', async () => {
+    const fetcher = vi.fn<Fetcher>(async () => jsonResponse({
+      code: 0,
+      msg: 'ok',
+      data: {
+        batch_id: 'batch-stuck',
+        extract_result: [{ data_id: 'task-1', file_name: 'paper.pdf', state: 'waiting-file' }]
+      }
+    }))
+    const client = new OfficialMinerUClient(fetcher, { upload: vi.fn() }, {
+      waitingFileTimeoutMs: 0,
+      pollIntervalMs: 1,
+      maxWaitMs: 100
+    })
+    const updates: Array<{ state: string; error: string | null }> = []
+
+    const result = await client.waitForBatch('batch-stuck', 'token', new Set(['task-1']), (batch) => {
+      updates.push({ state: batch.entries[0]!.state, error: batch.entries[0]!.error })
+    })
+
+    expect(result.entries[0]).toMatchObject({
+      dataId: 'task-1',
+      state: 'failed',
+      error: 'MinerU 未检测到已上传文件，请重试任务。'
+    })
+    expect(updates).toEqual([{ state: 'failed', error: 'MinerU 未检测到已上传文件，请重试任务。' }])
+  })
 })

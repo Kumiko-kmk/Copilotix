@@ -40,6 +40,8 @@ pnpm desktop:test:e2e
 3. 在“参数设置”选择解析模型和翻译源。千问、DeepSeek API Key 写入 Windows Credential Manager，不会保存到 SQLite 或前端。
 4. Bing 与腾讯 TranSmart 使用非官方网页接口，可能限流、变化或失效；客户端会重试并按配置回退。
 
+任务异常时可检查 `%APPDATA%\MinerU-Translation\mineru-desktop.log`。日志只记录任务阶段、远端状态和错误，Token、API Key 及预签名 URL 查询参数会被遮蔽。
+
 ## 隐私与安全
 
 - PDF 会通过官方预签名上传地址发送到 MinerU 服务。

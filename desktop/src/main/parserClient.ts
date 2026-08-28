@@ -80,6 +80,12 @@ interface RawBatchResultData {
   }>
 }
 
+interface OfficialMinerUClientOptions {
+  waitingFileTimeoutMs?: number
+  pollIntervalMs?: number
+  maxWaitMs?: number
+}
+
 const TOKEN_PROBE_BATCH_ID = '00000000-0000-0000-0000-000000000000'
 const TERMINAL_STATES = new Set<OfficialTaskState>(['done', 'failed'])
 const KNOWN_STATES = new Set<OfficialTaskState>([
@@ -103,10 +109,19 @@ export class MinerUApiError extends Error {
 }
 
 export class OfficialMinerUClient implements MinerUClient {
+  private readonly waitingFileTimeoutMs: number
+  private readonly pollIntervalMs: number
+  private readonly maxWaitMs: number
+
   constructor(
     private readonly fetcher: Fetcher,
-    private readonly uploader: FileUploader
-  ) {}
+    private readonly uploader: FileUploader,
+    options: OfficialMinerUClientOptions = {}
+  ) {
+    this.waitingFileTimeoutMs = options.waitingFileTimeoutMs ?? 2 * 60 * 1000
+    this.pollIntervalMs = options.pollIntervalMs ?? 2_000
+    this.maxWaitMs = options.maxWaitMs ?? 6 * 60 * 60 * 1000
+  }
 
   async verifyToken(token?: string | null): Promise<HealthResult> {
     if (!token?.trim()) return { ok: false, message: '请先输入 MinerU API Token' }
@@ -208,10 +223,15 @@ export class OfficialMinerUClient implements MinerUClient {
     expectedDataIds: Set<string>,
     onUpdate: (result: BatchResult) => void
   ): Promise<BatchResult> {
-    const deadline = Date.now() + 6 * 60 * 60 * 1000
-    let delayMs = 2_000
+    const startedAt = Date.now()
+    const deadline = startedAt + this.maxWaitMs
+    let delayMs = this.pollIntervalMs
     while (Date.now() < deadline) {
-      const result = await this.getBatchResult(batchId, token)
+      const result = expireUnregisteredUploads(
+        await this.getBatchResult(batchId, token),
+        expectedDataIds,
+        Date.now() - startedAt >= this.waitingFileTimeoutMs
+      )
       onUpdate(result)
       const entriesByDataId = new Map(result.entries.map((entry) => [entry.dataId, entry]))
       if (
@@ -222,7 +242,7 @@ export class OfficialMinerUClient implements MinerUClient {
         })
       ) return result
       await delay(delayMs)
-      delayMs = Math.min(10_000, Math.round(delayMs * 1.15))
+      delayMs = Math.min(10_000, Math.max(this.pollIntervalMs, Math.round(delayMs * 1.15)))
     }
     throw new Error('等待 MinerU 解析结果超时')
   }
@@ -236,6 +256,28 @@ export class OfficialMinerUClient implements MinerUClient {
     if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error('MinerU 解析结果不是有效的 ZIP 文件')
     return bytes
   }
+}
+
+function expireUnregisteredUploads(result: BatchResult, expectedDataIds: Set<string>, expired: boolean): BatchResult {
+  if (!expired) return result
+  const entries = result.entries.map((entry) =>
+    entry.dataId && expectedDataIds.has(entry.dataId) && entry.state === 'waiting-file'
+      ? { ...entry, state: 'failed' as const, error: 'MinerU 未检测到已上传文件，请重试任务。' }
+      : entry
+  )
+  const present = new Set(entries.map((entry) => entry.dataId).filter((dataId): dataId is string => Boolean(dataId)))
+  for (const dataId of expectedDataIds) {
+    if (present.has(dataId)) continue
+    entries.push({
+      dataId,
+      fileName: '',
+      state: 'failed',
+      fullZipUrl: null,
+      error: 'MinerU 批次结果未返回对应 data_id，请重试任务。',
+      progress: null
+    })
+  }
+  return { ...result, entries }
 }
 
 function authHeaders(token: string): HeadersInit {

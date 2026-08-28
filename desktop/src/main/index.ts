@@ -20,6 +20,7 @@ import { OfficialMinerUClient } from './parserClient'
 import { ElectronFileUploader } from './fileUploader'
 import { createAssetResponse } from './assetProtocol'
 import { TaskService } from './taskService'
+import { JsonLineLogger } from './logger'
 import { createTranslationProviders } from './translation/providers'
 import type { CreateTasksRequest, DeleteTaskRequest, SaveAsRequest, SettingsUpdate, TranslationProviderId } from '@shared/types'
 
@@ -49,7 +50,8 @@ async function bootstrap(): Promise<void> {
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
     net.fetch(input instanceof URL ? input.toString() : input, init)
   const parserClient = new OfficialMinerUClient(fetcher, new ElectronFileUploader())
-  const tasks = new TaskService(repository, settings, vault, parserClient, fetcher)
+  const logger = new JsonLineLogger(join(userData, 'mineru-desktop.log'))
+  const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger)
 
   protocol.handle('mineru-asset', (request) => createAssetResponse(request, (taskId, path) => tasks.resolveAsset(taskId, path)))
 
