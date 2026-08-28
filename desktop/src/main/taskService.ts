@@ -28,7 +28,7 @@ import type { TaskRepository } from './database'
 import type { CredentialVault } from './credentialVault'
 import type { SettingsService } from './settingsService'
 import { MinerUApiError, type BatchResult, type MinerUClient } from './parserClient'
-import { buildBlockMappings } from './blockMapping'
+import { BLOCK_MAPPING_VERSION, buildBlockMappings } from './blockMapping'
 import { createTranslationProviders } from './translation/providers'
 import { translateMarkdown } from './translation/markdownPipeline'
 import type { TaskLogger } from './logger'
@@ -466,23 +466,34 @@ export class TaskService extends EventEmitter {
     }
     const layoutData = JSON.parse(await readFile(join(task.outputDir, 'layout.json'), 'utf8'))
     const mappings = buildBlockMappings(task.id, layoutData)
-    await writeFile(join(task.outputDir, 'block_list.json'), JSON.stringify({ mappings }, null, 2), 'utf8')
+    await writeFile(
+      join(task.outputDir, 'block_list.json'),
+      JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2),
+      'utf8'
+    )
   }
 
   private async loadMappings(task: MinerUTask): Promise<BlockMapping[]> {
     const blockPath = join(task.outputDir, 'block_list.json')
     try {
-      const value = JSON.parse(await readFile(blockPath, 'utf8')) as { mappings?: BlockMapping[] }
-      if (Array.isArray(value.mappings)) return value.mappings
-      return buildBlockMappings(task.id, value)
+      const value = JSON.parse(await readFile(blockPath, 'utf8')) as { version?: number; mappings?: BlockMapping[]; pdfData?: unknown }
+      if (value.version === BLOCK_MAPPING_VERSION && Array.isArray(value.mappings)) return value.mappings
+      if (Array.isArray(value.pdfData)) return buildBlockMappings(task.id, value)
+      return await this.rebuildMappings(task, blockPath)
     } catch {
       try {
-        const layout = JSON.parse(await readFile(join(task.outputDir, 'layout.json'), 'utf8'))
-        return buildBlockMappings(task.id, layout)
+        return await this.rebuildMappings(task, blockPath)
       } catch {
         return []
       }
     }
+  }
+
+  private async rebuildMappings(task: MinerUTask, blockPath: string): Promise<BlockMapping[]> {
+    const layout = JSON.parse(await readFile(join(task.outputDir, 'layout.json'), 'utf8'))
+    const mappings = buildBlockMappings(task.id, layout)
+    await writeFile(blockPath, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2), 'utf8')
+    return mappings
   }
 
   private async writeManifest(task: MinerUTask, failedBlockIds: string[]): Promise<void> {

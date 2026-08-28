@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { copyFile, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -24,15 +24,20 @@ export async function createE2EWorkspace(): Promise<E2EWorkspace> {
 
 export async function seedReaderTask(
   workspace: E2EWorkspace,
-  options?: { missingPdf?: boolean; sourcePdf?: string }
+  options?: { missingPdf?: boolean; sourcePdf?: string; sourceTaskDir?: string }
 ): Promise<string> {
-  const taskId = options?.missingPdf ? 'missing-pdf-task' : options?.sourcePdf ? 'real-pdf-task' : 'reader-pdf-task'
+  const taskId = options?.missingPdf ? 'missing-pdf-task' : options?.sourceTaskDir ? 'real-layout-task' : options?.sourcePdf ? 'real-pdf-task' : 'reader-pdf-task'
   const outputDir = join(workspace.root, taskId)
   const pdfPath = join(outputDir, 'original.pdf')
   await mkdir(outputDir, { recursive: true })
-  if (options?.sourcePdf) await copyFile(options.sourcePdf, pdfPath)
-  else if (!options?.missingPdf) await writeFile(pdfPath, createTwoPagePdf())
-  await writeFile(join(outputDir, 'full.md'), '# Fixture document\n\nFirst page.', 'utf8')
+  if (options?.sourceTaskDir) {
+    await cp(options.sourceTaskDir, outputDir, { recursive: true })
+  } else {
+    if (options?.sourcePdf) await copyFile(options.sourcePdf, pdfPath)
+    else if (!options?.missingPdf) await writeFile(pdfPath, createTwoPagePdf())
+    await writeFile(join(outputDir, 'full.md'), '# Fixture document\n\nFirst page continues in second column.\n\nSecond paragraph.', 'utf8')
+    await writeFile(join(outputDir, 'layout.json'), JSON.stringify(createLayoutFixture()), 'utf8')
+  }
 
   const database = new DatabaseSync(join(workspace.userData, 'mineru-desktop.sqlite3'))
   database.exec(`
@@ -62,7 +67,7 @@ export async function seedReaderTask(
     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     taskId,
-    options?.missingPdf ? 'missing.pdf' : options?.sourcePdf ? basename(options.sourcePdf) : 'fixture.pdf',
+    options?.missingPdf ? 'missing.pdf' : options?.sourceTaskDir ? basename(options.sourceTaskDir) : options?.sourcePdf ? basename(options.sourcePdf) : 'fixture.pdf',
     pdfPath,
     'fixture-hash',
     outputDir,
@@ -79,6 +84,42 @@ export async function seedReaderTask(
   )
   database.close()
   return taskId
+}
+
+function createLayoutFixture(): object {
+  return {
+    pdf_info: [
+      {
+        page_idx: 0,
+        page_size: [612, 792],
+        para_blocks: [
+          {
+            index: 0,
+            type: 'title',
+            bbox: [72, 72, 300, 100],
+            lines: [{ bbox: [72, 72, 300, 100], spans: [{ type: 'text', content: 'Fixture document' }] }]
+          },
+          {
+            index: 1,
+            type: 'text',
+            bbox: [72, 120, 300, 170],
+            lines: [
+              { bbox: [72, 120, 300, 140], spans: [{ type: 'text', content: 'First page' }] },
+              { bbox: [330, 120, 560, 140], spans: [{ type: 'text', content: 'continues in second column.' }] }
+            ]
+          },
+          { index: 2, type: 'text', bbox: [330, 110, 560, 170], lines: [], lines_deleted: true },
+          {
+            index: 3,
+            type: 'text',
+            bbox: [72, 220, 300, 260],
+            lines: [{ bbox: [72, 220, 300, 240], spans: [{ type: 'text', content: 'Second paragraph.' }] }]
+          }
+        ]
+      },
+      { page_idx: 1, page_size: [612, 792], para_blocks: [] }
+    ]
+  }
 }
 
 function createTwoPagePdf(): Buffer {

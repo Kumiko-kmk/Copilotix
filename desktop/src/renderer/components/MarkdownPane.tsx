@@ -2,23 +2,20 @@ import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import type { BlockMapping } from '@shared/types'
-import { splitMarkdownBlocks } from '../markdownBlocks'
+import type { AlignedMarkdownBlock } from '@shared/markdownBlocks'
 
 export default function MarkdownPane(props: {
-  markdown: string
-  mappings: BlockMapping[]
+  blocks: AlignedMarkdownBlock[]
   assetBaseUrl: string
   activeBlockId: string | null
   onActiveBlock(blockId: string): void
 }): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const scrollFrame = React.useRef<number | null>(null)
-  const blocks = React.useMemo(() => splitMarkdownBlocks(props.markdown), [props.markdown])
 
   React.useEffect(() => {
     if (!props.activeBlockId || !containerRef.current) return
-    const element = containerRef.current.querySelector<HTMLElement>(`[data-block-id="${props.activeBlockId}"]`)
+    const element = containerRef.current.querySelector<HTMLElement>(`[data-block-ids~="${CSS.escape(props.activeBlockId)}"]`)
     if (!element) return
     const parentRect = containerRef.current.getBoundingClientRect()
     const rect = element.getBoundingClientRect()
@@ -33,8 +30,8 @@ export default function MarkdownPane(props: {
     if (!container) return
     const center = container.getBoundingClientRect().top + container.clientHeight * 0.35
     let best: { id: string; distance: number } | null = null
-    for (const element of container.querySelectorAll<HTMLElement>('[data-block-id]')) {
-      const id = element.dataset.blockId
+    for (const element of container.querySelectorAll<HTMLElement>('[data-block-ids]')) {
+      const id = element.dataset.blockIds?.split(' ')[0]
       if (!id) continue
       const rect = element.getBoundingClientRect()
       const distance = Math.abs(rect.top + rect.height / 2 - center)
@@ -42,7 +39,7 @@ export default function MarkdownPane(props: {
     }
     if (best && best.id !== props.activeBlockId) props.onActiveBlock(best.id)
     })
-  }, [props])
+  }, [props.activeBlockId, props.onActiveBlock])
 
   React.useEffect(() => () => {
     if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current)
@@ -51,14 +48,15 @@ export default function MarkdownPane(props: {
   return (
     <div className="markdown-scroll" ref={containerRef} onScroll={onScroll}>
       <article className="markdown-body">
-        {blocks.map((block, index) => {
-          const blockId = props.mappings[index]?.id ?? `markdown-${index}`
+        {props.blocks.map((block, index) => {
+          const blockId = block.mappingIds[0] ?? `markdown-${index}`
+          const active = props.activeBlockId !== null && block.mappingIds.includes(props.activeBlockId)
           return (
             <div
-              key={blockId}
-              data-block-id={blockId}
-              className={props.activeBlockId === blockId ? 'markdown-block active' : 'markdown-block'}
-              onClick={() => props.onActiveBlock(blockId)}
+              key={`${blockId}-${index}`}
+              data-block-ids={block.mappingIds.join(' ')}
+              className={active ? 'markdown-block active' : 'markdown-block'}
+              onClick={() => { if (block.mappingIds[0]) props.onActiveBlock(block.mappingIds[0]) }}
             >
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
@@ -67,7 +65,7 @@ export default function MarkdownPane(props: {
                   a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>
                 }}
               >
-                {block}
+                {block.markdown}
               </ReactMarkdown>
             </div>
           )

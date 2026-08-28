@@ -2,6 +2,7 @@ import React from 'react'
 import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Empty, Input, Segmented, Space, Spin, Tag, Typography, message } from 'antd'
 import type { DocumentPayload } from '@shared/types'
+import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from '@shared/markdownBlocks'
 import MarkdownPane from '../components/MarkdownPane'
 import PdfPane from '../components/PdfPane'
 
@@ -24,6 +25,15 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
       void load()
     }
   }), [load, props.taskId])
+
+  const originalBlocks = React.useMemo(
+    () => document ? alignMarkdownBlocks(document.markdown, document.mappings) : [],
+    [document]
+  )
+  const translatedBlocks = React.useMemo(
+    () => document ? reuseOriginalMapping(document.translatedMarkdown, originalBlocks) : [],
+    [document, originalBlocks]
+  )
 
   const copyCurrent = React.useCallback(async () => {
     if (!document) return
@@ -62,14 +72,21 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
             {tab === 'translated' ? <Tag color={translationColor(document.task.status)}>{translationLabel(document.task.status)}</Tag> : null}
             {tab === 'json' ? <Input allowClear size="small" placeholder="搜索 JSON" value={jsonQuery} onChange={(event) => setJsonQuery(event.target.value)} /> : null}
           </div>
-          {tab === 'original' ? <MarkdownPane markdown={document.markdown} mappings={document.mappings} assetBaseUrl={document.assetBaseUrl} activeBlockId={activeBlockId} onActiveBlock={setActiveBlockId} /> : null}
-          {tab === 'translated' && translatedReady ? <MarkdownPane markdown={document.translatedMarkdown} mappings={document.mappings} assetBaseUrl={document.assetBaseUrl} activeBlockId={activeBlockId} onActiveBlock={setActiveBlockId} /> : null}
+          {tab === 'original' ? <MarkdownPane blocks={originalBlocks} assetBaseUrl={document.assetBaseUrl} activeBlockId={activeBlockId} onActiveBlock={setActiveBlockId} /> : null}
+          {tab === 'translated' && translatedReady ? <MarkdownPane blocks={translatedBlocks} assetBaseUrl={document.assetBaseUrl} activeBlockId={activeBlockId} onActiveBlock={setActiveBlockId} /> : null}
           {tab === 'translated' && !translatedReady ? <Empty className="translation-empty" description={translationLabel(document.task.status)} /> : null}
           {tab === 'json' ? <pre className="json-view">{jsonContent}</pre> : null}
         </div>
       </div>
     </section>
   )
+}
+
+function reuseOriginalMapping(markdown: string, original: AlignedMarkdownBlock[]): AlignedMarkdownBlock[] {
+  return splitMarkdownBlocks(markdown).map((block, index) => ({
+    markdown: block,
+    mappingIds: original[index]?.mappingIds ?? []
+  }))
 }
 
 function translationLabel(status: DocumentPayload['task']['status']): string {

@@ -85,12 +85,16 @@ export interface BlockBox {
   bbox: [number, number, number, number]
   pageSize: [number, number]
   blockPosition: string
+  isDiscarded?: boolean
+  mergeRole?: 'source' | 'continuation'
 }
 
 export interface BlockMapping {
   id: string
   order: number
   type: string
+  sourceText: string
+  sourceAsset?: string
   boxes: BlockBox[]
 }
 

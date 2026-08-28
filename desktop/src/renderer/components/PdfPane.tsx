@@ -3,7 +3,7 @@ import { LeftOutlined, MinusOutlined, PlusOutlined, ReloadOutlined, RightOutline
 import { Alert, Button, Progress, Space } from 'antd'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
-import type { BlockMapping } from '@shared/types'
+import type { BlockBox, BlockMapping } from '@shared/types'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString()
 
@@ -27,6 +27,7 @@ export default function PdfPane(props: {
   const [zoom, setZoom] = React.useState(1)
   const [reloadKey, setReloadKey] = React.useState(0)
   const scrollerRef = React.useRef<HTMLDivElement>(null)
+  const suppressNavigationRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -65,6 +66,10 @@ export default function PdfPane(props: {
 
   React.useEffect(() => {
     if (!props.activeBlockId) return
+    if (suppressNavigationRef.current === props.activeBlockId) {
+      suppressNavigationRef.current = null
+      return
+    }
     const mapping = props.mappings.find((item) => item.id === props.activeBlockId)
     const pageIndex = mapping?.boxes[0]?.pageIndex
     if (pageIndex === undefined) return
@@ -86,6 +91,10 @@ export default function PdfPane(props: {
   const onVisiblePage = React.useCallback((pageIndex: number) => setCurrentPage(pageIndex + 1), [])
   const retry = React.useCallback(() => setReloadKey((value) => value + 1), [])
   const onPageError = React.useCallback((message: string) => setLoadingState({ status: 'error', message }), [])
+  const onPdfBlock = React.useCallback((blockId: string) => {
+    suppressNavigationRef.current = blockId
+    props.onActiveBlock(blockId)
+  }, [props.onActiveBlock])
 
   return (
     <div className="pdf-pane">
@@ -127,7 +136,7 @@ export default function PdfPane(props: {
                 shouldRender={Math.abs(pageIndex - (currentPage - 1)) <= PAGE_RENDER_RADIUS}
                 mappings={props.mappings}
                 activeBlockId={props.activeBlockId}
-                onActiveBlock={props.onActiveBlock}
+                onActiveBlock={onPdfBlock}
                 onVisible={onVisiblePage}
                 onError={onPageError}
               />
@@ -230,18 +239,37 @@ const PdfPage = React.memo(function PdfPage(props: {
       .map((box) => ({ mapping, box }))),
     [props.mappings, props.pageIndex]
   )
+  const connectors = React.useMemo(
+    () => buildMergeConnectors(props.mappings, props.pageIndex, size),
+    [props.mappings, props.pageIndex, size.height, size.width]
+  )
 
   return (
     <div className="pdf-page" data-pdf-page={props.pageIndex} ref={pageRef} style={size}>
       <canvas ref={canvasRef} />
       <div className="pdf-overlay-layer">
+        <svg className="pdf-merge-layer" viewBox={`0 0 ${size.width} ${size.height}`} aria-hidden="true">
+          {connectors.map((connector) => (
+            <g key={connector.key}>
+              <line x1={connector.x1} y1={connector.y1} x2={connector.x2} y2={connector.y2} />
+              <text x={(connector.x1 + connector.x2) / 2} y={(connector.y1 + connector.y2) / 2 - 5}>合并</text>
+            </g>
+          ))}
+        </svg>
         {overlays.map(({ mapping, box }) => {
           const [pageWidth, pageHeight] = box.pageSize
           const [x0, y0, x1, y1] = box.bbox
           return (
             <button
               key={`${mapping.id}-${box.blockPosition}`}
-              className={props.activeBlockId === mapping.id ? 'pdf-block active' : 'pdf-block'}
+              className={[
+                'pdf-block',
+                props.activeBlockId === mapping.id ? 'active' : '',
+                box.isDiscarded ? 'discarded' : '',
+                box.mergeRole ? 'merged' : ''
+              ].filter(Boolean).join(' ')}
+              data-block-id={mapping.id}
+              data-block-position={box.blockPosition}
               style={{
                 left: `${(x0 / pageWidth) * 100}%`,
                 top: `${(y0 / pageHeight) * 100}%`,
@@ -249,14 +277,110 @@ const PdfPage = React.memo(function PdfPage(props: {
                 height: `${((y1 - y0) / pageHeight) * 100}%`
               }}
               onClick={() => props.onActiveBlock(mapping.id)}
-              aria-label={`定位区块 ${mapping.order + 1}`}
-            />
+              aria-label={`${blockTypeLabel(mapping.type)}区块 ${mapping.order + 1}${box.mergeRole === 'continuation' ? '（合并续块）' : ''}`}
+            >
+              <span className="pdf-block-label">{blockTypeLabel(mapping.type)}</span>
+              {box.mergeRole === 'continuation' ? <span className="pdf-merge-badge">合并</span> : null}
+            </button>
           )
         })}
       </div>
     </div>
   )
 })
+
+interface MergeConnector {
+  key: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+function buildMergeConnectors(
+  mappings: BlockMapping[],
+  pageIndex: number,
+  size: { width: number; height: number }
+): MergeConnector[] {
+  const connectors: MergeConnector[] = []
+  for (const mapping of mappings) {
+    if (mapping.boxes.length < 2) continue
+    for (let index = 0; index < mapping.boxes.length - 1; index += 1) {
+      const source = mapping.boxes[index]
+      const target = mapping.boxes[index + 1]
+      if (!source || !target) continue
+      if (source.pageIndex === pageIndex && target.pageIndex === pageIndex) {
+        const points = closestConnection(normalizeBox(source, size), normalizeBox(target, size))
+        connectors.push({ key: `${mapping.id}-${index}`, ...points })
+      } else if (source.pageIndex === pageIndex && target.pageIndex > pageIndex) {
+        const box = normalizeBox(source, size)
+        connectors.push({
+          key: `${mapping.id}-${index}-out`,
+          x1: (box.left + box.right) / 2,
+          y1: box.bottom,
+          x2: (box.left + box.right) / 2,
+          y2: size.height
+        })
+      } else if (target.pageIndex === pageIndex && source.pageIndex < pageIndex) {
+        const box = normalizeBox(target, size)
+        connectors.push({
+          key: `${mapping.id}-${index}-in`,
+          x1: (box.left + box.right) / 2,
+          y1: 0,
+          x2: (box.left + box.right) / 2,
+          y2: box.top
+        })
+      }
+    }
+  }
+  return connectors
+}
+
+function normalizeBox(box: BlockBox, size: { width: number; height: number }): { left: number; top: number; right: number; bottom: number } {
+  const [pageWidth, pageHeight] = box.pageSize
+  return {
+    left: (box.bbox[0] / pageWidth) * size.width,
+    top: (box.bbox[1] / pageHeight) * size.height,
+    right: (box.bbox[2] / pageWidth) * size.width,
+    bottom: (box.bbox[3] / pageHeight) * size.height
+  }
+}
+
+function closestConnection(
+  source: { left: number; top: number; right: number; bottom: number },
+  target: { left: number; top: number; right: number; bottom: number }
+): Omit<MergeConnector, 'key'> {
+  const sourceCenter = { x: (source.left + source.right) / 2, y: (source.top + source.bottom) / 2 }
+  const targetCenter = { x: (target.left + target.right) / 2, y: (target.top + target.bottom) / 2 }
+  if (Math.abs(targetCenter.x - sourceCenter.x) > Math.abs(targetCenter.y - sourceCenter.y)) {
+    return targetCenter.x >= sourceCenter.x
+      ? { x1: source.right, y1: sourceCenter.y, x2: target.left, y2: targetCenter.y }
+      : { x1: source.left, y1: sourceCenter.y, x2: target.right, y2: targetCenter.y }
+  }
+  return targetCenter.y >= sourceCenter.y
+    ? { x1: sourceCenter.x, y1: source.bottom, x2: targetCenter.x, y2: target.top }
+    : { x1: sourceCenter.x, y1: source.top, x2: targetCenter.x, y2: target.bottom }
+}
+
+function blockTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    text: '文本',
+    ref_text: '文本',
+    title: '标题',
+    image: '图片',
+    chart: '图表',
+    table: '表格',
+    interline_equation: '公式',
+    equation: '公式',
+    page_header: '页眉',
+    header: '页眉',
+    page_footer: '页脚',
+    footer: '页脚',
+    page_footnote: '脚注',
+    page_number: '页码'
+  }
+  return labels[type] ?? '区块'
+}
 
 function pdfErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return String(error)

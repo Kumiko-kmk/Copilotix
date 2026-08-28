@@ -11,6 +11,7 @@ import type {
   TranslationBlockRecord,
   TranslationProviderId
 } from '@shared/types'
+import { alignMarkdownBlocks } from '@shared/markdownBlocks'
 import { FALLBACK_PROVIDER_ORDER } from '@shared/constants'
 import type { TaskRepository } from '../database'
 import type { TranslationProvider } from './providers'
@@ -39,6 +40,7 @@ const processor = unified()
 export async function translateMarkdown(options: PipelineOptions): Promise<TranslationResult> {
   const tree = processor.parse(options.markdown) as any
   const children: any[] = Array.isArray(tree.children) ? tree.children : []
+  const alignedBlocks = alignMarkdownBlocks(options.markdown, options.mappings)
   const existing = new Map(
     options.repository.listTranslationBlocks(options.task.id).map((block) => [block.blockId, block])
   )
@@ -52,7 +54,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
       queue.add(async () => {
         const sourceMarkdown = stringifyNode(child)
         const sourceHash = sha256(sourceMarkdown)
-        const blockId = options.mappings[index]?.id ?? `markdown-${index}-${sourceHash.slice(0, 12)}`
+        const blockId = alignedBlocks[index]?.mappingIds[0] ?? `markdown-${index}-${sourceHash.slice(0, 12)}`
         const saved = existing.get(blockId)
         if (saved?.status === 'completed' && saved.sourceHash === sourceHash && saved.translatedMarkdown) {
           results[index] = saved.translatedMarkdown
@@ -112,7 +114,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
     )
   )
 
-  return { markdown: results.join('\n').trimEnd() + '\n', failedBlockIds }
+  return { markdown: results.join('\n\n').trimEnd() + '\n', failedBlockIds }
 }
 
 async function translateBlock(
