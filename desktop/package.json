@@ -1,0 +1,86 @@
+{
+  "name": "mineru-desktop",
+  "version": "0.1.0",
+  "description": "Unofficial MinerU desktop reader with Markdown translation",
+  "main": "./out/main/index.js",
+  "author": "Kumiko-kmk",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "build": "pnpm typecheck && electron-vite build",
+    "dist": "pnpm build && electron-builder --win nsis portable --x64"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.0.0",
+    "@napi-rs/keyring": "^1.3.0",
+    "antd": "^5.27.0",
+    "archiver": "^7.0.1",
+    "extract-zip": "^2.0.1",
+    "p-queue": "^8.1.0",
+    "pdfjs-dist": "^5.4.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0",
+    "uuid": "^11.1.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@playwright/test": "^1.55.0",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/archiver": "^6.0.3",
+    "@types/node": "^24.5.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^37.4.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.0",
+    "jsdom": "^27.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.0"
+  },
+  "build": {
+    "appId": "com.kumiko.mineru.translation",
+    "productName": "MinerU",
+    "executableName": "MinerU",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@napi-rs/keyring/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "directories": { "output": "dist", "buildResources": "resources" },
+    "files": ["out/**/*", "package.json"],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "artifactName": "MinerU-${version}-${arch}-setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MinerU"
+    },
+    "portable": { "artifactName": "MinerU-${version}-${arch}-portable.exe" }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "mineru-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "desktop:dev": "pnpm --dir desktop dev",
+    "desktop:typecheck": "pnpm --dir desktop typecheck",
+    "desktop:test": "pnpm --dir desktop test",
+    "desktop:build": "pnpm --dir desktop build",
+    "desktop:dist": "pnpm --dir desktop dist"
+  }
+}

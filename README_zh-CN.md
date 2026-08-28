@@ -158,6 +158,8 @@ MCP Server · LangChain / Dify / FastGPT 原生集成 · 10+ 国产算力适配 
 
 # MinerU
 
+> 桌面翻译客户端开发说明见 [`desktop/README_zh-CN.md`](desktop/README_zh-CN.md)。该客户端为非官方个人改编，连接 `mineru-api` v2 并提供 Markdown 简体中文翻译。
+
 ## 项目简介
 
 MinerU 是一款文档解析工具，可将 `PDF`、图片以及 `DOCX`、`PPTX`、`XLSX` 转化为机器可读格式（如 Markdown、JSON），便于后续检索、抽取与二次处理。

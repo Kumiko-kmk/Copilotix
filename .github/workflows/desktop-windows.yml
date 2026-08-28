@@ -1,0 +1,38 @@
+name: Desktop Windows
+
+on:
+  push:
+    branches: [feature/desktop-translation]
+    tags: ['desktop-v*']
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/desktop-windows.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm desktop:typecheck
+      - run: pnpm desktop:test
+      - run: pnpm desktop:dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MinerU-Windows-x64
+          path: desktop/dist/*.exe
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        with:
+          files: desktop/dist/*.exe
