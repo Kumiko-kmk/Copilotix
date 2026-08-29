@@ -1,12 +1,10 @@
 import React from 'react'
 import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
-import { Button, Dropdown, Empty, Input, Segmented, Space, Spin, Tag, Typography, message } from 'antd'
+import { Button, Dropdown, Space, Spin, Tag, Typography, message } from 'antd'
+import { buildReaderDocumentBlocks } from '@shared/readerDocument'
 import type { BlockSelection, DocumentPayload } from '@shared/types'
-import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from '@shared/markdownBlocks'
-import MarkdownPane from '../components/MarkdownPane'
 import PdfPane from '../components/PdfPane'
-
-type ReaderTab = 'original' | 'translated' | 'json'
+import ReaderTextPane, { type ReaderTab } from '../components/ReaderTextPane'
 
 export default function ReaderPage(props: { taskId: string; onBack(): void }): React.JSX.Element {
   const [document, setDocument] = React.useState<DocumentPayload | null>(null)
@@ -15,9 +13,16 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
   const [jsonQuery, setJsonQuery] = React.useState('')
   const lastTerminalStatus = React.useRef<string | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
+  const [, startTransition] = React.useTransition()
 
   const load = React.useCallback(async () => setDocument(await window.mineru.getDocument(props.taskId)), [props.taskId])
   React.useEffect(() => { void load() }, [load])
+  React.useEffect(() => {
+    setTab('original')
+    setSelection(null)
+    setJsonQuery('')
+    lastTerminalStatus.current = null
+  }, [props.taskId])
   React.useEffect(() => window.mineru.onTasksChanged((tasks) => {
     const task = tasks.find((item) => item.id === props.taskId)
     if (task && ['completed', 'partial', 'failed'].includes(task.status) && lastTerminalStatus.current !== task.status) {
@@ -26,17 +31,21 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
     }
   }), [load, props.taskId])
 
-  const originalBlocks = React.useMemo(
-    () => document ? alignMarkdownBlocks(document.markdown, document.mappings) : [],
+  const readerBlocks = React.useMemo(
+    () => document
+      ? buildReaderDocumentBlocks(
+          document.markdown,
+          document.translatedMarkdown,
+          document.translatedBlocks,
+          document.mappings
+        )
+      : { original: [], translated: [] },
     [document]
   )
-  const translatedBlocks = React.useMemo(
-    () => document
-      ? document.translatedBlocks ?? reuseOriginalMapping(document.translatedMarkdown, originalBlocks)
-      : [],
-    [document, originalBlocks]
-  )
   const selectBlock = React.useCallback((next: BlockSelection) => setSelection(next), [])
+  const changeTab = React.useCallback((next: ReaderTab) => {
+    startTransition(() => setTab(next))
+  }, [startTransition])
 
   const copyCurrent = React.useCallback(async () => {
     if (!document) return
@@ -48,7 +57,6 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
   if (!document) return <div className="reader-loading"><Spin size="large" /></div>
 
   const translatedReady = Boolean(document.translatedMarkdown)
-  const jsonContent = jsonQuery ? highlightJsonSearch(document.layoutJson, jsonQuery) : document.layoutJson
 
   return (
     <section className="reader-page">
@@ -65,52 +73,22 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
       </header>
       <div className="reader-split">
         <PdfPane url={document.pdfUrl} mappings={document.mappings} selection={selection} onSelect={selectBlock} />
-        <div className="text-pane">
-          <div className="text-toolbar">
-            <Segmented<ReaderTab>
-              value={tab}
-              onChange={setTab}
-              options={[{ value: 'original', label: 'Markdown' }, { value: 'translated', label: 'Markdown（中文）' }, { value: 'json', label: 'JSON' }]}
-            />
-            {tab === 'translated' ? <Tag color={translationColor(document.task.status)}>{translationLabel(document.task.status)}</Tag> : null}
-            {tab === 'json' ? <Input allowClear size="small" placeholder="搜索 JSON" value={jsonQuery} onChange={(event) => setJsonQuery(event.target.value)} /> : null}
-          </div>
-          {tab === 'original' ? <MarkdownPane blocks={originalBlocks} assetBaseUrl={document.assetBaseUrl} selection={selection} onSelect={selectBlock} /> : null}
-          {tab === 'translated' && translatedReady ? <MarkdownPane blocks={translatedBlocks} assetBaseUrl={document.assetBaseUrl} selection={selection} onSelect={selectBlock} /> : null}
-          {tab === 'translated' && !translatedReady ? <Empty className="translation-empty" description={translationLabel(document.task.status)} /> : null}
-          {tab === 'json' ? <pre className="json-view">{jsonContent}</pre> : null}
-        </div>
+        <ReaderTextPane
+          key={document.task.id}
+          tab={tab}
+          onTabChange={changeTab}
+          originalBlocks={readerBlocks.original}
+          translatedBlocks={readerBlocks.translated}
+          translatedReady={translatedReady}
+          taskStatus={document.task.status}
+          layoutJson={document.layoutJson}
+          jsonQuery={jsonQuery}
+          onJsonQueryChange={setJsonQuery}
+          assetBaseUrl={document.assetBaseUrl}
+          selection={selection}
+          onSelect={selectBlock}
+        />
       </div>
     </section>
   )
-}
-
-function reuseOriginalMapping(markdown: string, original: AlignedMarkdownBlock[]): AlignedMarkdownBlock[] {
-  return splitMarkdownBlocks(markdown).map((block, index) => ({
-    markdown: block,
-    mappingIds: original[index]?.mappingIds ?? []
-  }))
-}
-
-function translationLabel(status: DocumentPayload['task']['status']): string {
-  if (status === 'completed') return '翻译完成'
-  if (status === 'partial') return '部分翻译完成，可重试失败区块'
-  if (status === 'failed') return '任务失败'
-  if (status === 'translating') return '正在翻译'
-  return '等待解析完成'
-}
-
-function translationColor(status: DocumentPayload['task']['status']): string {
-  if (status === 'completed') return 'success'
-  if (status === 'partial') return 'warning'
-  if (status === 'failed') return 'error'
-  return 'processing'
-}
-
-function highlightJsonSearch(json: string, query: string): string {
-  const index = json.toLowerCase().indexOf(query.toLowerCase())
-  if (index < 0) return json
-  const start = Math.max(0, index - 500)
-  const end = Math.min(json.length, index + query.length + 1_500)
-  return `${start > 0 ? '…\n' : ''}${json.slice(start, end)}${end < json.length ? '\n…' : ''}`
 }

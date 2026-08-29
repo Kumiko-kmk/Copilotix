@@ -2,7 +2,7 @@
 
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AlignedMarkdownBlock } from '@shared/markdownBlocks'
+import type { ReaderBlock } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
 import MarkdownPane from '../src/renderer/components/MarkdownPane'
 
@@ -63,6 +63,7 @@ describe('MarkdownPane', () => {
 
     view.rerender(
       <MarkdownPane
+        active
         blocks={blocks}
         assetBaseUrl="mineru-asset://task/"
         selection={{ mappingId: 'image', origin: 'markdown' }}
@@ -158,19 +159,60 @@ describe('MarkdownPane', () => {
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(onSelect).toHaveBeenLastCalledWith({ mappingId: 'target', origin: 'markdown' })
   })
+
+  it('renders supplemental HTML as display-only gray content', async () => {
+    const onSelect = vi.fn()
+    const supplement: ReaderBlock = {
+      role: 'footnote',
+      markdown: '',
+      text: '<sub>*</sub>. Equal contribution.',
+      mappingIds: [],
+      pageIndex: 0,
+      order: 1
+    }
+    const view = renderPane([supplement], null, onSelect)
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+
+    const footnote = view.container.querySelector<HTMLElement>('[data-reader-role="footnote"]')!
+    expect(footnote.querySelector('sub')?.textContent).toBe('*')
+    expect(footnote.textContent).toContain('Equal contribution.')
+    expect(footnote.hasAttribute('data-block-ids')).toBe(false)
+    fireEvent.click(footnote)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('refuses PDF navigation when a mapping id belongs to multiple Markdown elements', async () => {
+    const onSelect = vi.fn()
+    const view = renderPane(
+      [block('ambiguous', 'First'), block('ambiguous', 'Second')],
+      { mappingId: 'ambiguous', origin: 'pdf' },
+      onSelect
+    )
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(scrollIntoView).not.toHaveBeenCalled()
+    for (const element of view.container.querySelectorAll<HTMLElement>('[data-block-ids="ambiguous"]')) {
+      fireEvent.click(element)
+    }
+    fireEvent.scroll(view.container.querySelector('.markdown-scroll')!)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(onSelect).not.toHaveBeenCalled()
+  })
 })
 
-function block(mappingId: string, markdown: string): AlignedMarkdownBlock {
-  return { markdown, mappingIds: [mappingId] }
+function block(mappingId: string, markdown: string): ReaderBlock {
+  return { role: 'content', markdown, mappingIds: [mappingId], order: 0 }
 }
 
 function renderPane(
-  blocks: AlignedMarkdownBlock[],
+  blocks: ReaderBlock[],
   selection: BlockSelection | null,
   onSelect: (selection: BlockSelection) => void
 ): ReturnType<typeof render> {
   return render(
     <MarkdownPane
+      active
       blocks={blocks}
       assetBaseUrl="mineru-asset://task/"
       selection={selection}

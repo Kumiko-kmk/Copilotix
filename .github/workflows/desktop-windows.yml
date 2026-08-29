@@ -2,7 +2,7 @@ name: Desktop Windows
 
 on:
   push:
-    branches: [feature/desktop-translation]
+    branches: [master]
     tags: ['desktop-v*']
   pull_request:
     paths:
@@ -27,13 +27,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm desktop:typecheck
       - run: pnpm desktop:test
-      - run: pnpm desktop:dist
+      - run: pnpm desktop:release
       - run: pnpm desktop:test:e2e
       - uses: actions/upload-artifact@v4
         with:
           name: MinerU-Windows-x64
-          path: desktop/dist/*.exe
+          path: |
+            release/MinerU-*-win-x64.zip
+            release/SHA256SUMS.txt
+            release/release-manifest.json
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/desktop-v')
         with:
-          files: desktop/dist/*.exe
+          files: |
+            release/MinerU-*-win-x64.zip
+            release/SHA256SUMS.txt
+            release/release-manifest.json

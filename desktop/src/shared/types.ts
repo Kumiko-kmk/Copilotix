@@ -118,6 +118,7 @@ export interface DocumentPayload {
 }
 
 export interface TranslatedMarkdownBlock {
+  sourceIndex?: number
   markdown: string
   mappingIds: string[]
 }

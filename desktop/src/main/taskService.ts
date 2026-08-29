@@ -30,6 +30,7 @@ import type { CredentialVault } from './credentialVault'
 import type { SettingsService } from './settingsService'
 import { MinerUApiError, type BatchResult, type MinerUClient } from './parserClient'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from './blockMapping'
+import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
 import { createTranslationProviders } from './translation/providers'
 import { translateMarkdown, type TranslationResult } from './translation/markdownPipeline'
 import type { TaskLogger } from './logger'
@@ -506,21 +507,36 @@ export class TaskService extends EventEmitter {
       if (manifest?.version !== 2 || manifest.taskId !== task.id || !Array.isArray(manifest.blocks)) return null
       const blocks = manifest.blocks.map((block: any) => {
         if (
-          typeof block?.sourceIndex !== 'number' ||
-          typeof block?.markdown !== 'string' ||
-          !Array.isArray(block?.mappingIds) ||
-          !block.mappingIds.every((id: unknown) => typeof id === 'string')
+          !Number.isInteger(block?.sourceIndex) ||
+          block.sourceIndex < 0 ||
+          typeof block?.markdown !== 'string'
         ) return null
         return {
           sourceIndex: block.sourceIndex,
           markdown: block.markdown,
-          mappingIds: [...block.mappingIds]
+          mappingIds: Array.isArray(block.mappingIds) && block.mappingIds.every((id: unknown) => typeof id === 'string')
+            ? [...block.mappingIds]
+            : null
         }
       })
       if (blocks.some((block: unknown) => block === null)) return null
-      return blocks
-        .sort((left: any, right: any) => left.sourceIndex - right.sourceIndex)
-        .map(({ markdown, mappingIds }: any) => ({ markdown, mappingIds }))
+      const sourceIndexes = blocks.map((block: any) => block.sourceIndex)
+      const validSourceOrder =
+        new Set(sourceIndexes).size === sourceIndexes.length &&
+        [...sourceIndexes].sort((left: number, right: number) => left - right)
+          .every((sourceIndex: number, index: number) => sourceIndex === index)
+      const ordered = validSourceOrder
+        ? [...blocks].sort((left: any, right: any) => left.sourceIndex - right.sourceIndex)
+        : blocks
+      const trustMappings =
+        validSourceOrder &&
+        manifest.mappingAlgorithmVersion === MARKDOWN_MAPPING_ALGORITHM_VERSION &&
+        ordered.every((block: any) => Array.isArray(block.mappingIds))
+      return ordered.map(({ sourceIndex, markdown, mappingIds }: any) => ({
+        sourceIndex,
+        markdown,
+        mappingIds: trustMappings ? mappingIds : []
+      }))
     } catch {
       return null
     }
@@ -532,6 +548,7 @@ export class TaskService extends EventEmitter {
       JSON.stringify(
         {
           version: 2,
+          mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
           taskId: task.id,
           targetLanguage: 'zh-CN',
           preferredProvider: task.translationProvider,

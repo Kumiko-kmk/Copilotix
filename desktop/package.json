@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "build": "pnpm typecheck && electron-vite build",
-    "dist": "pnpm build && electron-builder --win nsis portable --x64"
+    "package:directory": "pnpm build && node scripts/package-directory.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
@@ -35,9 +35,7 @@
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
     "unified": "^11.0.5",
-    "unist-util-visit": "^5.0.0",
-    "uuid": "^11.1.0",
-    "zod": "^4.1.0"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
@@ -71,20 +69,11 @@
         "to": "icon.png"
       }
     ],
-    "directories": { "output": "dist", "buildResources": "resources" },
+    "directories": { "output": "../release/.staging", "buildResources": "resources" },
     "files": ["out/**/*", "package.json"],
     "win": {
-      "target": ["nsis", "portable"],
+      "target": ["dir"],
       "icon": "resources/icon.png"
-    },
-    "nsis": {
-      "artifactName": "MinerU-${version}-${arch}-setup.${ext}",
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "MinerU"
-    },
-    "portable": { "artifactName": "MinerU-${version}-${arch}-portable.exe" }
+    }
   }
 }

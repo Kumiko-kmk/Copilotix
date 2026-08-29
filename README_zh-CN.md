@@ -158,7 +158,7 @@ MCP Server · LangChain / Dify / FastGPT 原生集成 · 10+ 国产算力适配 
 
 # MinerU
 
-> 桌面翻译客户端开发说明见 [`desktop/README_zh-CN.md`](desktop/README_zh-CN.md)。该客户端为非官方个人改编，连接 `mineru-api` v2 并提供 Markdown 简体中文翻译。
+> 桌面 demo 的开发与构建说明见 [`desktop/README_zh-CN.md`](desktop/README_zh-CN.md)，完整架构与模块分支指南见 [`ARCHITECTURE_ZH.md`](ARCHITECTURE_ZH.md)。该客户端为非官方个人改编，直接连接 MinerU 官方 API v4，并在本地提供 Markdown 简体中文翻译与 PDF 版面联动阅读。
 
 ## 项目简介
 

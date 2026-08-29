@@ -9,6 +9,6 @@
     "desktop:test": "pnpm --dir desktop test",
     "desktop:test:e2e": "pnpm --dir desktop test:e2e",
     "desktop:build": "pnpm --dir desktop build",
-    "desktop:dist": "pnpm --dir desktop dist"
+    "desktop:release": "pnpm --dir desktop package:directory"
   }
 }

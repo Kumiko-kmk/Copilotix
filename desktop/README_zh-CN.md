@@ -1,6 +1,10 @@
 # MinerU 桌面翻译版
 
-这是基于 MinerU 开源解析引擎构建的非官方个人桌面客户端。它不包含本地解析模型，而是连接 MinerU 官方精确解析 API，在解析完成后自动生成简体中文 Markdown。
+这是基于 MinerU 开源项目构建的非官方个人桌面客户端。它不包含本地解析模型，也不会启动仓库内的 Python `mineru-api`，而是连接 MinerU 官方 API v4，在解析完成后于本地生成简体中文 Markdown，并提供 PDF 版面区块联动阅读。
+
+阅读器会以灰色还原 layout JSON 中的页眉、页脚、脚注与页码，并在页面边界显示“第 N 页”。原文视图隐藏单独的打印页码方块，中文译文视图保留完整灰色元素。这些灰色元素只用于阅读，不参与 PDF 跳转、高亮或滚动选择；`<sub>`、`<sup>` 与链接仍按安全 Markdown 渲染。译文正文按可信 `sourceIndex` 重新使用当前原文映射，因此旧 version 2 任务也能安全恢复 PDF 联动。原文 Markdown、中文 Markdown 与 JSON 采用常驻视图和空闲预热，长文档切换时不会反复销毁并重建已渲染内容。
+
+完整的进程边界、任务状态机、API 契约、输出文件、翻译流水线和模块修改地图见 [`../ARCHITECTURE_ZH.md`](../ARCHITECTURE_ZH.md)。
 
 ## 开发环境
 
@@ -14,7 +18,7 @@ pnpm install
 pnpm desktop:dev
 ```
 
-首次安装依赖时，pnpm 可能要求批准 Electron、esbuild 和 electron-winstaller 的构建脚本。不要批准清单之外的未知脚本。
+首次安装依赖时，pnpm 可能要求批准 Electron、esbuild 和 electron-builder 的构建脚本。不要批准清单之外的未知脚本。
 
 ## 测试与构建
 
@@ -22,16 +26,18 @@ pnpm desktop:dev
 pnpm desktop:typecheck
 pnpm desktop:test
 pnpm desktop:build
-pnpm desktop:dist
+pnpm desktop:release
 pnpm desktop:test:e2e
 ```
 
-最终文件位于 `desktop/dist/`：
+开发中间文件只位于 `desktop/out/`。正式发布文件统一位于仓库根目录 `release/`，每次执行 `desktop:release` 都会原子重建该目录：
 
-- `MinerU-<版本>-x64-setup.exe`：可选择安装目录的 NSIS 安装器
-- `MinerU-<版本>-x64-portable.exe`：便携版
+- `MinerU-<版本>-win-x64/`：唯一可运行目录，入口为其中的 `MinerU.exe`
+- `MinerU-<版本>-win-x64.zip`：上述目录的传输副本，解压后运行
+- `release-manifest.json`：版本、入口和 SHA-256 元数据
+- `SHA256SUMS.txt`：ZIP 与主程序校验值
 
-程序没有代码签名，Windows SmartScreen 可能显示未知发布者。安装前请先卸载官方客户端；自制版使用独立的 `%APPDATA%\MinerU-Translation` 数据目录，不会主动删除官方解析结果。
+不再生成 setup 或单文件 portable。运行时必须保留整个目录，不能只复制 `MinerU.exe`；更新时关闭程序并整体替换目录即可。程序没有代码签名，Windows SmartScreen 可能显示未知发布者。自制版使用独立的 `%APPDATA%\MinerU-Translation` 数据目录，整体替换程序目录不会删除任务、设置或官方解析结果。
 
 ## 配置
 
@@ -49,4 +55,4 @@ pnpm desktop:test:e2e
 - Token 只发送到固定的 `https://mineru.net/api/v4` 接口；预签名上传及结果下载请求不携带 Token。
 - 日志、任务数据库和渲染进程不保存或返回 API Key。
 
-本客户端为非官方个人改编，MinerU 名称、图标和解析引擎归其原项目所有。继续遵守仓库中的 AGPL-3.0 授权、CLA 与上游署名要求。
+本客户端为非官方个人改编，MinerU 名称、图标和解析引擎归其原项目所有。根仓库 `LICENSE.md` 使用附带额外条款的 MinerU Open Source License；`desktop/package.json` 当前声明 `AGPL-3.0-only`。正式分发前应由维护者确认并统一桌面客户端适用的许可证与署名要求。

@@ -7,7 +7,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
-import type { AlignedMarkdownBlock } from '@shared/markdownBlocks'
+import type { ReaderBlock } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
@@ -35,7 +35,8 @@ const markdownSanitizeSchema = {
 }
 
 export default function MarkdownPane(props: {
-  blocks: AlignedMarkdownBlock[]
+  active: boolean
+  blocks: ReaderBlock[]
   assetBaseUrl: string
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
@@ -47,6 +48,8 @@ export default function MarkdownPane(props: {
   const navigationReleaseFrameRef = React.useRef<number | null>(null)
   const suppressScrollSelectionRef = React.useRef(false)
   const blockPositionsRef = React.useRef<BlockPosition[]>([])
+  const blockElementsRef = React.useRef<Map<string, HTMLElement>>(new Map())
+  const ambiguousMappingIdsRef = React.useRef<Set<string>>(new Set())
   const [renderAttempt, setRenderAttempt] = React.useState(0)
   const [renderState, setRenderState] = React.useState<RenderState>({
     status: 'loading',
@@ -116,21 +119,41 @@ export default function MarkdownPane(props: {
     const container = containerRef.current
     if (!container) return
     const containerRect = container.getBoundingClientRect()
-    blockPositionsRef.current = Array.from(container.querySelectorAll<HTMLElement>('[data-block-ids]'))
-      .flatMap((element) => {
-        const mappingId = firstMappingId(element.dataset.blockIds)
-        if (!mappingId) return []
-        const rect = element.getBoundingClientRect()
-        return [{
-          mappingId,
-          center: rect.top - containerRect.top + container.scrollTop + rect.height / 2
-        }]
+    const positions: BlockPosition[] = []
+    const elementsByMappingId = new Map<string, HTMLElement>()
+    const ambiguousMappingIds = new Set<string>()
+    const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-block-ids]'))
+    for (const element of elements) {
+      const mappingIds = parseMappingIds(element.dataset.blockIds)
+      for (const mappingId of mappingIds) {
+        if (ambiguousMappingIds.has(mappingId)) continue
+        const existing = elementsByMappingId.get(mappingId)
+        if (existing && existing !== element) {
+          elementsByMappingId.delete(mappingId)
+          ambiguousMappingIds.add(mappingId)
+        } else if (!existing) {
+          elementsByMappingId.set(mappingId, element)
+        }
+      }
+    }
+    for (const mappingId of ambiguousMappingIds) elementsByMappingId.delete(mappingId)
+    for (const element of elements) {
+      const mappingId = parseMappingIds(element.dataset.blockIds)
+        .find((candidate) => !ambiguousMappingIds.has(candidate))
+      if (!mappingId) continue
+      const rect = element.getBoundingClientRect()
+      positions.push({
+        mappingId,
+        center: rect.top - containerRect.top + container.scrollTop + rect.height / 2
       })
-      .sort((left, right) => left.center - right.center)
+    }
+    ambiguousMappingIdsRef.current = ambiguousMappingIds
+    blockElementsRef.current = elementsByMappingId
+    blockPositionsRef.current = positions.sort((left, right) => left.center - right.center)
   }, [])
 
   React.useLayoutEffect(() => {
-    if (!ready || !articleRef.current || !containerRef.current) return
+    if (!props.active || !ready || !articleRef.current || !containerRef.current) return
     const scheduleRebuild = (): void => {
       if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current)
       resizeFrameRef.current = window.requestAnimationFrame(() => {
@@ -149,18 +172,25 @@ export default function MarkdownPane(props: {
         resizeFrameRef.current = null
       }
     }
-  }, [ready, rebuildBlockPositions])
+  }, [props.active, ready, rebuildBlockPositions])
 
   React.useLayoutEffect(() => {
-    if (!ready || !props.selection || props.selection.origin !== 'pdf' || !containerRef.current) return
-    const element = findMarkdownElement(containerRef.current, props.selection.mappingId)
+    if (
+      !props.active ||
+      !ready ||
+      !props.selection ||
+      props.selection.origin === 'scroll' ||
+      !containerRef.current
+    ) return
+    const element = blockElementsRef.current.get(props.selection.mappingId)
     if (!element) return
     suppressScrollSelectionRef.current = true
     element.scrollIntoView({ behavior: 'auto', block: 'center' })
     releaseScrollSelectionSuppression()
-  }, [props.selection, ready, releaseScrollSelectionSuppression])
+  }, [props.active, props.selection, ready, releaseScrollSelectionSuppression])
 
   const selectFromMarkdown = React.useCallback((selection: BlockSelection) => {
+    if (ambiguousMappingIdsRef.current.has(selection.mappingId)) return
     suppressScrollSelectionRef.current = true
     if (scrollFrameRef.current !== null) {
       window.cancelAnimationFrame(scrollFrameRef.current)
@@ -171,7 +201,7 @@ export default function MarkdownPane(props: {
   }, [props.onSelect, releaseScrollSelectionSuppression])
 
   const onScroll = React.useCallback(() => {
-    if (!ready || suppressScrollSelectionRef.current || scrollFrameRef.current !== null) return
+    if (!props.active || !ready || suppressScrollSelectionRef.current || scrollFrameRef.current !== null) return
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null
       if (suppressScrollSelectionRef.current) return
@@ -185,7 +215,7 @@ export default function MarkdownPane(props: {
         props.onSelect({ mappingId: position.mappingId, origin: 'scroll' })
       }
     })
-  }, [props.onSelect, props.selection, ready])
+  }, [props.active, props.onSelect, props.selection, ready])
 
   React.useEffect(() => () => {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
@@ -250,14 +280,39 @@ export default function MarkdownPane(props: {
 }
 
 const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
-  block: AlignedMarkdownBlock
+  block: ReaderBlock
   active: boolean
   assetBaseUrl: string
   onSelect(selection: BlockSelection): void
 }): React.JSX.Element {
+  if (props.block.role === 'page-divider') {
+    return (
+      <div
+        className="reader-page-divider"
+        data-reader-role="page-divider"
+        data-page-index={props.block.pageIndex}
+      >
+        <span>{props.block.text}</span>
+      </div>
+    )
+  }
+
+  const supplemental = props.block.role !== 'content'
+  if (supplemental) {
+    return (
+      <div
+        data-reader-role={props.block.role}
+        className={'markdown-supplemental markdown-supplemental-' + props.block.role}
+      >
+        <MarkdownContent markdown={props.block.text ?? ''} assetBaseUrl={props.assetBaseUrl} />
+      </div>
+    )
+  }
+
   return (
     <div
       data-block-ids={props.block.mappingIds.join(' ')}
+      data-reader-role={props.block.role}
       className={props.active ? 'markdown-block active' : 'markdown-block'}
       onClick={() => {
         const mappingId = props.block.mappingIds[0]
@@ -302,14 +357,8 @@ const MarkdownContent = React.memo(function MarkdownContent(props: {
   )
 })
 
-function findMarkdownElement(container: HTMLElement, mappingId: string): HTMLElement | null {
-  return Array.from(container.querySelectorAll<HTMLElement>('[data-block-ids]')).find((element) =>
-    element.dataset.blockIds?.split(/\s+/).includes(mappingId)
-  ) ?? null
-}
-
-function firstMappingId(value: string | undefined): string | null {
-  return value?.split(/\s+/).find(Boolean) ?? null
+function parseMappingIds(value: string | undefined): string[] {
+  return value?.split(/\s+/).filter(Boolean) ?? []
 }
 
 function nearestBlockPosition(positions: BlockPosition[], target: number): BlockPosition | null {

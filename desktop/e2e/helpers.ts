@@ -1,9 +1,13 @@
 import { DatabaseSync } from 'node:sqlite'
-import { copyFile, cp, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { buildBlockMappings } from '../src/main/blockMapping'
-import { alignMarkdownBlocks, splitMarkdownBlocks } from '../src/shared/markdownBlocks'
+import {
+  alignMarkdownBlocks,
+  MARKDOWN_MAPPING_ALGORITHM_VERSION,
+  splitMarkdownBlocks
+} from '../src/shared/markdownBlocks'
 
 const FIXTURE_MARKDOWN = [
   '# Fixture document',
@@ -13,6 +17,16 @@ const FIXTURE_MARKDOWN = [
   'Second paragraph with $E=mc^2$.',
   '<table><tbody><tr><td>Academic cell</td></tr></tbody></table>',
   '![Fixture image](images/fixture.png)'
+].join('\n\n')
+
+const ALIGNMENT_REGRESSION_MARKDOWN = [
+  '# Alignment regression',
+  'The abstract explains what happens then and furthermore motivates the method.',
+  'Keywords: operators',
+  'Then',
+  'First equation explanation.',
+  'Furthermore,',
+  'Furthermore,'
 ].join('\n\n')
 
 export interface E2EWorkspace {
@@ -36,31 +50,62 @@ export async function createE2EWorkspace(): Promise<E2EWorkspace> {
 
 export async function seedReaderTask(
   workspace: E2EWorkspace,
-  options?: { missingPdf?: boolean; sourcePdf?: string; sourceTaskDir?: string; translatedMarkdown?: string }
+  options?: {
+    missingPdf?: boolean
+    sourcePdf?: string
+    sourceTaskDir?: string
+    translatedMarkdown?: string
+    supplementalBlocks?: boolean
+    alignmentRegression?: boolean
+    legacyTranslationManifest?: boolean
+  }
 ): Promise<string> {
-  const taskId = options?.missingPdf ? 'missing-pdf-task' : options?.sourceTaskDir ? 'real-layout-task' : options?.sourcePdf ? 'real-pdf-task' : 'reader-pdf-task'
+  let sourceTaskId: string | undefined
+  if (options?.sourceTaskDir) {
+    try {
+      const manifest = JSON.parse(await readFile(join(options.sourceTaskDir, 'translation.manifest.json'), 'utf8'))
+      if (typeof manifest?.taskId === 'string' && manifest.taskId) sourceTaskId = manifest.taskId
+    } catch {
+      // A real layout fixture without a translation manifest keeps the fallback task id.
+    }
+  }
+  const taskId = options?.missingPdf
+    ? 'missing-pdf-task'
+    : options?.sourceTaskDir
+      ? sourceTaskId ?? 'real-layout-task'
+      : options?.sourcePdf
+        ? 'real-pdf-task'
+        : options?.alignmentRegression
+          ? 'alignment-regression-task'
+          : 'reader-pdf-task'
   const outputDir = join(workspace.root, taskId)
   const pdfPath = join(outputDir, 'original.pdf')
   await mkdir(outputDir, { recursive: true })
   if (options?.sourceTaskDir) {
     await cp(options.sourceTaskDir, outputDir, { recursive: true })
   } else {
-    const layout = createLayoutFixture()
+    const fixtureMarkdown = options?.alignmentRegression ? ALIGNMENT_REGRESSION_MARKDOWN : FIXTURE_MARKDOWN
+    const layout = options?.alignmentRegression
+      ? createAlignmentRegressionLayoutFixture()
+      : createLayoutFixture(options?.supplementalBlocks)
     if (options?.sourcePdf) await copyFile(options.sourcePdf, pdfPath)
     else if (!options?.missingPdf) await writeFile(pdfPath, createTwoPagePdf())
     const imagesDir = join(outputDir, 'images')
     await mkdir(imagesDir, { recursive: true })
     await copyFile(join(__dirname, '../resources/icon.png'), join(imagesDir, 'fixture.png'))
-    await writeFile(join(outputDir, 'full.md'), FIXTURE_MARKDOWN, 'utf8')
+    await writeFile(join(outputDir, 'full.md'), fixtureMarkdown, 'utf8')
     if (options?.translatedMarkdown !== undefined) {
       await writeFile(join(outputDir, 'full.zh-CN.md'), options.translatedMarkdown, 'utf8')
-      const sourceBlocks = alignMarkdownBlocks(FIXTURE_MARKDOWN, buildBlockMappings(taskId, layout))
+      const sourceBlocks = alignMarkdownBlocks(fixtureMarkdown, buildBlockMappings(taskId, layout))
       const translatedBlocks = splitMarkdownBlocks(options.translatedMarkdown)
       if (translatedBlocks.length !== sourceBlocks.length) {
         throw new Error(`Fixture translation block count ${translatedBlocks.length} does not match source ${sourceBlocks.length}`)
       }
       await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
         version: 2,
+        ...(options?.legacyTranslationManifest ? {} : {
+          mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION
+        }),
         taskId,
         targetLanguage: 'zh-CN',
         preferredProvider: 'qwen',
@@ -128,7 +173,7 @@ export async function seedReaderTask(
   return taskId
 }
 
-function createLayoutFixture(): object {
+function createLayoutFixture(supplementalBlocks = false): object {
   return {
     pdf_info: [
       {
@@ -163,7 +208,33 @@ function createLayoutFixture(): object {
             ]
           },
           { index: 4, type: 'text', bbox: [330, 210, 560, 270], lines: [], lines_deleted: true },
-        ]
+        ],
+        discarded_blocks: supplementalBlocks ? [
+          {
+            index: -1,
+            type: 'page_header',
+            bbox: [72, 28, 540, 44],
+            lines: [{ bbox: [72, 28, 540, 44], spans: [{ type: 'text', content: 'Fixture journal header' }] }]
+          },
+          {
+            index: 100,
+            type: 'page_footnote',
+            bbox: [72, 700, 540, 724],
+            lines: [{ bbox: [72, 700, 540, 724], spans: [{ type: 'text', content: '<sub>*</sub>. Fixture conference footnote' }] }]
+          },
+          {
+            index: 101,
+            type: 'page_footer',
+            bbox: [72, 732, 540, 748],
+            lines: [{ bbox: [72, 732, 540, 748], spans: [{ type: 'text', content: 'Fixture author footer' }] }]
+          },
+          {
+            index: 102,
+            type: 'page_number',
+            bbox: [290, 758, 320, 778],
+            lines: [{ bbox: [290, 758, 320, 778], spans: [{ type: 'text', content: '315' }] }]
+          }
+        ] : []
       },
       {
         page_idx: 1,
@@ -187,7 +258,93 @@ function createLayoutFixture(): object {
             bbox: [72, 300, 300, 460],
             lines: [{ bbox: [72, 300, 300, 460], spans: [{ type: 'image', image_path: 'images/fixture.png' }] }]
           }
-        ]
+        ],
+        discarded_blocks: supplementalBlocks ? [
+          {
+            index: -1,
+            type: 'page_header',
+            bbox: [72, 28, 540, 44],
+            lines: [{ bbox: [72, 28, 540, 44], spans: [{ type: 'text', content: 'Fixture running header' }] }]
+          },
+          {
+            index: 100,
+            type: 'page_footer',
+            bbox: [72, 732, 540, 748],
+            lines: [{ bbox: [72, 732, 540, 748], spans: [{ type: 'text', content: 'Fixture ending footer' }] }]
+          },
+          {
+            index: 101,
+            type: 'page_number',
+            bbox: [290, 758, 320, 778],
+            lines: [{ bbox: [290, 758, 320, 778], spans: [{ type: 'text', content: '316' }] }]
+          }
+        ] : []
+      }
+    ]
+  }
+}
+
+function createAlignmentRegressionLayoutFixture(): object {
+  return {
+    pdf_info: [
+      {
+        page_idx: 0,
+        page_size: [612, 792],
+        para_blocks: [
+          {
+            index: 0,
+            type: 'title',
+            bbox: [72, 72, 400, 100],
+            lines: [{ bbox: [72, 72, 400, 100], spans: [{ type: 'text', content: 'Alignment regression' }] }]
+          },
+          {
+            index: 1,
+            type: 'text',
+            bbox: [72, 120, 540, 180],
+            lines: [{
+              bbox: [72, 120, 540, 180],
+              spans: [{ type: 'text', content: 'The abstract explains what happens then and furthermore motivates the method.' }]
+            }]
+          },
+          {
+            index: 2,
+            type: 'text',
+            bbox: [72, 200, 300, 224],
+            lines: [{ bbox: [72, 200, 300, 224], spans: [{ type: 'text', content: 'Keywords: operators' }] }]
+          }
+        ],
+        discarded_blocks: []
+      },
+      {
+        page_idx: 1,
+        page_size: [612, 792],
+        para_blocks: [
+          {
+            index: 0,
+            type: 'text',
+            bbox: [72, 72, 160, 96],
+            lines: [{ bbox: [72, 72, 160, 96], spans: [{ type: 'text', content: 'Then' }] }]
+          },
+          {
+            index: 1,
+            type: 'text',
+            bbox: [72, 112, 360, 136],
+            lines: [{ bbox: [72, 112, 360, 136], spans: [{ type: 'text', content: 'First equation explanation.' }] }]
+          },
+          {
+            index: 2,
+            type: 'text',
+            bbox: [72, 152, 220, 176],
+            lines: [{ bbox: [72, 152, 220, 176], spans: [{ type: 'text', content: 'Furthermore,' }] }]
+          },
+          {
+            index: 3,
+            type: 'text',
+            bbox: [72, 192, 220, 216],
+            lines: [{ bbox: [72, 192, 220, 216], spans: [{ type: 'text', content: 'Furthermore,' }] }]
+          }
+        ],
+        discarded_blocks: []
       }
     ]
   }

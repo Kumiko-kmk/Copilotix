@@ -63,4 +63,5 @@ desktop/dist/
 desktop/coverage/
 desktop/test-results/
 desktop/playwright-report/
+/release/
 *.log

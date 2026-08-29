@@ -7,6 +7,7 @@ import type { CredentialAccount, CredentialVault } from '@main/credentialVault'
 import type { BatchResult, BatchSubmission, MinerUClient } from '@main/parserClient'
 import { SettingsService } from '@main/settingsService'
 import { TaskService } from '@main/taskService'
+import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
 import type { AppSettings, HealthResult, MinerUTask } from '@shared/types'
 
 const temporaryRoots: string[] = []
@@ -51,7 +52,7 @@ describe('TaskService official MinerU batches', () => {
     }
   })
 
-  it('loads ordered v2 translated blocks and leaves legacy tasks on the compatibility path', async () => {
+  it('trusts only ordered translated blocks written by the current mapping algorithm', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mineru-translation-manifest-'))
     temporaryRoots.push(root)
     const outputDir = join(root, 'task-output')
@@ -89,6 +90,7 @@ describe('TaskService official MinerU batches', () => {
     try {
       await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
         version: 2,
+        mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
         taskId: fixtureTask.id,
         blocks: [
           { sourceIndex: 1, markdown: '作者', mappingIds: ['authors'] },
@@ -98,9 +100,42 @@ describe('TaskService official MinerU batches', () => {
       }), 'utf8')
       const current = await service.getDocument(fixtureTask.id)
       expect(current.translatedBlocks).toEqual([
-        { markdown: '# 标题', mappingIds: ['title'] },
-        { markdown: '作者', mappingIds: ['authors'] },
-        { markdown: '摘要', mappingIds: ['abstract'] }
+        { sourceIndex: 0, markdown: '# 标题', mappingIds: ['title'] },
+        { sourceIndex: 1, markdown: '作者', mappingIds: ['authors'] },
+        { sourceIndex: 2, markdown: '摘要', mappingIds: ['abstract'] }
+      ])
+
+      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
+        version: 2,
+        taskId: fixtureTask.id,
+        blocks: [
+          { sourceIndex: 1, markdown: '作者', mappingIds: ['wrong-authors'] },
+          { sourceIndex: 0, markdown: '# 标题', mappingIds: ['wrong-title'] },
+          { sourceIndex: 2, markdown: '摘要', mappingIds: ['wrong-abstract'] }
+        ]
+      }), 'utf8')
+      const oldMapping = await service.getDocument(fixtureTask.id)
+      expect(oldMapping.translatedBlocks).toEqual([
+        { sourceIndex: 0, markdown: '# 标题', mappingIds: [] },
+        { sourceIndex: 1, markdown: '作者', mappingIds: [] },
+        { sourceIndex: 2, markdown: '摘要', mappingIds: [] }
+      ])
+
+      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
+        version: 2,
+        mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
+        taskId: fixtureTask.id,
+        blocks: [
+          { sourceIndex: 0, markdown: '# 标题', mappingIds: ['title'] },
+          { sourceIndex: 0, markdown: '重复索引', mappingIds: ['wrong'] },
+          { sourceIndex: 2, markdown: '摘要', mappingIds: ['abstract'] }
+        ]
+      }), 'utf8')
+      const malformed = await service.getDocument(fixtureTask.id)
+      expect(malformed.translatedBlocks).toEqual([
+        { sourceIndex: 0, markdown: '# 标题', mappingIds: [] },
+        { sourceIndex: 0, markdown: '重复索引', mappingIds: [] },
+        { sourceIndex: 2, markdown: '摘要', mappingIds: [] }
       ])
 
       await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({ version: 1 }), 'utf8')

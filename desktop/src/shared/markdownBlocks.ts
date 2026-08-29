@@ -29,6 +29,9 @@ interface SourceInterval {
   end: number
 }
 
+const MIN_SUBSTRING_TARGET_LENGTH = 16
+export const MARKDOWN_MAPPING_ALGORITHM_VERSION = 1
+
 export function splitMarkdownBlocks(markdown: string): string[] {
   return parseMarkdownBlocks(markdown).map((block) => block.markdown)
 }
@@ -41,59 +44,101 @@ export function alignMarkdownBlocks(markdown: string, mappings: BlockMapping[]):
   const orderedSources = orderedMappings.map((mapping) => ({ mapping, text: canonicalText(mapping.sourceText) }))
   const orderById = new Map(orderedMappings.map((mapping) => [mapping.id, mapping.order]))
   const intervals: SourceInterval[] = []
+  const intervalByMappingId = new Map<string, SourceInterval>()
   let sourceStream = ''
   for (const { mapping, text } of orderedSources) {
     if (!text) continue
     const start = sourceStream.length
     sourceStream += text
-    intervals.push({ mapping, start, end: sourceStream.length })
+    const interval = { mapping, start, end: sourceStream.length }
+    intervals.push(interval)
+    intervalByMappingId.set(mapping.id, interval)
   }
 
   let sourceCursor = 0
-  let mappingOrderCursor = 0
+  let mappingOrderCursor = orderedMappings[0]?.order ?? 0
+  const usedMappingIds = new Set<string>()
   const targets = blocks.map((block) => canonicalText(block.text))
+  const nextTargets = nextSignificantTargets(targets)
   return blocks.map((block, blockIndex) => {
     const target = targets[blockIndex] ?? ''
     let mappingIds: string[] = []
     if (target) {
-      const directIds = orderedSources
-        .filter(({ text }) => {
-          return text.length >= 24 && (target.includes(text) || text.includes(target))
-        })
-        .map(({ mapping }) => mapping.id)
-      const nextTarget = targets.slice(blockIndex + 1).find((value) => value.length >= 16)
-      const range = locateTarget(sourceStream, target, sourceCursor, nextTarget)
-      if (range) {
-        const [start, end] = range
-        mappingIds = unique(intervals
-          .filter((interval) => interval.end > start && interval.start < end)
-          .map((interval) => interval.mapping.id))
-        sourceCursor = end
+      const exact = orderedSources.find(({ mapping, text }) =>
+        mapping.order >= mappingOrderCursor &&
+        !usedMappingIds.has(mapping.id) &&
+        text === target
+      )
+      if (target.length < MIN_SUBSTRING_TARGET_LENGTH) {
+        if (exact) mappingIds = [exact.mapping.id]
+      } else {
+        const range = locateTarget(sourceStream, target, sourceCursor, nextTargets[blockIndex])
+        if (range) {
+          const [start, end] = range
+          mappingIds = unique(intervals
+            .filter((interval) =>
+              interval.mapping.order >= mappingOrderCursor &&
+              !usedMappingIds.has(interval.mapping.id) &&
+              interval.end > start &&
+              interval.start < end
+            )
+            .map((interval) => interval.mapping.id))
+          if (mappingIds.length > 0) sourceCursor = end
+        }
+        if (mappingIds.length === 0 && exact) mappingIds = [exact.mapping.id]
+        if (mappingIds.length === 0) {
+          const fallback = orderedSources.find(({ mapping, text }) =>
+            mapping.order >= mappingOrderCursor &&
+            !usedMappingIds.has(mapping.id) &&
+            text.length >= MIN_SUBSTRING_TARGET_LENGTH &&
+            (text.startsWith(target) || target.startsWith(text))
+          )
+          if (fallback) mappingIds = [fallback.mapping.id]
+        }
       }
-      mappingIds = unique([...mappingIds, ...directIds])
-      if (mappingIds.length === 0) {
-        const fallback = orderedSources.find(({ mapping, text }) => {
-          if (mapping.order < mappingOrderCursor) return false
-          return text.length >= 16 && (text.startsWith(target) || target.startsWith(text))
-        })
-        if (fallback) mappingIds = [fallback.mapping.id]
-      }
+      const lastInterval = mappingIds
+        .map((id) => intervalByMappingId.get(id))
+        .filter((interval): interval is SourceInterval => Boolean(interval))
+        .sort((left, right) => right.end - left.end)[0]
+      if (lastInterval) sourceCursor = Math.max(sourceCursor, lastInterval.end)
     }
 
     if (mappingIds.length === 0 && block.containsMedia) {
       const media = orderedMappings.find((mapping) =>
-        mapping.sourceAsset && block.mediaSources.some((source) => assetName(source) === assetName(mapping.sourceAsset!))
-      ) ?? orderedMappings.find((mapping) => mapping.order >= mappingOrderCursor && isMediaType(mapping.type))
+        mapping.order >= mappingOrderCursor &&
+        !usedMappingIds.has(mapping.id) &&
+        mapping.sourceAsset &&
+        block.mediaSources.some((source) => assetName(source) === assetName(mapping.sourceAsset!))
+      ) ?? orderedMappings.find((mapping) =>
+        mapping.order >= mappingOrderCursor &&
+        !usedMappingIds.has(mapping.id) &&
+        isMediaType(mapping.type)
+      )
       if (media) mappingIds = [media.id]
     }
     if (mappingIds.length > 0) {
+      mappingIds = mappingIds.filter((id) => !usedMappingIds.has(id))
       const orders = mappingIds
         .map((id) => orderById.get(id))
         .filter((order): order is number => typeof order === 'number')
-      if (orders.length > 0) mappingOrderCursor = Math.max(mappingOrderCursor, ...orders)
+      if (orders.length > 0) {
+        mappingOrderCursor = Math.max(...orders) + 1
+        for (const id of mappingIds) usedMappingIds.add(id)
+      }
     }
     return { markdown: block.markdown, mappingIds }
   })
+}
+
+function nextSignificantTargets(targets: string[]): Array<string | undefined> {
+  const nextTargets = new Array<string | undefined>(targets.length)
+  let nextTarget: string | undefined
+  for (let index = targets.length - 1; index >= 0; index -= 1) {
+    nextTargets[index] = nextTarget
+    const target = targets[index]
+    if (target && target.length >= 16) nextTarget = target
+  }
+  return nextTargets
 }
 
 function locateTarget(source: string, target: string, cursor: number, nextTarget?: string): [number, number] | null {

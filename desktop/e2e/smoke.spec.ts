@@ -1,6 +1,13 @@
 import { _electron as electron, expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createE2EWorkspace } from './helpers'
+
+const desktopPackage = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as {
+  version: string
+  build?: { productName?: string }
+}
+const releaseName = `${desktopPackage.build?.productName ?? 'MinerU'}-${desktopPackage.version}-win-x64`
 
 test('opens the minimal new parse page', async () => {
   const workspace = await createE2EWorkspace()
@@ -19,7 +26,7 @@ test('opens the packaged Windows executable', async () => {
   test.skip(process.platform !== 'win32', 'Windows package only')
   const workspace = await createE2EWorkspace()
   const executablePath = process.env.MINERU_E2E_EXECUTABLE_PATH
-    ?? join(__dirname, '../dist/win-unpacked/MinerU.exe')
+    ?? join(__dirname, `../../release/${releaseName}/MinerU.exe`)
   const app = await electron.launch({ executablePath, args: [], env: workspace.env })
   try {
     const window = await app.firstWindow()
