@@ -1,7 +1,7 @@
 import React from 'react'
 import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Empty, Input, Segmented, Space, Spin, Tag, Typography, message } from 'antd'
-import type { DocumentPayload } from '@shared/types'
+import type { BlockSelection, DocumentPayload } from '@shared/types'
 import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from '@shared/markdownBlocks'
 import MarkdownPane from '../components/MarkdownPane'
 import PdfPane from '../components/PdfPane'
@@ -11,7 +11,7 @@ type ReaderTab = 'original' | 'translated' | 'json'
 export default function ReaderPage(props: { taskId: string; onBack(): void }): React.JSX.Element {
   const [document, setDocument] = React.useState<DocumentPayload | null>(null)
   const [tab, setTab] = React.useState<ReaderTab>('original')
-  const [activeBlockId, setActiveBlockId] = React.useState<string | null>(null)
+  const [selection, setSelection] = React.useState<BlockSelection | null>(null)
   const [jsonQuery, setJsonQuery] = React.useState('')
   const lastTerminalStatus = React.useRef<string | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
@@ -31,9 +31,12 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
     [document]
   )
   const translatedBlocks = React.useMemo(
-    () => document ? reuseOriginalMapping(document.translatedMarkdown, originalBlocks) : [],
+    () => document
+      ? document.translatedBlocks ?? reuseOriginalMapping(document.translatedMarkdown, originalBlocks)
+      : [],
     [document, originalBlocks]
   )
+  const selectBlock = React.useCallback((next: BlockSelection) => setSelection(next), [])
 
   const copyCurrent = React.useCallback(async () => {
     if (!document) return
@@ -61,7 +64,7 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
         </Space>
       </header>
       <div className="reader-split">
-        <PdfPane url={document.pdfUrl} mappings={document.mappings} activeBlockId={activeBlockId} onActiveBlock={setActiveBlockId} />
+        <PdfPane url={document.pdfUrl} mappings={document.mappings} selection={selection} onSelect={selectBlock} />
         <div className="text-pane">
           <div className="text-toolbar">
             <Segmented<ReaderTab>
@@ -72,8 +75,8 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
             {tab === 'translated' ? <Tag color={translationColor(document.task.status)}>{translationLabel(document.task.status)}</Tag> : null}
             {tab === 'json' ? <Input allowClear size="small" placeholder="搜索 JSON" value={jsonQuery} onChange={(event) => setJsonQuery(event.target.value)} /> : null}
           </div>
-          {tab === 'original' ? <MarkdownPane blocks={originalBlocks} assetBaseUrl={document.assetBaseUrl} activeBlockId={activeBlockId} onActiveBlock={setActiveBlockId} /> : null}
-          {tab === 'translated' && translatedReady ? <MarkdownPane blocks={translatedBlocks} assetBaseUrl={document.assetBaseUrl} activeBlockId={activeBlockId} onActiveBlock={setActiveBlockId} /> : null}
+          {tab === 'original' ? <MarkdownPane blocks={originalBlocks} assetBaseUrl={document.assetBaseUrl} selection={selection} onSelect={selectBlock} /> : null}
+          {tab === 'translated' && translatedReady ? <MarkdownPane blocks={translatedBlocks} assetBaseUrl={document.assetBaseUrl} selection={selection} onSelect={selectBlock} /> : null}
           {tab === 'translated' && !translatedReady ? <Empty className="translation-empty" description={translationLabel(document.task.status)} /> : null}
           {tab === 'json' ? <pre className="json-view">{jsonContent}</pre> : null}
         </div>

@@ -3,7 +3,7 @@ import { LeftOutlined, MinusOutlined, PlusOutlined, ReloadOutlined, RightOutline
 import { Alert, Button, Progress, Space } from 'antd'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
-import type { BlockBox, BlockMapping } from '@shared/types'
+import type { BlockBox, BlockMapping, BlockSelection } from '@shared/types'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString()
 
@@ -18,8 +18,8 @@ const PAGE_RENDER_RADIUS = 2
 export default function PdfPane(props: {
   url: string
   mappings: BlockMapping[]
-  activeBlockId: string | null
-  onActiveBlock(blockId: string): void
+  selection: BlockSelection | null
+  onSelect(selection: BlockSelection): void
 }): React.JSX.Element {
   const [document, setDocument] = React.useState<PDFDocumentProxy | null>(null)
   const [loadingState, setLoadingState] = React.useState<LoadingState>({ status: 'loading', progress: null })
@@ -27,7 +27,6 @@ export default function PdfPane(props: {
   const [zoom, setZoom] = React.useState(1)
   const [reloadKey, setReloadKey] = React.useState(0)
   const scrollerRef = React.useRef<HTMLDivElement>(null)
-  const suppressNavigationRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -65,19 +64,23 @@ export default function PdfPane(props: {
   }, [props.url, reloadKey])
 
   React.useEffect(() => {
-    if (!props.activeBlockId) return
-    if (suppressNavigationRef.current === props.activeBlockId) {
-      suppressNavigationRef.current = null
-      return
-    }
-    const mapping = props.mappings.find((item) => item.id === props.activeBlockId)
-    const pageIndex = mapping?.boxes[0]?.pageIndex
-    if (pageIndex === undefined) return
+    const selection = props.selection
+    if (!selection || selection.origin !== 'markdown') return
+    const mapping = props.mappings.find((item) => item.id === selection.mappingId)
+    const targetBox = mapping ? findTargetBox(mapping, selection.blockPosition) : undefined
+    const pageIndex = targetBox?.pageIndex
+    if (!mapping || !targetBox || pageIndex === undefined) return
     setCurrentPage(pageIndex + 1)
     requestAnimationFrame(() => {
-      scrollerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${pageIndex}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const page = scrollerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${pageIndex}"]`)
+      if (!page) return
+      const target = Array.from(page.querySelectorAll<HTMLElement>('[data-block-id]')).find(
+        (element) => element.dataset.blockId === mapping.id && element.dataset.blockPosition === targetBox.blockPosition
+      )
+      const destination = target ?? page
+      destination.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
     })
-  }, [props.activeBlockId, props.mappings])
+  }, [props.mappings, props.selection])
 
   const goToPage = React.useCallback((page: number) => {
     if (!document) return
@@ -91,10 +94,9 @@ export default function PdfPane(props: {
   const onVisiblePage = React.useCallback((pageIndex: number) => setCurrentPage(pageIndex + 1), [])
   const retry = React.useCallback(() => setReloadKey((value) => value + 1), [])
   const onPageError = React.useCallback((message: string) => setLoadingState({ status: 'error', message }), [])
-  const onPdfBlock = React.useCallback((blockId: string) => {
-    suppressNavigationRef.current = blockId
-    props.onActiveBlock(blockId)
-  }, [props.onActiveBlock])
+  const onPdfBlock = React.useCallback((mappingId: string, blockPosition: string) => {
+    props.onSelect({ mappingId, blockPosition, origin: 'pdf' })
+  }, [props.onSelect])
 
   return (
     <div className="pdf-pane">
@@ -135,8 +137,8 @@ export default function PdfPane(props: {
                 zoom={zoom}
                 shouldRender={Math.abs(pageIndex - (currentPage - 1)) <= PAGE_RENDER_RADIUS}
                 mappings={props.mappings}
-                activeBlockId={props.activeBlockId}
-                onActiveBlock={onPdfBlock}
+                selection={props.selection}
+                onSelect={onPdfBlock}
                 onVisible={onVisiblePage}
                 onError={onPageError}
               />
@@ -153,8 +155,8 @@ const PdfPage = React.memo(function PdfPage(props: {
   zoom: number
   shouldRender: boolean
   mappings: BlockMapping[]
-  activeBlockId: string | null
-  onActiveBlock(blockId: string): void
+  selection: BlockSelection | null
+  onSelect(mappingId: string, blockPosition: string): void
   onVisible(pageIndex: number): void
   onError(message: string): void
 }): React.JSX.Element {
@@ -264,7 +266,7 @@ const PdfPage = React.memo(function PdfPage(props: {
               key={`${mapping.id}-${box.blockPosition}`}
               className={[
                 'pdf-block',
-                props.activeBlockId === mapping.id ? 'active' : '',
+                props.selection?.mappingId === mapping.id ? 'active' : '',
                 box.isDiscarded ? 'discarded' : '',
                 box.mergeRole ? 'merged' : ''
               ].filter(Boolean).join(' ')}
@@ -276,7 +278,7 @@ const PdfPage = React.memo(function PdfPage(props: {
                 width: `${((x1 - x0) / pageWidth) * 100}%`,
                 height: `${((y1 - y0) / pageHeight) * 100}%`
               }}
-              onClick={() => props.onActiveBlock(mapping.id)}
+              onClick={() => props.onSelect(mapping.id, box.blockPosition)}
               aria-label={`${blockTypeLabel(mapping.type)}区块 ${mapping.order + 1}${box.mergeRole === 'continuation' ? '（合并续块）' : ''}`}
             >
               <span className="pdf-block-label">{blockTypeLabel(mapping.type)}</span>
@@ -288,6 +290,14 @@ const PdfPage = React.memo(function PdfPage(props: {
     </div>
   )
 })
+
+function findTargetBox(mapping: BlockMapping, blockPosition?: string): BlockBox | undefined {
+  return (
+    (blockPosition ? mapping.boxes.find((box) => box.blockPosition === blockPosition) : undefined) ??
+    mapping.boxes.find((box) => box.mergeRole === 'source') ??
+    mapping.boxes[0]
+  )
+}
 
 interface MergeConnector {
   key: string

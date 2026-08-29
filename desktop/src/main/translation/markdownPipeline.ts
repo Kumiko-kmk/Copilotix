@@ -8,6 +8,7 @@ import PQueue from 'p-queue'
 import type {
   BlockMapping,
   MinerUTask,
+  TranslatedMarkdownBlock,
   TranslationBlockRecord,
   TranslationProviderId
 } from '@shared/types'
@@ -26,11 +27,24 @@ interface PipelineOptions {
   onProgress(completed: number, total: number, failed: number): void
 }
 
-interface TranslationResult {
+export interface TranslationBlockResult extends TranslatedMarkdownBlock {
+  blockId: string
+  sourceIndex: number
+  sourceHash: string
+  sourceMarkdown: string
+  provider: TranslationProviderId | null
+  model: string | null
+  status: TranslationBlockRecord['status']
+  error: string | null
+}
+
+export interface TranslationResult {
   markdown: string
+  blocks: TranslationBlockResult[]
   failedBlockIds: string[]
 }
 
+const TRANSLATION_PIPELINE_VERSION = 'markdown-logical-block-v2'
 const processor = unified()
   .use(remarkParse)
   .use(remarkGfm)
@@ -38,87 +52,117 @@ const processor = unified()
   .use(remarkStringify, { bullet: '-', fences: true, listItemIndent: 'one' })
 
 export async function translateMarkdown(options: PipelineOptions): Promise<TranslationResult> {
-  const tree = processor.parse(options.markdown) as any
-  const children: any[] = Array.isArray(tree.children) ? tree.children : []
-  const alignedBlocks = alignMarkdownBlocks(options.markdown, options.mappings)
+  const sourceBlocks = alignMarkdownBlocks(options.markdown, options.mappings)
   const existing = new Map(
     options.repository.listTranslationBlocks(options.task.id).map((block) => [block.blockId, block])
   )
-  const results = new Array<string>(children.length)
-  const failedBlockIds: string[] = []
+  const results = new Array<TranslationBlockResult | undefined>(sourceBlocks.length)
   const queue = new PQueue({ concurrency: 3 })
   let completed = 0
+  let failed = 0
 
   await Promise.all(
-    children.map((child, index) =>
+    sourceBlocks.map((sourceBlock, sourceIndex) =>
       queue.add(async () => {
-        const sourceMarkdown = stringifyNode(child)
+        const sourceMarkdown = sourceBlock.markdown
         const sourceHash = sha256(sourceMarkdown)
-        const blockId = alignedBlocks[index]?.mappingIds[0] ?? `markdown-${index}-${sourceHash.slice(0, 12)}`
+        const blockId = translationBlockId(options.task.id, sourceIndex, sourceBlock.mappingIds)
         const saved = existing.get(blockId)
         if (saved?.status === 'completed' && saved.sourceHash === sourceHash && saved.translatedMarkdown) {
-          results[index] = saved.translatedMarkdown
+          results[sourceIndex] = createBlockResult({
+            blockId,
+            sourceIndex,
+            sourceHash,
+            sourceMarkdown,
+            markdown: saved.translatedMarkdown,
+            mappingIds: sourceBlock.mappingIds,
+            provider: saved.provider,
+            model: saved.model,
+            status: 'completed',
+            error: null
+          })
           completed += 1
-          options.onProgress(completed, children.length, failedBlockIds.length)
+          options.onProgress(completed, sourceBlocks.length, failed)
           return
         }
 
-        if (!containsTranslatableText(child)) {
-          results[index] = sourceMarkdown
-          saveBlock(options.repository, options.task.id, blockId, sourceHash, sourceMarkdown, sourceMarkdown, null, null, 'completed', null)
+        const sourceTree = processor.parse(sourceMarkdown) as any
+        if (!containsTranslatableText(sourceTree)) {
+          results[sourceIndex] = createBlockResult({
+            blockId,
+            sourceIndex,
+            sourceHash,
+            sourceMarkdown,
+            markdown: sourceMarkdown,
+            mappingIds: sourceBlock.mappingIds,
+            provider: null,
+            model: null,
+            status: 'completed',
+            error: null
+          })
+          saveBlock(options.repository, options.task.id, results[sourceIndex]!)
           completed += 1
-          options.onProgress(completed, children.length, failedBlockIds.length)
+          options.onProgress(completed, sourceBlocks.length, failed)
           return
         }
 
         try {
           const translated = await translateBlock(
-            child,
+            sourceTree,
             sourceHash,
             options.task.translationProvider,
             options.providers,
             options.repository
           )
-          results[index] = translated.markdown
-          saveBlock(
-            options.repository,
-            options.task.id,
+          results[sourceIndex] = createBlockResult({
             blockId,
+            sourceIndex,
             sourceHash,
             sourceMarkdown,
-            translated.markdown,
-            translated.provider,
-            translated.model,
-            'completed',
-            null
-          )
+            markdown: translated.markdown,
+            mappingIds: sourceBlock.mappingIds,
+            provider: translated.provider,
+            model: translated.model,
+            status: 'completed',
+            error: null
+          })
+          saveBlock(options.repository, options.task.id, results[sourceIndex]!)
           completed += 1
         } catch (error) {
-          results[index] = sourceMarkdown
-          failedBlockIds.push(blockId)
-          saveBlock(
-            options.repository,
-            options.task.id,
+          const message = readableError(error)
+          results[sourceIndex] = createBlockResult({
             blockId,
+            sourceIndex,
             sourceHash,
             sourceMarkdown,
-            null,
-            null,
-            null,
-            'failed',
-            readableError(error)
-          )
+            markdown: sourceMarkdown,
+            mappingIds: sourceBlock.mappingIds,
+            provider: null,
+            model: null,
+            status: 'failed',
+            error: message
+          })
+          failed += 1
+          saveBlock(options.repository, options.task.id, results[sourceIndex]!)
         }
-        options.onProgress(completed, children.length, failedBlockIds.length)
+        options.onProgress(completed, sourceBlocks.length, failed)
       })
     )
   )
 
-  return { markdown: results.join('\n\n').trimEnd() + '\n', failedBlockIds }
+  const orderedBlocks = results.map((result, index) => {
+    if (!result) throw new Error(`翻译区块 ${index} 未生成结果`)
+    return result
+  })
+  return {
+    markdown: joinMarkdownBlocks(orderedBlocks.map((block) => block.markdown)),
+    blocks: orderedBlocks,
+    failedBlockIds: orderedBlocks.filter((block) => block.status === 'failed').map((block) => block.blockId)
+  }
 }
 
 async function translateBlock(
-  sourceNode: any,
+  sourceTree: any,
   sourceHash: string,
   preferred: TranslationProviderId,
   providers: Map<TranslationProviderId, TranslationProvider>,
@@ -129,14 +173,14 @@ async function translateBlock(
   for (const providerId of order) {
     const provider = providers.get(providerId)
     if (!provider || !(await provider.isAvailable())) continue
-    const cacheKey = sha256(`${provider.id}|${provider.model}|zh-CN|${sourceHash}`)
+    const cacheKey = sha256(`${TRANSLATION_PIPELINE_VERSION}|${provider.id}|${provider.model}|zh-CN|${sourceHash}`)
     const cached = repository.getCache(cacheKey)
     if (cached) return { markdown: cached, provider: provider.id, model: provider.model }
 
     try {
-      const clone = structuredClone(sourceNode)
+      const clone = structuredClone(sourceTree)
       await translateTextNodes(clone, provider)
-      const markdown = stringifyNode(clone)
+      const markdown = stringifyTree(clone)
       repository.putCache(cacheKey, markdown, provider.id, provider.model)
       return { markdown, provider: provider.id, model: provider.model }
     } catch (error) {
@@ -149,11 +193,24 @@ async function translateBlock(
 async function translateTextNodes(node: any, provider: TranslationProvider, protectedAncestor = false): Promise<void> {
   const protectedHere = protectedAncestor || ['code', 'inlineCode', 'math', 'inlineMath', 'html'].includes(node?.type)
   if (node?.type === 'text' && !protectedHere && shouldTranslate(node.value)) {
-    node.value = await withRetry(() => translateLongText(String(node.value), provider))
+    const source = String(node.value)
+    node.value = await withRetry(async () => normalizeTranslatedText(source, await translateLongText(source, provider)))
     return
   }
   if (!Array.isArray(node?.children)) return
   for (const child of node.children) await translateTextNodes(child, provider, protectedHere)
+}
+
+function normalizeTranslatedText(source: string, translated: string): string {
+  const leadingWhitespace = source.match(/^[\p{Zs}\t]+/u)?.[0] ?? ''
+  const trailingWhitespace = source.match(/[\p{Zs}\t]+$/u)?.[0] ?? ''
+  const value = translated.trim()
+  if (!value) throw new Error('翻译源返回了空译文')
+  const normalized = value.replace(/\r\n?/g, '\n')
+  const content = !/[\r\n]/.test(source)
+    ? normalized.replace(/[ \t]*\n+[ \t]*/g, ' ')
+    : normalized.replace(/\n{2,}/g, '\n')
+  return `${leadingWhitespace}${content}${trailingWhitespace}`
 }
 
 async function translateLongText(text: string, provider: TranslationProvider): Promise<string> {
@@ -192,8 +249,12 @@ export function shouldTranslate(value: unknown): boolean {
   return letters > 0 || han === 0
 }
 
-function stringifyNode(node: any): string {
-  return String(processor.stringify({ type: 'root', children: [node] } as any)).trimEnd()
+function stringifyTree(tree: any): string {
+  return String(processor.stringify(tree)).trimEnd()
+}
+
+function joinMarkdownBlocks(blocks: string[]): string {
+  return blocks.length > 0 ? `${blocks.map((block) => block.trimEnd()).join('\n\n')}\n` : ''
 }
 
 function splitText(text: string, limit: number): string[] {
@@ -210,29 +271,27 @@ function splitText(text: string, limit: number): string[] {
   return parts
 }
 
-function saveBlock(
-  repository: TaskRepository,
-  taskId: string,
-  blockId: string,
-  sourceHash: string,
-  sourceMarkdown: string,
-  translatedMarkdown: string | null,
-  provider: TranslationProviderId | null,
-  model: string | null,
-  status: TranslationBlockRecord['status'],
-  error: string | null
-): void {
+function createBlockResult(result: TranslationBlockResult): TranslationBlockResult {
+  return { ...result, mappingIds: [...result.mappingIds] }
+}
+
+function saveBlock(repository: TaskRepository, taskId: string, block: TranslationBlockResult): void {
   repository.upsertTranslationBlock({
     taskId,
-    blockId,
-    sourceHash,
-    sourceMarkdown,
-    translatedMarkdown,
-    provider,
-    model,
-    status,
-    error
+    blockId: block.blockId,
+    sourceHash: block.sourceHash,
+    sourceMarkdown: block.sourceMarkdown,
+    translatedMarkdown: block.status === 'completed' ? block.markdown : null,
+    provider: block.provider,
+    model: block.model,
+    status: block.status,
+    error: block.error
   })
+}
+
+function translationBlockId(taskId: string, sourceIndex: number, mappingIds: string[]): string {
+  const digest = sha256(`${TRANSLATION_PIPELINE_VERSION}|${taskId}|${sourceIndex}|${mappingIds.join('|')}`)
+  return `translation-${digest.slice(0, 20)}`
 }
 
 function sha256(value: string): string {

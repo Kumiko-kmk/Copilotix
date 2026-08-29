@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -46,6 +46,67 @@ describe('TaskService official MinerU batches', () => {
       expect(client.polledDataIds).toEqual([created[1]!.id])
       expect(repository.getTask(created[0]!.id)?.error).toContain('fixture upload failed')
       expect(repository.getTask(created[1]!.id)?.error).toContain('fixture parse failed')
+    } finally {
+      repository.close()
+    }
+  })
+
+  it('loads ordered v2 translated blocks and leaves legacy tasks on the compatibility path', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mineru-translation-manifest-'))
+    temporaryRoots.push(root)
+    const outputDir = join(root, 'task-output')
+    await mkdir(outputDir, { recursive: true })
+    await Promise.all([
+      writeFile(join(outputDir, 'full.md'), '# Title\n\nAuthors\n\nAbstract\n', 'utf8'),
+      writeFile(join(outputDir, 'full.zh-CN.md'), '# 标题\n作者\n摘要\n', 'utf8'),
+      writeFile(join(outputDir, 'layout.json'), '{"pdf_info":[]}', 'utf8')
+    ])
+
+    const repository = new TaskRepository(join(root, 'tasks.sqlite3'))
+    const now = new Date().toISOString()
+    const fixtureTask: MinerUTask = {
+      id: 'translated-task',
+      name: 'paper.pdf',
+      sourcePath: join(root, 'paper.pdf'),
+      sourceHash: 'fixture-hash',
+      outputDir,
+      status: 'completed',
+      progress: 100,
+      parserModel: 'vlm',
+      translationProvider: 'qwen',
+      remoteBatchId: null,
+      remoteDataId: null,
+      remoteResultUrl: null,
+      error: null,
+      createdAt: now,
+      updatedAt: now
+    }
+    repository.insertTasks([fixtureTask])
+    const vault = new MemoryVault({})
+    const settings = new SettingsService(repository, vault, join(root, 'output'))
+    const service = new TaskService(repository, settings, vault, new PartiallyFailingClient(), async () => new Response())
+
+    try {
+      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
+        version: 2,
+        taskId: fixtureTask.id,
+        blocks: [
+          { sourceIndex: 1, markdown: '作者', mappingIds: ['authors'] },
+          { sourceIndex: 0, markdown: '# 标题', mappingIds: ['title'] },
+          { sourceIndex: 2, markdown: '摘要', mappingIds: ['abstract'] }
+        ]
+      }), 'utf8')
+      const current = await service.getDocument(fixtureTask.id)
+      expect(current.translatedBlocks).toEqual([
+        { markdown: '# 标题', mappingIds: ['title'] },
+        { markdown: '作者', mappingIds: ['authors'] },
+        { markdown: '摘要', mappingIds: ['abstract'] }
+      ])
+
+      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({ version: 1 }), 'utf8')
+      const legacy = await service.getDocument(fixtureTask.id)
+      expect(legacy.translatedBlocks).toBeNull()
+      expect(legacy.translatedMarkdown).toContain('作者')
     } finally {
       repository.close()
     }

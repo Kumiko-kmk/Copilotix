@@ -98,14 +98,28 @@ export interface BlockMapping {
   boxes: BlockBox[]
 }
 
+export type BlockSelectionOrigin = 'pdf' | 'markdown' | 'scroll'
+
+export interface BlockSelection {
+  mappingId: string
+  blockPosition?: string
+  origin: BlockSelectionOrigin
+}
+
 export interface DocumentPayload {
   task: MinerUTask
   markdown: string
   translatedMarkdown: string
+  translatedBlocks: TranslatedMarkdownBlock[] | null
   layoutJson: string
   mappings: BlockMapping[]
   pdfUrl: string
   assetBaseUrl: string
+}
+
+export interface TranslatedMarkdownBlock {
+  markdown: string
+  mappingIds: string[]
 }
 
 export interface TranslationCheckpoint {

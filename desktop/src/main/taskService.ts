@@ -22,6 +22,7 @@ import type {
   DocumentPayload,
   MinerUTask,
   SelectedPdf,
+  TranslatedMarkdownBlock,
 } from '@shared/types'
 import { MAX_PDF_BYTES, MINERU_BATCH_SIZE } from '@shared/constants'
 import type { TaskRepository } from './database'
@@ -30,7 +31,7 @@ import type { SettingsService } from './settingsService'
 import { MinerUApiError, type BatchResult, type MinerUClient } from './parserClient'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from './blockMapping'
 import { createTranslationProviders } from './translation/providers'
-import { translateMarkdown } from './translation/markdownPipeline'
+import { translateMarkdown, type TranslationResult } from './translation/markdownPipeline'
 import type { TaskLogger } from './logger'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -148,12 +149,14 @@ export class TaskService extends EventEmitter {
     if (!task) throw new Error('任务不存在')
     const markdown = await readOptional(join(task.outputDir, 'full.md'))
     const translatedMarkdown = await readOptional(join(task.outputDir, 'full.zh-CN.md'))
+    const translatedBlocks = await this.loadTranslatedBlocks(task)
     const layoutJson = await readOptional(join(task.outputDir, 'layout.json'), '{}')
     const mappings = await this.loadMappings(task)
     return {
       task,
       markdown,
       translatedMarkdown,
+      translatedBlocks,
       layoutJson,
       mappings,
       pdfUrl: `mineru-asset://${task.id}/original.pdf`,
@@ -405,7 +408,8 @@ export class TaskService extends EventEmitter {
         JSON.stringify(
           {
             taskId,
-            totalBlocks: mappings.length,
+            totalBlocks: result.blocks.length,
+            completedBlocks: result.blocks.filter((block) => block.status === 'completed').length,
             failedBlockIds: result.failedBlockIds,
             updatedAt: new Date().toISOString()
           },
@@ -414,7 +418,7 @@ export class TaskService extends EventEmitter {
         ),
         'utf8'
       )
-      await this.writeManifest(task, result.failedBlockIds)
+      await this.writeManifest(task, result)
       this.repository.updateTask(taskId, {
         status: result.failedBlockIds.length > 0 ? 'partial' : 'completed',
         progress: 100,
@@ -496,20 +500,48 @@ export class TaskService extends EventEmitter {
     return mappings
   }
 
-  private async writeManifest(task: MinerUTask, failedBlockIds: string[]): Promise<void> {
-    const blocks = this.repository.listTranslationBlocks(task.id)
+  private async loadTranslatedBlocks(task: MinerUTask): Promise<TranslatedMarkdownBlock[] | null> {
+    try {
+      const manifest = JSON.parse(await readFile(join(task.outputDir, 'translation.manifest.json'), 'utf8')) as any
+      if (manifest?.version !== 2 || manifest.taskId !== task.id || !Array.isArray(manifest.blocks)) return null
+      const blocks = manifest.blocks.map((block: any) => {
+        if (
+          typeof block?.sourceIndex !== 'number' ||
+          typeof block?.markdown !== 'string' ||
+          !Array.isArray(block?.mappingIds) ||
+          !block.mappingIds.every((id: unknown) => typeof id === 'string')
+        ) return null
+        return {
+          sourceIndex: block.sourceIndex,
+          markdown: block.markdown,
+          mappingIds: [...block.mappingIds]
+        }
+      })
+      if (blocks.some((block: unknown) => block === null)) return null
+      return blocks
+        .sort((left: any, right: any) => left.sourceIndex - right.sourceIndex)
+        .map(({ markdown, mappingIds }: any) => ({ markdown, mappingIds }))
+    } catch {
+      return null
+    }
+  }
+
+  private async writeManifest(task: MinerUTask, result: TranslationResult): Promise<void> {
     await writeFile(
       join(task.outputDir, 'translation.manifest.json'),
       JSON.stringify(
         {
-          version: 1,
+          version: 2,
           taskId: task.id,
           targetLanguage: 'zh-CN',
           preferredProvider: task.translationProvider,
-          failedBlockIds,
-          blocks: blocks.map(({ blockId, sourceHash, provider, model, status, error }) => ({
+          failedBlockIds: result.failedBlockIds,
+          blocks: result.blocks.map(({ blockId, sourceIndex, mappingIds, sourceHash, markdown, provider, model, status, error }) => ({
             blockId,
+            sourceIndex,
+            mappingIds,
             sourceHash,
+            markdown,
             provider,
             model,
             status,

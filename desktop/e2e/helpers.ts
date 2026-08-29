@@ -2,6 +2,18 @@ import { DatabaseSync } from 'node:sqlite'
 import { copyFile, cp, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { buildBlockMappings } from '../src/main/blockMapping'
+import { alignMarkdownBlocks, splitMarkdownBlocks } from '../src/shared/markdownBlocks'
+
+const FIXTURE_MARKDOWN = [
+  '# Fixture document',
+  '<sub>Ada Lovelace</sub> and Alan Turing',
+  'Abstract | A separately mapped summary.',
+  'First page continues in second column.<sup>12</sup> Water is H<sub>2</sub>O.',
+  'Second paragraph with $E=mc^2$.',
+  '<table><tbody><tr><td>Academic cell</td></tr></tbody></table>',
+  '![Fixture image](images/fixture.png)'
+].join('\n\n')
 
 export interface E2EWorkspace {
   root: string
@@ -24,7 +36,7 @@ export async function createE2EWorkspace(): Promise<E2EWorkspace> {
 
 export async function seedReaderTask(
   workspace: E2EWorkspace,
-  options?: { missingPdf?: boolean; sourcePdf?: string; sourceTaskDir?: string }
+  options?: { missingPdf?: boolean; sourcePdf?: string; sourceTaskDir?: string; translatedMarkdown?: string }
 ): Promise<string> {
   const taskId = options?.missingPdf ? 'missing-pdf-task' : options?.sourceTaskDir ? 'real-layout-task' : options?.sourcePdf ? 'real-pdf-task' : 'reader-pdf-task'
   const outputDir = join(workspace.root, taskId)
@@ -33,10 +45,40 @@ export async function seedReaderTask(
   if (options?.sourceTaskDir) {
     await cp(options.sourceTaskDir, outputDir, { recursive: true })
   } else {
+    const layout = createLayoutFixture()
     if (options?.sourcePdf) await copyFile(options.sourcePdf, pdfPath)
     else if (!options?.missingPdf) await writeFile(pdfPath, createTwoPagePdf())
-    await writeFile(join(outputDir, 'full.md'), '# Fixture document\n\nFirst page continues in second column.\n\nSecond paragraph.', 'utf8')
-    await writeFile(join(outputDir, 'layout.json'), JSON.stringify(createLayoutFixture()), 'utf8')
+    const imagesDir = join(outputDir, 'images')
+    await mkdir(imagesDir, { recursive: true })
+    await copyFile(join(__dirname, '../resources/icon.png'), join(imagesDir, 'fixture.png'))
+    await writeFile(join(outputDir, 'full.md'), FIXTURE_MARKDOWN, 'utf8')
+    if (options?.translatedMarkdown !== undefined) {
+      await writeFile(join(outputDir, 'full.zh-CN.md'), options.translatedMarkdown, 'utf8')
+      const sourceBlocks = alignMarkdownBlocks(FIXTURE_MARKDOWN, buildBlockMappings(taskId, layout))
+      const translatedBlocks = splitMarkdownBlocks(options.translatedMarkdown)
+      if (translatedBlocks.length !== sourceBlocks.length) {
+        throw new Error(`Fixture translation block count ${translatedBlocks.length} does not match source ${sourceBlocks.length}`)
+      }
+      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
+        version: 2,
+        taskId,
+        targetLanguage: 'zh-CN',
+        preferredProvider: 'qwen',
+        failedBlockIds: [],
+        blocks: translatedBlocks.map((markdown, sourceIndex) => ({
+          blockId: `fixture-translation-${sourceIndex}`,
+          sourceIndex,
+          mappingIds: sourceBlocks[sourceIndex]?.mappingIds ?? [],
+          sourceHash: `fixture-source-${sourceIndex}`,
+          markdown,
+          provider: 'qwen',
+          model: 'fixture',
+          status: 'completed',
+          error: null
+        }))
+      }, null, 2), 'utf8')
+    }
+    await writeFile(join(outputDir, 'layout.json'), JSON.stringify(layout), 'utf8')
   }
 
   const database = new DatabaseSync(join(workspace.userData, 'mineru-desktop.sqlite3'))
@@ -102,22 +144,51 @@ function createLayoutFixture(): object {
           {
             index: 1,
             type: 'text',
-            bbox: [72, 120, 300, 170],
-            lines: [
-              { bbox: [72, 120, 300, 140], spans: [{ type: 'text', content: 'First page' }] },
-              { bbox: [330, 120, 560, 140], spans: [{ type: 'text', content: 'continues in second column.' }] }
-            ]
+            bbox: [72, 110, 500, 140],
+            lines: [{ bbox: [72, 110, 500, 140], spans: [{ type: 'text', content: 'Ada Lovelace and Alan Turing' }] }]
           },
-          { index: 2, type: 'text', bbox: [330, 110, 560, 170], lines: [], lines_deleted: true },
+          {
+            index: 2,
+            type: 'text',
+            bbox: [72, 150, 540, 200],
+            lines: [{ bbox: [72, 150, 540, 200], spans: [{ type: 'text', content: 'Abstract | A separately mapped summary.' }] }]
+          },
           {
             index: 3,
             type: 'text',
-            bbox: [72, 220, 300, 260],
-            lines: [{ bbox: [72, 220, 300, 240], spans: [{ type: 'text', content: 'Second paragraph.' }] }]
-          }
+            bbox: [72, 220, 300, 270],
+            lines: [
+              { bbox: [72, 220, 300, 240], spans: [{ type: 'text', content: 'First page' }] },
+              { bbox: [330, 220, 560, 240], spans: [{ type: 'text', content: 'continues in second column.' }] }
+            ]
+          },
+          { index: 4, type: 'text', bbox: [330, 210, 560, 270], lines: [], lines_deleted: true },
         ]
       },
-      { page_idx: 1, page_size: [612, 792], para_blocks: [] }
+      {
+        page_idx: 1,
+        page_size: [612, 792],
+        para_blocks: [
+          {
+            index: 0,
+            type: 'text',
+            bbox: [72, 220, 300, 260],
+            lines: [{ bbox: [72, 220, 300, 240], spans: [{ type: 'text', content: 'Second paragraph with' }] }]
+          },
+          {
+            index: 1,
+            type: 'text',
+            bbox: [72, 275, 300, 295],
+            lines: [{ bbox: [72, 275, 300, 295], spans: [{ type: 'text', content: 'Academic cell' }] }]
+          },
+          {
+            index: 2,
+            type: 'image',
+            bbox: [72, 300, 300, 460],
+            lines: [{ bbox: [72, 300, 300, 460], spans: [{ type: 'image', image_path: 'images/fixture.png' }] }]
+          }
+        ]
+      }
     ]
   }
 }

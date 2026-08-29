@@ -130,7 +130,11 @@ button, input, select { font: inherit; }
 .text-pane { display: grid; grid-template-rows: 64px minmax(0, 1fr); background: var(--surface); }
 .text-toolbar { gap: 12px; }
 .text-toolbar .ant-input-affix-wrapper { max-width: 230px; }
-.markdown-scroll { overflow: auto; scroll-behavior: smooth; }
+.markdown-scroll { position: relative; overflow: auto; }
+.markdown-scroll:not(.markdown-render-ready) { overflow: hidden; }
+.markdown-render-status { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px; color: var(--muted); background: var(--surface); }
+.markdown-render-status .ant-alert { width: min(560px, 90%); }
+.markdown-render-loading .markdown-body, .markdown-render-error .markdown-body { visibility: hidden; pointer-events: none; }
 .markdown-body { max-width: 900px; margin: 0 auto; padding: 30px 42px 120px; color: var(--text); font-size: 16px; line-height: 1.78; }
 .markdown-block { margin: 0 -12px; padding: 2px 12px; border: 1px solid transparent; border-radius: 5px; transition: background .15s ease; }
 .markdown-block:hover { background: color-mix(in srgb, var(--primary-soft) 55%, transparent); }
@@ -139,7 +143,11 @@ button, input, select { font: inherit; }
 .markdown-body h2 { margin-top: 30px; font-size: 23px; }
 .markdown-body h3 { margin-top: 24px; font-size: 19px; }
 .markdown-body p { margin: 12px 0; }
-.markdown-body img { max-width: 100%; height: auto; }
+.markdown-body img { display: block; max-width: 100%; height: auto; margin: 16px auto; object-fit: contain; }
+.markdown-body sub, .markdown-body sup { position: relative; vertical-align: baseline; font-size: .75em; line-height: 0; }
+.markdown-body sup { top: -.5em; }
+.markdown-body sub { bottom: -.2em; }
+.markdown-body .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding-block: 4px; }
 .markdown-body table { display: block; width: 100%; overflow: auto; border-collapse: collapse; }
 .markdown-body th, .markdown-body td { padding: 8px 10px; border: 1px solid var(--border); }
 .markdown-body code { padding: .15em .35em; border-radius: 4px; background: var(--muted-surface); }

@@ -18,7 +18,8 @@ test('opens the minimal new parse page', async () => {
 test('opens the packaged Windows executable', async () => {
   test.skip(process.platform !== 'win32', 'Windows package only')
   const workspace = await createE2EWorkspace()
-  const executablePath = join(__dirname, '../dist/win-unpacked/MinerU.exe')
+  const executablePath = process.env.MINERU_E2E_EXECUTABLE_PATH
+    ?? join(__dirname, '../dist/win-unpacked/MinerU.exe')
   const app = await electron.launch({ executablePath, args: [], env: workspace.env })
   try {
     const window = await app.firstWindow()
