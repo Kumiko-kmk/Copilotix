@@ -6,7 +6,7 @@ baseline_ref: master
 baseline_commit: 83795dd501c81dbeda0d59b916252aab70710556
 baseline_verified_at: 2026-09-01
 working_snapshot_branch: feature/english-title-filename
-working_snapshot_head: 83795dd501c81dbeda0d59b916252aab70710556
+working_snapshot_head: 752c896f0539c728b71ce614fc63f0f85ea7c00c
 coordination_owner: integration-agent
 ---
 
