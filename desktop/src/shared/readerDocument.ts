@@ -12,6 +12,7 @@ export type ReaderBlockRole =
 export interface ReaderBlock {
   role: ReaderBlockRole
   markdown: string
+  annotationKey?: string
   text?: string
   mappingIds: string[]
   pageIndex?: number
@@ -48,20 +49,20 @@ export function buildReaderDocumentBlocks(
     : []
 
   return {
-    original: mergeReaderBlocks(originalContent, mappings, { includePrintedPageNumbers: false }),
+    original: mergeReaderBlocks(originalContent, mappings),
     translated: translatedContent.length > 0 ? mergeReaderBlocks(translatedContent, mappings) : []
   }
 }
 
 export function mergeReaderBlocks(
   contentBlocks: AlignedMarkdownBlock[],
-  mappings: BlockMapping[],
-  options: { includePrintedPageNumbers?: boolean } = {}
+  mappings: BlockMapping[]
 ): ReaderBlock[] {
   const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]))
   const content = contentBlocks.map((block, sequence): ReaderBlock => ({
     role: 'content',
     markdown: block.markdown,
+    annotationKey: `content:${sequence}`,
     mappingIds: block.mappingIds,
     order: sequence
   }))
@@ -85,6 +86,7 @@ export function mergeReaderBlocks(
     const supplement: ReaderBlock = {
       role,
       markdown: '',
+      annotationKey: `supplemental:${mapping.id}`,
       text,
       mappingIds: [],
       pageIndex,
@@ -107,7 +109,7 @@ export function mergeReaderBlocks(
   const boundaries = new Map<number, BoundaryBlock[]>()
   for (const [pageIndex, lastOrder] of [...lastOrderByPage].sort((left, right) => left[0] - right[0])) {
     const pageSupplements = (supplementsByPage.get(pageIndex) ?? [])
-      .filter((block) => options.includePrintedPageNumbers !== false || block.role !== 'page-number')
+      .filter((block) => block.role !== 'page-number')
       .sort((left, right) => left.order - right.order)
     const headers = pageSupplements.filter((block) => block.role === 'page-header')
     const tails = pageSupplements.filter((block) => block.role !== 'page-header')

@@ -2,6 +2,9 @@ import { DatabaseSync } from 'node:sqlite'
 import type {
   AppSettings,
   MinerUTask,
+  ReaderAnnotation,
+  ReaderAnnotationView,
+  ReplaceReaderAnnotationsRequest,
   TaskStatus,
   TranslationBlockRecord,
   TranslationProviderId
@@ -90,6 +93,23 @@ export class TaskRepository {
         model TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS reader_annotations (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        view TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        color TEXT,
+        block_key TEXT NOT NULL,
+        start_offset INTEGER NOT NULL,
+        end_offset INTEGER NOT NULL,
+        quote TEXT NOT NULL,
+        prefix TEXT NOT NULL,
+        suffix TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_reader_annotations_task_view
+        ON reader_annotations(task_id, view, block_key, start_offset);
     `)
     const taskColumns = new Set(
       (this.db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>).map((column) => column.name)
@@ -284,6 +304,79 @@ export class TaskRepository {
         VALUES(?,?,?,?,?)
       `)
       .run(cacheKey, translated, provider, model, new Date().toISOString())
+  }
+
+  listReaderAnnotations(taskId: string): ReaderAnnotation[] {
+    return this.db
+      .prepare(`
+        SELECT id, task_id as taskId, view, kind, color, block_key as blockKey,
+          start_offset as startOffset, end_offset as endOffset, quote, prefix, suffix,
+          created_at as createdAt, updated_at as updatedAt
+        FROM reader_annotations
+        WHERE task_id = ?
+        ORDER BY view, block_key, start_offset, end_offset, id
+      `)
+      .all(taskId) as unknown as ReaderAnnotation[]
+  }
+
+  replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): ReaderAnnotation[] {
+    if (!request || typeof request.taskId !== 'string' || !request.taskId || !ANNOTATION_VIEWS.has(request.view)) {
+      throw new Error('无效的阅读标注请求')
+    }
+    validateReaderAnnotationsRequest(request, this.getTask(request.taskId) !== null)
+    const insert = this.db.prepare(`
+      INSERT INTO reader_annotations(
+        id, task_id, view, kind, color, block_key, start_offset, end_offset,
+        quote, prefix, suffix, created_at, updated_at
+      ) VALUES(
+        @id, @taskId, @view, @kind, @color, @blockKey, @startOffset, @endOffset,
+        @quote, @prefix, @suffix, @createdAt, @updatedAt
+      )
+    `)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.prepare('DELETE FROM reader_annotations WHERE task_id = ? AND view = ?')
+        .run(request.taskId, request.view)
+      for (const annotation of request.annotations) insert.run({ ...annotation })
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+    return this.listReaderAnnotations(request.taskId)
+  }
+}
+
+const ANNOTATION_VIEWS = new Set<ReaderAnnotationView>(['original', 'translated'])
+const ANNOTATION_KINDS = new Set(['highlight', 'underline'])
+const HIGHLIGHT_COLORS = new Set(['yellow', 'green', 'blue', 'pink', 'purple'])
+
+function validateReaderAnnotationsRequest(request: ReplaceReaderAnnotationsRequest, taskExists: boolean): void {
+  if (!taskExists) throw new Error('任务不存在')
+  if (!Array.isArray(request.annotations) || request.annotations.length > 50_000) {
+    throw new Error('阅读标注数量无效')
+  }
+  const ids = new Set<string>()
+  for (const annotation of request.annotations) {
+    const validKind = ANNOTATION_KINDS.has(annotation.kind)
+    const validColor = annotation.kind === 'highlight'
+      ? HIGHLIGHT_COLORS.has(annotation.color ?? '')
+      : annotation.color === null
+    const validOffsets = Number.isInteger(annotation.startOffset) && Number.isInteger(annotation.endOffset) &&
+      annotation.startOffset >= 0 && annotation.endOffset > annotation.startOffset
+    if (
+      annotation.taskId !== request.taskId || annotation.view !== request.view ||
+      typeof annotation.id !== 'string' || !annotation.id || ids.has(annotation.id) ||
+      !validKind || !validColor || typeof annotation.blockKey !== 'string' || !annotation.blockKey ||
+      !validOffsets || typeof annotation.quote !== 'string' || !annotation.quote ||
+      annotation.quote.length !== annotation.endOffset - annotation.startOffset ||
+      typeof annotation.prefix !== 'string' || annotation.prefix.length > 32 ||
+      typeof annotation.suffix !== 'string' || annotation.suffix.length > 32 ||
+      typeof annotation.createdAt !== 'string' || typeof annotation.updatedAt !== 'string'
+    ) {
+      throw new Error('阅读标注数据无效')
+    }
+    ids.add(annotation.id)
   }
 }
 

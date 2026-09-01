@@ -32,7 +32,8 @@ import { MinerUApiError, type BatchResult, type MinerUClient } from './parserCli
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from './blockMapping'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
 import { createTranslationProviders } from './translation/providers'
-import { translateMarkdown, type TranslationResult } from './translation/markdownPipeline'
+import { TRANSLATION_PIPELINE_VERSION, translateMarkdown, type TranslationResult } from './translation/markdownPipeline'
+import { TABLE_TRANSLATION_PROTOCOL } from './translation/tableTranslation'
 import type { TaskLogger } from './logger'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -552,6 +553,8 @@ export class TaskService extends EventEmitter {
           taskId: task.id,
           targetLanguage: 'zh-CN',
           preferredProvider: task.translationProvider,
+          translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
+          tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
           failedBlockIds: result.failedBlockIds,
           blocks: result.blocks.map(({ blockId, sourceIndex, mappingIds, sourceHash, markdown, provider, model, status, error }) => ({
             blockId,

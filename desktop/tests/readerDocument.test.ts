@@ -3,7 +3,7 @@ import { buildReaderDocumentBlocks, mergeReaderBlocks } from '@shared/readerDocu
 import type { BlockMapping, TranslatedMarkdownBlock } from '@shared/types'
 
 describe('reader document model', () => {
-  it('restores headers, footnotes, printed page numbers and page dividers in source order', () => {
+  it('restores headers, footnotes and page dividers while hiding printed page numbers', () => {
     const mappings = [
       mapping('header-1', 0, 'Journal header', 'page_header', 0, true),
       mapping('title', 1, 'Document title', 'title', 0),
@@ -39,17 +39,33 @@ describe('reader document model', () => {
       ['page-header', 'Journal header'],
       ['content', '# 文档标题'],
       ['footnote', 'Conference copyright notice'],
-      ['page-number', '315'],
       ['page-divider', '第 1 页'],
       ['page-header', 'Document running title'],
       ['content', '正文段落'],
       ['page-footer', 'Author footer'],
       ['page-divider', '第 2 页']
     ])
+    expect([...result.original, ...result.translated].some((block) => block.role === 'page-number')).toBe(false)
+    expect(result.original.filter((block) => block.role === 'page-divider').map((block) => block.text))
+      .toEqual(['第 1 页', '第 2 页'])
+    expect(result.translated.filter((block) => block.role === 'page-divider').map((block) => block.text))
+      .toEqual(['第 1 页', '第 2 页'])
     expect(result.original.filter((block) => block.role !== 'content').every((block) => block.mappingIds.length === 0))
       .toBe(true)
     expect(result.translated.filter((block) => block.role === 'content').map((block) => block.mappingIds))
       .toEqual([['title'], ['body']])
+    expect(result.original.map((block) => block.annotationKey ?? null)).toEqual([
+      'supplemental:header-1',
+      'content:0',
+      'supplemental:footnote-1',
+      null,
+      'supplemental:header-2',
+      'content:1',
+      'supplemental:footer-2',
+      null
+    ])
+    expect(result.translated.filter((block) => block.role === 'content').map((block) => block.annotationKey))
+      .toEqual(['content:0', 'content:1'])
   })
 
   it('keeps malformed translated source indexes readable but unlinked', () => {

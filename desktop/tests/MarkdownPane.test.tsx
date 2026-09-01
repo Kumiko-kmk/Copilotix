@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import React from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@shared/readerDocument'
@@ -36,6 +37,10 @@ beforeEach(() => {
     configurable: true,
     value: scrollIntoView
   })
+  Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({ top: 120, right: 220, bottom: 144, left: 100, width: 120, height: 24, x: 100, y: 120, toJSON: () => ({}) })
+  })
 })
 
 afterEach(() => {
@@ -66,6 +71,12 @@ describe('MarkdownPane', () => {
         active
         blocks={blocks}
         assetBaseUrl="mineru-asset://task/"
+        taskId="task"
+        view="original"
+        annotations={[]}
+        highlightColor="yellow"
+        onHighlightColorChange={() => undefined}
+        onReplaceAnnotations={async () => undefined}
         selection={{ mappingId: 'image', origin: 'markdown' }}
         onSelect={onSelect}
       />
@@ -105,7 +116,7 @@ describe('MarkdownPane', () => {
   it('renders academic HTML and KaTeX while removing unsafe markup', async () => {
     const markdown = [
       'H<sub>2</sub>O and citation<sup>12</sup> keep literal <12>.',
-      '<table><tbody><tr><td onclick="alert(1)">Cell</td></tr></tbody></table>',
+      '<table><tbody><tr><th rowspan="2">Header</th><td colspan="2" onclick="alert(1)">Cell</td></tr><tr><td>Second</td><td>Third</td></tr></tbody></table>',
       '$E=mc^2$',
       '<a href="javascript:alert(1)">unsafe</a><script>alert(2)</script>'
     ].join('\n\n')
@@ -116,6 +127,8 @@ describe('MarkdownPane', () => {
     expect(view.container.querySelector('sup')?.textContent).toBe('12')
     expect(view.container.querySelector('td')?.textContent).toBe('Cell')
     expect(view.container.querySelector('td')?.hasAttribute('onclick')).toBe(false)
+    expect(view.container.querySelector('th')?.getAttribute('rowspan')).toBe('2')
+    expect(view.container.querySelector('td')?.getAttribute('colspan')).toBe('2')
     expect(view.container.querySelector('.katex')).toBeTruthy()
     expect(view.container.querySelector('script')).toBeNull()
     expect(view.getByText('unsafe').hasAttribute('href')).toBe(false)
@@ -199,7 +212,75 @@ describe('MarkdownPane', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(onSelect).not.toHaveBeenCalled()
   })
+
+  it('annotates a cross-block selection, changes the current color without applying it, and exposes chat payloads', async () => {
+    const onReplaceAnnotations = vi.fn().mockResolvedValue(undefined)
+    const onAddToChat = vi.fn()
+    const annotationBlocks: ReaderBlock[] = [
+      { ...block('first', 'Alpha'), annotationKey: 'content:0' },
+      { role: 'page-divider', markdown: '', text: '第 1 页', mappingIds: [], pageIndex: 0, order: 0.5 },
+      { ...block('second', 'Bravo'), annotationKey: 'content:1', order: 1 }
+    ]
+    function Harness(): React.JSX.Element {
+      const [color, setColor] = React.useState<'yellow' | 'green' | 'blue' | 'pink' | 'purple'>('yellow')
+      return (
+        <MarkdownPane
+          active
+          blocks={annotationBlocks}
+          assetBaseUrl="mineru-asset://task/"
+          taskId="task"
+          view="original"
+          annotations={[]}
+          highlightColor={color}
+          onHighlightColorChange={setColor}
+          onReplaceAnnotations={onReplaceAnnotations}
+          onAddToChat={onAddToChat}
+          selection={null}
+          onSelect={() => undefined}
+        />
+      )
+    }
+    const view = render(<Harness />)
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    selectBetween(view.getByText('Alpha').firstChild!, 1, view.getByText('Bravo').firstChild!, 3)
+    document.dispatchEvent(new Event('selectionchange'))
+
+    const toolbar = await view.findByRole('toolbar', { name: '文本标注' })
+    expect(toolbar.querySelectorAll(':scope > button')).toHaveLength(3)
+    fireEvent.contextMenu(view.getByRole('button', { name: '荧光笔高亮' }))
+    expect(view.getAllByRole('option')).toHaveLength(5)
+    fireEvent.click(view.getByRole('option', { name: '选择蓝色' }))
+    expect(onReplaceAnnotations).not.toHaveBeenCalled()
+    expect(view.getByRole('button', { name: '荧光笔高亮' }).querySelector<HTMLElement>('.anticon')?.style.color).toBe('rgb(100, 168, 232)')
+
+    fireEvent.click(view.getByRole('button', { name: '荧光笔高亮' }))
+    await waitFor(() => expect(onReplaceAnnotations).toHaveBeenCalledTimes(1))
+    const saved = onReplaceAnnotations.mock.calls[0]![0]
+    expect(saved.map((annotation: { blockKey: string; quote: string; color: string }) =>
+      [annotation.blockKey, annotation.quote, annotation.color])).toEqual([
+      ['content:0', 'lpha', 'blue'],
+      ['content:1', 'Bra', 'blue']
+    ])
+
+    selectBetween(view.getByText('Alpha').firstChild!, 0, view.getByText('Alpha').firstChild!, 5)
+    document.dispatchEvent(new Event('selectionchange'))
+    fireEvent.click(await view.findByRole('button', { name: '添加到对话' }))
+    expect(onAddToChat).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task',
+      view: 'original',
+      text: 'Alpha'
+    }))
+  })
 })
+
+function selectBetween(startNode: Node, startOffset: number, endNode: Node, endOffset: number): void {
+  const selection = window.getSelection()!
+  selection.removeAllRanges()
+  const range = document.createRange()
+  range.setStart(startNode, startOffset)
+  range.setEnd(endNode, endOffset)
+  selection.addRange(range)
+}
 
 function block(mappingId: string, markdown: string): ReaderBlock {
   return { role: 'content', markdown, mappingIds: [mappingId], order: 0 }
@@ -215,6 +296,12 @@ function renderPane(
       active
       blocks={blocks}
       assetBaseUrl="mineru-asset://task/"
+      taskId="task"
+      view="original"
+      annotations={[]}
+      highlightColor="yellow"
+      onHighlightColorChange={() => undefined}
+      onReplaceAnnotations={async () => undefined}
       selection={selection}
       onSelect={onSelect}
     />

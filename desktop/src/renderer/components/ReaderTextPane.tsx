@@ -1,7 +1,14 @@
 import React from 'react'
 import { Empty, Input, Segmented, Tag } from 'antd'
 import type { ReaderBlock } from '@shared/readerDocument'
-import type { BlockSelection, TaskStatus } from '@shared/types'
+import type {
+  BlockSelection,
+  HighlightColor,
+  ReaderAnnotation,
+  ReaderAnnotationView,
+  ReaderChatSelection,
+  TaskStatus
+} from '@shared/types'
 import JsonPane from './JsonPane'
 import MarkdownPane from './MarkdownPane'
 
@@ -18,10 +25,31 @@ export default function ReaderTextPane(props: {
   jsonQuery: string
   onJsonQueryChange(query: string): void
   assetBaseUrl: string
+  taskId: string
+  annotations: ReaderAnnotation[]
+  onReplaceAnnotations(view: ReaderAnnotationView, annotations: ReaderAnnotation[]): Promise<void>
+  onAddToChat?(selection: ReaderChatSelection): void
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
 }): React.JSX.Element {
   const [prewarmStage, setPrewarmStage] = React.useState<0 | 1 | 2>(0)
+  const [highlightColor, setHighlightColor] = React.useState<HighlightColor>('yellow')
+  const originalAnnotations = React.useMemo(
+    () => props.annotations.filter((annotation) => annotation.view === 'original'),
+    [props.annotations]
+  )
+  const translatedAnnotations = React.useMemo(
+    () => props.annotations.filter((annotation) => annotation.view === 'translated'),
+    [props.annotations]
+  )
+  const replaceOriginalAnnotations = React.useCallback(
+    (annotations: ReaderAnnotation[]) => props.onReplaceAnnotations('original', annotations),
+    [props.onReplaceAnnotations]
+  )
+  const replaceTranslatedAnnotations = React.useCallback(
+    (annotations: ReaderAnnotation[]) => props.onReplaceAnnotations('translated', annotations),
+    [props.onReplaceAnnotations]
+  )
 
   React.useEffect(() => scheduleIdle(() => setPrewarmStage(1)), [])
   React.useEffect(() => {
@@ -62,6 +90,13 @@ export default function ReaderTextPane(props: {
           active={props.tab === 'original'}
           blocks={props.originalBlocks}
           assetBaseUrl={props.assetBaseUrl}
+          taskId={props.taskId}
+          view="original"
+          annotations={originalAnnotations}
+          highlightColor={highlightColor}
+          onHighlightColorChange={setHighlightColor}
+          onReplaceAnnotations={replaceOriginalAnnotations}
+          onAddToChat={props.onAddToChat}
           selection={props.selection}
           onSelect={props.onSelect}
         />
@@ -72,6 +107,13 @@ export default function ReaderTextPane(props: {
             active={props.tab === 'translated'}
             blocks={props.translatedBlocks}
             assetBaseUrl={props.assetBaseUrl}
+            taskId={props.taskId}
+            view="translated"
+            annotations={translatedAnnotations}
+            highlightColor={highlightColor}
+            onHighlightColorChange={setHighlightColor}
+            onReplaceAnnotations={replaceTranslatedAnnotations}
+            onAddToChat={props.onAddToChat}
             selection={props.selection}
             onSelect={props.onSelect}
           />

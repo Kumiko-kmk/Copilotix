@@ -7,6 +7,8 @@ import type {
   HealthResult,
   MinerUDesktopApi,
   MinerUTask,
+  ReaderAnnotation,
+  ReplaceReaderAnnotationsRequest,
   SaveAsRequest,
   SelectedPdf,
   SettingsUpdate,
@@ -30,6 +32,10 @@ const api: MinerUDesktopApi = {
   deleteTask: (request: DeleteTaskRequest) => ipcRenderer.invoke('tasks:delete', request) as Promise<void>,
   retryTask: (taskId: string) => ipcRenderer.invoke('tasks:retry', taskId) as Promise<void>,
   getDocument: (taskId: string) => ipcRenderer.invoke('document:get', taskId) as Promise<DocumentPayload>,
+  getReaderAnnotations: (taskId: string) =>
+    ipcRenderer.invoke('reader-annotations:get', taskId) as Promise<ReaderAnnotation[]>,
+  replaceReaderAnnotations: (request: ReplaceReaderAnnotationsRequest) =>
+    ipcRenderer.invoke('reader-annotations:replace', request) as Promise<ReaderAnnotation[]>,
   openOutputDirectory: (taskId: string) => ipcRenderer.invoke('document:open-output', taskId) as Promise<void>,
   saveAs: (request: SaveAsRequest) => ipcRenderer.invoke('document:save-as', request) as Promise<string | null>,
   performWindowAction: (action: WindowAction) => ipcRenderer.invoke('window:action', action) as Promise<WindowState>,

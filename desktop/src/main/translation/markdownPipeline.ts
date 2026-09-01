@@ -17,6 +17,13 @@ import { FALLBACK_PROVIDER_ORDER } from '@shared/constants'
 import type { TaskRepository } from '../database'
 import type { TranslationProvider } from './providers'
 import { TranslationHttpError } from './providers'
+import {
+  applyTableTranslation,
+  buildTableTranslationUnits,
+  TABLE_TRANSLATION_CACHE_VERSION,
+  validateTableTranslationResponse,
+  type TableTranslationUnit
+} from './tableTranslation'
 
 interface PipelineOptions {
   task: MinerUTask
@@ -44,7 +51,7 @@ export interface TranslationResult {
   failedBlockIds: string[]
 }
 
-const TRANSLATION_PIPELINE_VERSION = 'markdown-logical-block-v2'
+export const TRANSLATION_PIPELINE_VERSION = 'markdown-logical-block-v4-table-json-v2-references'
 const processor = unified()
   .use(remarkParse)
   .use(remarkGfm)
@@ -53,17 +60,75 @@ const processor = unified()
 
 export async function translateMarkdown(options: PipelineOptions): Promise<TranslationResult> {
   const sourceBlocks = alignMarkdownBlocks(options.markdown, options.mappings)
+  const referenceActions = buildReferenceActions(sourceBlocks, options.mappings)
   const existing = new Map(
     options.repository.listTranslationBlocks(options.task.id).map((block) => [block.blockId, block])
   )
   const results = new Array<TranslationBlockResult | undefined>(sourceBlocks.length)
+  const tableUnits = buildTableTranslationUnits(sourceBlocks, options.mappings)
+  const tableBySourceIndex = new Map<number, TableTranslationUnit>()
+  const tableStartIndexes = new Set<number>()
+  for (const unit of tableUnits) {
+    const startIndex = Math.min(...unit.blocks.map((block) => block.sourceIndex))
+    tableStartIndexes.add(startIndex)
+    for (const block of unit.blocks) tableBySourceIndex.set(block.sourceIndex, unit)
+  }
+  type WorkItem =
+    | { kind: 'table'; unit: TableTranslationUnit }
+    | { kind: 'reference'; sourceBlock: (typeof sourceBlocks)[number]; sourceIndex: number; markdown: string }
+    | { kind: 'block'; sourceBlock: (typeof sourceBlocks)[number]; sourceIndex: number }
+  const workItems: WorkItem[] = []
+  sourceBlocks.forEach((sourceBlock, sourceIndex) => {
+    const referenceMarkdown = referenceActions.get(sourceIndex)
+    if (referenceMarkdown !== undefined) {
+      workItems.push({ kind: 'reference', sourceBlock, sourceIndex, markdown: referenceMarkdown })
+      return
+    }
+    const tableUnit = tableBySourceIndex.get(sourceIndex)
+    if (tableUnit) {
+      if (tableStartIndexes.has(sourceIndex)) workItems.push({ kind: 'table', unit: tableUnit })
+      return
+    }
+    workItems.push({ kind: 'block', sourceBlock, sourceIndex })
+  })
   const queue = new PQueue({ concurrency: 3 })
   let completed = 0
   let failed = 0
 
   await Promise.all(
-    sourceBlocks.map((sourceBlock, sourceIndex) =>
+    workItems.map((workItem) =>
       queue.add(async () => {
+        if (workItem.kind === 'reference') {
+          const sourceHash = sha256(workItem.sourceBlock.markdown)
+          const blockId = translationBlockId(options.task.id, workItem.sourceIndex, workItem.sourceBlock.mappingIds)
+          const result = createBlockResult({
+            blockId,
+            sourceIndex: workItem.sourceIndex,
+            sourceHash,
+            sourceMarkdown: workItem.sourceBlock.markdown,
+            markdown: workItem.markdown,
+            mappingIds: workItem.sourceBlock.mappingIds,
+            provider: null,
+            model: null,
+            status: 'completed',
+            error: null
+          })
+          results[workItem.sourceIndex] = result
+          saveBlock(options.repository, options.task.id, result)
+          completed += 1
+          options.onProgress(completed, sourceBlocks.length, failed)
+          return
+        }
+        if (workItem.kind === 'table') {
+          await translateTableWorkItem(workItem.unit, options, existing, results)
+          const blockCount = workItem.unit.blocks.length
+          if (workItem.unit.blocks.every((block) => results[block.sourceIndex]?.status === 'completed')) completed += blockCount
+          else failed += blockCount
+          options.onProgress(completed, sourceBlocks.length, failed)
+          return
+        }
+
+        const { sourceBlock, sourceIndex } = workItem
         const sourceMarkdown = sourceBlock.markdown
         const sourceHash = sha256(sourceMarkdown)
         const blockId = translationBlockId(options.task.id, sourceIndex, sourceBlock.mappingIds)
@@ -159,6 +224,156 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
     blocks: orderedBlocks,
     failedBlockIds: orderedBlocks.filter((block) => block.status === 'failed').map((block) => block.blockId)
   }
+}
+
+async function translateTableWorkItem(
+  unit: TableTranslationUnit,
+  options: PipelineOptions,
+  existing: Map<string, TranslationBlockRecord>,
+  results: Array<TranslationBlockResult | undefined>
+): Promise<void> {
+  const savedBlocks = unit.blocks.map((sourceBlock) => {
+    const sourceHash = sha256(sourceBlock.markdown)
+    const blockId = translationBlockId(options.task.id, sourceBlock.sourceIndex, sourceBlock.mappingIds)
+    return { sourceBlock, sourceHash, blockId, saved: existing.get(blockId) }
+  })
+  if (savedBlocks.every(({ saved, sourceHash }) => saved?.status === 'completed' && saved.sourceHash === sourceHash && saved.translatedMarkdown)) {
+    for (const { sourceBlock, sourceHash, blockId, saved } of savedBlocks) {
+      results[sourceBlock.sourceIndex] = createBlockResult({
+        blockId,
+        sourceIndex: sourceBlock.sourceIndex,
+        sourceHash,
+        sourceMarkdown: sourceBlock.markdown,
+        markdown: saved!.translatedMarkdown!,
+        mappingIds: sourceBlock.mappingIds,
+        provider: saved!.provider,
+        model: saved!.model,
+        status: 'completed',
+        error: null
+      })
+    }
+    return
+  }
+
+  if (!unit.plan.hasTranslatableText) {
+    for (const { sourceBlock, sourceHash, blockId } of savedBlocks) {
+      const result = createBlockResult({
+        blockId,
+        sourceIndex: sourceBlock.sourceIndex,
+        sourceHash,
+        sourceMarkdown: sourceBlock.markdown,
+        markdown: sourceBlock.markdown,
+        mappingIds: sourceBlock.mappingIds,
+        provider: null,
+        model: null,
+        status: 'completed',
+        error: null
+      })
+      results[sourceBlock.sourceIndex] = result
+      saveBlock(options.repository, options.task.id, result)
+    }
+    return
+  }
+
+  try {
+    const translated = await translateTableUnit(
+      unit,
+      options.task.translationProvider,
+      options.providers,
+      options.repository
+    )
+    for (const { sourceBlock, sourceHash, blockId } of savedBlocks) {
+      const markdown = translated.markdownBySourceIndex.get(sourceBlock.sourceIndex)
+      if (markdown === undefined) throw new Error(`表格区块 ${sourceBlock.sourceIndex} 未生成译文`)
+      const result = createBlockResult({
+        blockId,
+        sourceIndex: sourceBlock.sourceIndex,
+        sourceHash,
+        sourceMarkdown: sourceBlock.markdown,
+        markdown,
+        mappingIds: sourceBlock.mappingIds,
+        provider: translated.provider,
+        model: translated.model,
+        status: 'completed',
+        error: null
+      })
+      results[sourceBlock.sourceIndex] = result
+      saveBlock(options.repository, options.task.id, result)
+    }
+  } catch (error) {
+    const message = readableError(error)
+    for (const { sourceBlock, sourceHash, blockId } of savedBlocks) {
+      const result = createBlockResult({
+        blockId,
+        sourceIndex: sourceBlock.sourceIndex,
+        sourceHash,
+        sourceMarkdown: sourceBlock.markdown,
+        markdown: sourceBlock.markdown,
+        mappingIds: sourceBlock.mappingIds,
+        provider: null,
+        model: null,
+        status: 'failed',
+        error: message
+      })
+      results[sourceBlock.sourceIndex] = result
+      saveBlock(options.repository, options.task.id, result)
+    }
+  }
+}
+
+async function translateTableUnit(
+  unit: TableTranslationUnit,
+  preferred: TranslationProviderId,
+  providers: Map<TranslationProviderId, TranslationProvider>,
+  repository: TaskRepository
+): Promise<{ markdownBySourceIndex: Map<number, string>; provider: TranslationProviderId; model: string }> {
+  const sourceHash = sha256(unit.blocks.map((block) => `${block.sourceIndex}\u0000${block.markdown}`).join('\u0000'))
+  const order = [preferred, ...FALLBACK_PROVIDER_ORDER.filter((provider) => provider !== preferred)]
+  const errors: string[] = []
+  for (const providerId of order) {
+    const provider = providers.get(providerId)
+    if (!provider || !(await provider.isAvailable())) continue
+    const cacheKey = sha256(
+      `${TRANSLATION_PIPELINE_VERSION}|table|${TABLE_TRANSLATION_CACHE_VERSION}|${provider.id}|${provider.model}|zh-CN|${sourceHash}`
+    )
+    const cached = repository.getCache(cacheKey)
+    if (cached) {
+      try {
+        const cache = JSON.parse(cached) as { version?: unknown; sourceHash?: unknown; response?: unknown }
+        if (cache.version !== TABLE_TRANSLATION_CACHE_VERSION || cache.sourceHash !== sourceHash) {
+          throw new Error('表格缓存版本或来源不匹配')
+        }
+        const response = validateTableTranslationResponse(cache.response, unit.plan.request)
+        applyTableTranslation(unit.plan, response)
+        return {
+          markdownBySourceIndex: new Map(unit.plan.blocks.map((block) => [block.sourceIndex, block.render()])),
+          provider: provider.id,
+          model: provider.model
+        }
+      } catch {
+        // Ignore an invalid cache entry and request a fresh complete-table translation.
+      }
+    }
+
+    try {
+      const response = await withRetry(() => provider.translateTable(unit.plan.request))
+      applyTableTranslation(unit.plan, response)
+      repository.putCache(
+        cacheKey,
+        JSON.stringify({ version: TABLE_TRANSLATION_CACHE_VERSION, sourceHash, response }),
+        provider.id,
+        provider.model
+      )
+      return {
+        markdownBySourceIndex: new Map(unit.plan.blocks.map((block) => [block.sourceIndex, block.render()])),
+        provider: provider.id,
+        model: provider.model
+      }
+    } catch (error) {
+      errors.push(`${providerId}: ${readableError(error)}`)
+    }
+  }
+  throw new Error(errors.length > 0 ? errors.join('；') : '没有可用的翻译源')
 }
 
 async function translateBlock(
@@ -270,6 +485,80 @@ function splitText(text: string, limit: number): string[] {
   if (remaining) parts.push(remaining)
   return parts
 }
+
+function buildReferenceActions(
+  sourceBlocks: Array<{ markdown: string; mappingIds: string[] }>,
+  mappings: BlockMapping[]
+): Map<number, string> {
+  const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]))
+  const actions = new Map<number, string>()
+  let preserveUnmappedEntries = false
+
+  sourceBlocks.forEach((block, sourceIndex) => {
+    const node = parseSingleBlockNode(block.markdown)
+    const headingLevel = referenceHeadingLevel(node)
+    if (headingLevel !== null) {
+      actions.set(sourceIndex, `${'#'.repeat(headingLevel)} 参考文献`)
+      preserveUnmappedEntries = true
+      return
+    }
+
+    const mappedReference = block.mappingIds.some((id) => isReferenceMappingType(mappingById.get(id)?.type))
+    if (mappedReference) {
+      actions.set(sourceIndex, block.markdown)
+      return
+    }
+
+    if (node?.type === 'heading') {
+      preserveUnmappedEntries = false
+      return
+    }
+    if (preserveUnmappedEntries && (node?.type === 'paragraph' || node?.type === 'list')) {
+      actions.set(sourceIndex, block.markdown)
+      return
+    }
+    if (preserveUnmappedEntries) preserveUnmappedEntries = false
+  })
+
+  return actions
+}
+
+function parseSingleBlockNode(markdown: string): any | null {
+  const tree = processor.parse(markdown) as any
+  return Array.isArray(tree.children) && tree.children.length === 1 ? tree.children[0] : null
+}
+
+function referenceHeadingLevel(node: any): number | null {
+  if (node?.type !== 'heading' || typeof node.depth !== 'number') return null
+  const title = visibleNodeText(node)
+    .normalize('NFKC')
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/\s+/g, ' ')
+    .replace(/[.:：。]+$/u, '')
+  return REFERENCE_HEADINGS.has(title) ? node.depth : null
+}
+
+function visibleNodeText(node: any): string {
+  if (!node || typeof node !== 'object') return ''
+  if (typeof node.value === 'string' && ['text', 'inlineCode'].includes(node.type)) return node.value
+  return Array.isArray(node.children) ? node.children.map(visibleNodeText).join('') : ''
+}
+
+function isReferenceMappingType(value: unknown): boolean {
+  return typeof value === 'string' && ['ref_text', 'reference', 'bibliography'].includes(value.toLocaleLowerCase('en-US'))
+}
+
+const REFERENCE_HEADINGS = new Set([
+  'references',
+  'reference',
+  'bibliography',
+  'works cited',
+  'literature cited',
+  '参考文献',
+  '參考文獻',
+  '引用'
+])
 
 function createBlockResult(result: TranslationBlockResult): TranslationBlockResult {
   return { ...result, mappingIds: [...result.mappingIds] }
