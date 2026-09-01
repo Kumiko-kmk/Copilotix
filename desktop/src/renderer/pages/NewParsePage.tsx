@@ -1,8 +1,9 @@
 import React from 'react'
 import { CloudUploadOutlined, FilePdfOutlined, InboxOutlined } from '@ant-design/icons'
-import { Alert, Button, Checkbox, Modal, Select, Space, Tag, Typography, message } from 'antd'
+import { Alert, Button, Checkbox, Modal, Select, Space, Tag, message } from 'antd'
 import { MAX_PDF_BYTES, PROVIDER_LABELS } from '@shared/constants'
 import type { AppSettings, ParserModel, SelectedPdf, TranslationProviderId } from '@shared/types'
+import ParticleLakeBackground from '../components/ParticleLakeBackground'
 
 export default function NewParsePage(props: {
   settings: AppSettings
@@ -48,36 +49,37 @@ export default function NewParsePage(props: {
   return (
     <section className="page new-parse-page">
       {contextHolder}
-      <header className="page-header compact-header">
-        <div>
-          <Typography.Title level={2}>智能解析</Typography.Title>
-          <Typography.Text type="secondary">上传 PDF，经 MinerU 解析后自动生成简体中文译文</Typography.Text>
+      <ParticleLakeBackground />
+      <div className="new-parse-content">
+        <div
+          className={dragging ? 'upload-entry dragging' : 'upload-entry'}
+          data-testid="pdf-upload-entry"
+          role="region"
+          aria-label="PDF 文件上传区"
+          onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false)
+          }}
+          onDrop={(event) => void onDrop(event)}
+        >
+          <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此区域</span>
+          <InboxOutlined className="upload-icon" aria-hidden="true" />
+          <Button type="primary" size="large" icon={<CloudUploadOutlined />} onClick={() => void chooseFiles()}>
+            {dragging ? '松开以添加 PDF' : '选择 PDF'}
+          </Button>
         </div>
-      </header>
-      <div
-        className={dragging ? 'upload-entry dragging' : 'upload-entry'}
-        onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
-        onDragOver={(event) => event.preventDefault()}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => void onDrop(event)}
-      >
-        <InboxOutlined className="upload-icon" />
-        <h2>拖入 PDF 文件</h2>
-        <p>支持批量选择，每份 PDF 会建立独立任务</p>
-        <Button type="primary" size="large" icon={<CloudUploadOutlined />} onClick={() => void chooseFiles()}>
-          选择 PDF
-        </Button>
-      </div>
 
-      {!props.settings.hasParserToken ? (
-        <Alert
-          className="token-required"
-          type="warning"
-          showIcon
-          message="需要先配置 MinerU API Token"
-          description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置</Button>}
-        />
-      ) : null}
+        {!props.settings.hasParserToken ? (
+          <Alert
+            className="token-required"
+            type="warning"
+            showIcon
+            message="需要先配置解析 API Token"
+            description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置</Button>}
+          />
+        ) : null}
+      </div>
 
       <Modal
         title="确认解析任务"
@@ -109,14 +111,14 @@ export default function NewParsePage(props: {
             description={<Checkbox checked={createDuplicates} onChange={(event) => setCreateDuplicates(event.target.checked)}>仍为重复文件创建新任务</Checkbox>}
           />
         ) : null}
-        {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="MinerU 官方 API 不接受超过 200MB 的单个文件" /> : null}
+        {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="解析 API 不接受超过 200MB 的单个文件" /> : null}
         <Space className="confirm-options" size="large">
           <label>
             <span>解析模型</span>
             <Select<ParserModel>
               value={parserModel}
               onChange={setParserModel}
-              options={[{ value: 'vlm', label: 'MinerU VLM' }, { value: 'pipeline', label: 'MinerU' }]}
+              options={[{ value: 'vlm', label: '视觉模型' }, { value: 'pipeline', label: '标准模型' }]}
             />
           </label>
           <label>

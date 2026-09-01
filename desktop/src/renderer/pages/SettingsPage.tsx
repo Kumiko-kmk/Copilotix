@@ -79,12 +79,12 @@ export default function SettingsPage(props: {
         <div className="settings-content">
           {section === 'system' ? (
             <>
-              <Typography.Title level={4}>MinerU API</Typography.Title>
+              <Typography.Title level={4}>解析 API</Typography.Title>
               <SettingField label="服务地址">
                 <Input value="https://mineru.net" readOnly />
               </SettingField>
               <SettingField label={`Bearer Token${draft.hasParserToken ? '（已保存）' : '（必填）'}`}>
-                <Input.Password value={parserToken} onChange={(event) => setParserToken(event.target.value)} placeholder={draft.hasParserToken ? '留空则使用已保存 Token' : '输入 MinerU API Token'} />
+                <Input.Password value={parserToken} onChange={(event) => setParserToken(event.target.value)} placeholder={draft.hasParserToken ? '留空则使用已保存 Token' : '输入解析 API Token'} />
               </SettingField>
               <Button loading={testing === 'parser'} disabled={!parserToken && !draft.hasParserToken} onClick={() => void testParser()}>验证 Token</Button>
               <Typography.Title level={4} className="settings-subtitle">结果保存</Typography.Title>
@@ -97,7 +97,7 @@ export default function SettingsPage(props: {
               <Typography.Title level={4}>解析参数</Typography.Title>
               <SettingField label="模型版本">
                 <Radio.Group value={draft.parserModel} onChange={(event) => update('parserModel', event.target.value)}>
-                  <Radio value="vlm">MinerU VLM</Radio><Radio value="pipeline">MinerU</Radio>
+                  <Radio value="vlm">视觉模型</Radio><Radio value="pipeline">标准模型</Radio>
                 </Radio.Group>
               </SettingField>
               <ToggleField label="强制开启 OCR" checked={draft.forceOcr} onChange={(value) => update('forceOcr', value)} />

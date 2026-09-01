@@ -22,7 +22,15 @@ import { createAssetResponse } from './assetProtocol'
 import { TaskService } from './taskService'
 import { JsonLineLogger } from './logger'
 import { createTranslationProviders } from './translation/providers'
-import type { CreateTasksRequest, DeleteTaskRequest, SaveAsRequest, SettingsUpdate, TranslationProviderId } from '@shared/types'
+import type {
+  CreateTasksRequest,
+  DeleteTaskRequest,
+  SaveAsRequest,
+  SettingsUpdate,
+  TranslationProviderId,
+  WindowAction,
+  WindowState
+} from '@shared/types'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -78,14 +86,19 @@ async function bootstrap(): Promise<void> {
 }
 
 function createMainWindow(): void {
+  Menu.setApplicationMenu(null)
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1100,
     minHeight: 700,
     show: false,
-    title: 'MinerU',
+    title: '',
     icon: getRuntimeIconPath(),
+    frame: false,
+    roundedCorners: true,
+    thickFrame: true,
+    autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#15171b' : '#f7f8fa',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -95,7 +108,14 @@ function createMainWindow(): void {
       webSecurity: true
     }
   })
+  mainWindow.webContents.on('page-title-updated', (event) => event.preventDefault())
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === 'https://github.com/Kumiko-kmk/MinerU') void shell.openExternal(url)
+    return { action: 'deny' }
+  })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('maximize', emitWindowState)
+  mainWindow.on('unmaximize', emitWindowState)
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault()
@@ -137,6 +157,21 @@ function showMainWindow(): void {
   mainWindow.focus()
 }
 
+function currentWindowState(window: BrowserWindow): WindowState {
+  return { maximized: window.isMaximized() }
+}
+
+function emitWindowState(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('window:state-changed', currentWindowState(mainWindow))
+}
+
+function requestWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow {
+  const window = BrowserWindow.fromWebContents(event.sender)
+  if (!window || window !== mainWindow) throw new Error('窗口操作来源无效')
+  return window
+}
+
 function registerIpc(
   tasks: TaskService,
   settings: SettingsService,
@@ -144,6 +179,15 @@ function registerIpc(
   parserClient: OfficialMinerUClient,
   fetcher: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 ): void {
+  ipcMain.handle('window:state', (event) => currentWindowState(requestWindow(event)))
+  ipcMain.handle('window:action', (event, action: WindowAction) => {
+    const window = requestWindow(event)
+    if (action === 'minimize') window.minimize()
+    else if (action === 'toggle-maximize') window.isMaximized() ? window.unmaximize() : window.maximize()
+    else if (action === 'close') window.close()
+    else throw new Error('不支持的窗口操作')
+    return currentWindowState(window)
+  })
   ipcMain.handle('settings:get', () => settings.get())
   ipcMain.handle('settings:save', (_event, update: SettingsUpdate) => settings.save(update))
   ipcMain.handle('settings:test-parser', async (_event, inputToken?: string) => {

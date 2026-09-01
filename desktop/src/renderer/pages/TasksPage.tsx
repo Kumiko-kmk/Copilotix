@@ -58,7 +58,7 @@ export default function TasksPage(props: { tasks: MinerUTask[]; onOpen(taskId: s
             )
           },
           { title: '类型', width: 100, render: () => '文档' },
-          { title: '模型', width: 150, render: (_: unknown, task: MinerUTask) => task.parserModel === 'vlm' ? 'MinerU VLM' : 'MinerU' },
+          { title: '模型', width: 150, render: (_: unknown, task: MinerUTask) => task.parserModel === 'vlm' ? '视觉模型' : '标准模型' },
           { title: '创建时间', dataIndex: 'createdAt', width: 190, render: (value: string) => new Date(value).toLocaleString('zh-CN') },
           {
             title: '操作', width: 170,

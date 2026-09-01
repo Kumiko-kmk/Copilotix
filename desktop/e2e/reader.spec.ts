@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test, type Locator } from '@playwright/test'
+import { _electron as electron, expect, test, type Locator, type Page } from '@playwright/test'
 import { join } from 'node:path'
 import { createE2EWorkspace, seedReaderTask } from './helpers'
 
@@ -35,7 +35,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
   const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await window.locator('.recent-task', { hasText: 'fixture.pdf' }).click()
+    await openPaper(window, taskId)
     const activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(window.getByText('1 / 2')).toBeVisible()
     await expect.poll(() => window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
@@ -155,7 +155,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
 
 test('restores discarded headers, footnotes, footers and page numbers as gray display-only content', async () => {
   const workspace = await createE2EWorkspace()
-  await seedReaderTask(workspace, {
+  const taskId = await seedReaderTask(workspace, {
     supplementalBlocks: true,
     translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
     legacyTranslationManifest: true
@@ -163,7 +163,7 @@ test('restores discarded headers, footnotes, footers and page numbers as gray di
   const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await window.locator('.recent-task', { hasText: 'fixture.pdf' }).click()
+    await openPaper(window, taskId)
     const activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
 
@@ -216,11 +216,11 @@ test('restores discarded headers, footnotes, footers and page numbers as gray di
 
 test('keeps repeated short phrases in source order and maps each one to one PDF block', async () => {
   const workspace = await createE2EWorkspace()
-  await seedReaderTask(workspace, { alignmentRegression: true })
+  const taskId = await seedReaderTask(workspace, { alignmentRegression: true })
   const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await window.locator('.recent-task', { hasText: 'fixture.pdf' }).click()
+    await openPaper(window, taskId)
     const activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
 
@@ -241,8 +241,9 @@ test('keeps repeated short phrases in source order and maps each one to one PDF 
     ))
     expect(new Set(mappingIds).size).toBe(mappingIds.length)
 
+    await expect(window.locator('[data-block-position="1-0"]')).toBeAttached()
     await markdownBlocks.filter({ hasText: /^Then$/ }).click()
-    await expect(window.getByText('2 / 2')).toBeVisible()
+    await expect(window.getByText('2 / 2')).toBeVisible({ timeout: 10_000 })
     await expect(window.locator('.pdf-block.active')).toHaveCount(1)
     await expect(window.locator('[data-block-position="1-0"]')).toHaveClass(/active/)
 
@@ -261,11 +262,11 @@ test('keeps repeated short phrases in source order and maps each one to one PDF 
 
 test('shows a recoverable error when the local PDF is missing', async () => {
   const workspace = await createE2EWorkspace()
-  await seedReaderTask(workspace, { missingPdf: true })
+  const taskId = await seedReaderTask(workspace, { missingPdf: true })
   const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await window.locator('.recent-task', { hasText: 'missing.pdf' }).click()
+    await openPaper(window, taskId)
     await expect(window.getByText('PDF 无法打开')).toBeVisible()
     await expect(window.getByRole('button', { name: '重新加载' })).toBeVisible()
   } finally {
@@ -278,11 +279,11 @@ test('renders an optional real MinerU PDF fixture', async () => {
   const sourcePdf = process.env.MINERU_E2E_REAL_PDF
   test.skip(!sourcePdf, 'Set MINERU_E2E_REAL_PDF for the local non-CI acceptance check')
   const workspace = await createE2EWorkspace()
-  await seedReaderTask(workspace, { sourcePdf: sourcePdf! })
+  const taskId = await seedReaderTask(workspace, { sourcePdf: sourcePdf! })
   const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await window.locator('.recent-task', { hasText: 'original.pdf' }).click()
+    await openPaper(window, taskId)
     await expect(window.locator('.pdf-page canvas').first()).toBeVisible()
     await expect.poll(() => window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
   } finally {
@@ -295,11 +296,11 @@ test('renders and safely links an optional real MinerU task', async () => {
   const sourceTaskDir = process.env.MINERU_E2E_REAL_TASK_DIR
   test.skip(!sourceTaskDir, 'Set MINERU_E2E_REAL_TASK_DIR for the local layout acceptance check')
   const workspace = await createE2EWorkspace()
-  await seedReaderTask(workspace, { sourceTaskDir: sourceTaskDir! })
+  const taskId = await seedReaderTask(workspace, { sourceTaskDir: sourceTaskDir! })
   const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await window.locator('.recent-task').first().click()
+    await openPaper(window, taskId)
     const activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect.poll(
       () => window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width),
@@ -344,3 +345,10 @@ test('renders and safely links an optional real MinerU task', async () => {
     await workspace.cleanup()
   }
 })
+
+async function openPaper(window: Page, taskId: string): Promise<void> {
+  await window.locator('[data-edge-dock="bottom"]').hover()
+  const item = window.locator(`[data-paper-task-id="${taskId}"]`)
+  await expect(item).toBeVisible()
+  await item.click()
+}

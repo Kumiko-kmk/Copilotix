@@ -1,7 +1,9 @@
 import React from 'react'
 import { FileAddOutlined, FileTextOutlined, GithubOutlined, SettingOutlined } from '@ant-design/icons'
 import type { AppSettings, MinerUTask } from '@shared/types'
-import logoUrl from '../../resources/icon.png'
+import EdgeDock from './components/EdgeDock'
+import PaperSwitcher from './components/PaperSwitcher'
+import WindowControls from './components/WindowControls'
 import NewParsePage from './pages/NewParsePage'
 import TasksPage from './pages/TasksPage'
 import SettingsPage from './pages/SettingsPage'
@@ -35,34 +37,16 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar" aria-label="主导航">
-        <button className="brand" onClick={() => setView({ name: 'new' })} aria-label="MinerU 首页">
-          <img src={logoUrl} alt="" />
-          <span>MinerU</span>
-        </button>
-        <nav className="primary-nav">
-          <NavButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => setView({ name: 'new' })} />
-          <NavButton active={view.name === 'tasks'} icon={<FileTextOutlined />} label="任务管理" onClick={() => setView({ name: 'tasks' })} />
+      <EdgeDock edge="top" label="展开主导航" persistent={<WindowControls />}>
+        <nav className="top-navigation" aria-label="主导航">
+          <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => setView({ name: 'new' })} />
+          <NavigationButton active={view.name === 'tasks'} icon={<FileTextOutlined />} label="任务管理" onClick={() => setView({ name: 'tasks' })} />
+          <NavigationButton active={view.name === 'settings'} icon={<SettingOutlined />} label="设置" onClick={() => setView({ name: 'settings' })} />
+          <a className="top-navigation-item" href="https://github.com/Kumiko-kmk/MinerU" target="_blank" rel="noreferrer" aria-label="打开 GitHub">
+            <GithubOutlined /><span>GitHub</span>
+          </a>
         </nav>
-        <div className="recent-section">
-          <div className="recent-title">最近任务</div>
-          {tasks.slice(0, 5).map((task) => (
-            <button key={task.id} className="recent-task" onClick={() => openTask(task.id)} title={task.name}>
-              <span className="pdf-dot">PDF</span>
-              <span>
-                <strong>{task.name}</strong>
-                <small>{task.status === 'completed' ? '已完成' : `${task.progress}%`}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="sidebar-footer">
-          <a href="https://github.com/Kumiko-kmk/MinerU" aria-label="GitHub" tabIndex={-1}><GithubOutlined /></a>
-          <button className={view.name === 'settings' ? 'active' : ''} onClick={() => setView({ name: 'settings' })} aria-label="设置">
-            <SettingOutlined />
-          </button>
-        </div>
-      </aside>
+      </EdgeDock>
       <main className="main-surface">
         {view.name === 'new' && settings ? (
           <NewParsePage
@@ -82,18 +66,21 @@ export default function App(): React.JSX.Element {
         ) : null}
         {!settings && view.name !== 'reader' ? <div className="page-loading">正在加载…</div> : null}
       </main>
+      <EdgeDock edge="bottom" label="展开论文切换">
+        <PaperSwitcher tasks={tasks} activeTaskId={view.name === 'reader' ? view.taskId : null} onOpen={openTask} />
+      </EdgeDock>
     </div>
   )
 }
 
-function NavButton(props: {
+function NavigationButton(props: {
   active: boolean
   icon: React.ReactNode
   label: string
   onClick(): void
 }): React.JSX.Element {
   return (
-    <button className={props.active ? 'nav-button active' : 'nav-button'} onClick={props.onClick}>
+    <button type="button" className={props.active ? 'top-navigation-item active' : 'top-navigation-item'} aria-current={props.active ? 'page' : undefined} onClick={props.onClick}>
       {props.icon}
       <span>{props.label}</span>
     </button>

@@ -148,6 +148,12 @@ export interface SaveAsRequest {
   kind: 'original-markdown' | 'translated-markdown' | 'result-zip'
 }
 
+export type WindowAction = 'minimize' | 'toggle-maximize' | 'close'
+
+export interface WindowState {
+  maximized: boolean
+}
+
 export interface MinerUDesktopApi {
   getSettings(): Promise<AppSettings>
   saveSettings(update: SettingsUpdate): Promise<AppSettings>
@@ -163,8 +169,11 @@ export interface MinerUDesktopApi {
   getDocument(taskId: string): Promise<DocumentPayload>
   openOutputDirectory(taskId: string): Promise<void>
   saveAs(request: SaveAsRequest): Promise<string | null>
+  performWindowAction(action: WindowAction): Promise<WindowState>
+  getWindowState(): Promise<WindowState>
   onTasksChanged(listener: (tasks: MinerUTask[]) => void): () => void
   onOpenTask(listener: (taskId: string) => void): () => void
+  onWindowStateChanged(listener: (state: WindowState) => void): () => void
 }
 
 declare global {

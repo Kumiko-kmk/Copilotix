@@ -10,7 +10,9 @@ import type {
   SaveAsRequest,
   SelectedPdf,
   SettingsUpdate,
-  TranslationProviderId
+  TranslationProviderId,
+  WindowAction,
+  WindowState
 } from '@shared/types'
 
 const api: MinerUDesktopApi = {
@@ -30,6 +32,8 @@ const api: MinerUDesktopApi = {
   getDocument: (taskId: string) => ipcRenderer.invoke('document:get', taskId) as Promise<DocumentPayload>,
   openOutputDirectory: (taskId: string) => ipcRenderer.invoke('document:open-output', taskId) as Promise<void>,
   saveAs: (request: SaveAsRequest) => ipcRenderer.invoke('document:save-as', request) as Promise<string | null>,
+  performWindowAction: (action: WindowAction) => ipcRenderer.invoke('window:action', action) as Promise<WindowState>,
+  getWindowState: () => ipcRenderer.invoke('window:state') as Promise<WindowState>,
   onTasksChanged: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, tasks: MinerUTask[]): void => listener(tasks)
     ipcRenderer.on('tasks:changed', handler)
@@ -39,6 +43,11 @@ const api: MinerUDesktopApi = {
     const handler = (_event: Electron.IpcRendererEvent, taskId: string): void => listener(taskId)
     ipcRenderer.on('tasks:open', handler)
     return () => ipcRenderer.removeListener('tasks:open', handler)
+  },
+  onWindowStateChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: WindowState): void => listener(state)
+    ipcRenderer.on('window:state-changed', handler)
+    return () => ipcRenderer.removeListener('window:state-changed', handler)
   }
 }
 
