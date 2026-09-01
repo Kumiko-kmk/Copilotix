@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import archiver from 'archiver'
 import extract from 'extract-zip'
+import { auditRelease, formatMiB } from './release-policy.mjs'
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const desktopDirectory = resolve(scriptDirectory, '..')
@@ -20,51 +21,76 @@ const releaseName = `${productName}-${packageJson.version}-win-x64`
 const runtimeDirectory = join(releaseRoot, releaseName)
 const zipPath = join(releaseRoot, `${releaseName}.zip`)
 const executableName = `${packageJson.build?.executableName ?? productName}.exe`
+const manifestPath = join(releaseRoot, 'release-manifest.json')
+const checksumsPath = join(releaseRoot, 'SHA256SUMS.txt')
 
 assertExactReleaseRoot()
 await rm(releaseRoot, { recursive: true, force: true })
 await mkdir(stagingDirectory, { recursive: true })
-await runElectronBuilder()
+let releaseCompleted = false
+try {
+  await runElectronBuilder()
 
-const unpackedDirectory = join(stagingDirectory, 'win-unpacked')
-await requireFile(join(unpackedDirectory, executableName))
-await requireFile(join(unpackedDirectory, 'resources', 'app.asar'))
-await rename(unpackedDirectory, runtimeDirectory)
-await rm(stagingDirectory, { recursive: true, force: true })
+  const unpackedDirectory = join(stagingDirectory, 'win-unpacked')
+  const appAsarPath = join(unpackedDirectory, 'resources', 'app.asar')
+  await requireFile(join(unpackedDirectory, executableName))
+  await requireFile(appAsarPath)
+  await rename(unpackedDirectory, runtimeDirectory)
+  await rm(stagingDirectory, { recursive: true, force: true })
 
-await createReleaseZip(runtimeDirectory, zipPath, releaseName)
-await verifyReleaseZip(zipPath, releaseName, executableName)
+  await createReleaseZip(runtimeDirectory, zipPath, releaseName)
+  await verifyReleaseZip(zipPath, releaseName, executableName)
 
-const executableHash = await sha256(join(runtimeDirectory, executableName))
-const zipHash = await sha256(zipPath)
-const createdAt = new Date().toISOString()
-const manifest = {
-  schemaVersion: 1,
-  productName,
-  version: packageJson.version,
-  platform: 'win32',
-  architecture: 'x64',
-  createdAt,
-  runtime: {
-    directory: releaseName,
-    entryPoint: `${releaseName}/${executableName}`,
-    sha256: executableHash
-  },
-  transport: {
-    file: `${releaseName}.zip`,
-    sha256: zipHash
+  const measurements = await auditRelease({
+    runtimeDirectory,
+    zipPath,
+    asarEntries: listAsarEntries(join(runtimeDirectory, 'resources', 'app.asar'))
+  })
+  const executableHash = await sha256(join(runtimeDirectory, executableName))
+  const zipHash = await sha256(zipPath)
+  const createdAt = new Date().toISOString()
+  const manifest = {
+    schemaVersion: 1,
+    productName,
+    version: packageJson.version,
+    platform: 'win32',
+    architecture: 'x64',
+    createdAt,
+    runtime: {
+      directory: releaseName,
+      entryPoint: `${releaseName}/${executableName}`,
+      sha256: executableHash
+    },
+    transport: {
+      file: `${releaseName}.zip`,
+      sha256: zipHash
+    }
+  }
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  await writeFile(
+    checksumsPath,
+    `${zipHash} *${releaseName}.zip\n${executableHash} *${releaseName}/${executableName}\n`,
+    'utf8'
+  )
+  await assertReleaseRootContents()
+  releaseCompleted = true
+
+  process.stdout.write(`Release directory: ${runtimeDirectory}\n`)
+  process.stdout.write(`Release archive:   ${zipPath}\n`)
+  process.stdout.write(`app.asar size:     ${formatMiB(measurements.appAsarBytes)} MiB / 40.00 MiB\n`)
+  process.stdout.write(`Runtime size:      ${formatMiB(measurements.runtimeBytes)} MiB / 330.00 MiB\n`)
+  process.stdout.write(`ZIP size:          ${formatMiB(measurements.zipBytes)} MiB / 140.00 MiB\n`)
+  process.stdout.write(`ZIP SHA-256:       ${zipHash}\n`)
+} finally {
+  await rm(stagingDirectory, { recursive: true, force: true })
+  await rm(join(releaseRoot, '.verify'), { recursive: true, force: true })
+  if (!releaseCompleted) {
+    await rm(runtimeDirectory, { recursive: true, force: true })
+    await rm(zipPath, { force: true })
+    await rm(manifestPath, { force: true })
+    await rm(checksumsPath, { force: true })
   }
 }
-await writeFile(join(releaseRoot, 'release-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
-await writeFile(
-  join(releaseRoot, 'SHA256SUMS.txt'),
-  `${zipHash} *${releaseName}.zip\n${executableHash} *${releaseName}/${executableName}\n`,
-  'utf8'
-)
-
-process.stdout.write(`Release directory: ${runtimeDirectory}\n`)
-process.stdout.write(`Release archive:   ${zipPath}\n`)
-process.stdout.write(`ZIP SHA-256:       ${zipHash}\n`)
 
 function assertExactReleaseRoot() {
   const expected = resolve(repositoryRoot, 'release')
@@ -94,6 +120,21 @@ async function runElectronBuilder() {
       else rejectPromise(new Error(`electron-builder exited with code ${String(code)}`))
     })
   })
+}
+
+function listAsarEntries(archivePath) {
+  const electronBuilderRequire = createRequire(require.resolve('electron-builder/out/cli/cli.js'))
+  const appBuilderRequire = createRequire(electronBuilderRequire.resolve('app-builder-lib'))
+  const asar = appBuilderRequire('@electron/asar')
+  return asar.listPackage(archivePath)
+}
+
+async function assertReleaseRootContents() {
+  const expected = [releaseName, `${releaseName}.zip`, 'SHA256SUMS.txt', 'release-manifest.json'].sort()
+  const actual = (await readdir(releaseRoot)).sort()
+  if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
+    throw new Error(`Unexpected release root contents: ${actual.join(', ')}`)
+  }
 }
 
 async function createReleaseZip(sourceDirectory, destination, rootName) {

@@ -66,6 +66,9 @@ function Harness(): React.JSX.Element {
       jsonQuery=""
       onJsonQueryChange={() => undefined}
       assetBaseUrl="mineru-asset://task/"
+      taskId="task"
+      annotations={[]}
+      onReplaceAnnotations={async () => undefined}
       selection={null}
       onSelect={() => undefined}
     />

@@ -26,6 +26,35 @@ async function isCentered(locator: Locator, containerSelector: string): Promise<
   }, containerSelector)
 }
 
+async function selectText(locator: Locator, startOffset: number, endOffset: number): Promise<void> {
+  await locator.evaluate((element, offsets) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    const nodes: Text[] = []
+    let node = walker.nextNode()
+    while (node) {
+      nodes.push(node as Text)
+      node = walker.nextNode()
+    }
+    const locate = (target: number): { node: Text; offset: number } => {
+      let consumed = 0
+      for (const textNode of nodes) {
+        if (target <= consumed + textNode.data.length) return { node: textNode, offset: target - consumed }
+        consumed += textNode.data.length
+      }
+      throw new Error('Selection offset exceeds rendered text')
+    }
+    const start = locate(offsets.startOffset)
+    const end = locate(offsets.endOffset)
+    const range = document.createRange()
+    range.setStart(start.node, start.offset)
+    range.setEnd(end.node, end.offset)
+    const selection = window.getSelection()!
+    selection.removeAllRanges()
+    selection.addRange(range)
+    document.dispatchEvent(new Event('selectionchange'))
+  }, { startOffset, endOffset })
+}
+
 test('renders a local PDF with range requests before parsing succeeds', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
@@ -153,7 +182,70 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
   }
 })
 
-test('restores discarded headers, footnotes, footers and page numbers as gray display-only content', async () => {
+test('persists original and translated Markdown annotations with color and underline isolation', async () => {
+  const workspace = await createE2EWorkspace()
+  const taskId = await seedReaderTask(workspace, {
+    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
+    legacyTranslationManifest: true
+  })
+  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.recent-task', { hasText: 'fixture.pdf' }).click()
+    let activeTextPanel = window.locator('.reader-tab-panel.active')
+    await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
+    const originalBlock = activeTextPanel.locator('.markdown-block', { hasText: 'Second paragraph with' })
+    await selectText(originalBlock, 0, 6)
+    await expect(window.getByRole('toolbar', { name: '文本标注' })).toBeVisible()
+    await window.getByRole('button', { name: '荧光笔高亮' }).click({ button: 'right' })
+    await expect(window.getByRole('option')).toHaveCount(5)
+    await window.getByRole('option', { name: '选择蓝色' }).click()
+    await expect(window.getByRole('toolbar', { name: '文本标注' })).toBeVisible()
+    await window.getByRole('button', { name: '荧光笔高亮' }).click()
+    await expect.poll(() => window.evaluate(async (id) => {
+      const values = await (window as any).mineru.getReaderAnnotations(id)
+      return values.map((value: any) => [value.view, value.kind, value.color, value.quote])
+    }, taskId)).toEqual([['original', 'highlight', 'blue', 'Second']])
+
+    await window.reload()
+    await window.locator('.recent-task', { hasText: 'fixture.pdf' }).click()
+    activeTextPanel = window.locator('.reader-tab-panel.active')
+    await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
+    await expect.poll(() => window.evaluate(() =>
+      (CSS as any).highlights.get('mineru-highlight-blue')?.size ?? 0
+    )).toBeGreaterThan(0)
+
+    await window.getByText('Markdown（中文）').click()
+    activeTextPanel = window.locator('.reader-tab-panel.active')
+    await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
+    const translatedBlock = activeTextPanel.locator('.markdown-block', { hasText: '第二段落包含' })
+    await selectText(translatedBlock, 0, 4)
+    await window.getByRole('button', { name: '添加下划线' }).click()
+    await expect.poll(() => window.evaluate(async (id) => {
+      const values = await (window as any).mineru.getReaderAnnotations(id)
+      return values.map((value: any) => [value.view, value.kind, value.quote])
+    }, taskId)).toEqual([
+      ['original', 'highlight', 'Second'],
+      ['translated', 'underline', '第二段落']
+    ])
+
+    await window.getByText('Markdown', { exact: true }).click()
+    activeTextPanel = window.locator('.reader-tab-panel.active')
+    await selectText(activeTextPanel.locator('.markdown-block', { hasText: 'Second paragraph with' }), 0, 6)
+    await window.getByRole('button', { name: '荧光笔高亮' }).click({ button: 'right' })
+    await window.getByRole('option', { name: '选择蓝色' }).click()
+    await window.getByRole('button', { name: '荧光笔高亮' }).click()
+    await expect.poll(() => window.evaluate(async (id) => {
+      const values = await (window as any).mineru.getReaderAnnotations(id)
+      return values.map((value: any) => value.view)
+    }, taskId)).toEqual(['translated'])
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
+test('restores discarded headers, footnotes and footers while hiding printed page numbers', async () => {
   const workspace = await createE2EWorkspace()
   await seedReaderTask(workspace, {
     supplementalBlocks: true,
@@ -204,7 +296,7 @@ test('restores discarded headers, footnotes, footers and page numbers as gray di
       'Fixture author footer',
       'Fixture ending footer'
     ])
-    await expect(activeTextPanel.locator('[data-reader-role="page-number"]')).toHaveText(['315', '316'])
+    await expect(activeTextPanel.locator('[data-reader-role="page-number"]')).toHaveCount(0)
     await expect(activeTextPanel.locator('[data-reader-role="page-divider"]')).toHaveText(['第 1 页', '第 2 页'])
     await activeTextPanel.locator('.markdown-block', { hasText: '第二段落包含' }).click()
     await expect(window.locator('[data-block-position="1-1"]')).toHaveClass(/active/)
@@ -326,7 +418,7 @@ test('renders and safely links an optional real MinerU task', async () => {
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready', { timeout: 30_000 })
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(1110)
     await expect(activeTextPanel.locator('.markdown-block[data-block-ids=""]')).toHaveCount(1)
-    await expect.poll(() => activeTextPanel.locator('[data-reader-role="page-number"]').count()).toBeGreaterThan(0)
+    await expect(activeTextPanel.locator('[data-reader-role="page-number"]')).toHaveCount(0)
     await expect(activeTextPanel.locator('[data-reader-role="page-divider"]')).toHaveCount(97)
     const translatedMappedBlock = activeTextPanel.locator('.markdown-block:not([data-block-ids=""])').first()
     const translatedMappingId = (await translatedMappedBlock.getAttribute('data-block-ids'))?.split(/\s+/)[0]

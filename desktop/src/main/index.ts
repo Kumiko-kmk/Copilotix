@@ -22,7 +22,7 @@ import { createAssetResponse } from './assetProtocol'
 import { TaskService } from './taskService'
 import { JsonLineLogger } from './logger'
 import { createTranslationProviders } from './translation/providers'
-import type { CreateTasksRequest, DeleteTaskRequest, SaveAsRequest, SettingsUpdate, TranslationProviderId } from '@shared/types'
+import type { CreateTasksRequest, DeleteTaskRequest, ReplaceReaderAnnotationsRequest, SaveAsRequest, SettingsUpdate, TranslationProviderId } from '@shared/types'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -178,6 +178,11 @@ function registerIpc(
   ipcMain.handle('tasks:retry', (_event, taskId: string) => tasks.retry(taskId))
   ipcMain.handle('tasks:delete', (_event, request: DeleteTaskRequest) => tasks.delete(request.taskId, request.deleteFiles))
   ipcMain.handle('document:get', (_event, taskId: string) => tasks.getDocument(taskId))
+  ipcMain.handle('reader-annotations:get', (_event, taskId: string) => repository?.listReaderAnnotations(taskId) ?? [])
+  ipcMain.handle('reader-annotations:replace', (_event, request: ReplaceReaderAnnotationsRequest) => {
+    if (!repository) throw new Error('数据库尚未初始化')
+    return repository.replaceReaderAnnotations(request)
+  })
   ipcMain.handle('document:open-output', async (_event, taskId: string) => {
     const task = repository?.getTask(taskId)
     if (!task) throw new Error('任务不存在')

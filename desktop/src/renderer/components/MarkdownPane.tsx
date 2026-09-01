@@ -1,5 +1,7 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { Alert, Button, Spin } from 'antd'
+import { HighlightOutlined, MessageOutlined, UnderlineOutlined } from '@ant-design/icons'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
@@ -8,7 +10,27 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
 import type { ReaderBlock } from '@shared/readerDocument'
-import type { BlockSelection } from '@shared/types'
+import {
+  applyReaderAnnotationOperation,
+  READER_HIGHLIGHT_COLORS,
+  resolveReaderAnnotation
+} from '@shared/readerAnnotations'
+import type {
+  BlockSelection,
+  HighlightColor,
+  ReaderAnnotation,
+  ReaderAnnotationKind,
+  ReaderAnnotationView,
+  ReaderChatSelection
+} from '@shared/types'
+import {
+  buildReaderHighlightRanges,
+  captureReaderTextSelection,
+  clearBrowserTextSelection,
+  collectAnnotationBlockTexts,
+  registerReaderHighlightRanges,
+  type ReaderTextSelection
+} from '../readerAnnotations'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 
@@ -26,7 +48,9 @@ const markdownSanitizeSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    code: [['className', /^language-./, 'math-inline', 'math-display']]
+    code: [['className', /^language-./, 'math-inline', 'math-display']],
+    th: [...(defaultSchema.attributes?.th ?? []), 'rowSpan', 'colSpan'],
+    td: [...(defaultSchema.attributes?.td ?? []), 'rowSpan', 'colSpan']
   },
   protocols: {
     ...defaultSchema.protocols,
@@ -38,6 +62,13 @@ export default function MarkdownPane(props: {
   active: boolean
   blocks: ReaderBlock[]
   assetBaseUrl: string
+  taskId: string
+  view: ReaderAnnotationView
+  annotations: ReaderAnnotation[]
+  highlightColor: HighlightColor
+  onHighlightColorChange(color: HighlightColor): void
+  onReplaceAnnotations(annotations: ReaderAnnotation[]): Promise<void>
+  onAddToChat?(selection: ReaderChatSelection): void
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
 }): React.JSX.Element {
@@ -50,6 +81,11 @@ export default function MarkdownPane(props: {
   const blockPositionsRef = React.useRef<BlockPosition[]>([])
   const blockElementsRef = React.useRef<Map<string, HTMLElement>>(new Map())
   const ambiguousMappingIdsRef = React.useRef<Set<string>>(new Set())
+  const [annotationOwner] = React.useState(() => `reader-annotations-${crypto.randomUUID()}`)
+  const selectionFrameRef = React.useRef<number | null>(null)
+  const paletteTimerRef = React.useRef<number | null>(null)
+  const [textSelection, setTextSelection] = React.useState<ReaderTextSelection | null>(null)
+  const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [renderAttempt, setRenderAttempt] = React.useState(0)
   const [renderState, setRenderState] = React.useState<RenderState>({
     status: 'loading',
@@ -57,6 +93,16 @@ export default function MarkdownPane(props: {
     totalImages: 0
   })
   const ready = renderState.status === 'ready'
+
+  const closeTextSelection = React.useCallback((clearBrowser = false) => {
+    if (paletteTimerRef.current !== null) {
+      window.clearTimeout(paletteTimerRef.current)
+      paletteTimerRef.current = null
+    }
+    setTextSelection(null)
+    setPaletteOpen(false)
+    if (clearBrowser) clearBrowserTextSelection()
+  }, [])
 
   const releaseScrollSelectionSuppression = React.useCallback(() => {
     if (navigationReleaseFrameRef.current !== null) {
@@ -175,6 +221,40 @@ export default function MarkdownPane(props: {
   }, [props.active, ready, rebuildBlockPositions])
 
   React.useLayoutEffect(() => {
+    if (!ready || !articleRef.current) return
+    return registerReaderHighlightRanges(
+      annotationOwner,
+      buildReaderHighlightRanges(articleRef.current, props.annotations)
+    )
+  }, [annotationOwner, props.annotations, props.blocks, ready, renderAttempt])
+
+  React.useEffect(() => {
+    if (!props.active || !ready) {
+      closeTextSelection(true)
+      return
+    }
+    const updateSelection = (): void => {
+      if (selectionFrameRef.current !== null) window.cancelAnimationFrame(selectionFrameRef.current)
+      selectionFrameRef.current = window.requestAnimationFrame(() => {
+        selectionFrameRef.current = null
+        const article = articleRef.current
+        setTextSelection(article ? captureReaderTextSelection(article) : null)
+      })
+    }
+    document.addEventListener('selectionchange', updateSelection)
+    return () => document.removeEventListener('selectionchange', updateSelection)
+  }, [closeTextSelection, props.active, ready])
+
+  React.useEffect(() => {
+    if (!props.active) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') closeTextSelection(true)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [closeTextSelection, props.active])
+
+  React.useLayoutEffect(() => {
     if (
       !props.active ||
       !ready ||
@@ -201,6 +281,7 @@ export default function MarkdownPane(props: {
   }, [props.onSelect, releaseScrollSelectionSuppression])
 
   const onScroll = React.useCallback(() => {
+    if (textSelection) closeTextSelection(true)
     if (!props.active || !ready || suppressScrollSelectionRef.current || scrollFrameRef.current !== null) return
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null
@@ -215,12 +296,57 @@ export default function MarkdownPane(props: {
         props.onSelect({ mappingId: position.mappingId, origin: 'scroll' })
       }
     })
-  }, [props.active, props.onSelect, props.selection, ready])
+  }, [closeTextSelection, props.active, props.onSelect, props.selection, ready, textSelection])
+
+  const applyTextAnnotation = React.useCallback((kind: ReaderAnnotationKind) => {
+    const article = articleRef.current
+    if (!article || !textSelection) return
+    const blockTexts = collectAnnotationBlockTexts(article)
+    const repaired = props.annotations.map((annotation) => {
+      const text = blockTexts.get(annotation.blockKey)
+      if (text === undefined) return annotation
+      const resolved = resolveReaderAnnotation(text, annotation)
+      if (!resolved) return annotation
+      return {
+        ...annotation,
+        startOffset: resolved.startOffset,
+        endOffset: resolved.endOffset,
+        quote: text.slice(resolved.startOffset, resolved.endOffset),
+        prefix: text.slice(Math.max(0, resolved.startOffset - 32), resolved.startOffset),
+        suffix: text.slice(resolved.endOffset, resolved.endOffset + 32)
+      }
+    })
+    const next = applyReaderAnnotationOperation({
+      existing: repaired,
+      taskId: props.taskId,
+      view: props.view,
+      kind,
+      color: kind === 'highlight' ? props.highlightColor : null,
+      selections: textSelection.fragments,
+      blockTexts,
+      createId: () => crypto.randomUUID()
+    })
+    void props.onReplaceAnnotations(next)
+    closeTextSelection(true)
+  }, [closeTextSelection, props, textSelection])
+
+  const addToChat = React.useCallback(() => {
+    if (!textSelection) return
+    props.onAddToChat?.({
+      taskId: props.taskId,
+      view: props.view,
+      text: textSelection.text,
+      fragments: textSelection.fragments
+    })
+    closeTextSelection(true)
+  }, [closeTextSelection, props, textSelection])
 
   React.useEffect(() => () => {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
     if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current)
     if (navigationReleaseFrameRef.current !== null) window.cancelAnimationFrame(navigationReleaseFrameRef.current)
+    if (selectionFrameRef.current !== null) window.cancelAnimationFrame(selectionFrameRef.current)
+    if (paletteTimerRef.current !== null) window.clearTimeout(paletteTimerRef.current)
   }, [])
 
   const retry = React.useCallback(() => {
@@ -275,6 +401,28 @@ export default function MarkdownPane(props: {
           )
         })}
       </article>
+      {props.active && ready && textSelection ? createPortal(
+        <ReaderAnnotationToolbar
+          selection={textSelection}
+          color={props.highlightColor}
+          paletteOpen={paletteOpen}
+          onPaletteOpen={() => setPaletteOpen(true)}
+          onPaletteClose={() => setPaletteOpen(false)}
+          onPaletteHover={() => {
+            if (paletteTimerRef.current !== null) window.clearTimeout(paletteTimerRef.current)
+            paletteTimerRef.current = window.setTimeout(() => setPaletteOpen(true), 250)
+          }}
+          onPaletteHoverEnd={() => {
+            if (paletteTimerRef.current !== null) window.clearTimeout(paletteTimerRef.current)
+            paletteTimerRef.current = null
+          }}
+          onColorChange={props.onHighlightColorChange}
+          onHighlight={() => applyTextAnnotation('highlight')}
+          onUnderline={() => applyTextAnnotation('underline')}
+          onAddToChat={addToChat}
+        />,
+        document.body
+      ) : null}
     </div>
   )
 }
@@ -302,6 +450,8 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
     return (
       <div
         data-reader-role={props.block.role}
+        data-annotation-block-key={props.block.annotationKey}
+        data-page-index={props.block.pageIndex}
         className={'markdown-supplemental markdown-supplemental-' + props.block.role}
       >
         <MarkdownContent markdown={props.block.text ?? ''} assetBaseUrl={props.assetBaseUrl} />
@@ -312,9 +462,12 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   return (
     <div
       data-block-ids={props.block.mappingIds.join(' ')}
+      data-mapping-ids={props.block.mappingIds.join(' ')}
+      data-annotation-block-key={props.block.annotationKey}
       data-reader-role={props.block.role}
       className={props.active ? 'markdown-block active' : 'markdown-block'}
       onClick={() => {
+        if (window.getSelection() && !window.getSelection()!.isCollapsed) return
         const mappingId = props.block.mappingIds[0]
         if (mappingId) props.onSelect({ mappingId, origin: 'markdown' })
       }}
@@ -323,6 +476,86 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
     </div>
   )
 })
+
+const HIGHLIGHT_COLOR_VALUES: Record<HighlightColor, string> = {
+  yellow: '#F4C542',
+  green: '#67C587',
+  blue: '#64A8E8',
+  pink: '#E98AB4',
+  purple: '#A98BEA'
+}
+
+function ReaderAnnotationToolbar(props: {
+  selection: ReaderTextSelection
+  color: HighlightColor
+  paletteOpen: boolean
+  onPaletteOpen(): void
+  onPaletteClose(): void
+  onPaletteHover(): void
+  onPaletteHoverEnd(): void
+  onColorChange(color: HighlightColor): void
+  onHighlight(): void
+  onUnderline(): void
+  onAddToChat(): void
+}): React.JSX.Element {
+  const above = props.selection.rect.top >= 92
+  const center = props.selection.rect.left + props.selection.rect.width / 2
+  const left = Math.max(68, Math.min(window.innerWidth - 68, center))
+  const top = above ? props.selection.rect.top - 10 : props.selection.rect.bottom + 10
+  return (
+    <div
+      className={`reader-annotation-toolbar ${above ? 'above' : 'below'}`}
+      data-testid="reader-annotation-toolbar"
+      style={{ left, top }}
+      onMouseDown={(event) => event.preventDefault()}
+      role="toolbar"
+      aria-label="文本标注"
+    >
+      {props.paletteOpen ? (
+        <div className="reader-highlight-palette" role="listbox" aria-label="荧光笔颜色">
+          {READER_HIGHLIGHT_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={color === props.color ? 'active' : ''}
+              style={{ '--highlight-swatch': HIGHLIGHT_COLOR_VALUES[color] } as React.CSSProperties}
+              aria-label={`选择${highlightColorLabel(color)}`}
+              aria-selected={color === props.color}
+              role="option"
+              onClick={() => {
+                props.onColorChange(color)
+                props.onPaletteClose()
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        aria-label="荧光笔高亮"
+        onClick={props.onHighlight}
+        onMouseEnter={props.onPaletteHover}
+        onMouseLeave={props.onPaletteHoverEnd}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          props.onPaletteOpen()
+        }}
+      >
+        <HighlightOutlined style={{ color: HIGHLIGHT_COLOR_VALUES[props.color] }} />
+      </button>
+      <button type="button" aria-label="添加下划线" onClick={props.onUnderline}>
+        <UnderlineOutlined />
+      </button>
+      <button type="button" aria-label="添加到对话" onClick={props.onAddToChat}>
+        <MessageOutlined />
+      </button>
+    </div>
+  )
+}
+
+function highlightColorLabel(color: HighlightColor): string {
+  return ({ yellow: '黄色', green: '绿色', blue: '蓝色', pink: '粉色', purple: '紫色' })[color]
+}
 
 const MarkdownContent = React.memo(function MarkdownContent(props: {
   markdown: string

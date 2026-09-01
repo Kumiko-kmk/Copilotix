@@ -2,24 +2,44 @@ import React from 'react'
 import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Space, Spin, Tag, Typography, message } from 'antd'
 import { buildReaderDocumentBlocks } from '@shared/readerDocument'
-import type { BlockSelection, DocumentPayload } from '@shared/types'
+import type {
+  BlockSelection,
+  DocumentPayload,
+  ReaderAnnotation,
+  ReaderAnnotationView
+} from '@shared/types'
 import PdfPane from '../components/PdfPane'
 import ReaderTextPane, { type ReaderTab } from '../components/ReaderTextPane'
 
 export default function ReaderPage(props: { taskId: string; onBack(): void }): React.JSX.Element {
   const [document, setDocument] = React.useState<DocumentPayload | null>(null)
+  const [annotations, setAnnotations] = React.useState<ReaderAnnotation[]>([])
   const [tab, setTab] = React.useState<ReaderTab>('original')
   const [selection, setSelection] = React.useState<BlockSelection | null>(null)
   const [jsonQuery, setJsonQuery] = React.useState('')
   const lastTerminalStatus = React.useRef<string | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
   const [, startTransition] = React.useTransition()
+  const annotationsRef = React.useRef<ReaderAnnotation[]>([])
+  const loadSequence = React.useRef(0)
 
-  const load = React.useCallback(async () => setDocument(await window.mineru.getDocument(props.taskId)), [props.taskId])
+  const load = React.useCallback(async () => {
+    const sequence = ++loadSequence.current
+    const [nextDocument, nextAnnotations] = await Promise.all([
+      window.mineru.getDocument(props.taskId),
+      window.mineru.getReaderAnnotations(props.taskId)
+    ])
+    if (sequence !== loadSequence.current) return
+    annotationsRef.current = nextAnnotations
+    setDocument(nextDocument)
+    setAnnotations(nextAnnotations)
+  }, [props.taskId])
   React.useEffect(() => { void load() }, [load])
   React.useEffect(() => {
     setTab('original')
     setSelection(null)
+    annotationsRef.current = []
+    setAnnotations([])
     setJsonQuery('')
     lastTerminalStatus.current = null
   }, [props.taskId])
@@ -46,6 +66,34 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
   const changeTab = React.useCallback((next: ReaderTab) => {
     startTransition(() => setTab(next))
   }, [startTransition])
+
+  const replaceAnnotations = React.useCallback(async (
+    view: ReaderAnnotationView,
+    nextViewAnnotations: ReaderAnnotation[]
+  ): Promise<void> => {
+    const previous = annotationsRef.current
+    const optimistic = [
+      ...previous.filter((annotation) => annotation.view !== view),
+      ...nextViewAnnotations
+    ]
+    annotationsRef.current = optimistic
+    setAnnotations(optimistic)
+    try {
+      const saved = await window.mineru.replaceReaderAnnotations({
+        taskId: props.taskId,
+        view,
+        annotations: nextViewAnnotations
+      })
+      annotationsRef.current = saved
+      setAnnotations(saved)
+    } catch (error) {
+      if (annotationsRef.current === optimistic) {
+        annotationsRef.current = previous
+        setAnnotations(previous)
+      }
+      messageApi.error(error instanceof Error ? error.message : '标注保存失败')
+    }
+  }, [messageApi, props.taskId])
 
   const copyCurrent = React.useCallback(async () => {
     if (!document) return
@@ -85,6 +133,9 @@ export default function ReaderPage(props: { taskId: string; onBack(): void }): R
           jsonQuery={jsonQuery}
           onJsonQueryChange={setJsonQuery}
           assetBaseUrl={document.assetBaseUrl}
+          taskId={document.task.id}
+          annotations={annotations}
+          onReplaceAnnotations={replaceAnnotations}
           selection={selection}
           onSelect={selectBlock}
         />

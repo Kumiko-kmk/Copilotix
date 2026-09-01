@@ -168,6 +168,8 @@ ReaderPage 採用 React.lazy 延遲載入，避免初始頁面立即載入 PDF.j
 | tasks:retry | retryTask | void |
 | tasks:delete | deleteTask | void |
 | document:get | getDocument | DocumentPayload |
+| reader-annotations:get | getReaderAnnotations | ReaderAnnotation[] |
+| reader-annotations:replace | replaceReaderAnnotations | ReaderAnnotation[] |
 | document:open-output | openOutputDirectory | void |
 | document:save-as | saveAs | 保存路徑或 null |
 | tasks:changed | onTasksChanged | 主進程推送任務列表 |
@@ -365,6 +367,8 @@ tasks、translation_runs、translation_blocks 之間使用外鍵和 ON DELETE CA
 
 SQLite 只保存公開配置。SettingsService 會從傳入更新中分離密鑰，再把公開字段寫入數據庫。
 
+`reader_annotations` 按 task、original/translated 視圖、穩定 Reader block key 和 UTF-16 文本區間保存閱讀標註。任務刪除時由外鍵級聯清理；renderer 只能經過經驗證的全視圖事務替換 IPC 讀寫，標註不進任務輸出文件或結果 ZIP。
+
 ### 12.2 公開設置
 
 主要設置：
@@ -414,11 +418,21 @@ OpenAI compatible provider 的 base URL 和 model 可配置。Bing 與 TranSmart
 translateMarkdown 使用 unified/remark 把 Markdown 解析成 AST，再逐頂層節點翻譯：
 
 - 保留 code、inlineCode、math、inlineMath 和 html。
-- 圖片、URL、表格/列表結構由 AST stringify 保持。
+- 普通文本的圖片、URL、表格/列表結構由 AST stringify 保持。
 - 單段超過 4,000 字符時按句號、分號或空格拆分。
 - 每個操作最多重試 3 次。
 - 429 等錯誤可使用 Retry-After，否則指數退避。
 - 翻譯總 queue 併發為 3。
+
+MinerU 輸出的 HTML 表格會走獨立的整表翻譯協議：
+
+- `parse5` 讀取 `table/tr/td/th`，保留單元格順序、空單元格、`rowspan`、`colspan` 和原始 HTML 結構；不新增單元格級 bbox 或 PDF 聯動。
+- 每張表格及其相鄰 `table_caption`、`table_footnote` 生成一個 v2 結構化請求，所有可翻譯文本以穩定 segment id 傳遞，響應是有序 `{id, text}` 數組。
+- Qwen/DeepSeek 接收完整表格 JSON；TranSmart 使用原生 `source.text_list` 在一次 HTTP 請求中提交有序文本數組；Bing 作為兜底時逐 segment 發送短請求。所有 Provider 都在完整校驗後才原子回填整表，不再依賴會被網頁翻譯器改寫的 marker。
+- 回填時只替換原 HTML 文本節點，表格標籤、行列合併、屬性、公式、圖片和鏈接均來自原文。
+- 缺少、重複、未知、空白或數量不符的 segment 會使當前 Provider 整表失敗並觸發回退；所有 Provider 都失敗時才保留整表原文並將任務標為 partial。圖片型或沒有可翻譯文本的表格保持原樣完成。
+
+參考文獻在進入 Provider 前處理：章節標題統一寫為同級 Markdown 標題“参考文献”，`ref_text` 映射的文獻條目直接保留原文。缺少該映射時，使用參考文獻標題到下一個章節標題之間的連續段落/列表作為回退邊界，因此文獻之後的 Appendix 仍會繼續翻譯。
 
 Provider 回退順序是：
 
@@ -432,11 +446,11 @@ Provider 回退順序是：
 
 ### 13.3 翻譯緩存與恢復
 
-區塊 sourceHash 基於該 Markdown AST 節點的序列化結果。緩存鍵包含 provider、model、目標語言和 sourceHash。
+區塊 sourceHash 基於該 Markdown AST 節點的序列化結果。緩存鍵包含流水線版本、provider、model、目標語言和 sourceHash；整表翻譯的緩存值是帶協議版本和完整表格 sourceHash 的 JSON。
 
 已完成且 sourceHash 未變的 translation_blocks 會直接復用。這使部分任務重試時不需要重譯全部內容。
 
-修改 prompt、清洗規則或翻譯語義時，應把算法版本加入 cache key；目前 cache key 不包含 prompt/流水線版本，否則舊譯文可能在行為變更後仍被命中。
+修改 prompt、清洗規則或翻譯語義時，應更新流水線版本。當前表格協議版本為 `mineru-table-translation-v2`，舊任務結果仍可讀取，只有手動重試才會使用新的整表流程。
 
 ## 14. PDF 與 Markdown 區塊映射
 
@@ -502,7 +516,7 @@ readerDocument.ts 是 MinerU 映射資料到 UI 的純函數邊界。正文永�
 - page-footer。
 - page-number。
 
-頁眉插在該頁第一個正文錨點前；腳注、頁腳、打印頁碼及「第 N 页」插在該頁最後一個正文錨點後。原文視圖隱藏容易被誤認為圖片的打印頁碼方塊，只保留其他補充元素與「第 N 页」；中文譯文視圖顯示全部頁眉、腳注、頁腳、打印頁碼及分頁線。跨頁正文無法安全拆分時，補充元素放在完整邏輯塊之後。所有灰色補充元素都沒有 mapping id，只經過既有 sanitize Markdown renderer 顯示，未知 discarded 雜訊不顯示。
+頁眉插在該頁第一個正文錨點前；腳注、頁腳及「第 N 页」插在該頁最後一個正文錨點後。原文與中文譯文視圖都隱藏容易被誤認為圖片的打印頁碼方塊，只顯示頁眉、腳注、頁腳與統一分頁線。跨頁正文無法安全拆分時，補充元素放在完整邏輯塊之後。所有灰色補充元素都沒有 mapping id，只經過既有 sanitize Markdown renderer 顯示，未知 discarded 雜訊不顯示。
 
 ## 15. 閱讀器
 
@@ -540,7 +554,7 @@ PdfPane：
 
 - 點擊 PDF bbox，MarkdownPane 激活並滾動到對應區塊。
 - 點擊/滾動 Markdown，PdfPane 跳到第一個映射頁。
-- 灰色頁眉、腳注、頁腳、頁碼及分頁線是純展示元素，不可點擊、不進入位置索引，也不參與被動捲動選擇。
+- 灰色頁眉、腳注和頁腳不參與 PDF 導航或被動捲動選擇，但可作為文本標註錨點；打印頁碼不顯示，統一分頁線不可選取或標註。
 - MarkdownPane 在佈局重建時建立 mapping id 到 DOM 的索引，PDF 點擊後不再逐節點掃描。
 - 若同一 mapping id 污染到多個正文 DOM 元素，該 id 被標記為歧義並禁用導航，不任選第一個。
 - scroll selection suppression 防止一次主動定位造成反向導航循環。
@@ -551,6 +565,12 @@ PdfPane：
 ReaderTextPane 持續掛載三個 tab panel，切換只改變 active/inactive 顯示狀態，不銷毀已完成的 Markdown AST、圖片或捲動容器。中文與 JSON 分兩個 requestIdleCallback 階段預熱，避免同一幀建立兩個長文檔視圖；若用戶先點擊尚未預熱的視圖，該視圖會立即掛載。
 
 隱藏 MarkdownPane 不建立 ResizeObserver、不重算區塊位置，也不處理捲動聯動。長文 block 使用 content-visibility 降低首屏外版面成本。JSON 使用只讀 textarea，搜索只建立命中附近的摘錄，不再為整份 JSON 建立帶高亮的巨型 DOM。
+
+### 15.5 文本標註
+
+原文與中文 Markdown 共用划選工具欄和當前荧光筆顏色，但標註資料按視圖隔離。正文以 source block 序號作為穩定 key，頁眉、頁腳與腳注使用 mapping ID；跨 block 選區拆成多個區間後一次事務保存。區間保存 quote 與最多 32 字符前後文，渲染時先驗證 offset，內容改變後才做唯一 quote/context 重定位，歧義錨點保留但不繪製。
+
+視覺層使用 CSS Custom Highlight API，不插入或包裝 ReactMarkdown、KaTeX、表格與代碼 DOM。高亮與下劃線獨立，部分重疊按字符區間拆分、合併；再次操作已完全覆蓋的同色高亮或下劃線會刪除該範圍。“添加到對話”目前只有可選 renderer 回調和類型化選文載荷，沒有 IPC 或聊天後端。
 
 ## 16. 開發構建與目錄版發布
 
@@ -577,9 +597,12 @@ electron-builder 配置：
 - productName/executableName：MinerU
 - x64
 - ASAR 開啟
+- Electron locale 僅保留 zh-CN
 - 目標：dir
+- build 前精確清理 desktop/out，禁止累積舊哈希 bundle
 - `desktop/scripts/package-directory.mjs` 每次只重建根目錄 release
 - ZIP 生成後立即解壓驗證 MinerU.exe 與 resources/app.asar
+- 發布門禁：app.asar ≤ 40 MiB、運行目錄 ≤ 330 MiB、ZIP ≤ 140 MiB，且不得包含 @napi-rs/canvas
 - 暫無代碼簽名
 
 `desktop:build` 只生成開發 bundle。`desktop:release` 先 build，再生成唯一運行目錄、ZIP、manifest 與 SHA-256；setup、portable 及 `desktop/dist*` 都不是受支持產物。更新時關閉應用並整體替換運行目錄，userData 與 Credential Manager 數據不受影響。
@@ -613,10 +636,11 @@ push 只觸發 master；以 desktop-v 開頭的 tag 建立 GitHub Release。CI �
 | taskBatching.test.ts | 每批最多 50 |
 | blockMapping.test.ts | 穩定 ID、合併、discarded |
 | markdownBlocks.test.ts | 單調文本／媒體對齊、短句不擴張、ID 不重用、97 頁真實回歸 |
-| markdownPipeline.test.ts | AST 保護與 provider 回退 |
+| markdownPipeline.test.ts / tableTranslation.test.ts / providers.test.ts | AST 保護、整表 v2 JSON、TranSmart 數組與 Bing 短請求、附件聚合、參考文獻保護、缓存、provider 回退與原表保留 |
 | assetProtocol.test.ts | Range、HEAD、404/416 |
 | readerDocument.test.ts | 正文 sourceIndex 保序、原／譯文頁碼差異、譯文安全重映射、污染 mapping 不重排 |
-| MarkdownPane.test.tsx | 資源就緒、錯誤重試、主動／被動聯動、歧義 ID 防禦、HTML 補充元素 |
+| MarkdownPane.test.tsx | 資源就緒、錯誤重試、主動／被動聯動、歧義 ID 防禦、跨 block 標註工具欄與選色 |
+| readerAnnotations.test.ts / readerAnnotationDatabase.test.ts | 區間增刪改色、重定位、視圖隔離、SQLite 遷移與級聯清理 |
 | ReaderTextPane.test.tsx | 次要視圖預熱及三視圖 DOM 常駐 |
 | JsonPane.test.ts | JSON 字面搜索與摘錄 |
 
@@ -780,18 +804,18 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 
 ## 26. 本基線驗證記錄
 
-驗證日期：2026-08-29。
+驗證日期：2026-09-01。
 
 | 檢查 | 結果 |
 |---|---|
 | pnpm desktop:typecheck | 通過 |
-| pnpm desktop:test | 12 個測試文件通過；48 個測試通過，4 個可選 fixture 測試跳過 |
-| pnpm desktop:build | 通過；main、preload、renderer 均成功生成 |
-| pnpm desktop:test:e2e | 6 個通過；4 個依賴外部服務／真實 fixture 的可選測試跳過 |
-| 97 頁真實任務 | 1110 個原文／譯文正文塊保序、1109 個高置信映射、ID 重用 0；原文打印頁碼隱藏、譯文 97 條分頁線及打印頁碼恢復、譯文 PDF 跳轉通過 |
-| 正式打包 | 唯一運行目錄、ZIP、release manifest 與 SHA256SUMS 生成成功；ZIP 解壓結構驗證通過 |
+| pnpm desktop:test | 17 個測試文件通過；75 個測試通過，4 個可選 fixture 測試跳過 |
+| pnpm desktop:build | 通過；main、preload、renderer 均成功生成，build 前安全清理舊 bundle |
+| pnpm desktop:test:e2e | 7 個通過；4 個依賴外部服務／真實 fixture 的可選測試跳過 |
+| 真實 Deep Sparse 任務 | 完整離線映射／整表／參考文獻回歸通過；`ref_text` 未進 Provider，表格 caption 與單元格均生成 v2 結果 |
+| 正式打包 | app.asar 20.24 MiB、運行目錄 297.31 MiB、ZIP 125.64 MiB；僅 zh-CN locale、無 @napi-rs/canvas，ZIP 解壓及體積門禁通過 |
 | 打包程式 smoke | 2 個通過；首屏及 window.mineru.getSettings IPC 正常 |
 | git diff --check | 通過 |
 | 文檔關鍵路徑核對 | 全部存在 |
 
-本次修改 Desktop 閱讀器與共享純函數，沒有改動 Python 層、官方 API、SQLite、IPC 或翻譯 provider 契約。真實翻譯 provider 測試仍需由對應環境變量啟用；本次可重現 fixture 與 97 頁真實任務已覆蓋短句重複對齊、正文保序、補充元素純展示、HTML 上下標、PDF 聯動、歧義 mapping 防禦、視圖常駐與打包程式啟動。
+本次將整表協議升級為 v2，TranSmart 使用原生數組、Bing 使用短請求兜底，並加入參考文獻原文保護；沒有改動 Python 層、官方 API、SQLite、IPC 或 `DocumentPayload`。TranSmart 公開接口已用無敏感合成文本驗證等長數組返回；可重現 fixture 與真實任務覆蓋混合公式回填、正文保序、補充元素、PDF 聯動、文本標註、視圖常駐與打包程式啟動。
