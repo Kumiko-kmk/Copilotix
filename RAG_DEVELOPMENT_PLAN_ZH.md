@@ -1,12 +1,12 @@
 ---
 document_id: mineru-desktop-rag-development-plan
-document_version: 1
+document_version: 2
 status: proposed
 baseline_ref: master
-baseline_commit: 6c0c8fe25c69e62626bdfe44330480642bbb6885
-baseline_verified_at: 2026-08-31
-working_snapshot_branch: feature/ui-changes
-working_snapshot_head: 6c0c8fe25c69e62626bdfe44330480642bbb6885
+baseline_commit: 83795dd501c81dbeda0d59b916252aab70710556
+baseline_verified_at: 2026-09-01
+working_snapshot_branch: feature/english-title-filename
+working_snapshot_head: 83795dd501c81dbeda0d59b916252aab70710556
 coordination_owner: integration-agent
 ---
 
@@ -20,7 +20,7 @@ coordination_owner: integration-agent
 
 本文中的结论按以下层级解释，后续 Agent 不得把它们混写：
 
-1. **已提交基线**：只指本地 `master@6c0c8fe25c69e62626bdfe44330480642bbb6885` 中可由 Git 复现的内容。
+1. **已提交基线**：只指本地 `master@83795dd501c81dbeda0d59b916252aab70710556` 中可由 Git 复现的内容。
 2. **工作树观察**：指 2026-08-31 在 `feature/ui-changes` 上看到但尚未提交的内容；它们不是 master 能力，可能继续变化。
 3. **目标设计**：本文提出的 RAG 方案；在代码和测试合入前都不能写成“已实现”。
 
@@ -77,15 +77,23 @@ coordination_owner: integration-agent
 
 首版不把 `sqlite-vec`、LanceDB、Qdrant、LangChain 或模型权重设为必需依赖。
 
-## 2. 已提交基线：master@6c0c8fe
+## 2. 已提交基线：master@83795dd
 
 ### 2.1 Git 与产品边界
 
-- 本地 `master` 和当前 `feature/ui-changes` 的 HEAD 都指向 `6c0c8fe`。
-- 两个本地分支均无 upstream，仓库也没有 remote-tracking refs；本文只能判断本地进度，不能据此推断与远端仓库的差异。
-- master 共 7 个本地提交：导入 MinerU 上游快照、加入 Desktop、修复官方 API/Reader、恢复上传、版面对齐、译文联动、Reader/目录发布整合。
+- 本地 `master` 的基线为 `83795dd`；本功能在独立 worktree `feature/english-title-filename` 上实现，避免影响 master 与既有 worktree。
+- 本地分支均无 upstream，仓库也没有 remote-tracking refs；本文只能判断本地进度，不能据此推断与远端仓库的差异。
+- master 共 8 个本地提交：导入 MinerU 上游快照、加入 Desktop、修复官方 API/Reader、恢复上传、版面对齐、译文联动、Reader/目录发布整合及文档基线整理。
 - Desktop 是独立 Electron 客户端，不在运行时 import、spawn 或打包仓库中的 Python `mineru/`。
 - Desktop 固定调用 MinerU 官方 v4 API，下载 ZIP 后在本地标准化、翻译和阅读。
+
+### 2.1.1 解析后英文标题命名兼容边界
+
+- 新任务在创建时保存不可变的 `originalName`；解析完成后从 `block_list.json` 的首个非 discarded `title` 块提取英文标题，Markdown heading 只作兜底。
+- 安全标题写入 `title`（不含扩展名），用户可见 `name` 更新为 `<title>.pdf`，输出目录移动为 `<title>-<taskId>`，并同步 `outputDir`、`sourcePath`。
+- 任务目录内的 `original.pdf`、`full.md`、`full.zh-CN.md`、`layout.json`、`block_list.json` 和 `mineru-asset://<taskId>/original.pdf` 不改名；MinerU 上传仍使用 `originalName`。
+- 旧数据库行迁移为 `originalName = name`、`title = NULL`，旧任务目录和用户可见名称不自动移动或重命名；未来回填必须是显式操作。
+- 标题缺失、非法或目录移动失败时保留原路径/原名并继续解析与翻译，记录可诊断日志；重复重试不会继续追加后缀。
 
 ### 2.2 技术栈
 
@@ -158,8 +166,8 @@ PDF 选择/拖入
 `ARCHITECTURE_ZH.md` 记录 master 当时验证为：
 
 - typecheck 通过；
-- 12 个 Vitest 文件、48 个测试通过、4 个可选 fixture 跳过；
-- 6 个 E2E 通过、4 个外部服务/真实 fixture 测试跳过；
+- 17 个 Vitest 文件、75 个测试通过、4 个可选 fixture 跳过；
+- 7 个 E2E 通过、4 个外部服务/真实 fixture 测试跳过；
 - build、目录版打包、ZIP 结构和 smoke 通过。
 
 这些是提交内记录，不等同于本次重新执行 master 测试。本次没有切换或临时检出 master，以免干扰现有 dirty worktree。
@@ -215,7 +223,7 @@ PDF 选择/拖入
 ### 3.4 已知文档/源码不一致
 
 - 基线架构文档称 translation cache key 不含“prompt 或流水线版本”；源码 `markdownPipeline.ts` 已包含 `TRANSLATION_PIPELINE_VERSION`，准确缺口是它未表达完整 prompt/策略指纹。
-- 基线架构文档称只保留 master，但当前存在 `feature/ui-changes`。
+- 基线架构文档已更新为 master 基线 + feature worktree 策略；既有 `feature/ui-overhaul` 等 worktree 保持不动。
 - 基线架构文档的“当前工作树”会随本地状态漂移，后续应只用提交号描述稳定事实。
 - 在研发布文档称 release “原子重建”，但脚本会先删除旧 `release/` 再构建；它会清理失败半成品，却不保留失败前产物，严格说不具备原子替换语义。
 

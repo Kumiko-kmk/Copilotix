@@ -1,6 +1,6 @@
 # MinerU Desktop Demo 架構與二次開發指南
 
-> 本文是目前 demo 版本的權威開發導覽。項目只維護本地 master；所有結論以 master 當前工作樹與已驗證產物為準。
+> 本文是目前 demo 版本的權威開發導覽。`master` 是穩定基線；新功能在独立分支/worktree 中实现，所有结论以对应提交与已验证产物为准。
 
 ## 1. 文檔基線
 
@@ -8,16 +8,16 @@
 |---|---|
 | 倉庫 | Kumiko-kmk/MinerU |
 | 主開發分支 | master |
-| 基線 | 本地 master 當前 HEAD 與工作樹 |
-| 本地分支策略 | 只保留 master |
-| 當前工作樹 | Reader 對齊修復、補充版面還原、常駐閱讀視圖及目錄版發布架構 |
+| 基線 | `master@83795dd`（提交 `83795dd501c81dbeda0d59b916252aab70710556`） |
+| 本地分支策略 | `master` 保持基线；功能使用 `feature/*` 独立分支与 worktree |
+| 當前工作樹 | `feature/english-title-filename`：解析后英文标题命名与兼容迁移 |
 | Desktop 版本 | 0.1.0 |
 | Python MinerU 版本 | 3.4.5 |
 | 桌面平台 | Windows 10/11 x64 |
 | Node.js | 24.11.1；package.json 約束為 24.x |
 | pnpm | 11.19.0 |
 
-後續功能直接在本地 master 上分階段完成；高風險操作先建立 bundle、patch 或資料備份。`desktop/dist*` 不再是合法發布位置，正式產物只允許由 `pnpm desktop:release` 寫入根目錄 `release/`。
+後續功能从 `master@83795dd` 创建独立分支后分阶段完成；高風險操作先建立 bundle、patch 或資料備份。`desktop/dist*` 不再是合法發布位置，正式產物只允許由 `pnpm desktop:release` 寫入根目錄 `release/`。
 
 ## 2. 最重要的架構結論
 
@@ -231,7 +231,9 @@ partial 表示解析成功，但至少一個 Markdown 區塊的翻譯失敗。�
 - inspectPdfs 對整個文件做 SHA-256。
 - 默認根據 sourceHash 阻止重複任務，可由 createDuplicates 覆蓋。
 - 任務建立時把來源複製為任務目錄中的 original.pdf，後續不再依賴原始外部路徑。
-- 輸出目錄名為清理後的文件名加 UUID。
+- `originalName` 永久保存用户选择的原始文件名；解析前 `name` 为原文件名、`title` 为空。
+- `normalizeParserOutput` 完成后优先从 `block_list.json` 的首个非 discarded `title` 块提取英文标题，Markdown heading 仅作兜底；安全化后将 `name` 更新为 `<title>.pdf`，`title` 不含扩展名。
+- 新任务输出目录从原文件名目录移动为 `<安全标题>-<taskId>`，并同步更新 `outputDir`、`sourcePath`。目录移动失败时保留原路径并继续任务；历史任务不启动时批量改名。
 
 刪除實體文件前，TaskService 會 resolve 輸出根與任務目錄，拒絕刪除輸出根本身或根以外的路徑。
 
@@ -322,7 +324,7 @@ Token 驗證：
 
 | 文件 | 用途 |
 |---|---|
-| original.pdf | 任務自己的 PDF 副本 |
+| original.pdf | 任務自己的 PDF 副本；改名功能不会物理重命名它，`mineru-asset://{taskId}/original.pdf` 保持兼容 |
 | full.md | MinerU 原始 Markdown |
 | full.zh-CN.md | 本地翻譯結果 |
 | layout.json | 官方 middle/layout JSON |
@@ -346,14 +348,14 @@ desktop/src/main/database.ts 使用 node:sqlite 的 DatabaseSync：
 | 表 | 作用 |
 |---|---|
 | settings | 非敏感配置鍵值 |
-| tasks | 任務、狀態、遠端 ID、路徑 |
+| tasks | `originalName`（不可变上传/溯源名）、`title`（安全英文标题）、当前 `name`、状态、远端 ID 与路径 |
 | translation_runs | 每個任務的總數、成功數、失敗數 |
 | translation_blocks | 區塊級來源、譯文、provider、狀態 |
 | translation_cache | 跨任務翻譯緩存 |
 
 tasks、translation_runs、translation_blocks 之間使用外鍵和 ON DELETE CASCADE。刪除任務記錄會刪除其翻譯運行與區塊記錄，但全局 translation_cache 不會隨任務刪除。
 
-當前遷移方式是 CREATE TABLE IF NOT EXISTS 加少量 PRAGMA table_info/ALTER TABLE。若 schema 繼續演進，建議引入顯式 schema_version 和順序遷移；不要依賴應用啟動時猜測所有歷史狀態。
+當前遷移方式是 CREATE TABLE IF NOT EXISTS 加 PRAGMA table_info/ALTER TABLE；`original_name` 和 `title` 的新增在事务中执行，旧行回填 `original_name=name`、`title=NULL`。若 schema 繼續演進，建議引入顯式 schema_version 和順序遷移；不要依賴應用啟動時猜測所有歷史狀態。
 
 ## 12. 憑證、設置與日誌
 
@@ -715,7 +717,7 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 
 ## 21. 後續模塊修改地圖
 
-本地只保留 master；每次任務仍應只選一個主範圍：
+`master` 只作为稳定基线；每次功能任务应从基线创建独立 `feature/*` 分支/worktree，并只选一个主范围：
 
 | 修改範圍 | 主文件 | 必須保持 | 最低驗證 |
 |---|---|---|---|
@@ -737,7 +739,7 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 
 後續可以直接使用：
 
-    基線：Kumiko-kmk/MinerU 本地 master 當前 HEAD，
+    基線：Kumiko-kmk/MinerU 本地 master@83795dd；在 feature/* 独立 worktree 工作，
     先閱讀 ARCHITECTURE_ZH.md。
     本次只修改「<模塊>」，目標是「<可觀察結果>」。
     必須保持「<IPC/API/數據/輸出契約>」。
@@ -751,7 +753,7 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 
 ### 修改前
 
-- 確認位於本地 master；高風險修改先建立 bundle／patch 備份。
+- 確認位於目标 feature/* worktree，核对其基线为本地 master；高風險修改先建立 bundle／patch 備份。
 - 檢查 git status，保留已有改動和未跟蹤產物。
 - 確認需求屬於 Desktop、官方 API 適配或 Python 引擎。
 - 保存代表性 PDF、layout JSON、Markdown 和 block_list fixture。

@@ -13,6 +13,8 @@ import { DEFAULT_SETTINGS } from '@shared/constants'
 
 interface TaskRow {
   id: string
+  original_name: string
+  title: string | null
   name: string
   source_path: string
   source_hash: string
@@ -35,7 +37,12 @@ export class TaskRepository {
   constructor(databasePath: string) {
     this.db = new DatabaseSync(databasePath)
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
-    this.migrate()
+    try {
+      this.migrate()
+    } catch (error) {
+      this.db.close()
+      throw error
+    }
   }
 
   close(): void {
@@ -50,6 +57,8 @@ export class TaskRepository {
       );
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
+        original_name TEXT NOT NULL DEFAULT '',
+        title TEXT,
         name TEXT NOT NULL,
         source_path TEXT NOT NULL,
         source_hash TEXT NOT NULL,
@@ -114,8 +123,18 @@ export class TaskRepository {
     const taskColumns = new Set(
       (this.db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>).map((column) => column.name)
     )
-    if (!taskColumns.has('remote_batch_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN remote_batch_id TEXT')
-    if (!taskColumns.has('remote_data_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN remote_data_id TEXT')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      if (!taskColumns.has('original_name')) this.db.exec("ALTER TABLE tasks ADD COLUMN original_name TEXT NOT NULL DEFAULT ''")
+      if (!taskColumns.has('title')) this.db.exec('ALTER TABLE tasks ADD COLUMN title TEXT')
+      if (!taskColumns.has('remote_batch_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN remote_batch_id TEXT')
+      if (!taskColumns.has('remote_data_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN remote_data_id TEXT')
+      this.db.exec("UPDATE tasks SET original_name = name WHERE original_name IS NULL OR original_name = ''")
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
     this.db
       .prepare("UPDATE tasks SET status = 'failed', error = ?, updated_at = ? WHERE status IN ('uploading','parsing','translating')")
       .run('应用在任务完成前退出，请手动重试。', new Date().toISOString())
@@ -187,16 +206,20 @@ export class TaskRepository {
     this.db
       .prepare(`
         INSERT INTO tasks(
-          id,name,source_path,source_hash,output_dir,status,progress,parser_model,
+          id,original_name,title,name,source_path,source_hash,output_dir,status,progress,parser_model,
           translation_provider,remote_batch_id,remote_data_id,remote_result_url,
           error,created_at,updated_at
         ) VALUES(
-          @id,@name,@sourcePath,@sourceHash,@outputDir,@status,@progress,@parserModel,
+          @id,@originalName,@title,@name,@sourcePath,@sourceHash,@outputDir,@status,@progress,@parserModel,
           @translationProvider,@remoteBatchId,@remoteDataId,@remoteResultUrl,
           @error,@createdAt,@updatedAt
         )
       `)
-      .run({ ...task })
+      .run({
+        ...task,
+        originalName: task.originalName || task.name,
+        title: task.title ?? null
+      })
   }
 
   insertTasks(tasks: MinerUTask[]): void {
@@ -217,7 +240,8 @@ export class TaskRepository {
     this.db
       .prepare(`
         UPDATE tasks SET
-          name=@name, source_path=@sourcePath, source_hash=@sourceHash,
+          original_name=@originalName, title=@title, name=@name,
+          source_path=@sourcePath, source_hash=@sourceHash,
           output_dir=@outputDir, status=@status, progress=@progress,
           parser_model=@parserModel, translation_provider=@translationProvider,
           remote_batch_id=@remoteBatchId, remote_data_id=@remoteDataId,
@@ -226,6 +250,8 @@ export class TaskRepository {
       `)
       .run({
         id: next.id,
+        originalName: next.originalName,
+        title: next.title,
         name: next.name,
         sourcePath: next.sourcePath,
         sourceHash: next.sourceHash,
@@ -383,6 +409,8 @@ function validateReaderAnnotationsRequest(request: ReplaceReaderAnnotationsReque
 function toTask(row: TaskRow): MinerUTask {
   return {
     id: row.id,
+    originalName: row.original_name || row.name,
+    title: row.title ?? null,
     name: row.name,
     sourcePath: row.source_path,
     sourceHash: row.source_hash,

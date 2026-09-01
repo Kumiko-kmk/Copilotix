@@ -19,7 +19,7 @@ const markdownParser = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
 
 function task(provider: MinerUTask['translationProvider'] = 'qwen'): MinerUTask {
   return {
-    id: 'task-1', name: 'paper.pdf', sourcePath: 'paper.pdf', sourceHash: 'hash', outputDir: '.',
+    id: 'task-1', originalName: 'paper.pdf', title: null, name: 'paper.pdf', sourcePath: 'paper.pdf', sourceHash: 'hash', outputDir: '.',
     status: 'translating', progress: 0, parserModel: 'pipeline', translationProvider: provider,
     remoteBatchId: null, remoteDataId: null, remoteResultUrl: null, error: null,
     createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z'

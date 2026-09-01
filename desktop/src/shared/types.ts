@@ -38,6 +38,10 @@ export interface SettingsUpdate
 
 export interface MinerUTask {
   id: string
+  /** Filename selected by the user; never changed after task creation. */
+  originalName: string
+  /** Sanitized English paper title without a file extension, when available. */
+  title: string | null
   name: string
   sourcePath: string
   sourceHash: string
