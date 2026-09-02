@@ -28,6 +28,19 @@ export default tseslint.config(
     }
   },
   {
+    files: ['src/core/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['@main/*', '@renderer/*', 'electron', 'node:*'], message: 'Core code cannot depend on a runtime layer.' }
+          ]
+        }
+      ]
+    }
+  },
+  {
     files: ['src/shared/**/*.ts'],
     rules: {
       'no-restricted-imports': [
