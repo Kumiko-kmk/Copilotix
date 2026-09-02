@@ -153,7 +153,7 @@ describe('TaskService official MinerU batches', () => {
     }
   })
 
-  it('renames a parsed task from its English title while preserving original.pdf and translated output', async () => {
+  it('updates a parsed task title without renaming its stable output directory', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mineru-title-integration-'))
     temporaryRoots.push(root)
     const outputRoot = join(root, 'output')
@@ -217,7 +217,7 @@ describe('TaskService official MinerU batches', () => {
       await processParsedTask(fixtureTask.id, 'https://cdn.example.test/result.zip', await settings.get())
 
       const task = repository.getTask(fixtureTask.id)
-      const expectedDir = join(outputRoot, 'Attention Is All You Need-parse-task')
+      const expectedDir = oldOutputDir
       expect(task).toMatchObject({
         originalName: 'uploaded-name.pdf',
         title: 'Attention Is All You Need',
@@ -226,7 +226,7 @@ describe('TaskService official MinerU batches', () => {
         sourcePath: join(expectedDir, 'original.pdf'),
         status: 'completed'
       })
-      await expect(access(oldOutputDir)).rejects.toThrow()
+      await expect(access(oldOutputDir)).resolves.toBeUndefined()
       await expect(readFile(join(expectedDir, 'original.pdf'), 'utf8')).resolves.toBe('%PDF-1.4 fixture')
       await expect(readFile(join(expectedDir, 'full.md'), 'utf8')).resolves.toContain('# Attention Is All You Need')
       await expect(readFile(join(expectedDir, 'full.zh-CN.md'), 'utf8')).resolves.toContain('这是一个测试段落。')
@@ -249,7 +249,7 @@ describe('TaskService official MinerU batches', () => {
     }
   })
 
-  it('keeps the original directory and still completes when the title directory cannot be moved', async () => {
+  it('keeps the original directory and leaves unrelated title-like directories untouched', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mineru-title-rename-failure-'))
     temporaryRoots.push(root)
     const outputRoot = join(root, 'output')

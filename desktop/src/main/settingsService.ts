@@ -1,10 +1,10 @@
 import type { AppSettings, SettingsUpdate } from '@shared/types'
-import type { TaskRepository } from './database'
+import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { CredentialVault } from './credentialVault'
 
 export class SettingsService {
   constructor(
-    private readonly repository: TaskRepository,
+    private readonly repository: TaskRepositoryCompat,
     private readonly vault: CredentialVault,
     private readonly defaultOutputRoot: string
   ) {}

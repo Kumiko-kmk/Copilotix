@@ -6,12 +6,11 @@ import {
   mkdir,
   readFile,
   readdir,
-  rename,
   rm,
   stat,
   writeFile
 } from 'node:fs/promises'
-import { basename, dirname, extname, join, relative, resolve } from 'node:path'
+import { basename, dirname, extname, join, relative } from 'node:path'
 import { EventEmitter } from 'node:events'
 import archiver from 'archiver'
 import extract from 'extract-zip'
@@ -25,8 +24,11 @@ import type {
   SelectedPdf,
   TranslatedMarkdownBlock,
 } from '@shared/types'
+import type { ArtifactKind } from '@core/types'
 import { MAX_PDF_BYTES, MINERU_BATCH_SIZE } from '@shared/constants'
-import type { TaskRepository } from './database'
+import type { TaskRepositoryCompat } from './taskRepositoryCompat'
+import type { PathPolicyPort } from '@core/ports'
+import { PathPolicy } from './pathPolicy'
 import type { CredentialVault } from './credentialVault'
 import type { SettingsService } from './settingsService'
 import { MinerUApiError, type BatchResult, type MinerUClient } from './parserClient'
@@ -51,12 +53,13 @@ export class TaskService extends EventEmitter {
   private readonly remoteSnapshots = new Map<string, string>()
 
   constructor(
-    private readonly repository: TaskRepository,
+    private readonly repository: TaskRepositoryCompat,
     private readonly settingsService: SettingsService,
     private readonly vault: CredentialVault,
     private readonly parserClient: MinerUClient,
     private readonly fetcher: Fetcher,
-    private readonly logger: TaskLogger = silentLogger
+    private readonly logger: TaskLogger = silentLogger,
+    private readonly pathPolicy: PathPolicyPort = new PathPolicy()
   ) {
     super()
   }
@@ -89,13 +92,15 @@ export class TaskService extends EventEmitter {
       if (info.size > MAX_PDF_BYTES) throw new Error(`${file.name} 超过 MinerU 官方 API 的 200MB 限制`)
     }
     await mkdir(settings.outputRoot, { recursive: true })
+    const documentsRoot = join(settings.outputRoot, 'documents-v2')
+    await mkdir(documentsRoot, { recursive: true })
     const created: MinerUTask[] = []
     for (const file of request.files) {
       if (extname(file.path).toLowerCase() !== '.pdf') continue
       const sourceHash = await hashFile(file.path)
       if (!request.createDuplicates && this.repository.findByHash(sourceHash)) continue
       const id = uuidv4()
-      const outputDir = join(settings.outputRoot, `${sanitizeFileName(basename(file.name, '.pdf'))}-${id}`)
+      const outputDir = this.pathPolicy.resolveChild(documentsRoot, join(documentsRoot, id))
       await mkdir(outputDir, { recursive: true })
       const localPdf = join(outputDir, 'original.pdf')
       await copyFile(file.path, localPdf)
@@ -141,9 +146,8 @@ export class TaskService extends EventEmitter {
     if (!task) return
     if (deleteFiles) {
       const settings = await this.settingsService.get()
-      const root = resolve(settings.outputRoot)
-      const target = resolve(task.outputDir)
-      if (target === root || !target.startsWith(`${root}\\`)) throw new Error('拒绝删除输出根目录以外的路径')
+      const root = join(settings.outputRoot, 'documents-v2')
+      const target = this.pathPolicy.resolveChild(root, task.outputDir)
       await rm(target, { recursive: true, force: true })
     }
     this.repository.deleteTask(taskId)
@@ -173,10 +177,7 @@ export class TaskService extends EventEmitter {
   resolveAsset(taskId: string, assetPath: string): string {
     const task = this.repository.getTask(taskId)
     if (!task) throw new Error('任务不存在')
-    const root = resolve(task.outputDir)
-    const target = resolve(root, decodeURIComponent(assetPath.replace(/^\/+/, '')))
-    if (target !== root && !target.startsWith(`${root}\\`)) throw new Error('非法资源路径')
-    return target
+    return this.pathPolicy.resolveChild(task.outputDir, decodeURIComponent(assetPath.replace(/^\/+/, '')))
   }
 
   async createResultZip(taskId: string, destination: string): Promise<void> {
@@ -410,6 +411,7 @@ export class TaskService extends EventEmitter {
         }
       })
       await writeFile(join(namedTask.outputDir, 'full.zh-CN.md'), result.markdown, 'utf8')
+      await this.recordArtifact(namedTask, 'translated_markdown', join(namedTask.outputDir, 'full.zh-CN.md'))
       await writeFile(
         join(namedTask.outputDir, 'translation.checkpoint.json'),
         JSON.stringify(
@@ -450,59 +452,12 @@ export class TaskService extends EventEmitter {
     }
 
     const name = `${title}.pdf`
-    const oldOutputDir = task.outputDir
-    const targetOutputDir = join(dirname(oldOutputDir), `${title}-${task.id}`)
-    const oldResolved = resolve(oldOutputDir)
-    const targetResolved = resolve(targetOutputDir)
-    const nextSourcePath = join(targetOutputDir, 'original.pdf')
-
-    if (oldResolved === targetResolved) {
-      try {
-        return this.repository.updateTask(task.id, { title, name, sourcePath: nextSourcePath })
-      } catch (error) {
-        this.logger.error('result.title-metadata-failed', error, { taskId: task.id })
-        return task
-      }
-    }
-
-    let moved = false
     try {
-      await rename(oldOutputDir, targetOutputDir)
-      moved = true
+      // The v2 storage path is an immutable UUID directory. Parsed titles are
+      // display metadata only; changing them must never move an active job's
+      // files or invalidate persisted artifact paths.
+      return this.repository.updateTask(task.id, { title, name })
     } catch (error) {
-      this.logger.info('result.title-rename-warning', {
-        taskId: task.id,
-        from: oldOutputDir,
-        to: targetOutputDir,
-        error: readableError(error)
-      })
-      try {
-        return this.repository.updateTask(task.id, { title, name })
-      } catch (metadataError) {
-        this.logger.error('result.title-metadata-failed', metadataError, { taskId: task.id })
-        return task
-      }
-    }
-
-    try {
-      return this.repository.updateTask(task.id, {
-        title,
-        name,
-        outputDir: targetOutputDir,
-        sourcePath: nextSourcePath
-      })
-    } catch (error) {
-      if (moved) {
-        try {
-          await rename(targetOutputDir, oldOutputDir)
-        } catch (rollbackError) {
-          this.logger.error('result.title-rollback-failed', rollbackError, {
-            taskId: task.id,
-            from: targetOutputDir,
-            to: oldOutputDir
-          })
-        }
-      }
       this.logger.error('result.title-metadata-failed', error, { taskId: task.id })
       return task
     }
@@ -536,8 +491,13 @@ export class TaskService extends EventEmitter {
     if (!markdown) throw new Error('MinerU 结果中缺少 Markdown 文件')
     if (!layout) throw new Error('MinerU 结果中缺少 middle/layout JSON')
     await copyFile(markdown, join(task.outputDir, 'full.md'))
+    await this.recordArtifact(task, 'parsed_markdown', join(task.outputDir, 'full.md'))
     await copyFile(layout, join(task.outputDir, 'layout.json'))
-    if (contentList) await copyFile(contentList, join(task.outputDir, 'content_list.json'))
+    await this.recordArtifact(task, 'layout', join(task.outputDir, 'layout.json'))
+    if (contentList) {
+      await copyFile(contentList, join(task.outputDir, 'content_list.json'))
+      await this.recordArtifact(task, 'content_list', join(task.outputDir, 'content_list.json'))
+    }
 
     for (const file of files) {
       const rel = relative(extractedDir, file)
@@ -553,6 +513,12 @@ export class TaskService extends EventEmitter {
       JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2),
       'utf8'
     )
+    await this.recordArtifact(task, 'block_mappings', join(task.outputDir, 'block_list.json'))
+  }
+
+  private async recordArtifact(task: MinerUTask, kind: ArtifactKind, path: string): Promise<void> {
+    if (!this.repository.recordArtifactRevision) return
+    await this.repository.recordArtifactRevision(task.id, kind, path, await hashFile(path))
   }
 
   private async loadMappings(task: MinerUTask): Promise<BlockMapping[]> {
@@ -649,6 +615,7 @@ export class TaskService extends EventEmitter {
       ),
       'utf8'
     )
+    await this.recordArtifact(task, 'manifest', join(task.outputDir, 'translation.manifest.json'))
   }
 
   private emitTasks(): void {
@@ -665,12 +632,6 @@ async function hashFile(path: string): Promise<string> {
     input.on('error', reject)
   })
   return hash.digest('hex')
-}
-
-function sanitizeFileName(value: string): string {
-  // NUL/control characters are intentionally stripped from user-derived filenames.
-  // eslint-disable-next-line no-control-regex
-  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '').slice(0, 100) || 'document'
 }
 
 async function walkFiles(root: string): Promise<string[]> {

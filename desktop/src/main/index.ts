@@ -12,7 +12,9 @@ import {
   shell,
   Tray
 } from 'electron'
-import { TaskRepository } from './database'
+import type { TaskRepositoryCompat } from './taskRepositoryCompat'
+import { V2Database } from './v2Database'
+import { V2TaskRepositoryCompat } from './v2TaskRepositoryCompat'
 import { WindowsCredentialVault } from './credentialVault'
 import { SettingsService } from './settingsService'
 import { OfficialMinerUClient } from './parserClient'
@@ -57,18 +59,18 @@ protocol.registerSchemesAsPrivileged([
 
 app.setName('MinerU')
 const isolatedUserData = process.env.NODE_ENV === 'test' ? process.env.MINERU_E2E_USER_DATA : undefined
-app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'MinerU-Translation'))
+app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'MinerU-Translation-v2'))
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
-let repository: TaskRepository | null = null
+let repository: TaskRepositoryCompat | null = null
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
   const userData = app.getPath('userData')
   await mkdir(userData, { recursive: true })
-  repository = new TaskRepository(join(userData, 'mineru-desktop.sqlite3'))
+  repository = new V2TaskRepositoryCompat(new V2Database(join(userData, 'mineru-desktop-v2.sqlite3')))
   const vault = new WindowsCredentialVault()
   const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'MinerU'))
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>

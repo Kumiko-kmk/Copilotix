@@ -14,7 +14,7 @@ import type {
 } from '@shared/types'
 import { alignMarkdownBlocks } from '@shared/markdownBlocks'
 import { FALLBACK_PROVIDER_ORDER } from '@shared/constants'
-import type { TaskRepository } from '../database'
+import type { TaskRepositoryCompat } from '../taskRepositoryCompat'
 import type { TranslationProvider } from './providers'
 import { TranslationHttpError } from './providers'
 import {
@@ -30,7 +30,7 @@ interface PipelineOptions {
   markdown: string
   mappings: BlockMapping[]
   providers: Map<TranslationProviderId, TranslationProvider>
-  repository: TaskRepository
+  repository: TaskRepositoryCompat
   onProgress(completed: number, total: number, failed: number): void
 }
 
@@ -325,7 +325,7 @@ async function translateTableUnit(
   unit: TableTranslationUnit,
   preferred: TranslationProviderId,
   providers: Map<TranslationProviderId, TranslationProvider>,
-  repository: TaskRepository
+  repository: TaskRepositoryCompat
 ): Promise<{ markdownBySourceIndex: Map<number, string>; provider: TranslationProviderId; model: string }> {
   const sourceHash = sha256(unit.blocks.map((block) => `${block.sourceIndex}\u0000${block.markdown}`).join('\u0000'))
   const order = [preferred, ...FALLBACK_PROVIDER_ORDER.filter((provider) => provider !== preferred)]
@@ -381,7 +381,7 @@ async function translateBlock(
   sourceHash: string,
   preferred: TranslationProviderId,
   providers: Map<TranslationProviderId, TranslationProvider>,
-  repository: TaskRepository
+  repository: TaskRepositoryCompat
 ): Promise<{ markdown: string; provider: TranslationProviderId; model: string }> {
   const order = [preferred, ...FALLBACK_PROVIDER_ORDER.filter((provider) => provider !== preferred)]
   const errors: string[] = []
@@ -564,7 +564,7 @@ function createBlockResult(result: TranslationBlockResult): TranslationBlockResu
   return { ...result, mappingIds: [...result.mappingIds] }
 }
 
-function saveBlock(repository: TaskRepository, taskId: string, block: TranslationBlockResult): void {
+function saveBlock(repository: TaskRepositoryCompat, taskId: string, block: TranslationBlockResult): void {
   repository.upsertTranslationBlock({
     taskId,
     blockId: block.blockId,

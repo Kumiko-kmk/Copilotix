@@ -1,8 +1,10 @@
-import { DatabaseSync } from 'node:sqlite'
-import { copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { buildBlockMappings } from '../src/main/blockMapping'
+import { V2Database } from '../src/main/v2Database'
+import { V2TaskRepositoryCompat } from '../src/main/v2TaskRepositoryCompat'
+import type { ArtifactKind } from '../src/core/types'
 import {
   alignMarkdownBlocks,
   MARKDOWN_MAPPING_ALGORITHM_VERSION,
@@ -79,7 +81,7 @@ export async function seedReaderTask(
         : options?.alignmentRegression
           ? 'alignment-regression-task'
           : 'reader-pdf-task'
-  const outputDir = join(workspace.root, taskId)
+  const outputDir = join(workspace.root, 'documents-v2', taskId)
   const originalName = options?.missingPdf
     ? 'missing.pdf'
     : options?.sourceTaskDir
@@ -135,54 +137,51 @@ export async function seedReaderTask(
     await writeFile(join(outputDir, 'layout.json'), JSON.stringify(layout), 'utf8')
   }
 
-  const database = new DatabaseSync(join(workspace.userData, 'mineru-desktop.sqlite3'))
-  database.exec(`
-    CREATE TABLE tasks (
-      id TEXT PRIMARY KEY,
-      original_name TEXT NOT NULL DEFAULT '',
-      title TEXT,
-      name TEXT NOT NULL,
-      source_path TEXT NOT NULL,
-      source_hash TEXT NOT NULL,
-      output_dir TEXT NOT NULL,
-      status TEXT NOT NULL,
-      progress INTEGER NOT NULL DEFAULT 0,
-      parser_model TEXT NOT NULL,
-      translation_provider TEXT NOT NULL,
-      remote_batch_id TEXT,
-      remote_data_id TEXT,
-      remote_result_url TEXT,
-      error TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-  `)
+  const database = new V2Database(join(workspace.userData, 'mineru-desktop-v2.sqlite3'))
+  const repository = new V2TaskRepositoryCompat(database)
   const now = new Date().toISOString()
-  database.prepare(`
-    INSERT INTO tasks(
-      id,original_name,title,name,source_path,source_hash,output_dir,status,progress,parser_model,
-      translation_provider,remote_batch_id,remote_data_id,remote_result_url,error,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-  `).run(
-    taskId,
+  const taskStatus = options?.missingPdf ? 'failed' : 'completed'
+  repository.insertTask({
+    id: taskId,
     originalName,
-    options?.englishTitle ?? null,
-    taskName,
-    pdfPath,
-    'fixture-hash',
+    title: options?.englishTitle ?? null,
+    name: taskName,
+    sourcePath: pdfPath,
+    sourceHash: 'fixture-hash',
     outputDir,
-    'failed',
-    0,
-    'vlm',
-    'qwen',
-    null,
-    null,
-    null,
-    options?.missingPdf ? 'fixture missing file' : 'fixture task',
-    now,
-    now
-  )
-  database.close()
+    status: taskStatus,
+    progress: taskStatus === 'completed' ? 100 : 0,
+    parserModel: 'vlm',
+    translationProvider: 'qwen',
+    remoteBatchId: null,
+    remoteDataId: null,
+    remoteResultUrl: null,
+    error: options?.missingPdf ? 'fixture missing file' : null,
+    createdAt: now,
+    updatedAt: now
+  })
+  repository.updateTask(taskId, {
+    status: taskStatus,
+    progress: taskStatus === 'completed' ? 100 : 0,
+    error: options?.missingPdf ? 'fixture missing file' : null
+  })
+  const artifacts: Array<[ArtifactKind, string]> = [
+    ['parsed_markdown', join(outputDir, 'full.md')],
+    ['layout', join(outputDir, 'layout.json')],
+    ['block_mappings', join(outputDir, 'block_list.json')],
+    ['content_list', join(outputDir, 'content_list.json')],
+    ['translated_markdown', join(outputDir, 'full.zh-CN.md')],
+    ['manifest', join(outputDir, 'translation.manifest.json')]
+  ]
+  for (const [kind, path] of artifacts) {
+    try {
+      await access(path)
+      repository.recordArtifactRevision(taskId, kind, path, `fixture-${kind}`)
+    } catch {
+      // Some fixtures intentionally omit translated or supplemental files.
+    }
+  }
+  repository.close()
   return taskId
 }
 
