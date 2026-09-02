@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint'
 
 const sourceFiles = ['src/**/*.ts', 'src/**/*.tsx']
 const testFiles = ['tests/**/*.ts', 'tests/**/*.tsx']
-const configFiles = ['electron.vite.config.ts', 'vitest.config.ts', 'playwright.config.ts']
+const configFiles = ['electron.vite.config.ts', 'utility.vite.config.ts', 'vitest.config.ts', 'playwright.config.ts']
 const typedFiles = [...sourceFiles, ...testFiles, ...configFiles]
 
 export default tseslint.config(

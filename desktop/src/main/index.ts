@@ -52,6 +52,8 @@ import {
 } from '@shared/ipcSchemas'
 import type { WindowState } from '@shared/types'
 import { computeDocumentChange, projectDocumentDetails, projectDocumentSummary } from './documentProjection'
+import { UtilitySupervisor } from './utilitySupervisor'
+import { forkUtilityProcess } from './electronUtilityFork'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -70,9 +72,16 @@ let isQuitting = false
 let repository: TaskRepositoryCompat | null = null
 let documentRevision = 0
 let documentSummaries = new Map<string, DocumentSummary>()
+let utilitySupervisor: UtilitySupervisor | null = null
+let utilityShutdownPromise: Promise<void> | null = null
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
+  utilitySupervisor = new UtilitySupervisor({
+    entryPath: join(__dirname, '../utility/index.js'),
+    fork: forkUtilityProcess
+  })
+  await utilitySupervisor.start()
   const userData = app.getPath('userData')
   await mkdir(userData, { recursive: true })
   repository = new V2TaskRepositoryCompat(new V2Database(join(userData, 'mineru-desktop-v2.sqlite3')))
@@ -325,8 +334,13 @@ function registerIpc(
   }, validationOptions)
 }
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   isQuitting = true
+  if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
+  event.preventDefault()
+  utilityShutdownPromise = utilitySupervisor.shutdown().catch(() => undefined).then(() => {
+    app.quit()
+  })
 })
 
 app.on('window-all-closed', () => {
@@ -335,9 +349,9 @@ app.on('window-all-closed', () => {
 
 app.on('quit', () => repository?.close())
 
-void bootstrap().catch((error: unknown) => {
-  const message = error instanceof Error ? error.stack || error.message : String(error)
-  console.error(message)
-  dialog.showErrorBox('MinerU 启动失败', message)
+void bootstrap().catch((_error: unknown) => {
+  // Keep startup diagnostics free of stack traces, local paths and credentials.
+  console.error('MinerU startup failed')
+  dialog.showErrorBox('MinerU 启动失败', '核心服务无法启动，请重试。')
   app.quit()
 })

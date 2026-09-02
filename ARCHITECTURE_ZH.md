@@ -80,11 +80,16 @@
 | E2E | Playwright 1.55 |
 | 打包 | electron-builder 26 目錄目標、archiver ZIP、extract-zip 驗證 |
 
-electron-vite 生成三份 bundle：
+### 4.1 Phase 3A1 進度（Utility RPC）
+
+Phase 3A1 已建立 strict Zod Core RPC envelope、transport-agnostic client、具重啟/優雅關閉的 Electron utility supervisor，以及獨立 `desktop/src/utility` entry。RPC 目前只開放 `ping`、`cancel`、`drain`、`shutdown` 控制操作；資料庫與 compute operation registry 留待後續階段擴充。這一階段尚未完成 DB 隔離：`DatabaseSync` 仍由 main process 持有，沒有把既有資料庫或 migration 移入 utility process。
+
+electron-vite 与独立 Vite 配置生成四份 bundle：
 
     desktop/src/main       -> desktop/out/main
     desktop/src/preload    -> desktop/out/preload
     desktop/src/renderer   -> desktop/out/renderer
+    desktop/src/utility    -> desktop/out/utility
 
 electron-builder 再把 out、desktop/package.json 和圖標打入 ASAR 與完整 Windows 運行目錄。@napi-rs/keyring 被 asarUnpack，以便原生模塊正常載入；不再生成安裝器或自解壓 portable。
 
