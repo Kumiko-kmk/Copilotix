@@ -1,6 +1,6 @@
 # MinerU Desktop Demo 架構與二次開發指南
 
-> 本文是目前 demo 版本的權威開發導覽。`master` 是穩定基線；新功能在独立分支/worktree 中实现，所有结论以对应提交与已验证产物为准。
+> 本文是目前 demo 版本的權威開發導覽。`master` 是本地整合主線；新功能在独立 `feature/*` 分支/worktree 中实现，所有结论以已标注提交与已验证产物为准。
 
 ## 1. 文檔基線
 
@@ -8,16 +8,16 @@
 |---|---|
 | 倉庫 | Kumiko-kmk/MinerU |
 | 主開發分支 | master |
-| 基線 | `master@83795dd`（提交 `83795dd501c81dbeda0d59b916252aab70710556`） |
-| 本地分支策略 | `master` 保持基线；功能使用 `feature/*` 独立分支与 worktree |
-| 當前工作樹 | `feature/english-title-filename`：解析后英文标题命名与兼容迁移 |
+| 基線 | `master@10225a1`（合并提交 `10225a12c88ac0c4fb1107aa28e3fb5ca28e98b2`） |
+| 本地分支策略 | `master` 為整合主線；功能使用 `feature/*` 独立分支与 worktree |
+| 當前能力 | UI/Reader 改造、表格翻译/Reader 标注、目录版发布治理、解析后英文标题命名 |
 | Desktop 版本 | 0.1.0 |
 | Python MinerU 版本 | 3.4.5 |
-| 桌面平台 | Windows 10/11 x64 |
+| 當前發布目標 | Windows 10/11 x64；macOS 尚未接入發布鏈路 |
 | Node.js | 24.11.1；package.json 約束為 24.x |
 | pnpm | 11.19.0 |
 
-後續功能从 `master@83795dd` 创建独立分支后分阶段完成；高風險操作先建立 bundle、patch 或資料備份。`desktop/dist*` 不再是合法發布位置，正式產物只允許由 `pnpm desktop:release` 寫入根目錄 `release/`。
+後續功能从 `master@10225a1` 创建独立分支后分阶段完成；高風險操作先建立 bundle、patch 或資料備份。`desktop/dist*` 不再是合法發布位置，正式產物只允許由 `pnpm desktop:release` 寫入根目錄 `release/`。
 
 ## 2. 最重要的架構結論
 
@@ -352,8 +352,9 @@ desktop/src/main/database.ts 使用 node:sqlite 的 DatabaseSync：
 | translation_runs | 每個任務的總數、成功數、失敗數 |
 | translation_blocks | 區塊級來源、譯文、provider、狀態 |
 | translation_cache | 跨任務翻譯緩存 |
+| reader_annotations | 原文/譯文視圖標註、UTF-16 區間與 quote/context 錨點 |
 
-tasks、translation_runs、translation_blocks 之間使用外鍵和 ON DELETE CASCADE。刪除任務記錄會刪除其翻譯運行與區塊記錄，但全局 translation_cache 不會隨任務刪除。
+tasks、translation_runs、translation_blocks、reader_annotations 之間使用外鍵和 ON DELETE CASCADE。刪除任務記錄會刪除其翻譯運行、區塊與閱讀標註，但全局 translation_cache 不會隨任務刪除；標註不進任務輸出文件或結果 ZIP。
 
 當前遷移方式是 CREATE TABLE IF NOT EXISTS 加 PRAGMA table_info/ALTER TABLE；`original_name` 和 `title` 的新增在事务中执行，旧行回填 `original_name=name`、`title=NULL`。若 schema 繼續演進，建議引入顯式 schema_version 和順序遷移；不要依賴應用啟動時猜測所有歷史狀態。
 
@@ -361,7 +362,7 @@ tasks、translation_runs、translation_blocks 之間使用外鍵和 ON DELETE CA
 
 ### 12.1 憑證
 
-以下內容保存在 Windows Credential Manager，service 名為 MinerU-Translation：
+目前 Windows 發布將以下內容保存在 Windows Credential Manager，service 名為 MinerU-Translation；`CredentialVault` 是未來跨平台 adapter 的邊界：
 
 - parser-token
 - qwen-api-key
@@ -607,7 +608,7 @@ electron-builder 配置：
 - 發布門禁：app.asar ≤ 40 MiB、運行目錄 ≤ 330 MiB、ZIP ≤ 140 MiB，且不得包含 @napi-rs/canvas
 - 暫無代碼簽名
 
-`desktop:build` 只生成開發 bundle。`desktop:release` 先 build，再生成唯一運行目錄、ZIP、manifest 與 SHA-256；setup、portable 及 `desktop/dist*` 都不是受支持產物。更新時關閉應用並整體替換運行目錄，userData 與 Credential Manager 數據不受影響。
+`desktop:build` 只生成開發 bundle。`desktop:release` 先精確清理 `release/` 再生成唯一運行目錄、ZIP、manifest 與 SHA-256；setup、portable 及 `desktop/dist*` 都不是受支持產物。更新時關閉應用並整體替換運行目錄，userData 與 Credential Manager 數據不受影響；這是當前 Windows 流程，macOS `.app`/簽名/公證尚未接入。
 
 ## 17. CI 與發布
 
@@ -692,17 +693,20 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 
 | 文件 | 約行數 | 風險 |
 |---|---:|---|
-| main/taskService.ts | 577 | 任務、網絡、文件、翻譯與狀態集中 |
+| main/taskService.ts | 629 | 任務、網絡、文件、翻譯與狀態集中；另有跨平台路徑邊界風險 |
 | renderer/components/PdfPane.tsx | 396 | PDF.js 生命周期、Canvas、虛擬渲染和幾何 |
 | main/parserClient.ts | 340 | 官方 API 契約與超時 |
 | main/blockMapping.ts | 318 | middle JSON 兼容與穩定 ID |
-| main/database.ts | 308 | schema、遷移和恢復 |
-| translation/markdownPipeline.ts | 248 | AST、緩存、重試與回退 |
+| main/database.ts | 401 | schema、遷移和恢復；含 reader_annotations |
+| translation/markdownPipeline.ts | 596 | AST、整表翻譯、緩存、重試與回退 |
 | main/index.ts | 223 | Electron 生命周期和全部 IPC |
-| translation/providers.ts | 221 | 外部接口易變、限流和密鑰 |
-| renderer/components/MarkdownPane.tsx | 423 | Markdown 資源生命週期、位置索引和雙向聯動 |
-| shared/markdownBlocks.ts | 208 | 文本匹配啟發式 |
-| shared/readerDocument.ts | 188 | 正文、discarded 補充元素與分頁排序 |
+| translation/providers.ts | 307 | 外部接口易變、限流和密鑰 |
+| translation/tableTranslation.ts | 481 | HTML 表格解析、segment 協議與整體回填 |
+| renderer/components/MarkdownPane.tsx | 675 | Markdown 資源生命週期、位置索引、標註和雙向聯動 |
+| renderer/readerAnnotations.ts | 185 | 選區、CSS Custom Highlight 與重定位 |
+| shared/markdownBlocks.ts | 241 | 文本匹配啟發式 |
+| shared/readerDocument.ts | 242 | 正文、discarded 補充元素與分頁排序 |
+| shared/readerAnnotations.ts | 238 | 標註區間、上下文錨點與合併 |
 
 跨模塊公共契約：
 
@@ -717,7 +721,7 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 
 ## 21. 後續模塊修改地圖
 
-`master` 只作为稳定基线；每次功能任务应从基线创建独立 `feature/*` 分支/worktree，并只选一个主范围：
+`master` 是稳定整合主线；每次功能任务应从当前基线创建独立 `feature/*` 分支/worktree，并只选一个主范围：
 
 | 修改範圍 | 主文件 | 必須保持 | 最低驗證 |
 |---|---|---|---|
@@ -739,7 +743,7 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 
 後續可以直接使用：
 
-    基線：Kumiko-kmk/MinerU 本地 master@83795dd；在 feature/* 独立 worktree 工作，
+    基線：Kumiko-kmk/MinerU 本地 master@10225a1；在 feature/* 独立 worktree 工作，
     先閱讀 ARCHITECTURE_ZH.md。
     本次只修改「<模塊>」，目標是「<可觀察結果>」。
     必須保持「<IPC/API/數據/輸出契約>」。
@@ -777,7 +781,7 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 ## 24. 已知不一致與待決策項
 
 1. 根 LICENSE.md 是基於 Apache 2.0 並帶附加條款的 MinerU Open Source License，但 desktop/package.json 目前聲明 AGPL-3.0-only。這是分發前必須由維護者確認並統一的授權元數據問題。
-2. translation cache key 不包含 prompt 或翻譯流水線版本。
+2. translation cache key 已包含流水線/表格協議版本，但尚未包含完整 prompt 或策略指紋。
 3. schema 遷移尚無顯式版本表。
 4. app 重啟後在途任務只標失敗，不自動恢復。
 5. 結果 ZIP 目前包含內部 .parsed。
@@ -806,18 +810,36 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 
 ## 26. 本基線驗證記錄
 
-驗證日期：2026-09-01。
+驗證日期：2026-09-02。
 
 | 檢查 | 結果 |
 |---|---|
 | pnpm desktop:typecheck | 通過 |
-| pnpm desktop:test | 17 個測試文件通過；75 個測試通過，4 個可選 fixture 測試跳過 |
+| pnpm desktop:test | 24 個測試文件通過；106 個測試通過，4 個可選 fixture 測試跳過 |
 | pnpm desktop:build | 通過；main、preload、renderer 均成功生成，build 前安全清理舊 bundle |
-| pnpm desktop:test:e2e | 7 個通過；4 個依賴外部服務／真實 fixture 的可選測試跳過 |
+| Reader E2E | 6 個通過；2 個依賴真實 MinerU fixture 的可選測試跳過 |
+| UI chrome E2E | 2 個通過 |
+| 開發 bundle smoke | 1 個通過；首屏正常 |
 | 真實 Deep Sparse 任務 | 完整離線映射／整表／參考文獻回歸通過；`ref_text` 未進 Provider，表格 caption 與單元格均生成 v2 結果 |
-| 正式打包 | app.asar 20.24 MiB、運行目錄 297.31 MiB、ZIP 125.64 MiB；僅 zh-CN locale、無 @napi-rs/canvas，ZIP 解壓及體積門禁通過 |
-| 打包程式 smoke | 2 個通過；首屏及 window.mineru.getSettings IPC 正常 |
+| 正式打包 | 合并前已验证的 Windows 目录版/ZIP 为 app.asar 20.24 MiB、运行目录 297.31 MiB、ZIP 125.64 MiB；合并后未重跑正式 release |
+| 打包程式 smoke | 合并后未重跑 packaged smoke；开发 bundle smoke 已通过 |
 | git diff --check | 通過 |
 | 文檔關鍵路徑核對 | 全部存在 |
 
-本次將整表協議升級為 v2，TranSmart 使用原生數組、Bing 使用短請求兜底，並加入參考文獻原文保護；沒有改動 Python 層、官方 API、SQLite、IPC 或 `DocumentPayload`。TranSmart 公開接口已用無敏感合成文本驗證等長數組返回；可重現 fixture 與真實任務覆蓋混合公式回填、正文保序、補充元素、PDF 聯動、文本標註、視圖常駐與打包程式啟動。
+本次將整表協議升級為 v2，TranSmart 使用原生數組、Bing 使用短請求兜底，並加入參考文獻原文保護；同一提交新增 `reader_annotations` SQLite 表、兩個 annotation IPC 和對應共享類型，但沒有改動 Python 層、官方 API 或 `DocumentPayload`。TranSmart 公開接口已用無敏感合成文本驗證等長數組返回；可重現 fixture 與真實任務覆蓋混合公式回填、正文保序、補充元素、PDF 聯動、文本標註、視圖常駐與打包程式啟動。
+
+## 27. macOS 可移植性現狀（2026-09-02 評估）
+
+目前 Desktop 的「核心業務」大多可跨平台：React/TypeScript、PDF.js、Markdown、`node:sqlite`、網絡 Provider 和任務隊列沒有直接依賴 Win32。当前发布链路仍是 Windows-only，macOS 不是把 `--win` 改成 `--mac` 就完成，需把以下边界显式抽象：
+
+| 優先級 | 現況 | 必要工作 |
+|---|---|---|
+| P0 | `taskService.ts` 以 `${root}\\` 判斷路徑邊界 | 改用 `path.relative()` 等跨平台判斷；補 POSIX 資產讀取與刪除測試 |
+| P0 | electron-builder、package script、smoke E2E 和 workflow 固定 `win-x64`/`.exe`/`--win` | 增加 darwin arm64 目標、`.app` 入口驗證、資源/manifest/ZIP（或 DMG）策略與 macOS CI |
+| P1 | `WindowsCredentialVault` 類名與 Windows Credential Manager 文案 | 改為通用 `CredentialVault` adapter；在真實 Mac 驗證 Keychain 的保存、重啟、更新和簽名權限 |
+| P1 | Tray、彩色 PNG 圖標、`window-all-closed` 行為未按 Dock/Menu Bar 驗證 | 增加 macOS Template icon、Dock activate、關窗/退出/通知點擊 E2E 或手工驗收 |
+| P2 | README、數據目錄、發布門禁只描述 Windows | 按平台補路徑、產物、簽名/notarization 和 Gatekeeper 文檔 |
+
+建議先支持 Apple Silicon arm64，再決定 Intel/universal；`@napi-rs/keyring` 鎖文件已含 darwin-arm64/x64 可選包，但仍需 Electron 原生模塊與 `.app` 實機驗證。僅開發版可運行約 2–4 個開發日；arm64 未簽名目錄版約 1–2 人周；包含 CI、Developer ID 簽名、公證和回歸約 3–6 人周；Intel/universal、自动更新或本地模型另加约 1–3 人周。
+
+這些結論與 RAG 方案相互獨立：先完成平台 adapter 和路徑安全，再提交 RAG migration/artifact/chunk，避免索引與引用契約被平台修復反覆改寫。Electron 的 macOS 簽名/公證、生命週期和原生模塊要求見官方文檔：<https://www.electronjs.org/docs/latest/tutorial/code-signing>、<https://www.electronjs.org/docs/latest/api/app>、<https://www.electronjs.org/docs/latest/tutorial/using-native-node-modules>。

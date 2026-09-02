@@ -373,8 +373,10 @@ test('shows the parsed English title in recent tasks and the Reader header', asy
   const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await expect(window.locator('.recent-task', { hasText: 'Attention Is All You Need.pdf' })).toBeVisible()
-    await window.locator('.recent-task', { hasText: 'Attention Is All You Need.pdf' }).click()
+    await window.getByRole('button', { name: '展开论文切换' }).click()
+    const paper = window.locator('.paper-switcher-item', { hasText: 'Attention Is All You Need.pdf' })
+    await expect(paper).toBeVisible()
+    await paper.click()
     await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need.pdf')
   } finally {
     await app.close()

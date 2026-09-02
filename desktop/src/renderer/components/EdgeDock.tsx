@@ -14,6 +14,7 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
   const hideTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const triggerRef = React.useRef<HTMLButtonElement>(null)
   const suppressFocusOpen = React.useRef(false)
+  const hoverOpened = React.useRef(false)
 
   const cancelHide = React.useCallback(() => {
     if (hideTimer.current === null) return
@@ -23,6 +24,7 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
 
   const show = React.useCallback(() => {
     cancelHide()
+    hoverOpened.current = true
     setOpen(true)
   }, [cancelHide])
 
@@ -30,9 +32,25 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
     cancelHide()
     hideTimer.current = setTimeout(() => {
       hideTimer.current = null
+      hoverOpened.current = false
       setOpen(false)
     }, HIDE_DELAY_MS)
   }, [cancelHide])
+
+  const handleTriggerClick = React.useCallback(() => {
+    if (hoverOpened.current) {
+      hoverOpened.current = false
+      setOpen(true)
+      return
+    }
+    setOpen((current) => !current)
+  }, [])
+
+  const handlePointerLeave = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
+    scheduleHide()
+  }, [scheduleHide])
 
   React.useEffect(() => cancelHide, [cancelHide])
 
@@ -46,6 +64,7 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
     if (event.key !== 'Escape') return
     event.preventDefault()
     cancelHide()
+    hoverOpened.current = false
     suppressFocusOpen.current = true
     setOpen(false)
     triggerRef.current?.focus()
@@ -57,7 +76,7 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
       className={`edge-dock edge-dock-${props.edge}${open ? ' open' : ''}`}
       data-edge-dock={props.edge}
       onPointerEnter={show}
-      onPointerLeave={scheduleHide}
+      onPointerLeave={handlePointerLeave}
       onFocusCapture={() => { if (!suppressFocusOpen.current) show() }}
       onBlurCapture={handleBlur}
       onKeyDown={handleEscape}
@@ -70,11 +89,11 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
         className="edge-dock-trigger"
         aria-label={props.label}
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={handleTriggerClick}
       >
         <span aria-hidden="true" />
       </button>
-      <div className="edge-dock-panel" aria-hidden={!open} inert={open ? undefined : true}>
+      <div className="edge-dock-panel" aria-hidden={!open} inert={open ? undefined : true} onPointerEnter={show}>
         {props.children}
       </div>
     </section>

@@ -32,7 +32,7 @@ pnpm desktop:release
 pnpm desktop:test:e2e
 ```
 
-开发中间文件只位于 `desktop/out/`；每次 build 都会先安全清空该目录，避免旧哈希 bundle 混入新产物。正式发布文件统一位于仓库根目录 `release/`，每次执行 `desktop:release` 都会原子重建该目录：
+开发中间文件只位于 `desktop/out/`；每次 build 都会先安全清空该目录，避免旧哈希 bundle 混入新产物。正式发布文件统一位于仓库根目录 `release/`，每次执行 `desktop:release` 都会先精确清理再重建该目录（失败时不保留旧发布物）：
 
 - `MinerU-<版本>-win-x64/`：唯一可运行目录，入口为其中的 `MinerU.exe`
 - `MinerU-<版本>-win-x64.zip`：上述目录的传输副本，解压后运行

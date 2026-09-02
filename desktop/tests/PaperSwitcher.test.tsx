@@ -31,6 +31,8 @@ function task(id: string, name: string, status: TaskStatus): MinerUTask {
   return {
     id,
     name,
+    originalName: name,
+    title: null,
     sourcePath: `${name}`,
     sourceHash: id,
     outputDir: '.',
