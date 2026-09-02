@@ -186,7 +186,7 @@ class BingProvider extends QueuedProvider {
     })
     if (!response.ok) throw await toHttpError(response, '无法初始化 Bing 翻译会话')
     const html = await response.text()
-    const ig = html.match(/IG:\"([^\"]+)\"/)?.[1] ?? html.match(/IG:"([^"]+)"/)?.[1]
+    const ig = html.match(/IG:"([^"]+)"/)?.[1]
     const helper = html.match(/params_AbusePreventionHelper\s*=\s*\[(\d+),\s*"([^"]+)"/)
     if (!ig || !helper?.[1] || !helper[2]) throw new Error('Bing 页面格式已变化，请改用其他翻译源')
     this.session = {

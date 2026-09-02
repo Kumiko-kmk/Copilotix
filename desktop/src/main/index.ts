@@ -4,7 +4,6 @@ import {
   app,
   BrowserWindow,
   dialog,
-  ipcMain,
   Menu,
   nativeTheme,
   net,
@@ -22,14 +21,30 @@ import { createAssetResponse } from './assetProtocol'
 import { TaskService } from './taskService'
 import { JsonLineLogger } from './logger'
 import { createTranslationProviders } from './translation/providers'
+import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike } from './ipc'
+import {
+  appSettingsSchema,
+  createTasksRequestSchema,
+  deleteTaskRequestSchema,
+  documentPayloadSchema,
+  healthResultSchema,
+  inspectPdfsRequestSchema,
+  minerUTaskSchema,
+  noRequestSchema,
+  outputDirectorySchema,
+  parserTokenSchema,
+  providerIdRequestSchema,
+  readerAnnotationSchema,
+  replaceReaderAnnotationsRequestSchema,
+  saveAsRequestSchema,
+  selectedPdfSchema,
+  settingsUpdateSchema,
+  taskIdRequestSchema,
+  voidResponseSchema,
+  windowActionSchema,
+  windowStateSchema
+} from '@shared/ipcSchemas'
 import type {
-  CreateTasksRequest,
-  DeleteTaskRequest,
-  ReplaceReaderAnnotationsRequest,
-  SaveAsRequest,
-  SettingsUpdate,
-  TranslationProviderId,
-  WindowAction,
   WindowState
 } from '@shared/types'
 
@@ -68,7 +83,9 @@ async function bootstrap(): Promise<void> {
   createMainWindow()
   createTray()
 
-  tasks.on('changed', (taskList) => mainWindow?.webContents.send('tasks:changed', taskList))
+  tasks.on('changed', (taskList) => {
+    if (mainWindow) sendValidatedEvent(mainWindow.webContents, 'tasks:changed', minerUTaskSchema.array(), taskList)
+  })
   tasks.on('notification', (taskId: string, status: 'completed' | 'partial' | 'failed') => {
     const task = repository?.getTask(taskId)
     if (!task || !Notification.isSupported()) return
@@ -78,7 +95,7 @@ async function bootstrap(): Promise<void> {
     })
     notification.on('click', () => {
       showMainWindow()
-      mainWindow?.webContents.send('tasks:open', taskId)
+      if (mainWindow) sendValidatedEvent(mainWindow.webContents, 'tasks:open', taskIdRequestSchema, taskId)
     })
     notification.show()
   })
@@ -164,11 +181,11 @@ function currentWindowState(window: BrowserWindow): WindowState {
 
 function emitWindowState(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
-  mainWindow.webContents.send('window:state-changed', currentWindowState(mainWindow))
+  sendValidatedEvent(mainWindow.webContents, 'window:state-changed', windowStateSchema, currentWindowState(mainWindow))
 }
 
-function requestWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow {
-  const window = BrowserWindow.fromWebContents(event.sender)
+function requestWindow(event: IpcInvokeEventLike): BrowserWindow {
+  const window = BrowserWindow.fromWebContents(event.sender as Electron.WebContents)
   if (!window || window !== mainWindow) throw new Error('窗口操作来源无效')
   return window
 }
@@ -180,22 +197,31 @@ function registerIpc(
   parserClient: OfficialMinerUClient,
   fetcher: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 ): void {
-  ipcMain.handle('window:state', (event) => currentWindowState(requestWindow(event)))
-  ipcMain.handle('window:action', (event, action: WindowAction) => {
+  const validationOptions = {
+    getMainWindow: () => mainWindow,
+    rendererEntryPath: join(__dirname, '../renderer/index.html'),
+    rendererOrigin: process.env.ELECTRON_RENDERER_URL
+  }
+
+  registerValidatedHandler('window:state', noRequestSchema, windowStateSchema, (event) => currentWindowState(requestWindow(event)), validationOptions)
+  registerValidatedHandler('window:action', windowActionSchema, windowStateSchema, (event, action) => {
     const window = requestWindow(event)
     if (action === 'minimize') window.minimize()
-    else if (action === 'toggle-maximize') window.isMaximized() ? window.unmaximize() : window.maximize()
+    else if (action === 'toggle-maximize') {
+      if (window.isMaximized()) window.unmaximize()
+      else window.maximize()
+    }
     else if (action === 'close') window.close()
     else throw new Error('不支持的窗口操作')
     return currentWindowState(window)
-  })
-  ipcMain.handle('settings:get', () => settings.get())
-  ipcMain.handle('settings:save', (_event, update: SettingsUpdate) => settings.save(update))
-  ipcMain.handle('settings:test-parser', async (_event, inputToken?: string) => {
+  }, validationOptions)
+  registerValidatedHandler('settings:get', noRequestSchema, appSettingsSchema, () => settings.get(), validationOptions)
+  registerValidatedHandler('settings:save', settingsUpdateSchema, appSettingsSchema, (_event, update) => settings.save(update), validationOptions)
+  registerValidatedHandler('settings:test-parser', parserTokenSchema, healthResultSchema, async (_event, inputToken) => {
     const token = inputToken?.trim() || (await vault.get('parser-token'))
     return parserClient.verifyToken(token)
-  })
-  ipcMain.handle('settings:test-translation', async (_event, providerId: TranslationProviderId) => {
+  }, validationOptions)
+  registerValidatedHandler('settings:test-translation', providerIdRequestSchema, healthResultSchema, async (_event, providerId) => {
     try {
       const current = await settings.get()
       const provider = createTranslationProviders(current, vault, fetcher).get(providerId)
@@ -205,36 +231,37 @@ function registerIpc(
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) }
     }
-  })
-  ipcMain.handle('dialog:output-directory', async () => {
+  }, validationOptions)
+  registerValidatedHandler('dialog:output-directory', noRequestSchema, outputDirectorySchema, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] })
     return result.canceled ? null : (result.filePaths[0] ?? null)
-  })
-  ipcMain.handle('dialog:pdfs', async () => {
+  }, validationOptions)
+  registerValidatedHandler('dialog:pdfs', noRequestSchema, selectedPdfSchema.array(), async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'PDF', extensions: ['pdf'] }]
     })
     return result.canceled ? [] : tasks.inspectPdfs(result.filePaths)
-  })
-  ipcMain.handle('dialog:inspect-pdfs', (_event, paths: string[]) => tasks.inspectPdfs(paths.filter((path) => path.toLowerCase().endsWith('.pdf'))))
-  ipcMain.handle('tasks:list', () => tasks.list())
-  ipcMain.handle('tasks:create', (_event, request: CreateTasksRequest) => tasks.create(request))
-  ipcMain.handle('tasks:retry', (_event, taskId: string) => tasks.retry(taskId))
-  ipcMain.handle('tasks:delete', (_event, request: DeleteTaskRequest) => tasks.delete(request.taskId, request.deleteFiles))
-  ipcMain.handle('document:get', (_event, taskId: string) => tasks.getDocument(taskId))
-  ipcMain.handle('reader-annotations:get', (_event, taskId: string) => repository?.listReaderAnnotations(taskId) ?? [])
-  ipcMain.handle('reader-annotations:replace', (_event, request: ReplaceReaderAnnotationsRequest) => {
+  }, validationOptions)
+  registerValidatedHandler('dialog:inspect-pdfs', inspectPdfsRequestSchema, selectedPdfSchema.array(), (_event, paths) =>
+    tasks.inspectPdfs(paths.filter((path) => path.toLowerCase().endsWith('.pdf'))), validationOptions)
+  registerValidatedHandler('tasks:list', noRequestSchema, minerUTaskSchema.array(), () => tasks.list(), validationOptions)
+  registerValidatedHandler('tasks:create', createTasksRequestSchema, minerUTaskSchema.array(), (_event, request) => tasks.create(request), validationOptions)
+  registerValidatedHandler('tasks:retry', taskIdRequestSchema, voidResponseSchema, (_event, taskId) => tasks.retry(taskId), validationOptions)
+  registerValidatedHandler('tasks:delete', deleteTaskRequestSchema, voidResponseSchema, (_event, request) => tasks.delete(request.taskId, request.deleteFiles), validationOptions)
+  registerValidatedHandler('document:get', taskIdRequestSchema, documentPayloadSchema, (_event, taskId) => tasks.getDocument(taskId), validationOptions)
+  registerValidatedHandler('reader-annotations:get', taskIdRequestSchema, readerAnnotationSchema.array(), (_event, taskId) => repository?.listReaderAnnotations(taskId) ?? [], validationOptions)
+  registerValidatedHandler('reader-annotations:replace', replaceReaderAnnotationsRequestSchema, readerAnnotationSchema.array(), (_event, request) => {
     if (!repository) throw new Error('数据库尚未初始化')
     return repository.replaceReaderAnnotations(request)
-  })
-  ipcMain.handle('document:open-output', async (_event, taskId: string) => {
+  }, validationOptions)
+  registerValidatedHandler('document:open-output', taskIdRequestSchema, voidResponseSchema, async (_event, taskId) => {
     const task = repository?.getTask(taskId)
     if (!task) throw new Error('任务不存在')
     const result = await shell.openPath(task.outputDir)
     if (result) throw new Error(result)
-  })
-  ipcMain.handle('document:save-as', async (_event, request: SaveAsRequest) => {
+  }, validationOptions)
+  registerValidatedHandler('document:save-as', saveAsRequestSchema, outputDirectorySchema, async (_event, request) => {
     const task = repository?.getTask(request.taskId)
     if (!task) throw new Error('任务不存在')
     const source =
@@ -253,7 +280,7 @@ function registerIpc(
     if (source) await copyFile(source, result.filePath)
     else await tasks.createResultZip(task.id, result.filePath)
     return result.filePath
-  })
+  }, validationOptions)
 }
 
 app.on('before-quit', () => {

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import archiver from 'archiver'
+import { listPackage } from '@electron/asar'
 import extract from 'extract-zip'
 import { auditRelease, formatMiB } from './release-policy.mjs'
 
@@ -123,10 +124,7 @@ async function runElectronBuilder() {
 }
 
 function listAsarEntries(archivePath) {
-  const electronBuilderRequire = createRequire(require.resolve('electron-builder/out/cli/cli.js'))
-  const appBuilderRequire = createRequire(electronBuilderRequire.resolve('app-builder-lib'))
-  const asar = appBuilderRequire('@electron/asar')
-  return asar.listPackage(archivePath)
+  return listPackage(archivePath)
 }
 
 async function assertReleaseRootContents() {

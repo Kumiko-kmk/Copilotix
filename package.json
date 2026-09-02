@@ -6,6 +6,7 @@
   "scripts": {
     "desktop:dev": "pnpm --dir desktop dev",
     "desktop:typecheck": "pnpm --dir desktop typecheck",
+    "desktop:lint": "pnpm --dir desktop lint",
     "desktop:test": "pnpm --dir desktop test",
     "desktop:test:e2e": "pnpm --dir desktop test:e2e",
     "desktop:build": "pnpm --dir desktop build",

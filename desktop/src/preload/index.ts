@@ -1,57 +1,103 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { z } from 'zod'
+import {
+  appSettingsSchema,
+  createTasksRequestSchema,
+  deleteTaskRequestSchema,
+  documentPayloadSchema,
+  healthResultSchema,
+  inspectPdfsRequestSchema,
+  minerUTaskSchema,
+  noRequestSchema,
+  outputDirectorySchema,
+  parserTokenSchema,
+  providerIdRequestSchema,
+  readerAnnotationSchema,
+  replaceReaderAnnotationsRequestSchema,
+  saveAsRequestSchema,
+  selectedPdfSchema,
+  settingsUpdateSchema,
+  taskIdRequestSchema,
+  voidResponseSchema,
+  windowActionSchema,
+  windowStateSchema
+} from '@shared/ipcSchemas'
+import { decodeIpcEvent, decodeIpcResponse } from './ipcClient'
 import type {
-  AppSettings,
   CreateTasksRequest,
   DeleteTaskRequest,
-  DocumentPayload,
-  HealthResult,
   MinerUDesktopApi,
-  MinerUTask,
-  ReaderAnnotation,
   ReplaceReaderAnnotationsRequest,
   SaveAsRequest,
-  SelectedPdf,
   SettingsUpdate,
   TranslationProviderId,
-  WindowAction,
-  WindowState
+  WindowAction
 } from '@shared/types'
 
+async function invokeValidated<Request, Response>(
+  channel: string,
+  requestSchema: z.ZodType<Request>,
+  responseSchema: z.ZodType<Response>,
+  request: Request
+): Promise<Response> {
+  const validatedRequest = requestSchema.parse(request)
+  const response = await ipcRenderer.invoke(channel, validatedRequest)
+  return decodeIpcResponse(response, responseSchema)
+}
+
 const api: MinerUDesktopApi = {
-  getSettings: () => ipcRenderer.invoke('settings:get') as Promise<AppSettings>,
-  saveSettings: (update: SettingsUpdate) => ipcRenderer.invoke('settings:save', update) as Promise<AppSettings>,
-  testParserConnection: (parserToken) => ipcRenderer.invoke('settings:test-parser', parserToken) as Promise<HealthResult>,
+  getSettings: () => invokeValidated('settings:get', noRequestSchema, appSettingsSchema, undefined),
+  saveSettings: (update: SettingsUpdate) => invokeValidated('settings:save', settingsUpdateSchema, appSettingsSchema, update),
+  testParserConnection: (parserToken) =>
+    invokeValidated('settings:test-parser', parserTokenSchema, healthResultSchema, parserToken),
   testTranslationProvider: (provider: TranslationProviderId) =>
-    ipcRenderer.invoke('settings:test-translation', provider) as Promise<HealthResult>,
-  chooseOutputDirectory: () => ipcRenderer.invoke('dialog:output-directory') as Promise<string | null>,
-  choosePdfs: () => ipcRenderer.invoke('dialog:pdfs') as Promise<SelectedPdf[]>,
-  inspectDroppedPdfs: (files: File[]) =>
-    ipcRenderer.invoke('dialog:inspect-pdfs', files.map((file) => webUtils.getPathForFile(file))) as Promise<SelectedPdf[]>,
-  createTasks: (request: CreateTasksRequest) => ipcRenderer.invoke('tasks:create', request) as Promise<MinerUTask[]>,
-  listTasks: () => ipcRenderer.invoke('tasks:list') as Promise<MinerUTask[]>,
-  deleteTask: (request: DeleteTaskRequest) => ipcRenderer.invoke('tasks:delete', request) as Promise<void>,
-  retryTask: (taskId: string) => ipcRenderer.invoke('tasks:retry', taskId) as Promise<void>,
-  getDocument: (taskId: string) => ipcRenderer.invoke('document:get', taskId) as Promise<DocumentPayload>,
+    invokeValidated('settings:test-translation', providerIdRequestSchema, healthResultSchema, provider),
+  chooseOutputDirectory: () =>
+    invokeValidated('dialog:output-directory', noRequestSchema, outputDirectorySchema, undefined),
+  choosePdfs: () => invokeValidated('dialog:pdfs', noRequestSchema, selectedPdfSchema.array(), undefined),
+  inspectDroppedPdfs: (files: File[]) => {
+    const paths = files.map((file) => webUtils.getPathForFile(file))
+    return invokeValidated('dialog:inspect-pdfs', inspectPdfsRequestSchema, selectedPdfSchema.array(), paths)
+  },
+  createTasks: (request: CreateTasksRequest) =>
+    invokeValidated('tasks:create', createTasksRequestSchema, minerUTaskSchema.array(), request),
+  listTasks: () => invokeValidated('tasks:list', noRequestSchema, minerUTaskSchema.array(), undefined),
+  deleteTask: (request: DeleteTaskRequest) =>
+    invokeValidated('tasks:delete', deleteTaskRequestSchema, voidResponseSchema, request),
+  retryTask: (taskId: string) => invokeValidated('tasks:retry', taskIdRequestSchema, voidResponseSchema, taskId),
+  getDocument: (taskId: string) => invokeValidated('document:get', taskIdRequestSchema, documentPayloadSchema, taskId),
   getReaderAnnotations: (taskId: string) =>
-    ipcRenderer.invoke('reader-annotations:get', taskId) as Promise<ReaderAnnotation[]>,
+    invokeValidated('reader-annotations:get', taskIdRequestSchema, readerAnnotationSchema.array(), taskId),
   replaceReaderAnnotations: (request: ReplaceReaderAnnotationsRequest) =>
-    ipcRenderer.invoke('reader-annotations:replace', request) as Promise<ReaderAnnotation[]>,
-  openOutputDirectory: (taskId: string) => ipcRenderer.invoke('document:open-output', taskId) as Promise<void>,
-  saveAs: (request: SaveAsRequest) => ipcRenderer.invoke('document:save-as', request) as Promise<string | null>,
-  performWindowAction: (action: WindowAction) => ipcRenderer.invoke('window:action', action) as Promise<WindowState>,
-  getWindowState: () => ipcRenderer.invoke('window:state') as Promise<WindowState>,
+    invokeValidated('reader-annotations:replace', replaceReaderAnnotationsRequestSchema, readerAnnotationSchema.array(), request),
+  openOutputDirectory: (taskId: string) =>
+    invokeValidated('document:open-output', taskIdRequestSchema, voidResponseSchema, taskId),
+  saveAs: (request: SaveAsRequest) =>
+    invokeValidated('document:save-as', saveAsRequestSchema, outputDirectorySchema, request),
+  performWindowAction: (action: WindowAction) =>
+    invokeValidated('window:action', windowActionSchema, windowStateSchema, action),
+  getWindowState: () => invokeValidated('window:state', noRequestSchema, windowStateSchema, undefined),
   onTasksChanged: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, tasks: MinerUTask[]): void => listener(tasks)
+    const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const tasks = decodeIpcEvent(payload, minerUTaskSchema.array())
+      if (tasks) listener(tasks)
+    }
     ipcRenderer.on('tasks:changed', handler)
     return () => ipcRenderer.removeListener('tasks:changed', handler)
   },
   onOpenTask: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, taskId: string): void => listener(taskId)
+    const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const taskId = decodeIpcEvent(payload, taskIdRequestSchema)
+      if (taskId) listener(taskId)
+    }
     ipcRenderer.on('tasks:open', handler)
     return () => ipcRenderer.removeListener('tasks:open', handler)
   },
   onWindowStateChanged: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, state: WindowState): void => listener(state)
+    const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const state = decodeIpcEvent(payload, windowStateSchema)
+      if (state) listener(state)
+    }
     ipcRenderer.on('window:state-changed', handler)
     return () => ipcRenderer.removeListener('window:state-changed', handler)
   }

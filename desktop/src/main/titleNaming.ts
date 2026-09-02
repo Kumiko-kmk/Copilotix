@@ -3,6 +3,8 @@ import type { BlockMapping } from '@shared/types'
 /** Maximum stem length used for both the task name and its output directory. */
 export const MAX_TITLE_STEM_LENGTH = 100
 
+// NUL/control characters are intentionally stripped from user-derived filenames.
+// eslint-disable-next-line no-control-regex
 const INVALID_FILENAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f]/gu
 const WINDOWS_RESERVED_NAME = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/iu
 
@@ -43,7 +45,7 @@ export function cleanTitleText(value: string): string {
     .replace(/\[([^\]]+)\](?:\([^)]*\)|\[[^\]]*\])?/gu, '$1')
     .replace(/<[^>]*>/gu, ' ')
     .replace(/\s*\{#[^}]+\}\s*$/u, '')
-    .replace(/\\([\\`*_{}\[\]()#+.!-])/gu, '$1')
+    .replace(/\\([\\`*_{}\x5b\x5d()#+.!-])/gu, '$1')
     .replace(/\*\*([^*\r\n]+)\*\*/gu, '$1')
     .replace(/__([^_\r\n]+)__/gu, '$1')
     .replace(/~~([^~\r\n]+)~~/gu, '$1')

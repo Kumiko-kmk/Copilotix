@@ -7,6 +7,9 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
 
+minimumReleaseAgeExclude:
+  - electron@44.1.1
+
 onlyBuiltDependencies:
   - '@napi-rs/keyring'
   - electron

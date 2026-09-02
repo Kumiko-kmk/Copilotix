@@ -668,6 +668,8 @@ async function hashFile(path: string): Promise<string> {
 }
 
 function sanitizeFileName(value: string): string {
+  // NUL/control characters are intentionally stripped from user-derived filenames.
+  // eslint-disable-next-line no-control-regex
   return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '').slice(0, 100) || 'document'
 }
 

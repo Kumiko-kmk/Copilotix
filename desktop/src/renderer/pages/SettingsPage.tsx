@@ -56,7 +56,8 @@ export default function SettingsPage(props: {
     setTesting('parser')
     const result = await window.mineru.testParserConnection(parserToken || undefined)
     setTesting(null)
-    result.ok ? messageApi.success(result.message) : messageApi.error(result.message)
+    if (result.ok) messageApi.success(result.message)
+    else messageApi.error(result.message)
   }, [messageApi, parserToken])
 
   const testProvider = React.useCallback(async (provider: TranslationProviderId) => {
@@ -64,7 +65,8 @@ export default function SettingsPage(props: {
     if ((provider === 'qwen' && qwenKey) || (provider === 'deepseek' && deepseekKey)) await save()
     const result = await window.mineru.testTranslationProvider(provider)
     setTesting(null)
-    result.ok ? messageApi.success(result.message) : messageApi.error(result.message)
+    if (result.ok) messageApi.success(result.message)
+    else messageApi.error(result.message)
   }, [deepseekKey, messageApi, qwenKey, save])
 
   return (
