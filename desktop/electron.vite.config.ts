@@ -12,7 +12,7 @@ export default defineConfig({
     resolve: { alias: { '@shared': resolve('src/shared'), '@main': resolve('src/main') } }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['zod'] })],
     resolve: { alias: { '@shared': resolve('src/shared') } }
   },
   renderer: {

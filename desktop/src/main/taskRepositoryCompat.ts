@@ -6,6 +6,11 @@ import type {
   ReplaceReaderAnnotationsRequest,
   TranslationBlockRecord
 } from '@shared/types'
+import type {
+  DocumentSummary,
+  MutateReaderAnnotationsRequest,
+  ReaderAnnotationSnapshot
+} from '@shared/ipcSchemas'
 
 /**
  * Temporary application adapter contract. It keeps the pre-2B services
@@ -19,6 +24,12 @@ export interface TaskRepositoryCompat {
   listTasks(): MinerUTask[]
   getTask(id: string): MinerUTask | null
   findByHash(hash: string): MinerUTask | null
+  /** New document API projections; optional for the legacy database adapter. */
+  listDocumentSummaries?(): DocumentSummary[]
+  getDocumentSummary?(id: string): DocumentSummary | null
+  getLatestArtifactReference?(id: string, kind: ArtifactKind): ArtifactReference | null
+  listDocumentAnnotations?(request: { documentId: string; view: 'original' | 'translated' }): ReaderAnnotationSnapshot
+  mutateDocumentAnnotations?(request: MutateReaderAnnotationsRequest): ReaderAnnotationSnapshot
   insertTask(task: MinerUTask): void
   insertTasks(tasks: MinerUTask[]): void
   updateTask(id: string, patch: Partial<MinerUTask>): MinerUTask
@@ -31,4 +42,14 @@ export interface TaskRepositoryCompat {
   listReaderAnnotations(taskId: string): ReaderAnnotation[]
   replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): ReaderAnnotation[]
   recordArtifactRevision?(taskId: string, kind: ArtifactKind, path: string, checksum: string, metadata?: Record<string, unknown>): void
+}
+
+export interface ArtifactReference {
+  id: string
+  documentId: string
+  kind: ArtifactKind
+  revision: number
+  relativePath: string
+  contentHash: string
+  metadata: Record<string, unknown>
 }

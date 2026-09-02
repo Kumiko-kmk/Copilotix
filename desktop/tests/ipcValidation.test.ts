@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { assertTrustedSender, isTrustedRendererUrl, registerValidatedHandler, type IpcInvokeEventLike, type IpcMainLike } from '../src/main/ipc'
+import { assertTrustedSender, isTrustedRendererUrl, registerValidatedHandler, toIpcError, type IpcInvokeEventLike, type IpcMainLike } from '../src/main/ipc'
 import { z } from 'zod'
 
 function makeEvent(url: string): IpcInvokeEventLike {
@@ -75,5 +75,10 @@ describe('validated IPC handler', () => {
       ok: false,
       error: { code: 'UNTRUSTED_SENDER' }
     })
+  })
+
+  it('preserves stable domain error codes and marks annotation conflicts non-retryable', () => {
+    const error = Object.assign(new Error('标注版本已变化'), { code: 'ANNOTATION_CONFLICT' })
+    expect(toIpcError(error, 'HANDLER_ERROR')).toMatchObject({ code: 'ANNOTATION_CONFLICT', retryable: false })
   })
 })

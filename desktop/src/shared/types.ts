@@ -1,3 +1,16 @@
+import type {
+  DeleteDocumentRequest,
+  DocumentChangeEvent,
+  DocumentDetails,
+  DocumentSummary,
+  ImportDocumentsRequest,
+  ListReaderAnnotationsRequest,
+  MutateReaderAnnotationsRequest,
+  ReaderAnnotationSnapshot,
+  SaveDocumentAsRequest,
+  SaveDocumentAsResult
+} from './ipcSchemas'
+
 export type ParserModel = 'vlm' | 'pipeline'
 export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart'
 
@@ -206,21 +219,19 @@ export interface MinerUDesktopApi {
   testParserConnection(parserToken?: string): Promise<HealthResult>
   testTranslationProvider(provider: TranslationProviderId): Promise<HealthResult>
   chooseOutputDirectory(): Promise<string | null>
-  choosePdfs(): Promise<SelectedPdf[]>
-  inspectDroppedPdfs(files: File[]): Promise<SelectedPdf[]>
-  createTasks(request: CreateTasksRequest): Promise<MinerUTask[]>
-  listTasks(): Promise<MinerUTask[]>
-  deleteTask(request: DeleteTaskRequest): Promise<void>
-  retryTask(taskId: string): Promise<void>
-  getDocument(taskId: string): Promise<DocumentPayload>
-  getReaderAnnotations(taskId: string): Promise<ReaderAnnotation[]>
-  replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): Promise<ReaderAnnotation[]>
-  openOutputDirectory(taskId: string): Promise<void>
-  saveAs(request: SaveAsRequest): Promise<string | null>
+  importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[]): Promise<DocumentSummary[]>
+  listDocuments(): Promise<DocumentSummary[]>
+  retryDocument(documentId: string): Promise<void>
+  deleteDocument(request: DeleteDocumentRequest): Promise<void>
+  getDocument(documentId: string): Promise<DocumentDetails>
+  openDocumentOutput(documentId: string): Promise<void>
+  saveDocumentAs(request: SaveDocumentAsRequest): Promise<SaveDocumentAsResult>
+  listReaderAnnotations(request: ListReaderAnnotationsRequest): Promise<ReaderAnnotationSnapshot>
+  mutateReaderAnnotations(request: MutateReaderAnnotationsRequest): Promise<ReaderAnnotationSnapshot>
   performWindowAction(action: WindowAction): Promise<WindowState>
   getWindowState(): Promise<WindowState>
-  onTasksChanged(listener: (tasks: MinerUTask[]) => void): () => void
-  onOpenTask(listener: (taskId: string) => void): () => void
+  onDocumentsChanged(listener: (event: DocumentChangeEvent) => void): () => void
+  onOpenDocument(listener: (documentId: string) => void): () => void
   onWindowStateChanged(listener: (state: WindowState) => void): () => void
 }
 

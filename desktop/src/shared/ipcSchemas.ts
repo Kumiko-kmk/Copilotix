@@ -197,3 +197,193 @@ export function ipcEnvelopeSchema<T extends z.ZodType>(valueSchema: T) {
     z.object({ ok: z.literal(false), error: ipcErrorSchema }).strict()
   ])
 }
+
+/*
+ * Document IPC contracts
+ *
+ * These schemas are the only source of truth for the v2 document API.  The
+ * legacy task contracts above remain in place for the temporary compatibility
+ * adapter, but no local filesystem path is part of any contract below.
+ */
+const uuid = z.string().uuid().refine(noNul, '值不能包含 NUL 字符')
+const documentFilename = z.string().min(1).max(1_024).refine(noNul, '文件名不能包含 NUL 字符')
+const documentContent = z.string().max(100_000_000).refine(noNul, '内容不能包含 NUL 字符')
+const documentUrl = z.string().min(1).max(8_192).refine(noNul, '地址不能包含 NUL 字符')
+const documentTimestamp = z.string().min(1).max(128).refine(noNul, '时间不能包含 NUL 字符')
+const documentProgress = z.number().int().min(0).max(100)
+
+export const documentWorkflowStatusSchema = z.enum(['queued', 'uploading', 'parsing', 'translating', 'partial', 'completed', 'failed'])
+export type DocumentWorkflowStatus = z.infer<typeof documentWorkflowStatusSchema>
+
+export const documentWorkflowSchema = z.object({
+  status: documentWorkflowStatusSchema,
+  progress: documentProgress,
+  activeJobKind: z.enum(['parse', 'translate']).nullable(),
+  error: z.string().max(32_768).refine(noNul, '错误信息不能包含 NUL 字符').nullable()
+}).strict()
+
+export const documentProcessingSchema = z.object({
+  parserModel: parserModelSchema,
+  translationProvider: translationProviderIdSchema
+}).strict()
+
+export const documentSummarySchema = z.object({
+  id: uuid,
+  originalName: documentFilename,
+  displayName: documentFilename,
+  sourceHash: z.string().min(1).max(512).refine(noNul, '源文件摘要不能包含 NUL 字符'),
+  workflow: documentWorkflowSchema,
+  processing: documentProcessingSchema,
+  createdAt: documentTimestamp,
+  updatedAt: documentTimestamp
+}).strict()
+export type DocumentSummary = z.infer<typeof documentSummarySchema>
+
+export const documentChangeEventSchema = z.object({
+  revision: z.number().int().positive(),
+  upserted: z.array(documentSummarySchema).max(1_000),
+  removedIds: z.array(uuid).max(1_000)
+}).strict().superRefine((value, context) => {
+  const upsertedIds = new Set(value.upserted.map((document) => document.id))
+  const removedIds = new Set(value.removedIds)
+  if (upsertedIds.size !== value.upserted.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['upserted'], message: 'upserted 文档 ID 必须唯一' })
+  }
+  if (removedIds.size !== value.removedIds.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['removedIds'], message: 'removedIds 必须唯一' })
+  }
+  for (const id of upsertedIds) {
+    if (removedIds.has(id)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['removedIds'], message: '同一文档不能同时 upsert 和 remove' })
+      break
+    }
+  }
+})
+export type DocumentChangeEvent = z.infer<typeof documentChangeEventSchema>
+
+export const documentDetailsSchema = z.object({
+  summary: documentSummarySchema,
+  markdown: documentContent,
+  translatedMarkdown: documentContent,
+  translatedBlocks: z.array(translatedMarkdownBlockSchema).max(100_000).nullable(),
+  layoutJson: documentContent,
+  mappings: z.array(blockMappingSchema).max(100_000),
+  pdfUrl: documentUrl,
+  assetBaseUrl: documentUrl
+}).strict()
+export type DocumentDetails = z.infer<typeof documentDetailsSchema>
+
+export const importDocumentsRequestSchema = z.object({
+  parserModel: parserModelSchema,
+  translationProvider: translationProviderIdSchema,
+  createDuplicates: z.boolean().optional()
+}).strict()
+export type ImportDocumentsRequest = z.infer<typeof importDocumentsRequestSchema>
+
+// This request is used only between preload and main. `paths` is never part
+// of the renderer-visible API or any response DTO.
+export const importDocumentsIpcRequestSchema = z.object({
+  options: importDocumentsRequestSchema,
+  paths: z.array(boundedPath).max(100).optional()
+}).strict()
+
+export const documentIdRequestSchema = uuid
+export const deleteDocumentRequestSchema = z.object({
+  documentId: uuid,
+  deleteFiles: z.boolean()
+}).strict()
+export type DeleteDocumentRequest = z.infer<typeof deleteDocumentRequestSchema>
+
+export const saveDocumentAsRequestSchema = z.object({
+  documentId: uuid,
+  kind: z.enum(['original-markdown', 'translated-markdown', 'result-zip'])
+}).strict()
+export type SaveDocumentAsRequest = z.infer<typeof saveDocumentAsRequestSchema>
+
+export const saveDocumentAsResultSchema = z.object({ saved: z.boolean() }).strict()
+export type SaveDocumentAsResult = z.infer<typeof saveDocumentAsResultSchema>
+
+export const documentAnnotationViewSchema = z.enum(['original', 'translated'])
+export const documentAnnotationKindSchema = z.enum(['highlight', 'underline'])
+export const documentHighlightColorSchema = z.enum(['yellow', 'green', 'blue', 'pink', 'purple'])
+
+export const documentAnnotationSchema = z.object({
+  id: uuid,
+  documentId: uuid,
+  artifactId: uuid,
+  view: documentAnnotationViewSchema,
+  kind: documentAnnotationKindSchema,
+  color: documentHighlightColorSchema.nullable(),
+  blockKey: z.string().min(1).max(4_096).refine(noNul, '区块键不能包含 NUL 字符'),
+  startOffset: z.number().int().min(0),
+  endOffset: z.number().int().min(1),
+  quote: z.string().min(1).max(1_000_000).refine(noNul, '引用不能包含 NUL 字符'),
+  prefix: z.string().max(256).refine(noNul, '前缀不能包含 NUL 字符'),
+  suffix: z.string().max(256).refine(noNul, '后缀不能包含 NUL 字符'),
+  createdAt: documentTimestamp,
+  updatedAt: documentTimestamp
+}).strict().superRefine((value, context) => {
+  if (value.endOffset <= value.startOffset) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['endOffset'], message: '结束偏移必须大于起始偏移' })
+  }
+  if (value.quote.length !== value.endOffset - value.startOffset) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['quote'], message: '引用长度必须匹配偏移范围' })
+  }
+  if (value.kind === 'underline' && value.color !== null) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['color'], message: '下划线标注不能设置颜色' })
+  }
+})
+export type DocumentAnnotation = z.infer<typeof documentAnnotationSchema>
+
+export const listReaderAnnotationsRequestSchema = z.object({
+  documentId: uuid,
+  view: documentAnnotationViewSchema
+}).strict()
+export type ListReaderAnnotationsRequest = z.infer<typeof listReaderAnnotationsRequestSchema>
+
+export const readerAnnotationSnapshotSchema = z.object({
+  documentId: uuid,
+  artifactId: uuid,
+  view: documentAnnotationViewSchema,
+  revision: z.number().int().min(0),
+  annotations: z.array(documentAnnotationSchema).max(50_000)
+}).strict()
+export type ReaderAnnotationSnapshot = z.infer<typeof readerAnnotationSnapshotSchema>
+
+export const mutateReaderAnnotationsRequestSchema = z.object({
+  documentId: uuid,
+  artifactId: uuid,
+  view: documentAnnotationViewSchema,
+  expectedRevision: z.number().int().min(0),
+  upserts: z.array(documentAnnotationSchema).max(50_000),
+  deleteIds: z.array(uuid).max(50_000)
+}).strict().superRefine((value, context) => {
+  const upsertIds = new Set(value.upserts.map((annotation) => annotation.id))
+  const deleteIds = new Set(value.deleteIds)
+  if (upsertIds.size !== value.upserts.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['upserts'], message: 'upserts 标注 ID 必须唯一' })
+  }
+  if (deleteIds.size !== value.deleteIds.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['deleteIds'], message: 'deleteIds 必须唯一' })
+  }
+  for (const id of upsertIds) {
+    if (deleteIds.has(id)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['deleteIds'], message: 'upsert 和 delete 不能包含同一标注' })
+      break
+    }
+  }
+  for (const [index, annotation] of value.upserts.entries()) {
+    if (annotation.documentId !== value.documentId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['upserts', index, 'documentId'], message: '标注文档不匹配' })
+    }
+    if (annotation.artifactId !== value.artifactId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['upserts', index, 'artifactId'], message: '标注产物不匹配' })
+    }
+    if (annotation.view !== value.view) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['upserts', index, 'view'], message: '标注视图不匹配' })
+    }
+  }
+})
+export type MutateReaderAnnotationsRequest = z.infer<typeof mutateReaderAnnotationsRequestSchema>
+
+export const voidDocumentResponseSchema = z.undefined()

@@ -1,39 +1,77 @@
 import React from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileAddOutlined, FileTextOutlined, GithubOutlined, SettingOutlined } from '@ant-design/icons'
-import type { AppSettings, MinerUTask } from '@shared/types'
+import type { AppSettings } from '@shared/types'
+import type { DocumentDetails } from '@shared/ipcSchemas'
 import EdgeDock from './components/EdgeDock'
 import PaperSwitcher from './components/PaperSwitcher'
 import WindowControls from './components/WindowControls'
 import NewParsePage from './pages/NewParsePage'
 import TasksPage from './pages/TasksPage'
 import SettingsPage from './pages/SettingsPage'
+import {
+  applyDocumentChange,
+  getDocumentRefreshPlan,
+  patchDocumentDetails,
+  type DocumentListCache
+} from './documentCache'
 
 const ReaderPage = React.lazy(() => import('./pages/ReaderPage'))
 
-type View = { name: 'new' | 'tasks' | 'settings' } | { name: 'reader'; taskId: string }
+type View = { name: 'new' | 'tasks' | 'settings' } | { name: 'reader'; documentId: string }
 
 export default function App(): React.JSX.Element {
+  const queryClient = useQueryClient()
   const [view, setView] = React.useState<View>({ name: 'new' })
-  const [tasks, setTasks] = React.useState<MinerUTask[]>([])
-  const [settings, setSettings] = React.useState<AppSettings | null>(null)
-
-  const refresh = React.useCallback(async () => {
-    const [nextTasks, nextSettings] = await Promise.all([window.mineru.listTasks(), window.mineru.getSettings()])
-    setTasks(nextTasks)
-    setSettings(nextSettings)
-  }, [])
+  const settingsQuery = useQuery<AppSettings>({
+    queryKey: ['settings'],
+    queryFn: () => window.mineru.getSettings()
+  })
+  const documentsQuery = useQuery<DocumentListCache>({
+    queryKey: ['documents'],
+    queryFn: async () => ({ revision: 0, documents: await window.mineru.listDocuments() })
+  })
+  const settings = settingsQuery.data
+  const documents = documentsQuery.data?.documents ?? []
 
   React.useEffect(() => {
-    void refresh()
-    const stopTasks = window.mineru.onTasksChanged(setTasks)
-    const stopOpen = window.mineru.onOpenTask((taskId) => setView({ name: 'reader', taskId }))
+    const stop = window.mineru.onDocumentsChanged((change) => {
+      const current = queryClient.getQueryData<DocumentListCache>(['documents'])
+      const previousSummaries = new Map(current?.documents.map((document) => [document.id, document] as const))
+      if (!current) {
+        void queryClient.invalidateQueries({ queryKey: ['documents'] })
+      } else {
+        queryClient.setQueryData(['documents'], applyDocumentChange(current, change))
+      }
+
+      for (const summary of change.upserted) {
+        const refreshPlan = getDocumentRefreshPlan(previousSummaries.get(summary.id), summary)
+        queryClient.setQueryData<DocumentDetails>(['document', summary.id], (detail) =>
+          patchDocumentDetails(detail, change)
+        )
+        if (refreshPlan.invalidateDocument) {
+          void queryClient.invalidateQueries({ queryKey: ['document', summary.id] })
+        }
+        for (const view of refreshPlan.annotationViews) {
+          void queryClient.invalidateQueries({ queryKey: ['annotations', summary.id, view] })
+        }
+      }
+      for (const documentId of change.removedIds) {
+        queryClient.removeQueries({ queryKey: ['document', documentId] })
+        queryClient.removeQueries({ queryKey: ['annotations', documentId] })
+      }
+    })
+    const stopOpen = window.mineru.onOpenDocument((documentId) => setView({ name: 'reader', documentId }))
     return () => {
-      stopTasks()
+      stop()
       stopOpen()
     }
-  }, [refresh])
+  }, [queryClient])
 
-  const openTask = React.useCallback((taskId: string) => setView({ name: 'reader', taskId }), [])
+  const openDocument = React.useCallback((documentId: string) => setView({ name: 'reader', documentId }), [])
+  const onSettingsSaved = React.useCallback((next: AppSettings) => {
+    queryClient.setQueryData(['settings'], next)
+  }, [queryClient])
 
   return (
     <div className="app-shell">
@@ -51,23 +89,24 @@ export default function App(): React.JSX.Element {
         {view.name === 'new' && settings ? (
           <NewParsePage
             settings={settings}
-            onCreated={() => setView({ name: 'tasks' })}
+            onCreated={() => {
+              void queryClient.invalidateQueries({ queryKey: ['documents'] })
+              setView({ name: 'tasks' })
+            }}
             onOpenSettings={() => setView({ name: 'settings' })}
           />
         ) : null}
-        {view.name === 'tasks' ? <TasksPage tasks={tasks} onOpen={openTask} /> : null}
-        {view.name === 'settings' && settings ? (
-          <SettingsPage settings={settings} onSaved={(next) => setSettings(next)} />
-        ) : null}
+        {view.name === 'tasks' ? <TasksPage documents={documents} onOpen={openDocument} /> : null}
+        {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} /> : null}
         {view.name === 'reader' ? (
           <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>
-            <ReaderPage taskId={view.taskId} onBack={() => setView({ name: 'tasks' })} />
+            <ReaderPage documentId={view.documentId} onBack={() => setView({ name: 'tasks' })} />
           </React.Suspense>
         ) : null}
         {!settings && view.name !== 'reader' ? <div className="page-loading">正在加载…</div> : null}
       </main>
       <EdgeDock edge="bottom" label="展开论文切换">
-        <PaperSwitcher tasks={tasks} activeTaskId={view.name === 'reader' ? view.taskId : null} onOpen={openTask} />
+        <PaperSwitcher documents={documents} activeDocumentId={view.name === 'reader' ? view.documentId : null} onOpen={openDocument} />
       </EdgeDock>
     </div>
   )

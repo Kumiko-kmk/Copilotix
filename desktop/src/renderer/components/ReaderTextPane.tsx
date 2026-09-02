@@ -7,8 +7,8 @@ import type {
   ReaderAnnotation,
   ReaderAnnotationView,
   ReaderChatSelection,
-  TaskStatus
 } from '@shared/types'
+import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
 import JsonPane from './JsonPane'
 import MarkdownPane from './MarkdownPane'
 
@@ -20,7 +20,7 @@ export default function ReaderTextPane(props: {
   originalBlocks: ReaderBlock[]
   translatedBlocks: ReaderBlock[]
   translatedReady: boolean
-  taskStatus: TaskStatus
+  taskStatus: DocumentWorkflowStatus
   layoutJson: string
   jsonQuery: string
   onJsonQueryChange(query: string): void
@@ -158,7 +158,7 @@ function scheduleIdle(callback: () => void): () => void {
   return () => globalThis.clearTimeout(id)
 }
 
-function translationLabel(status: TaskStatus): string {
+function translationLabel(status: DocumentWorkflowStatus): string {
   if (status === 'completed') return '翻译完成'
   if (status === 'partial') return '部分翻译完成，可重试失败区块'
   if (status === 'failed') return '任务失败'
@@ -166,7 +166,7 @@ function translationLabel(status: TaskStatus): string {
   return '等待解析完成'
 }
 
-function translationColor(status: TaskStatus): string {
+function translationColor(status: DocumentWorkflowStatus): string {
   if (status === 'completed') return 'success'
   if (status === 'partial') return 'warning'
   if (status === 'failed') return 'error'

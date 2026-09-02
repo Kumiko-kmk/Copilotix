@@ -26,29 +26,32 @@ import { createTranslationProviders } from './translation/providers'
 import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike } from './ipc'
 import {
   appSettingsSchema,
-  createTasksRequestSchema,
-  deleteTaskRequestSchema,
-  documentPayloadSchema,
   healthResultSchema,
-  inspectPdfsRequestSchema,
-  minerUTaskSchema,
   noRequestSchema,
   outputDirectorySchema,
   parserTokenSchema,
   providerIdRequestSchema,
-  readerAnnotationSchema,
-  replaceReaderAnnotationsRequestSchema,
-  saveAsRequestSchema,
-  selectedPdfSchema,
   settingsUpdateSchema,
-  taskIdRequestSchema,
   voidResponseSchema,
   windowActionSchema,
   windowStateSchema
 } from '@shared/ipcSchemas'
-import type {
-  WindowState
-} from '@shared/types'
+import {
+  deleteDocumentRequestSchema,
+  documentChangeEventSchema,
+  documentDetailsSchema,
+  documentIdRequestSchema,
+  documentSummarySchema,
+  importDocumentsIpcRequestSchema,
+  listReaderAnnotationsRequestSchema,
+  mutateReaderAnnotationsRequestSchema,
+  readerAnnotationSnapshotSchema,
+  saveDocumentAsRequestSchema,
+  saveDocumentAsResultSchema,
+  type DocumentSummary
+} from '@shared/ipcSchemas'
+import type { WindowState } from '@shared/types'
+import { computeDocumentChange, projectDocumentDetails, projectDocumentSummary } from './documentProjection'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -65,6 +68,8 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 let repository: TaskRepositoryCompat | null = null
+let documentRevision = 0
+let documentSummaries = new Map<string, DocumentSummary>()
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
@@ -78,6 +83,11 @@ async function bootstrap(): Promise<void> {
   const parserClient = new OfficialMinerUClient(fetcher, new ElectronFileUploader())
   const logger = new JsonLineLogger(join(userData, 'mineru-desktop.log'))
   const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger)
+  documentSummaries = new Map(tasks.list().map((task) => {
+    const summary = projectDocumentSummary(task)
+    return [summary.id, summary] as const
+  }))
+  documentRevision = 0
 
   protocol.handle('mineru-asset', (request) => createAssetResponse(request, (taskId, path) => tasks.resolveAsset(taskId, path)))
 
@@ -86,7 +96,18 @@ async function bootstrap(): Promise<void> {
   createTray()
 
   tasks.on('changed', (taskList) => {
-    if (mainWindow) sendValidatedEvent(mainWindow.webContents, 'tasks:changed', minerUTaskSchema.array(), taskList)
+    const computation = computeDocumentChange(
+      documentSummaries,
+      taskList.map(projectDocumentSummary),
+      documentRevision
+    )
+    documentSummaries = computation.next
+    if (computation.event && mainWindow) {
+      documentRevision = computation.event.revision
+      sendValidatedEvent(mainWindow.webContents, 'documents:changed', documentChangeEventSchema, computation.event)
+    } else if (computation.event) {
+      documentRevision = computation.event.revision
+    }
   })
   tasks.on('notification', (taskId: string, status: 'completed' | 'partial' | 'failed') => {
     const task = repository?.getTask(taskId)
@@ -97,7 +118,7 @@ async function bootstrap(): Promise<void> {
     })
     notification.on('click', () => {
       showMainWindow()
-      if (mainWindow) sendValidatedEvent(mainWindow.webContents, 'tasks:open', taskIdRequestSchema, taskId)
+      if (mainWindow) sendValidatedEvent(mainWindow.webContents, 'documents:open', documentIdRequestSchema, taskId)
     })
     notification.show()
   })
@@ -238,34 +259,45 @@ function registerIpc(
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] })
     return result.canceled ? null : (result.filePaths[0] ?? null)
   }, validationOptions)
-  registerValidatedHandler('dialog:pdfs', noRequestSchema, selectedPdfSchema.array(), async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'PDF', extensions: ['pdf'] }]
-    })
-    return result.canceled ? [] : tasks.inspectPdfs(result.filePaths)
+  registerValidatedHandler('documents:import', importDocumentsIpcRequestSchema, documentSummarySchema.array(), async (_event, request) => {
+    let paths = request.paths
+    if (paths === undefined) {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+      })
+      if (result.canceled) return []
+      paths = result.filePaths
+    }
+    const selected = await tasks.inspectPdfs(paths.filter((path) => path.toLowerCase().endsWith('.pdf')))
+    const created = await tasks.create({ ...request.options, files: selected })
+    return created.map(projectDocumentSummary)
   }, validationOptions)
-  registerValidatedHandler('dialog:inspect-pdfs', inspectPdfsRequestSchema, selectedPdfSchema.array(), (_event, paths) =>
-    tasks.inspectPdfs(paths.filter((path) => path.toLowerCase().endsWith('.pdf'))), validationOptions)
-  registerValidatedHandler('tasks:list', noRequestSchema, minerUTaskSchema.array(), () => tasks.list(), validationOptions)
-  registerValidatedHandler('tasks:create', createTasksRequestSchema, minerUTaskSchema.array(), (_event, request) => tasks.create(request), validationOptions)
-  registerValidatedHandler('tasks:retry', taskIdRequestSchema, voidResponseSchema, (_event, taskId) => tasks.retry(taskId), validationOptions)
-  registerValidatedHandler('tasks:delete', deleteTaskRequestSchema, voidResponseSchema, (_event, request) => tasks.delete(request.taskId, request.deleteFiles), validationOptions)
-  registerValidatedHandler('document:get', taskIdRequestSchema, documentPayloadSchema, (_event, taskId) => tasks.getDocument(taskId), validationOptions)
-  registerValidatedHandler('reader-annotations:get', taskIdRequestSchema, readerAnnotationSchema.array(), (_event, taskId) => repository?.listReaderAnnotations(taskId) ?? [], validationOptions)
-  registerValidatedHandler('reader-annotations:replace', replaceReaderAnnotationsRequestSchema, readerAnnotationSchema.array(), (_event, request) => {
-    if (!repository) throw new Error('数据库尚未初始化')
-    return repository.replaceReaderAnnotations(request)
+  registerValidatedHandler('documents:list', noRequestSchema, documentSummarySchema.array(), () => {
+    if (documentSummaries.size === 0) {
+      const current = repository?.listDocumentSummaries?.() ?? tasks.list().map(projectDocumentSummary)
+      documentSummaries = new Map(current.map((summary) => [summary.id, summary] as const))
+    }
+    return [...documentSummaries.values()]
   }, validationOptions)
-  registerValidatedHandler('document:open-output', taskIdRequestSchema, voidResponseSchema, async (_event, taskId) => {
-    const task = repository?.getTask(taskId)
-    if (!task) throw new Error('任务不存在')
+  registerValidatedHandler('documents:retry', documentIdRequestSchema, voidResponseSchema, (_event, documentId) => {
+    return tasks.retry(documentId)
+  }, validationOptions)
+  registerValidatedHandler('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, (_event, request) => {
+    return tasks.delete(request.documentId, request.deleteFiles)
+  }, validationOptions)
+  registerValidatedHandler('documents:get', documentIdRequestSchema, documentDetailsSchema, async (_event, documentId) => {
+    return projectDocumentDetails(await tasks.getDocument(documentId))
+  }, validationOptions)
+  registerValidatedHandler('documents:open-output', documentIdRequestSchema, voidResponseSchema, async (_event, documentId) => {
+    const task = repository?.getTask(documentId)
+    if (!task) throw new Error('文档不存在')
     const result = await shell.openPath(task.outputDir)
     if (result) throw new Error(result)
   }, validationOptions)
-  registerValidatedHandler('document:save-as', saveAsRequestSchema, outputDirectorySchema, async (_event, request) => {
-    const task = repository?.getTask(request.taskId)
-    if (!task) throw new Error('任务不存在')
+  registerValidatedHandler('documents:save-as', saveDocumentAsRequestSchema, saveDocumentAsResultSchema, async (_event, request) => {
+    const task = repository?.getTask(request.documentId)
+    if (!task) throw new Error('文档不存在')
     const source =
       request.kind === 'original-markdown'
         ? join(task.outputDir, 'full.md')
@@ -278,10 +310,18 @@ function registerIpc(
       defaultPath: join(app.getPath('downloads'), `${exportStem}${request.kind === 'translated-markdown' ? '.zh-CN' : ''}.${extension}`),
       filters: [{ name: extension.toUpperCase(), extensions: [extension] }]
     })
-    if (result.canceled || !result.filePath) return null
+    if (result.canceled || !result.filePath) return { saved: false }
     if (source) await copyFile(source, result.filePath)
     else await tasks.createResultZip(task.id, result.filePath)
-    return result.filePath
+    return { saved: true }
+  }, validationOptions)
+  registerValidatedHandler('reader-annotations:list', listReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, (_event, request) => {
+    if (!repository?.listDocumentAnnotations) throw new Error('数据库尚未初始化')
+    return repository.listDocumentAnnotations(request)
+  }, validationOptions)
+  registerValidatedHandler('reader-annotations:mutate', mutateReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, (_event, request) => {
+    if (!repository?.mutateDocumentAnnotations) throw new Error('数据库尚未初始化')
+    return repository.mutateDocumentAnnotations(request)
   }, validationOptions)
 }
 

@@ -63,24 +63,15 @@ export async function seedReaderTask(
     englishTitle?: string
   }
 ): Promise<string> {
-  let sourceTaskId: string | undefined
-  if (options?.sourceTaskDir) {
-    try {
-      const manifest = JSON.parse(await readFile(join(options.sourceTaskDir, 'translation.manifest.json'), 'utf8'))
-      if (typeof manifest?.taskId === 'string' && manifest.taskId) sourceTaskId = manifest.taskId
-    } catch {
-      // A real layout fixture without a translation manifest keeps the fallback task id.
-    }
-  }
   const taskId = options?.missingPdf
-    ? 'missing-pdf-task'
+    ? '00000000-0000-4000-8000-000000000001'
     : options?.sourceTaskDir
-      ? sourceTaskId ?? 'real-layout-task'
+      ? '00000000-0000-4000-8000-000000000002'
       : options?.sourcePdf
-        ? 'real-pdf-task'
+        ? '00000000-0000-4000-8000-000000000003'
         : options?.alignmentRegression
-          ? 'alignment-regression-task'
-          : 'reader-pdf-task'
+          ? '00000000-0000-4000-8000-000000000004'
+          : '00000000-0000-4000-8000-000000000005'
   const outputDir = join(workspace.root, 'documents-v2', taskId)
   const originalName = options?.missingPdf
     ? 'missing.pdf'
@@ -94,6 +85,13 @@ export async function seedReaderTask(
   await mkdir(outputDir, { recursive: true })
   if (options?.sourceTaskDir) {
     await cp(options.sourceTaskDir, outputDir, { recursive: true })
+    try {
+      const manifestPath = join(outputDir, 'translation.manifest.json')
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>
+      await writeFile(manifestPath, JSON.stringify({ ...manifest, taskId }, null, 2), 'utf8')
+    } catch {
+      // Layout-only fixtures do not contain a translation manifest.
+    }
   } else {
     const fixtureMarkdown = options?.alignmentRegression ? ALIGNMENT_REGRESSION_MARKDOWN : FIXTURE_MARKDOWN
     const layout = options?.alignmentRegression

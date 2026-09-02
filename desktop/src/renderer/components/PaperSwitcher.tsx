@@ -1,7 +1,8 @@
 import React from 'react'
-import type { MinerUTask, TaskStatus } from '@shared/types'
+import type { DocumentSummary } from '@shared/ipcSchemas'
 
-const statusLabels: Record<TaskStatus, string> = {
+const statusLabels: Record<DocumentSummary['workflow']['status'], string> = {
+  queued: '排队中',
   uploading: '上传中',
   parsing: '解析中',
   translating: '翻译中',
@@ -9,39 +10,38 @@ const statusLabels: Record<TaskStatus, string> = {
   completed: '已完成',
   failed: '失败'
 }
-
-const progressStatuses = new Set<TaskStatus>(['uploading', 'parsing', 'translating'])
+const progressStatuses = new Set<DocumentSummary['workflow']['status']>(['queued', 'uploading', 'parsing', 'translating'])
 
 interface PaperSwitcherProps {
-  tasks: MinerUTask[]
-  activeTaskId: string | null
-  onOpen(taskId: string): void
+  documents: DocumentSummary[]
+  activeDocumentId: string | null
+  onOpen(documentId: string): void
 }
 
 export default function PaperSwitcher(props: PaperSwitcherProps): React.JSX.Element {
-  if (props.tasks.length === 0) {
+  if (props.documents.length === 0) {
     return <div className="paper-switcher-empty">暂无论文</div>
   }
 
   return (
     <nav className="paper-switcher" aria-label="论文切换">
-      {props.tasks.map((task) => {
-        const active = task.id === props.activeTaskId
-        const progress = progressStatuses.has(task.status) ? ` · ${task.progress}%` : ''
+      {props.documents.map((document) => {
+        const active = document.id === props.activeDocumentId
+        const progress = progressStatuses.has(document.workflow.status) ? ` · ${document.workflow.progress}%` : ''
         return (
           <button
-            key={task.id}
+            key={document.id}
             type="button"
             className={`paper-switcher-item${active ? ' active' : ''}`}
             data-testid="paper-switcher-item"
-            data-paper-task-id={task.id}
-            title={task.name}
-            aria-label={`打开论文：${task.name}，${statusLabels[task.status]}${progress}`}
+            data-paper-task-id={document.id}
+            title={document.displayName}
+            aria-label={`打开论文：${document.displayName}，${statusLabels[document.workflow.status]}${progress}`}
             aria-current={active ? 'page' : undefined}
-            onClick={() => props.onOpen(task.id)}
+            onClick={() => props.onOpen(document.id)}
           >
-            <span className="paper-switcher-name">{task.name}</span>
-            <span className={`paper-switcher-status status-${task.status}`}>{statusLabels[task.status]}{progress}</span>
+            <span className="paper-switcher-name">{document.displayName}</span>
+            <span className={`paper-switcher-status status-${document.workflow.status}`}>{statusLabels[document.workflow.status]}{progress}</span>
           </button>
         )
       })}

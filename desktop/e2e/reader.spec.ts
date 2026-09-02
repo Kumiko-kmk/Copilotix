@@ -1,6 +1,8 @@
 import { _electron as electron, expect, test, type Locator, type Page } from '@playwright/test'
 import { join } from 'node:path'
 import { createE2EWorkspace, seedReaderTask } from './helpers'
+import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
+import type { MinerUDesktopApi } from '../src/shared/types'
 
 const FIXTURE_TRANSLATED_MARKDOWN = [
   '# 测试文档',
@@ -203,8 +205,8 @@ test('persists original and translated Markdown annotations with color and under
     await expect(window.getByRole('toolbar', { name: '文本标注' })).toBeVisible()
     await window.getByRole('button', { name: '荧光笔高亮' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
-      const values = await (window as any).mineru.getReaderAnnotations(id)
-      return values.map((value: any) => [value.view, value.kind, value.color, value.quote])
+      const values = await (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'original' })
+      return values.annotations.map((value) => [value.view, value.kind, value.color, value.quote])
     }, taskId)).toEqual([['original', 'highlight', 'blue', 'Second']])
 
     await window.reload()
@@ -212,7 +214,7 @@ test('persists original and translated Markdown annotations with color and under
     activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect.poll(() => window.evaluate(() =>
-      (CSS as any).highlights.get('mineru-highlight-blue')?.size ?? 0
+      (CSS as typeof CSS & { highlights?: { get(name: string): { size: number } | undefined } }).highlights?.get('mineru-highlight-blue')?.size ?? 0
     )).toBeGreaterThan(0)
 
     await window.getByText('Markdown（中文）').click()
@@ -222,8 +224,11 @@ test('persists original and translated Markdown annotations with color and under
     await selectText(translatedBlock, 0, 4)
     await window.getByRole('button', { name: '添加下划线' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
-      const values = await (window as any).mineru.getReaderAnnotations(id)
-      return values.map((value: any) => [value.view, value.kind, value.quote])
+      const values = await Promise.all([
+        (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'original' }),
+        (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'translated' })
+      ])
+      return values.flatMap((snapshot: ReaderAnnotationSnapshot) => snapshot.annotations.map((value) => [value.view, value.kind, value.quote]))
     }, taskId)).toEqual([
       ['original', 'highlight', 'Second'],
       ['translated', 'underline', '第二段落']
@@ -236,8 +241,11 @@ test('persists original and translated Markdown annotations with color and under
     await window.getByRole('option', { name: '选择蓝色' }).click()
     await window.getByRole('button', { name: '荧光笔高亮' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
-      const values = await (window as any).mineru.getReaderAnnotations(id)
-      return values.map((value: any) => value.view)
+      const values = await Promise.all([
+        (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'original' }),
+        (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'translated' })
+      ])
+      return values.flatMap((snapshot: ReaderAnnotationSnapshot) => snapshot.annotations.map((value) => value.view))
     }, taskId)).toEqual(['translated'])
   } finally {
     await app.close()

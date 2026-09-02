@@ -80,12 +80,17 @@ export function toIpcError(
   code = 'INTERNAL_ERROR',
   traceId = randomUUID()
 ): { code: string; message: string; retryable: boolean; traceId: string } {
-  const retryable = code === 'INTERNAL_ERROR' || code === 'HANDLER_ERROR'
+  const domainCode = error && typeof error === 'object' && 'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string'
+    ? (error as { code: string }).code
+    : null
+  const resolvedCode = domainCode && code === 'HANDLER_ERROR' ? domainCode : code
+  const retryable = resolvedCode === 'INTERNAL_ERROR' || resolvedCode === 'HANDLER_ERROR'
   if (error instanceof z.ZodError) {
     return { code, message: 'IPC 请求格式无效', retryable: false, traceId }
   }
   const message = error instanceof Error ? error.message : String(error)
-  return { code, message: message || 'IPC 请求失败', retryable, traceId }
+  return { code: resolvedCode, message: message || 'IPC 请求失败', retryable, traceId }
 }
 
 export function registerValidatedHandler<Request, Response>(

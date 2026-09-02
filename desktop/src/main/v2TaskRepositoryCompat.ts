@@ -10,10 +10,19 @@ import type {
   TaskStatus,
   TranslationBlockRecord
 } from '@shared/types'
+import {
+  documentAnnotationSchema,
+  mutateReaderAnnotationsRequestSchema,
+  readerAnnotationSnapshotSchema,
+  type DocumentSummary,
+  type MutateReaderAnnotationsRequest,
+  type ReaderAnnotationSnapshot
+} from '@shared/ipcSchemas'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { TaskRepositoryCompat } from './taskRepositoryCompat'
+import type { ArtifactReference, TaskRepositoryCompat } from './taskRepositoryCompat'
 import { PathPolicy, resolveLexicalWithinRoot } from './pathPolicy'
 import { V2Database } from './v2Database'
+import { projectDocumentSummary } from './documentProjection'
 
 export interface CompatDocumentRow {
   id: string
@@ -54,6 +63,13 @@ export interface CompatJobRow {
 }
 
 const TERMINAL: ReadonlySet<V2JobStatus> = new Set(['succeeded', 'partial', 'failed', 'cancelled'])
+
+export class CompatDomainError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message)
+    this.name = 'CompatDomainError'
+  }
+}
 
 /** Temporary phase-2 compatibility adapter; remove when services use core ports directly in phase 3. */
 export class V2TaskRepositoryCompat implements TaskRepositoryCompat {
@@ -105,6 +121,147 @@ export class V2TaskRepositoryCompat implements TaskRepositoryCompat {
 
   getTask(id: string): MinerUTask | null {
     return this.readProjection(id)
+  }
+
+  listDocumentSummaries(): DocumentSummary[] {
+    return this.listTasks().map((task) => projectDocumentSummary(task))
+  }
+
+  getDocumentSummary(id: string): DocumentSummary | null {
+    const task = this.getTask(id)
+    return task ? projectDocumentSummary(task) : null
+  }
+
+  getLatestArtifactReference(documentId: string, kind: ArtifactKind): ArtifactReference | null {
+    const row = this.database.connection.prepare(`
+      SELECT id,document_id,kind,revision,relative_path,content_hash,metadata_json
+      FROM artifacts
+      WHERE document_id=? AND kind=?
+      ORDER BY revision DESC
+      LIMIT 1
+    `).get(documentId, kind) as {
+      id: string
+      document_id: string
+      kind: ArtifactKind
+      revision: number
+      relative_path: string
+      content_hash: string
+      metadata_json: string
+    } | undefined
+    if (!row) return null
+    return {
+      id: row.id,
+      documentId: row.document_id,
+      kind: row.kind,
+      revision: row.revision,
+      relativePath: row.relative_path,
+      contentHash: row.content_hash,
+      metadata: parseObject(row.metadata_json)
+    }
+  }
+
+  listDocumentAnnotations(request: { documentId: string; view: 'original' | 'translated' }): ReaderAnnotationSnapshot {
+    return this.database.transaction(() => {
+      const normalized = {
+        documentId: request.documentId,
+        view: request.view
+      }
+      const artifactKind: ArtifactKind = request.view === 'translated' ? 'translated_markdown' : 'parsed_markdown'
+      const artifact = this.getLatestArtifactReference(request.documentId, artifactKind)
+      if (!artifact) throw new CompatDomainError('ANNOTATION_ARTIFACT_NOT_FOUND', '当前文档尚无可标注的产物')
+      return this.readDocumentAnnotationSnapshotUnsafe(normalized.documentId, artifact, normalized.view)
+    })
+  }
+
+  mutateDocumentAnnotations(request: MutateReaderAnnotationsRequest): ReaderAnnotationSnapshot {
+    const normalized = mutateReaderAnnotationsRequestSchema.parse(request)
+    return this.database.transaction(() => {
+      const document = this.readDocument(normalized.documentId)
+      if (!document) throw new CompatDomainError('DOCUMENT_NOT_FOUND', '文档不存在')
+      const artifactKind: ArtifactKind = normalized.view === 'translated' ? 'translated_markdown' : 'parsed_markdown'
+      const artifact = this.getLatestArtifactReference(normalized.documentId, artifactKind)
+      if (!artifact || artifact.id !== normalized.artifactId) {
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注对应的文档产物已更新，请重新加载')
+      }
+
+      const currentSet = this.database.connection.prepare(`
+        SELECT id,revision FROM annotation_sets
+        WHERE document_id=? AND artifact_id=? AND view=?
+      `).get(normalized.documentId, normalized.artifactId, normalized.view) as {
+        id: string
+        revision: number
+      } | undefined
+      const currentRevision = currentSet?.revision ?? 0
+      if (currentRevision !== normalized.expectedRevision) {
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注版本已变化，请重新加载')
+      }
+
+      this.assertAnnotationRowsAvailable(normalized)
+      if (normalized.upserts.length === 0 && normalized.deleteIds.length === 0) {
+        return this.readDocumentAnnotationSnapshotUnsafe(normalized.documentId, artifact, normalized.view)
+      }
+
+      const now = new Date().toISOString()
+      const setId = currentSet?.id ?? randomUUID()
+      if (currentSet) {
+        const update = this.database.connection.prepare(`
+          UPDATE annotation_sets
+          SET revision=revision+1,updated_at=?
+          WHERE id=? AND document_id=? AND artifact_id=? AND view=? AND revision=?
+        `).run(now, currentSet.id, normalized.documentId, normalized.artifactId, normalized.view, normalized.expectedRevision)
+        if (update.changes !== 1) throw new CompatDomainError('ANNOTATION_CONFLICT', '标注版本已变化，请重新加载')
+      } else {
+        this.database.connection.prepare(`
+          INSERT INTO annotation_sets(id,document_id,artifact_id,view,revision,created_at,updated_at)
+          VALUES(?,?,?,?,?,?,?)
+        `).run(setId, normalized.documentId, normalized.artifactId, normalized.view, 1, now, now)
+      }
+
+      if (normalized.deleteIds.length > 0) {
+        const placeholders = normalized.deleteIds.map(() => '?').join(',')
+        this.database.connection.prepare(
+          `DELETE FROM reader_annotations WHERE annotation_set_id=? AND id IN (${placeholders})`
+        ).run(setId, ...normalized.deleteIds)
+      }
+
+      const upsert = this.database.connection.prepare(`
+        INSERT INTO reader_annotations(
+          id,document_id,artifact_id,annotation_set_id,view,kind,color,block_key,
+          start_offset,end_offset,quote,prefix,suffix,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          kind=excluded.kind,
+          color=excluded.color,
+          block_key=excluded.block_key,
+          start_offset=excluded.start_offset,
+          end_offset=excluded.end_offset,
+          quote=excluded.quote,
+          prefix=excluded.prefix,
+          suffix=excluded.suffix,
+          updated_at=excluded.updated_at
+        WHERE reader_annotations.annotation_set_id=excluded.annotation_set_id
+      `)
+      for (const annotation of normalized.upserts) {
+        upsert.run(
+          annotation.id,
+          annotation.documentId,
+          annotation.artifactId,
+          setId,
+          annotation.view,
+          annotation.kind,
+          annotation.color,
+          annotation.blockKey,
+          annotation.startOffset,
+          annotation.endOffset,
+          annotation.quote,
+          annotation.prefix,
+          annotation.suffix,
+          annotation.createdAt,
+          annotation.updatedAt
+        )
+      }
+      return this.readDocumentAnnotationSnapshotUnsafe(normalized.documentId, artifact, normalized.view)
+    })
   }
 
   findByHash(hash: string): MinerUTask | null {
@@ -224,6 +381,64 @@ export class V2TaskRepositoryCompat implements TaskRepositoryCompat {
       )
       ORDER BY view,block_key,start_offset,end_offset,id
     `).all(taskId, taskId, taskId) as unknown as ReaderAnnotation[]
+  }
+
+  private readDocumentAnnotationSnapshotUnsafe(
+    documentId: string,
+    artifact: ArtifactReference,
+    view: 'original' | 'translated'
+  ): ReaderAnnotationSnapshot {
+    const set = this.database.connection.prepare(`
+      SELECT id,revision FROM annotation_sets
+      WHERE document_id=? AND artifact_id=? AND view=?
+    `).get(documentId, artifact.id, view) as { id: string; revision: number } | undefined
+    const rows = set
+      ? this.database.connection.prepare(`
+          SELECT id,document_id,artifact_id,view,kind,color,block_key,
+            start_offset,end_offset,quote,prefix,suffix,created_at,updated_at
+          FROM reader_annotations
+          WHERE annotation_set_id=? AND document_id=? AND artifact_id=? AND view=?
+          ORDER BY block_key,start_offset,end_offset,id
+        `).all(set.id, documentId, artifact.id, view) as Array<Record<string, unknown>>
+      : []
+    const annotations = rows.map((row) => documentAnnotationSchema.parse({
+      id: row.id,
+      documentId: row.document_id,
+      artifactId: row.artifact_id,
+      view: row.view,
+      kind: row.kind,
+      color: row.color,
+      blockKey: row.block_key,
+      startOffset: row.start_offset,
+      endOffset: row.end_offset,
+      quote: row.quote,
+      prefix: row.prefix,
+      suffix: row.suffix,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }))
+    return readerAnnotationSnapshotSchema.parse({
+      documentId,
+      artifactId: artifact.id,
+      view,
+      revision: set?.revision ?? 0,
+      annotations
+    })
+  }
+
+  private assertAnnotationRowsAvailable(request: MutateReaderAnnotationsRequest): void {
+    const set = this.database.connection.prepare(`
+      SELECT id FROM annotation_sets
+      WHERE document_id=? AND artifact_id=? AND view=?
+    `).get(request.documentId, request.artifactId, request.view) as { id: string } | undefined
+    for (const annotation of request.upserts) {
+      const existing = this.database.connection.prepare(
+        'SELECT annotation_set_id FROM reader_annotations WHERE id=?'
+      ).get(annotation.id) as { annotation_set_id: string } | undefined
+      if (existing && existing.annotation_set_id !== set?.id) {
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注 ID 已属于其他标注集')
+      }
+    }
   }
 
   replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): ReaderAnnotation[] {
