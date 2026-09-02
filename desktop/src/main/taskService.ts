@@ -6,6 +6,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   writeFile
@@ -35,6 +36,7 @@ import { createTranslationProviders } from './translation/providers'
 import { TRANSLATION_PIPELINE_VERSION, translateMarkdown, type TranslationResult } from './translation/markdownPipeline'
 import { TABLE_TRANSLATION_PROTOCOL } from './translation/tableTranslation'
 import type { TaskLogger } from './logger'
+import { extractPaperTitle, sanitizeTitleStem } from './titleNaming'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
@@ -100,6 +102,8 @@ export class TaskService extends EventEmitter {
       const now = new Date().toISOString()
       const task: MinerUTask = {
         id,
+        originalName: file.name,
+        title: null,
         name: file.name,
         sourcePath: localPdf,
         sourceHash,
@@ -387,12 +391,13 @@ export class TaskService extends EventEmitter {
 
       const markdown = await readFile(join(task.outputDir, 'full.md'), 'utf8')
       const mappings = await this.loadMappings(task)
+      const namedTask = await this.applyParsedTitle(task, markdown, mappings)
       const providers = createTranslationProviders(settings, this.vault, this.fetcher)
       this.repository.updateTask(taskId, { status: 'translating', progress: 45 })
-      this.logger.info('translation.start', { taskId, preferredProvider: task.translationProvider })
+      this.logger.info('translation.start', { taskId, preferredProvider: namedTask.translationProvider })
       this.emitTasks()
       const result = await translateMarkdown({
-        task,
+        task: namedTask,
         markdown,
         mappings,
         providers,
@@ -404,9 +409,9 @@ export class TaskService extends EventEmitter {
           this.emitTasks()
         }
       })
-      await writeFile(join(task.outputDir, 'full.zh-CN.md'), result.markdown, 'utf8')
+      await writeFile(join(namedTask.outputDir, 'full.zh-CN.md'), result.markdown, 'utf8')
       await writeFile(
-        join(task.outputDir, 'translation.checkpoint.json'),
+        join(namedTask.outputDir, 'translation.checkpoint.json'),
         JSON.stringify(
           {
             taskId,
@@ -420,7 +425,7 @@ export class TaskService extends EventEmitter {
         ),
         'utf8'
       )
-      await this.writeManifest(task, result)
+      await this.writeManifest(namedTask, result)
       this.repository.updateTask(taskId, {
         status: result.failedBlockIds.length > 0 ? 'partial' : 'completed',
         progress: 100,
@@ -430,6 +435,77 @@ export class TaskService extends EventEmitter {
       this.emitTasks()
       this.emit('notification', taskId, result.failedBlockIds.length > 0 ? 'partial' : 'completed')
       this.logger.info('translation.completed', { taskId, failedBlocks: result.failedBlockIds.length })
+  }
+
+  private async applyParsedTitle(
+    task: MinerUTask,
+    markdown: string,
+    mappings: BlockMapping[]
+  ): Promise<MinerUTask> {
+    const candidate = extractPaperTitle(markdown, mappings)
+    const title = candidate ? sanitizeTitleStem(candidate) : null
+    if (!title) {
+      this.logger.info('result.title-skipped', { taskId: task.id, reason: 'empty-or-invalid-title' })
+      return task
+    }
+
+    const name = `${title}.pdf`
+    const oldOutputDir = task.outputDir
+    const targetOutputDir = join(dirname(oldOutputDir), `${title}-${task.id}`)
+    const oldResolved = resolve(oldOutputDir)
+    const targetResolved = resolve(targetOutputDir)
+    const nextSourcePath = join(targetOutputDir, 'original.pdf')
+
+    if (oldResolved === targetResolved) {
+      try {
+        return this.repository.updateTask(task.id, { title, name, sourcePath: nextSourcePath })
+      } catch (error) {
+        this.logger.error('result.title-metadata-failed', error, { taskId: task.id })
+        return task
+      }
+    }
+
+    let moved = false
+    try {
+      await rename(oldOutputDir, targetOutputDir)
+      moved = true
+    } catch (error) {
+      this.logger.info('result.title-rename-warning', {
+        taskId: task.id,
+        from: oldOutputDir,
+        to: targetOutputDir,
+        error: readableError(error)
+      })
+      try {
+        return this.repository.updateTask(task.id, { title, name })
+      } catch (metadataError) {
+        this.logger.error('result.title-metadata-failed', metadataError, { taskId: task.id })
+        return task
+      }
+    }
+
+    try {
+      return this.repository.updateTask(task.id, {
+        title,
+        name,
+        outputDir: targetOutputDir,
+        sourcePath: nextSourcePath
+      })
+    } catch (error) {
+      if (moved) {
+        try {
+          await rename(targetOutputDir, oldOutputDir)
+        } catch (rollbackError) {
+          this.logger.error('result.title-rollback-failed', rollbackError, {
+            taskId: task.id,
+            from: targetOutputDir,
+            to: oldOutputDir
+          })
+        }
+      }
+      this.logger.error('result.title-metadata-failed', error, { taskId: task.id })
+      return task
+    }
   }
 
   private clearRemoteTask(taskId: string): void {

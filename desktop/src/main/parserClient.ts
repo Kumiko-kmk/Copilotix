@@ -153,7 +153,7 @@ export class OfficialMinerUClient implements MinerUClient {
       method: 'POST',
       headers: { ...authHeaders(token), 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        files: tasks.map((task) => ({ name: task.name, data_id: task.id, is_ocr: settings.forceOcr })),
+        files: tasks.map((task) => ({ name: task.originalName || task.name, data_id: task.id, is_ocr: settings.forceOcr })),
         model_version: parserModel,
         enable_formula: settings.formulaEnabled,
         enable_table: settings.tableEnabled,

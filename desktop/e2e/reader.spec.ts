@@ -367,6 +367,21 @@ test('shows a recoverable error when the local PDF is missing', async () => {
   }
 })
 
+test('shows the parsed English title in recent tasks and the Reader header', async () => {
+  const workspace = await createE2EWorkspace()
+  await seedReaderTask(workspace, { englishTitle: 'Attention Is All You Need' })
+  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await expect(window.locator('.recent-task', { hasText: 'Attention Is All You Need.pdf' })).toBeVisible()
+    await window.locator('.recent-task', { hasText: 'Attention Is All You Need.pdf' }).click()
+    await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need.pdf')
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
 test('renders an optional real MinerU PDF fixture', async () => {
   const sourcePdf = process.env.MINERU_E2E_REAL_PDF
   test.skip(!sourcePdf, 'Set MINERU_E2E_REAL_PDF for the local non-CI acceptance check')

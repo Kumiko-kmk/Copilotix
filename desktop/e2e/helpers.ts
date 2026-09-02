@@ -58,6 +58,7 @@ export async function seedReaderTask(
     supplementalBlocks?: boolean
     alignmentRegression?: boolean
     legacyTranslationManifest?: boolean
+    englishTitle?: string
   }
 ): Promise<string> {
   let sourceTaskId: string | undefined
@@ -79,6 +80,14 @@ export async function seedReaderTask(
           ? 'alignment-regression-task'
           : 'reader-pdf-task'
   const outputDir = join(workspace.root, taskId)
+  const originalName = options?.missingPdf
+    ? 'missing.pdf'
+    : options?.sourceTaskDir
+      ? basename(options.sourceTaskDir)
+      : options?.sourcePdf
+        ? basename(options.sourcePdf)
+        : 'fixture.pdf'
+  const taskName = options?.englishTitle ? `${options.englishTitle}.pdf` : originalName
   const pdfPath = join(outputDir, 'original.pdf')
   await mkdir(outputDir, { recursive: true })
   if (options?.sourceTaskDir) {
@@ -130,6 +139,8 @@ export async function seedReaderTask(
   database.exec(`
     CREATE TABLE tasks (
       id TEXT PRIMARY KEY,
+      original_name TEXT NOT NULL DEFAULT '',
+      title TEXT,
       name TEXT NOT NULL,
       source_path TEXT NOT NULL,
       source_hash TEXT NOT NULL,
@@ -149,12 +160,14 @@ export async function seedReaderTask(
   const now = new Date().toISOString()
   database.prepare(`
     INSERT INTO tasks(
-      id,name,source_path,source_hash,output_dir,status,progress,parser_model,
+      id,original_name,title,name,source_path,source_hash,output_dir,status,progress,parser_model,
       translation_provider,remote_batch_id,remote_data_id,remote_result_url,error,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     taskId,
-    options?.missingPdf ? 'missing.pdf' : options?.sourceTaskDir ? basename(options.sourceTaskDir) : options?.sourcePdf ? basename(options.sourcePdf) : 'fixture.pdf',
+    originalName,
+    options?.englishTitle ?? null,
+    taskName,
     pdfPath,
     'fixture-hash',
     outputDir,

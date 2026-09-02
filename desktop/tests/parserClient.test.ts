@@ -23,7 +23,9 @@ const settings: AppSettings = {
 
 const task: MinerUTask = {
   id: 'task-1',
-  name: 'paper.pdf',
+  originalName: 'paper.pdf',
+  title: null,
+  name: 'Attention Is All You Need.pdf',
   sourcePath: 'C:\\paper.pdf',
   sourceHash: 'hash',
   outputDir: 'C:\\output\\paper',

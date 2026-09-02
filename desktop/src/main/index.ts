@@ -244,8 +244,9 @@ function registerIpc(
           ? join(task.outputDir, 'full.zh-CN.md')
           : null
     const extension = request.kind === 'result-zip' ? 'zip' : 'md'
+    const exportStem = task.title?.trim() || task.name.replace(/\.pdf$/i, '')
     const result = await dialog.showSaveDialog(mainWindow!, {
-      defaultPath: join(app.getPath('downloads'), `${task.name.replace(/\.pdf$/i, '')}${request.kind === 'translated-markdown' ? '.zh-CN' : ''}.${extension}`),
+      defaultPath: join(app.getPath('downloads'), `${exportStem}${request.kind === 'translated-markdown' ? '.zh-CN' : ''}.${extension}`),
       filters: [{ name: extension.toUpperCase(), extensions: [extension] }]
     })
     if (result.canceled || !result.filePath) return null
