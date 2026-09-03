@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { createTranslationProviders } from '@main/translation/providers'
+import { buildTableTranslationPlan } from '../src/utility/core/compute/tableTranslation'
 import {
-  buildTableTranslationPlan,
   flattenSegments,
   type TableTranslationRequest
-} from '@main/translation/tableTranslation'
+} from '@shared/translationPlanProtocol'
 import type { CredentialVault } from '@main/credentialVault'
 
 const vault: CredentialVault = {

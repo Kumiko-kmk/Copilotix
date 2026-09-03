@@ -1,4 +1,4 @@
-import { readFile, rename, rm, stat } from 'node:fs/promises'
+import { rename, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import extract from 'extract-zip'
 import PQueue from 'p-queue'
@@ -13,14 +13,12 @@ import type {
 import { JobRunnerError as RunnerError } from '@core/jobs'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { AppSettings, MinerUTask } from '@shared/types'
-import { extractPaperTitle, sanitizeTitleStem } from './titleNaming'
 import type { CredentialVault } from './credentialVault'
 import type { TaskLogger } from './logger'
 import type { MinerUClient, BatchResult, BatchSubmission } from './parserClient'
 import type { SettingsService } from './settingsService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { JobRepositoryPort } from '@core/jobs'
-import { ArtifactService } from './artifactService'
 import { ProgressReporter } from './progressReporter'
 
 const MAX_UPLOAD_CONCURRENCY = 3
@@ -34,7 +32,6 @@ export interface ParseJobRunnerOptions {
   compute: TaskComputePort
   pathPolicy: PathPolicyPort
   logger?: TaskLogger
-  artifacts?: ArtifactService
 }
 
 interface LoadedJob {
@@ -44,12 +41,10 @@ interface LoadedJob {
 
 /** Scheduler-owned parse runner with remote IDs/checkpoints as the resume source of truth. */
 export class ParseJobRunner implements BatchJobRunner {
-  private readonly artifacts: ArtifactService
   private readonly logger: TaskLogger
   private readonly remoteSnapshots = new Map<string, string>()
 
   constructor(private readonly options: ParseJobRunnerOptions) {
-    this.artifacts = options.artifacts ?? new ArtifactService(options.repository, options.compute, options.pathPolicy)
     this.logger = options.logger ?? { info: () => undefined, error: () => undefined }
   }
 
@@ -271,7 +266,10 @@ export class ParseJobRunner implements BatchJobRunner {
       await rename(partialZipPath, zipPath)
       await rm(extractedDir, { recursive: true, force: true })
       await extract(zipPath, { dir: extractedDir })
-      await this.options.compute.normalizeParserOutput(originalTask, extractedDir, job.id)
+      const normalized = await this.options.compute.normalizeParserOutput(originalTask, extractedDir, job.id)
+      if (normalized.displayTitle && this.options.repository.updateDocumentMetadata) {
+        await this.options.repository.updateDocumentMetadata(originalTask.id, { displayTitle: normalized.displayTitle })
+      }
       this.logger.info('result.normalized', { taskId: originalTask.id, jobId: job.id })
     } finally {
       await rm(zipPath, { force: true }).catch(() => undefined)
@@ -279,13 +277,6 @@ export class ParseJobRunner implements BatchJobRunner {
       await rm(extractedDir, { recursive: true, force: true }).catch(() => undefined)
     }
 
-    const markdown = await readFile(join(originalTask.outputDir, 'full.md'), 'utf8')
-    const mappings = await this.artifacts.loadMappings(originalTask)
-    const candidate = extractPaperTitle(markdown, mappings)
-    const title = candidate ? sanitizeTitleStem(candidate) : null
-    if (title && this.options.repository.updateDocumentMetadata) {
-      await this.options.repository.updateDocumentMetadata(originalTask.id, { displayTitle: title })
-    }
     const translate = await this.ensureTranslateJob(job, originalTask, settings)
     const finalCheckpoint = {
       ...checkpoint,

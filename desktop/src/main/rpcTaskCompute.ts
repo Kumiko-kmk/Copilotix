@@ -1,6 +1,6 @@
 import type { MinerUTask } from '@shared/types'
 import type { UtilitySupervisor } from './utilitySupervisor'
-import type { TaskComputePort } from '@core/ports'
+import type { NormalizeParserOutputResult, TaskComputePort } from '@core/ports'
 import type {
   TranslationPlanFinalizeResult,
   TranslationPlanListResult,
@@ -22,8 +22,8 @@ export class RpcTaskCompute implements TaskComputePort {
     return this.supervisor.request('compute:import-pdf', { sourcePath, documentId })
   }
 
-  async normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<void> {
-    await this.supervisor.request('compute:normalize-parser', {
+  async normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult> {
+    return this.supervisor.request('compute:normalize-parser', {
       task,
       extractedDir,
       ...(jobId === undefined ? {} : { jobId })
@@ -34,17 +34,17 @@ export class RpcTaskCompute implements TaskComputePort {
     await this.supervisor.request('compute:rebuild-mappings', { taskId, outputDir })
   }
 
-  async openTranslationPlan(taskId: string, jobId: string): Promise<TranslationPlanOpenResult> {
-    return this.supervisor.request('compute:translation-plan-open', { taskId, jobId })
+  async openTranslationPlan(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanOpenResult> {
+    return this.supervisor.request('compute:translation-plan-open', { taskId, jobId }, { signal })
   }
 
-  async listTranslationWork(taskId: string, jobId: string, cursor?: number, limit?: number): Promise<TranslationPlanListResult> {
+  async listTranslationWork(taskId: string, jobId: string, cursor?: number, limit?: number, signal?: AbortSignal): Promise<TranslationPlanListResult> {
     return this.supervisor.request('compute:translation-plan-list', {
       taskId,
       jobId,
       ...(cursor === undefined ? {} : { cursor }),
       ...(limit === undefined ? {} : { limit })
-    })
+    }, { signal })
   }
 
   async tryTranslationCache(
@@ -52,9 +52,10 @@ export class RpcTaskCompute implements TaskComputePort {
     jobId: string,
     unitId: string,
     provider: TranslationProviderId,
-    model: string
+    model: string,
+    signal?: AbortSignal
   ): Promise<TranslationPlanMutationResult> {
-    return this.supervisor.request('compute:translation-plan-cache', { taskId, jobId, unitId, provider, model })
+    return this.supervisor.request('compute:translation-plan-cache', { taskId, jobId, unitId, provider, model }, { signal })
   }
 
   async applyTranslation(
@@ -63,7 +64,8 @@ export class RpcTaskCompute implements TaskComputePort {
     unitId: string,
     responsePath?: string,
     provider?: TranslationProviderId | null,
-    model?: string | null
+    model?: string | null,
+    signal?: AbortSignal
   ): Promise<TranslationPlanMutationResult> {
     return this.supervisor.request('compute:translation-plan-apply', {
       taskId,
@@ -72,19 +74,19 @@ export class RpcTaskCompute implements TaskComputePort {
       ...(responsePath === undefined ? {} : { responsePath }),
       ...(provider === undefined ? {} : { provider }),
       ...(model === undefined ? {} : { model })
-    })
+    }, { signal })
   }
 
-  async failTranslation(taskId: string, jobId: string, unitId: string, error?: string): Promise<TranslationPlanMutationResult> {
+  async failTranslation(taskId: string, jobId: string, unitId: string, error?: string, signal?: AbortSignal): Promise<TranslationPlanMutationResult> {
     return this.supervisor.request('compute:translation-plan-fail', {
       taskId,
       jobId,
       unitId,
       ...(error === undefined ? {} : { error })
-    })
+    }, { signal })
   }
 
-  async finalizeTranslation(taskId: string, jobId: string): Promise<TranslationPlanFinalizeResult> {
-    return this.supervisor.request('compute:translation-plan-finalize', { taskId, jobId })
+  async finalizeTranslation(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanFinalizeResult> {
+    return this.supervisor.request('compute:translation-plan-finalize', { taskId, jobId }, { signal })
   }
 }

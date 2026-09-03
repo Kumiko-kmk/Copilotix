@@ -73,30 +73,37 @@ export interface ComputePort {
 }
 
 /** Narrow compute calls used by the legacy task service during migration. */
+export interface NormalizeParserOutputResult {
+  normalized: true
+  displayTitle: string | null
+}
+
 export interface TaskComputePort {
   hashFile(path: string): Promise<string>
   importPdf(sourcePath: string, documentId: string): Promise<{ sha256: string; size: number }>
-  normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<void>
+  normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult>
   rebuildMappings(taskId: string, outputDir: string): Promise<void>
-  openTranslationPlan?(taskId: string, jobId: string): Promise<TranslationPlanOpenResult>
-  listTranslationWork?(taskId: string, jobId: string, cursor?: number, limit?: number): Promise<TranslationPlanListResult>
-  tryTranslationCache?(
+  openTranslationPlan(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanOpenResult>
+  listTranslationWork(taskId: string, jobId: string, cursor?: number, limit?: number, signal?: AbortSignal): Promise<TranslationPlanListResult>
+  tryTranslationCache(
     taskId: string,
     jobId: string,
     unitId: string,
     provider: MinerUTask['translationProvider'],
-    model: string
+    model: string,
+    signal?: AbortSignal
   ): Promise<TranslationPlanMutationResult>
-  applyTranslation?(
+  applyTranslation(
     taskId: string,
     jobId: string,
     unitId: string,
     responsePath?: string,
     provider?: MinerUTask['translationProvider'] | null,
-    model?: string | null
+    model?: string | null,
+    signal?: AbortSignal
   ): Promise<TranslationPlanMutationResult>
-  failTranslation?(taskId: string, jobId: string, unitId: string, error?: string): Promise<TranslationPlanMutationResult>
-  finalizeTranslation?(taskId: string, jobId: string): Promise<TranslationPlanFinalizeResult>
+  failTranslation(taskId: string, jobId: string, unitId: string, error?: string, signal?: AbortSignal): Promise<TranslationPlanMutationResult>
+  finalizeTranslation(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanFinalizeResult>
 }
 
 export interface ClockPort {

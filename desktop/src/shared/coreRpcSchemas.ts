@@ -410,7 +410,10 @@ export const coreHashFileResultSchema = z.object({ sha256: coreHashSchema }).str
 export const coreImportPdfPayloadSchema = z.object({ sourcePath: corePathSchema, documentId: coreIdSchema }).strict()
 export const coreImportPdfResultSchema = z.object({ sha256: coreHashSchema, size: z.number().int().min(0).max(200 * 1024 * 1024) }).strict()
 export const coreNormalizeParserPayloadSchema = z.object({ task: minerUTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()
-export const coreNormalizeParserResultSchema = z.object({ normalized: z.literal(true) }).strict()
+export const coreNormalizeParserResultSchema = z.object({
+  normalized: z.literal(true),
+  displayTitle: z.string().max(32_768).refine(noNul).nullable()
+}).strict()
 export const coreRebuildMappingsPayloadSchema = z.object({ taskId: coreIdSchema, outputDir: corePathSchema }).strict()
 export const coreRebuildMappingsResultSchema = z.object({ rebuilt: z.literal(true) }).strict()
 

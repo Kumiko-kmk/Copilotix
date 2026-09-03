@@ -102,11 +102,11 @@ Phase 4A 已将生产 PDF 导入改为 utility 单次流式 hash/copy，并为 M
 
 ### 4.6 Phase 4B1 进度（批量翻译持久化）
 
-Phase 4B1 已增加显式作业绑定的翻译批量提交：blocks、cache 与受限 checkpoint 摘要在 utility 内单事务落库，pipeline 以不超过 32 条/约 768 KiB 的小缓冲提交；completed 仅在来源 hash 有效且译文非空时复用，partial 可在同一 translate job 上续跑。scheduler 租约/进度更新仍是独立事务边界；文件型 AST 迁移和更大范围批量调度留待 Phase 4B2，Phase 4B2 尚未开始。
+Phase 4B1 已增加显式作业绑定的翻译批量提交：blocks、cache 与受限 checkpoint 摘要在 utility 内单事务落库，pipeline 以不超过 32 条/约 768 KiB 的小缓冲提交；completed 仅在来源 hash 有效且译文非空时复用，partial 可在同一 translate job 上续跑。scheduler 租约/进度更新仍是独立事务边界。
 
 ### 4.7 Phase 4B2-A 进度（翻译计划 foundation）
 
-Phase 4B2-A 已建立 utility-owned、可重启的 Markdown/table 翻译计划 foundation：请求/响应正文留在受限文件路径，Core RPC 只传绑定作业的有界描述符；计划与持久化操作进入同一 serialized lane，并按 UTF-8 大小动态分批。此阶段仍未切换生产 `TranslationJobRunner`；provider 调度与 production cutover 留待 Phase 4B2-B。
+Phase 4B2-A/B 已完成 production cutover：utility-owned、可重启的 Markdown/table 翻译计划负责 AST、映射、正文文件和 artifact 发布；Main 的 `TranslationPlanOrchestrator` 只读取受限请求 JSON、调度 provider、写响应 JSON 并通过有界 plan RPC 驱动 utility。Core RPC 不传正文，生产 Main 不再加载 Markdown AST；renderer/shared 仍可为阅读展示解析与渲染 Markdown。请求/响应内部目录 `.translation` 不进入结果 ZIP，provider 顺序、重试、cache、mapping 与 table 协议版本继续保持兼容。
 
 electron-vite 与独立 Vite 配置生成四份 bundle：
 
@@ -431,7 +431,9 @@ JsonLineLogger 寫入 JSON Lines。它會：
 主要文件：
 
 - desktop/src/main/translation/providers.ts
-- desktop/src/main/translation/markdownPipeline.ts
+- desktop/src/main/translation/translationPlanOrchestrator.ts
+- desktop/src/utility/core/compute/markdownTranslationPlan.ts
+- desktop/src/utility/core/compute/tableTranslation.ts
 - desktop/src/shared/markdownBlocks.ts
 
 ### 13.1 Provider
@@ -445,16 +447,16 @@ JsonLineLogger 寫入 JSON Lines。它會：
 
 OpenAI compatible provider 的 base URL 和 model 可配置。Bing 與 TranSmart 依賴非官方網頁接口，頁面或返回格式改變時可能失效。
 
-### 13.2 AST 級翻譯
+### 13.2 AST 級翻譯（utility-owned）
 
-translateMarkdown 使用 unified/remark 把 Markdown 解析成 AST，再逐頂層節點翻譯：
+`MarkdownTranslationPlanManager` 在 utility 進程使用 unified/remark 把 Markdown 解析成 AST，建立可重啟的文件型翻譯計劃；Main 的 `TranslationPlanOrchestrator` 不持有 AST，只調度文件型 request/response：
 
 - 保留 code、inlineCode、math、inlineMath 和 html。
 - 普通文本的圖片、URL、表格/列表結構由 AST stringify 保持。
 - 單段超過 4,000 字符時按句號、分號或空格拆分。
 - 每個操作最多重試 3 次。
 - 429 等錯誤可使用 Retry-After，否則指數退避。
-- 翻譯總 queue 併發為 3。
+- utility plan 的请求/响应正文留在 `.translation/<jobId>/`，Main 侧 provider 调度 queue 併發為 3。
 
 MinerU 輸出的 HTML 表格會走獨立的整表翻譯協議：
 
@@ -478,7 +480,7 @@ Provider 回退順序是：
 
 ### 13.3 翻譯緩存與恢復
 
-區塊 sourceHash 基於該 Markdown AST 節點的序列化結果。緩存鍵包含流水線版本、provider、model、目標語言和 sourceHash；整表翻譯的緩存值是帶協議版本和完整表格 sourceHash 的 JSON。
+區塊 sourceHash 基於該 Markdown AST 節點的序列化結果。緩存鍵包含流水線版本、provider、model、目標語言和 sourceHash；整表翻譯的緩存值是帶協議版本和完整表格 sourceHash 的 JSON。Core RPC 僅傳 plan descriptor/counts，不傳 request/response 正文。
 
 已完成且 sourceHash 未變的 translation_blocks 會直接復用。這使部分任務重試時不需要重譯全部內容。
 
@@ -668,7 +670,7 @@ push 只觸發 master；以 desktop-v 開頭的 tag 建立 GitHub Release。CI �
 | taskBatching.test.ts | 每批最多 50 |
 | blockMapping.test.ts | 穩定 ID、合併、discarded |
 | markdownBlocks.test.ts | 單調文本／媒體對齊、短句不擴張、ID 不重用、97 頁真實回歸 |
-| markdownPipeline.test.ts / tableTranslation.test.ts / providers.test.ts | AST 保護、整表 v2 JSON、TranSmart 數組與 Bing 短請求、附件聚合、參考文獻保護、缓存、provider 回退與原表保留 |
+| markdownTranslationPlan.test.ts / translationPlanOrchestrator.test.ts / tableTranslation.test.ts / providers.test.ts | Utility AST 計劃、文件型 request/response、整表 v2 JSON、TranSmart 數組與 Bing 短請求、附件聚合、cache、provider 回退與原表保留 |
 | assetProtocol.test.ts | Range、HEAD、404/416 |
 | readerDocument.test.ts | 正文 sourceIndex 保序、原／譯文頁碼差異、譯文安全重映射、污染 mapping 不重排 |
 | MarkdownPane.test.tsx | 資源就緒、錯誤重試、主動／被動聯動、歧義 ID 防禦、跨 block 標註工具欄與選色 |
@@ -727,10 +729,10 @@ Desktop 與 Python 層唯一實際耦合是官方 API 返回的 Markdown、middl
 | main/parserClient.ts | 340 | 官方 API 契約與超時 |
 | main/blockMapping.ts | 318 | middle JSON 兼容與穩定 ID |
 | main/database.ts | 401 | schema、遷移和恢復；含 reader_annotations |
-| translation/markdownPipeline.ts | 596 | AST、整表翻譯、緩存、重試與回退 |
+| utility/core/compute/markdownTranslationPlan.ts | — | AST、整表翻譯計劃、映射、緩存與 utility artifact 發布 |
 | main/index.ts | 223 | Electron 生命周期和全部 IPC |
 | translation/providers.ts | 307 | 外部接口易變、限流和密鑰 |
-| translation/tableTranslation.ts | 481 | HTML 表格解析、segment 協議與整體回填 |
+| utility/core/compute/tableTranslation.ts | — | HTML 表格解析、segment 協議與整體回填 |
 | renderer/components/MarkdownPane.tsx | 675 | Markdown 資源生命週期、位置索引、標註和雙向聯動 |
 | renderer/readerAnnotations.ts | 185 | 選區、CSS Custom Highlight 與重定位 |
 | shared/markdownBlocks.ts | 241 | 文本匹配啟發式 |

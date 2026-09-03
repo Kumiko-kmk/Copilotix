@@ -4,11 +4,10 @@ import { access, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/pr
 import { dirname, join } from 'node:path'
 import archiver from 'archiver'
 import type { BlockMapping, DocumentPayload, MinerUTask, TranslatedMarkdownBlock } from '@shared/types'
+import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
 import type { ArtifactKind } from '@core/types'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
-import { TRANSLATION_PIPELINE_VERSION, type TranslationResult } from './translation/markdownPipeline'
-import { TABLE_TRANSLATION_PROTOCOL } from './translation/tableTranslation'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 
 const BLOCK_MAPPING_VERSION = 2
@@ -54,7 +53,7 @@ export class ArtifactService {
       output.on('error', reject)
       archive.on('error', reject)
       archive.pipe(output)
-      archive.directory(task.outputDir, false)
+      archive.directory(task.outputDir, false, (entry) => shouldIncludeResultZipEntry(entry.name) ? entry : false)
       void archive.finalize()
     })
   }
@@ -105,7 +104,10 @@ export class ArtifactService {
   async loadTranslatedBlocks(task: MinerUTask): Promise<TranslatedMarkdownBlock[] | null> {
     try {
       const manifest = JSON.parse(await readFile(join(task.outputDir, 'translation.manifest.json'), 'utf8')) as unknown
-      if (!isRecord(manifest) || manifest.version !== 2 || manifest.taskId !== task.id || !Array.isArray(manifest.blocks)) return null
+      if (!isRecord(manifest) || manifest.version !== 2 || manifest.taskId !== task.id ||
+        manifest.translationPipelineVersion !== TRANSLATION_PIPELINE_VERSION ||
+        manifest.tableTranslationProtocol !== TABLE_TRANSLATION_PROTOCOL ||
+        !Array.isArray(manifest.blocks)) return null
       const blocks = manifest.blocks.map((block) => {
         if (!isRecord(block) || !Number.isInteger(block.sourceIndex) || (block.sourceIndex as number) < 0 || typeof block.markdown !== 'string') return null
         const mappingIds = Array.isArray(block.mappingIds) && block.mappingIds.every((id) => typeof id === 'string')
@@ -133,33 +135,6 @@ export class ArtifactService {
     }
   }
 
-  async writeManifest(task: MinerUTask, result: TranslationResult, jobId?: string): Promise<void> {
-    const path = join(task.outputDir, 'translation.manifest.json')
-    const manifest = {
-      version: 2,
-      mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
-      taskId: task.id,
-      targetLanguage: 'zh-CN',
-      preferredProvider: task.translationProvider,
-      translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
-      tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
-      failedBlockIds: result.failedBlockIds,
-      blocks: result.blocks.map(({ blockId, sourceIndex, mappingIds, sourceHash, markdown, provider, model, status, error }) => ({
-        blockId,
-        sourceIndex,
-        mappingIds,
-        sourceHash,
-        markdown,
-        provider,
-        model,
-        status,
-        error
-      }))
-    }
-    await this.atomicWriteJson(path, manifest)
-    await this.recordArtifact(task, 'manifest', path, jobId)
-  }
-
   async readOptional(path: string, fallback = ''): Promise<string> {
     try {
       await access(path)
@@ -185,4 +160,10 @@ function readMappings(path: string): Promise<BlockMapping[]> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+/** Keep durable plan request/response internals out of user-exported archives. */
+export function shouldIncludeResultZipEntry(name: string): boolean {
+  const normalized = name.replace(/\\/g, '/').replace(/^\/+/, '')
+  return normalized !== '.translation' && !normalized.startsWith('.translation/')
 }

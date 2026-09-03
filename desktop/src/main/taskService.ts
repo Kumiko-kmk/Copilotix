@@ -124,5 +124,16 @@ function isPathPolicyPort(value: unknown): value is PathPolicyPort {
 
 function unavailableCompute(): TaskComputePort {
   const unavailable = async (): Promise<never> => { throw new Error('核心计算服务尚未初始化') }
-  return { hashFile: unavailable, importPdf: unavailable, normalizeParserOutput: unavailable, rebuildMappings: unavailable }
+  return {
+    hashFile: unavailable,
+    importPdf: unavailable,
+    normalizeParserOutput: unavailable,
+    rebuildMappings: unavailable,
+    openTranslationPlan: unavailable,
+    listTranslationWork: unavailable,
+    tryTranslationCache: unavailable,
+    applyTranslation: unavailable,
+    failTranslation: unavailable,
+    finalizeTranslation: unavailable
+  }
 }

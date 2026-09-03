@@ -9,7 +9,8 @@ import type {
   ReaderAnnotation,
   ReplaceReaderAnnotationsRequest,
   TaskStatus,
-  TranslationBlockRecord
+  TranslationBlockRecord,
+  TranslationProviderId
 } from '@shared/types'
 import {
   documentAnnotationSchema,
@@ -72,6 +73,7 @@ export interface TranslationJobBinding {
   jobId: string
   attempt: number
   outputDir: string
+  translationProvider: TranslationProviderId
   checkpoint: Record<string, unknown>
   status: V2JobStatus
 }
@@ -203,6 +205,7 @@ export class V2TaskRepositoryCompat {
       jobId,
       attempt: job.attempt,
       outputDir: document.storage_path,
+      translationProvider: document.translation_provider,
       checkpoint: parseObject(job.checkpoint_json),
       status: job.status
     }

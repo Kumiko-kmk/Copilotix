@@ -12,6 +12,7 @@ import { TranslationJobRunner } from '../src/main/translationJobRunner'
 import { PathPolicy } from '../src/main/pathPolicy'
 import { SettingsService } from '../src/main/settingsService'
 import { TaskService } from '../src/main/taskService'
+import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
 import type { CredentialAccount, CredentialVault } from '../src/main/credentialVault'
 import type { BatchResult, BatchSubmission, MinerUClient } from '../src/main/parserClient'
 import type { HealthResult, MinerUTask } from '@shared/types'
@@ -80,15 +81,23 @@ describe('durable TaskService cutover', () => {
     const settings = new SettingsService(repository, vault, join(root, 'output'))
     const client = new ResumeClient(await resultZip())
     const normalizedJobIds: string[] = []
+    const planManager = new MarkdownTranslationPlanManager(repository)
     const compute: TaskComputePort = {
       ...fixtureTaskCompute,
       async normalizeParserOutput(task, extractedDir, jobId) {
         if (!jobId) throw new Error('parse artifact test requires an explicit job id')
         normalizedJobIds.push(jobId)
-        await fixtureTaskCompute.normalizeParserOutput(task, extractedDir, jobId)
         const parsedPath = join(task.outputDir, 'full.md')
+        const result = await fixtureTaskCompute.normalizeParserOutput(task, extractedDir, jobId)
         repository.recordArtifactRevision!(task.id, 'parsed_markdown', parsedPath, await fixtureTaskCompute.hashFile(parsedPath), {}, jobId)
-      }
+        return result
+      },
+      openTranslationPlan: (taskId, jobId) => planManager.open(taskId, jobId),
+      listTranslationWork: (taskId, jobId, cursor, limit) => planManager.listWork(taskId, jobId, cursor, limit),
+      tryTranslationCache: (taskId, jobId, unitId, provider, model) => planManager.tryCache(taskId, jobId, unitId, provider, model),
+      applyTranslation: (taskId, jobId, unitId, responsePath, provider, model) => planManager.apply(taskId, jobId, unitId, responsePath, provider, model),
+      failTranslation: (taskId, jobId, unitId, error) => planManager.fail(taskId, jobId, unitId, error),
+      finalizeTranslation: (taskId, jobId) => planManager.finalize(taskId, jobId)
     }
     const fetcher = async (input: string | URL | Request): Promise<Response> => {
       if (String(input).includes('/chat/completions')) {
@@ -177,7 +186,7 @@ class ResumeClient extends NeverCalledClient {
   constructor(private readonly zip: Uint8Array) { super() }
 
   override async getBatchResult(batchId: string): Promise<BatchResult> {
-    return { batchId, entries: [{ dataId: 'document-1', fileName: 'paper.pdf', state: 'pending', fullZipUrl: null, error: null, progress: null }] }
+    return { batchId, entries: [{ dataId: '00000000-0000-4000-8000-000000000001', fileName: 'paper.pdf', state: 'pending', fullZipUrl: null, error: null, progress: null }] }
   }
 
   override async waitForBatch(batchId: string, _token: string, expectedDataIds: Set<string>, onUpdate: (result: BatchResult) => void): Promise<BatchResult> {
@@ -194,7 +203,7 @@ class ResumeClient extends NeverCalledClient {
 
 function makeTask(outputDir: string, sourcePath: string): MinerUTask {
   return {
-    id: 'document-1',
+    id: '00000000-0000-4000-8000-000000000001',
     originalName: 'paper.pdf',
     title: null,
     name: 'paper.pdf',

@@ -1,9 +1,8 @@
-import { join } from 'node:path'
 import type { JobRunner, JobRunnerInput, JobRunnerResult } from '@core/jobs'
 import { JobRunnerError } from '@core/jobs'
 import type { TaskComputePort } from '@core/ports'
 import { createTranslationProviders } from './translation/providers'
-import { translateMarkdown } from './translation/markdownPipeline'
+import { runTranslationPlan } from './translation/translationPlanOrchestrator'
 import type { CredentialVault } from './credentialVault'
 import type { SettingsService } from './settingsService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
@@ -38,9 +37,6 @@ export class TranslationJobRunner implements JobRunner {
     const task = await this.options.repository.getTask(input.job.documentId)
     if (!task) throw new JobRunnerError('文档不存在', 'DOCUMENT_NOT_FOUND', false)
     const settings = await this.options.settingsService.get()
-    const markdown = await this.artifacts.readOptional(join(task.outputDir, 'full.md'))
-    if (!markdown.trim()) throw new JobRunnerError('解析产物尚未生成', 'PARSED_ARTIFACT_MISSING', false)
-    const mappings = await this.artifacts.loadMappings(task)
     const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher)
     const checkpointBase = {
       ...input.job.checkpoint,
@@ -54,15 +50,17 @@ export class TranslationJobRunner implements JobRunner {
     })
 
     this.logger.info('translation.start', { taskId: task.id, jobId: input.job.id, preferredProvider: task.translationProvider })
-    const result = await translateMarkdown({
+    const result = await runTranslationPlan({
       task,
       jobId: input.job.id,
-      markdown,
-      mappings,
       providers,
-      repository: this.options.repository,
-      onProgress: async (completed, total, failed, failedBlockIds = []) => {
+      compute: this.options.compute,
+      artifacts: this.artifacts,
+      pathPolicy: this.options.pathPolicy,
+      signal: input.signal,
+      onProgress: async ({ counts, failedBlockIds }) => {
         if (input.signal.aborted) throw abortError()
+        const { completed, total, failed } = counts
         await reporter.report(
           total === 0 ? 100 : 45 + Math.round(((completed + failed) / total) * 55),
           {
@@ -77,26 +75,27 @@ export class TranslationJobRunner implements JobRunner {
     })
     if (input.signal.aborted) throw abortError()
 
-    await this.artifacts.atomicWriteFile(join(task.outputDir, 'full.zh-CN.md'), result.markdown)
-    await this.artifacts.recordArtifact(task, 'translated_markdown', join(task.outputDir, 'full.zh-CN.md'), input.job.id)
-    const completed = result.blocks.filter((block) => block.status === 'completed').length
     const checkpoint = {
       ...checkpointBase,
       stage: 'completed',
-      totalBlocks: result.blocks.length,
-      completedBlocks: completed,
-      failedBlocks: result.failedBlockIds.length,
-      failedBlockIds: result.failedBlockIds.slice(0, 64),
+      totalBlocks: result.total,
+      completedBlocks: result.completed,
+      failedBlocks: result.failed,
+      failedBlockIds: result.failedBlockIdsSample.slice(0, 64),
       updatedAt: new Date().toISOString()
     }
-    await this.artifacts.atomicWriteJson(join(task.outputDir, 'translation.checkpoint.json'), { taskId: task.id, ...checkpoint })
-    await this.artifacts.writeManifest(task, result, input.job.id)
-    this.logger.info('translation.completed', { taskId: task.id, jobId: input.job.id, failedBlocks: result.failedBlockIds.length })
+    await reporter.report(100, checkpoint, true)
+    this.logger.info('translation.completed', { taskId: task.id, jobId: input.job.id, failedBlocks: result.failed })
     return {
-      status: result.failedBlockIds.length > 0 ? 'partial' : 'succeeded',
+      status: result.status,
       progress: 100,
       checkpoint,
-      detail: { failedBlockCount: result.failedBlockIds.length }
+      detail: {
+        failedBlockCount: result.failed,
+        translatedRelativePath: result.translatedRelativePath,
+        manifestRelativePath: result.manifestRelativePath,
+        checkpointRelativePath: result.checkpointRelativePath
+      }
     }
   }
 }

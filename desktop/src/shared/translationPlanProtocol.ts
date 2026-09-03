@@ -265,7 +265,8 @@ export function validateTableTranslationResponse(value: unknown, request: TableT
     actual.set(segment.id, segment.text)
   }
   const missing = expectedIds.find((segmentId) => !actual.has(segmentId))
-  if (missing || parsed.translations.length !== expectedIds.length) throw new Error('表格翻译响应数量不匹配')
+  if (missing) throw new Error(`表格翻译响应缺少 segment：${missing}`)
+  if (parsed.translations.length !== expectedIds.length) throw new Error('表格翻译响应数量不匹配')
   return { protocol: TABLE_TRANSLATION_PROTOCOL, translations: expectedIds.map((segmentId) => ({ id: segmentId, text: actual.get(segmentId)! })) }
 }
 

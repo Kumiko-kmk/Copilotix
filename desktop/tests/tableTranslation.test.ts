@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   applyTableTranslation,
   buildTableTranslationPlan,
-  buildTableTranslationUnits,
+  buildTableTranslationUnits
+} from '../src/utility/core/compute/tableTranslation'
+import {
   flattenSegments,
   parseTableTranslationResponse,
   validateTableTranslationResponse,
   type TableTranslationRequest,
   type TableTranslationResponse
-} from '@main/translation/tableTranslation'
+} from '@shared/translationPlanProtocol'
 import type { BlockMapping } from '@shared/types'
 
 function block(sourceIndex: number, markdown: string, mappingIds: string[] = []) {

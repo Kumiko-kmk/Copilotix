@@ -8,7 +8,7 @@ import {
   validateTableTranslationResponse,
   type TableTranslationRequest,
   type TableTranslationResponse
-} from './tableTranslation'
+} from '@shared/translationPlanProtocol'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
@@ -16,8 +16,8 @@ export interface TranslationProvider {
   readonly id: TranslationProviderId
   readonly model: string
   isAvailable(): Promise<boolean>
-  translate(text: string): Promise<string>
-  translateTable(request: TableTranslationRequest): Promise<TableTranslationResponse>
+  translate(text: string, signal?: AbortSignal): Promise<string>
+  translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse>
 }
 
 export class TranslationHttpError extends Error {
@@ -35,15 +35,15 @@ abstract class QueuedProvider implements TranslationProvider {
   abstract readonly model: string
   protected abstract readonly queue: PQueue
   abstract isAvailable(): Promise<boolean>
-  protected abstract translateDirect(text: string): Promise<string>
-  protected abstract translateTableDirect(request: TableTranslationRequest): Promise<TableTranslationResponse>
+  protected abstract translateDirect(text: string, signal?: AbortSignal): Promise<string>
+  protected abstract translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse>
 
-  translate(text: string): Promise<string> {
-    return this.queue.add(() => this.translateDirect(text), { throwOnTimeout: true }) as Promise<string>
+  translate(text: string, signal?: AbortSignal): Promise<string> {
+    return this.queue.add(() => this.translateDirect(text, signal), { throwOnTimeout: true }) as Promise<string>
   }
 
-  translateTable(request: TableTranslationRequest): Promise<TableTranslationResponse> {
-    return this.queue.add(() => this.translateTableDirect(request), { throwOnTimeout: true }) as Promise<TableTranslationResponse>
+  translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
+    return this.queue.add(() => this.translateTableDirect(request, signal), { throwOnTimeout: true }) as Promise<TableTranslationResponse>
   }
 }
 
@@ -65,7 +65,7 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     return this.vault.has(this.credentialAccount)
   }
 
-  protected async translateDirect(text: string): Promise<string> {
+  protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
     const apiKey = await this.vault.get(this.credentialAccount)
     if (!apiKey) throw new Error(`${this.id} 尚未配置 API Key`)
     const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
@@ -86,14 +86,14 @@ class OpenAiCompatibleProvider extends QueuedProvider {
           { role: 'user', content: text }
         ]
       }),
-      signal: AbortSignal.timeout(90_000)
+      signal: requestSignal(signal, 90_000)
     })
     if (!response.ok) throw await toHttpError(response, `${this.id} 翻译失败`)
     const payload: unknown = await response.json()
     return openAiResponseContent(payload, this.id)
   }
 
-  protected async translateTableDirect(request: TableTranslationRequest): Promise<TableTranslationResponse> {
+  protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
     const apiKey = await this.vault.get(this.credentialAccount)
     if (!apiKey) throw new Error(`${this.id} 尚未配置 API Key`)
     const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
@@ -114,7 +114,7 @@ class OpenAiCompatibleProvider extends QueuedProvider {
           { role: 'user', content: JSON.stringify(request) }
         ]
       }),
-      signal: AbortSignal.timeout(90_000)
+      signal: requestSignal(signal, 90_000)
     })
     if (!response.ok) throw await toHttpError(response, `${this.id} 表格翻译失败`)
     const payload: unknown = await response.json()
@@ -137,20 +137,20 @@ class BingProvider extends QueuedProvider {
     return true
   }
 
-  protected async translateDirect(text: string): Promise<string> {
-    return this.translateRemoteText(text)
+  protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
+    return this.translateRemoteText(text, signal)
   }
 
-  protected async translateTableDirect(request: TableTranslationRequest): Promise<TableTranslationResponse> {
+  protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
     const segments = flattenSegments(request)
     const translations: Array<{ id: string; text: string }> = []
     for (const segment of segments) {
-      translations.push({ id: segment.id, text: await this.translateRemoteText(segment.text) })
+      translations.push({ id: segment.id, text: await this.translateRemoteText(segment.text, signal) })
     }
     return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
   }
 
-  private async translateRemoteText(text: string): Promise<string> {
+  private async translateRemoteText(text: string, signal?: AbortSignal): Promise<string> {
     const session = await this.getSession()
     const body = new URLSearchParams({
       fromLang: 'auto-detect',
@@ -164,7 +164,7 @@ class BingProvider extends QueuedProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
       body,
-      signal: AbortSignal.timeout(45_000)
+      signal: requestSignal(signal, 45_000)
     })
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) this.session = null
@@ -209,22 +209,22 @@ class TransmartProvider extends QueuedProvider {
     return true
   }
 
-  protected async translateDirect(text: string): Promise<string> {
-    const translated = await this.translateRemoteTexts([text])
+  protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
+    const translated = await this.translateRemoteTexts([text], signal)
     return translated[0]!
   }
 
-  protected async translateTableDirect(request: TableTranslationRequest): Promise<TableTranslationResponse> {
+  protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
     const segments = flattenSegments(request)
     if (segments.length === 0) {
       return { protocol: TABLE_TRANSLATION_PROTOCOL, translations: [] }
     }
-    const translated = await this.translateRemoteTexts(segments.map((segment) => segment.text))
+    const translated = await this.translateRemoteTexts(segments.map((segment) => segment.text), signal)
     const translations = segments.map((segment, index) => ({ id: segment.id, text: translated[index]! }))
     return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
   }
 
-  private async translateRemoteTexts(texts: string[]): Promise<string[]> {
+  private async translateRemoteTexts(texts: string[], signal?: AbortSignal): Promise<string[]> {
     const response = await this.fetcher('https://transmart.qq.com/api/imt', {
       method: 'POST',
       headers: {
@@ -239,7 +239,7 @@ class TransmartProvider extends QueuedProvider {
         source: { lang: 'auto', text_list: texts },
         target: { lang: 'zh' }
       }),
-      signal: AbortSignal.timeout(45_000)
+      signal: requestSignal(signal, 45_000)
     })
     if (!response.ok) throw await toHttpError(response, 'TranSmart 翻译接口暂不可用')
     const payload: unknown = await response.json()
@@ -332,4 +332,9 @@ async function toHttpError(response: Response, prefix: string): Promise<Translat
     response.status,
     Number.isFinite(retryAfterMs) ? retryAfterMs : undefined
   )
+}
+
+function requestSignal(jobSignal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  return jobSignal ? AbortSignal.any([jobSignal, timeoutSignal]) : timeoutSignal
 }

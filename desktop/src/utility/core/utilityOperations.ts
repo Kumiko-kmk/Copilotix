@@ -33,6 +33,7 @@ import {
 import type { MinerUTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
 import { MAX_PDF_BYTES } from '@shared/constants'
+import { extractPaperTitle, sanitizeTitleStem } from '@shared/titleNaming'
 import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../coreUtilityRuntime'
 import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
@@ -224,8 +225,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     },
     'compute:normalize-parser': async (request) => {
       const payload = request.payload as { task: MinerUTask; extractedDir: string; jobId?: string }
-      await normalizeParserOutput(payload.task, payload.extractedDir, requireRepository(), payload.jobId)
-      return { normalized: true }
+      return normalizeParserOutput(payload.task, payload.extractedDir, requireRepository(), payload.jobId)
     },
     'compute:rebuild-mappings': async (request) => {
       const payload = request.payload as { taskId: string; outputDir: string }
@@ -424,7 +424,12 @@ function isNotFound(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'ENOENT')
 }
 
-async function normalizeParserOutput(task: MinerUTask, extractedDir: string, repository: V2TaskRepositoryCompat, jobId?: string): Promise<void> {
+async function normalizeParserOutput(
+  task: MinerUTask,
+  extractedDir: string,
+  repository: V2TaskRepositoryCompat,
+  jobId?: string
+): Promise<{ normalized: true; displayTitle: string | null }> {
   assertTaskPath(task.outputDir)
   assertTaskPath(extractedDir)
   await mkdir(task.outputDir, { recursive: true })
@@ -465,6 +470,9 @@ async function normalizeParserOutput(task: MinerUTask, extractedDir: string, rep
 
     const layoutData = JSON.parse(await readFile(layoutStaged, 'utf8')) as unknown
     const mappings = buildUtilityBlockMappings(task.id, layoutData)
+    const markdownText = await readFile(markdownStaged, 'utf8')
+    const extractedTitle = extractPaperTitle(markdownText, mappings)
+    const displayTitle = extractedTitle ? sanitizeTitleStem(extractedTitle) : null
     const blockStaged = pathPolicy.resolveChild(stagingRoot, 'block_list.json')
     await writeFile(blockStaged, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2), 'utf8')
     artifactSources.push({ kind: 'block_mappings', relativePath: 'block_list.json', stagedPath: blockStaged })
@@ -480,6 +488,7 @@ async function normalizeParserOutput(task: MinerUTask, extractedDir: string, rep
       await publishStagedFile(image.stagedPath, destination, await hashFile(image.stagedPath))
     }
     repository.recordArtifactRevisions(revisions)
+    return { normalized: true, displayTitle }
   } finally {
     await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined)
   }

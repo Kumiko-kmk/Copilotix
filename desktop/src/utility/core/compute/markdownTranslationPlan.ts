@@ -151,6 +151,7 @@ interface PlanMetadata {
   taskId: string
   jobId: string
   attempt: number
+  preferredProvider: TranslationProviderId
   sourceHash: string
   mappingHash: string
   pipelineVersion: typeof TRANSLATION_PIPELINE_VERSION
@@ -358,6 +359,7 @@ export class MarkdownTranslationPlanManager {
       taskId,
       jobId,
       targetLanguage: 'zh-CN',
+      preferredProvider: state.binding.translationProvider,
       translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
       tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
       failedBlockIds,
@@ -474,7 +476,7 @@ export class MarkdownTranslationPlanManager {
       units.push(this.makePlainUnit(binding, sourceBlock, sourceIndex, unitId, segments, status))
     }
 
-    const expectedPlanId = stableUuid(`plan|${binding.taskId}|${binding.jobId}`)
+    const expectedPlanId = stableUuid(`plan|${binding.taskId}|${binding.jobId}|${binding.translationProvider}`)
     const planId = existing?.planId === expectedPlanId ? existing.planId : expectedPlanId
     const state: PlanState = {
       binding,
@@ -568,7 +570,7 @@ export class MarkdownTranslationPlanManager {
   private metadataMatches(metadata: PlanMetadata, state: PlanState): boolean {
     if (
       metadata.formatVersion !== 1 || metadata.planId !== state.planId || metadata.taskId !== state.taskId || metadata.jobId !== state.jobId ||
-      metadata.sourceHash !== state.sourceHash || metadata.mappingHash !== state.mappingHash ||
+      metadata.preferredProvider !== state.binding.translationProvider || metadata.sourceHash !== state.sourceHash || metadata.mappingHash !== state.mappingHash ||
       metadata.pipelineVersion !== TRANSLATION_PIPELINE_VERSION ||
       metadata.mappingAlgorithmVersion !== MARKDOWN_MAPPING_ALGORITHM_VERSION ||
       metadata.blockMappingVersion !== this.blockMappingVersion ||
@@ -898,6 +900,7 @@ export class MarkdownTranslationPlanManager {
       taskId: state.taskId,
       jobId: state.jobId,
       attempt: state.binding.attempt,
+      preferredProvider: state.binding.translationProvider,
       sourceHash: state.sourceHash,
       mappingHash: state.mappingHash,
       pipelineVersion: TRANSLATION_PIPELINE_VERSION,
@@ -1212,11 +1215,16 @@ function isRecord(value: unknown): value is Record<string, any> {
 function isPlanMetadata(value: unknown): value is PlanMetadata {
   if (!isRecord(value) || value.formatVersion !== 1 || typeof value.planId !== 'string' || typeof value.taskId !== 'string' || typeof value.jobId !== 'string' ||
     typeof value.attempt !== 'number' || !Number.isInteger(value.attempt) || value.attempt < 0 ||
+    !isTranslationProviderId(value.preferredProvider) ||
     typeof value.sourceHash !== 'string' || typeof value.mappingHash !== 'string' || !Array.isArray(value.units)) return false
   return value.units.every((unit: unknown) => isRecord(unit) && typeof unit.unitId === 'string' && typeof unit.kind === 'string' &&
     typeof unit.sourceHash === 'string' && Array.isArray(unit.blockIds) && Array.isArray(unit.resultBlockPaths) &&
     Array.isArray(unit.sourceIndexes) && Array.isArray(unit.mappingIds) && typeof unit.requestPath === 'string' &&
     typeof unit.responsePath === 'string' && typeof unit.resultPath === 'string' && typeof unit.status === 'string')
+}
+
+function isTranslationProviderId(value: unknown): value is TranslationProviderId {
+  return value === 'qwen' || value === 'deepseek' || value === 'bing' || value === 'transmart'
 }
 
 function arraysEqual(left: unknown, right: unknown): boolean {
