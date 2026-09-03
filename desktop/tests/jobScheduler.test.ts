@@ -116,4 +116,43 @@ describe('JobScheduler lifecycle', () => {
 
     expect(cancelCalls).toBe(0)
   })
+
+  it('bounds shutdown drain when a runner ignores abort', async () => {
+    const job = runningJob()
+    let release!: () => void
+    let runnerSignal!: AbortSignal
+    const runnerDone = new Promise<{ status: 'succeeded' }>((resolve) => {
+      release = () => resolve({ status: 'succeeded' })
+    })
+    let cancelCalls = 0
+    const repository = repositoryWith({
+      recoverExpired: () => [],
+      claimBatch: () => [job],
+      cancel: () => {
+        cancelCalls += 1
+        return job
+      }
+    })
+    const scheduler = new JobScheduler(repository, {
+      leaseOwner: 'scheduler-test',
+      parseAggregationWindowMs: 0,
+      pollIntervalMs: 60_000,
+      shutdownDrainTimeoutMs: 5,
+      runners: {
+        parse: {
+          run: async ({ signal }) => {
+            runnerSignal = signal
+            return runnerDone
+          }
+        }
+      }
+    })
+
+    await scheduler.start()
+    await scheduler.shutdown()
+
+    expect(runnerSignal.aborted).toBe(true)
+    expect(cancelCalls).toBe(0)
+    release()
+  })
 })

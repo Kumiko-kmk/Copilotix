@@ -51,7 +51,7 @@ export class TaskService extends EventEmitter {
     options.scheduler?.on('job-changed', () => { void this.emitTasks().catch(() => undefined) })
     options.scheduler?.on('job-notification', (taskId: string, status: string, kind: string) => {
       if ((kind === 'translate' || status === 'failed') && (status === 'succeeded' || status === 'partial' || status === 'failed')) {
-        this.emit('notification', taskId, status)
+        this.emit('notification', taskId, status === 'succeeded' ? 'completed' : status)
       }
     })
   }

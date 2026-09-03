@@ -153,8 +153,8 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       return requireRepository().getLatestArtifactReference(payload.documentId, payload.kind)
     },
     'artifacts:record-revision': (request) => {
-      const payload = request.payload as { taskId: string; kind: Parameters<V2TaskRepositoryCompat['recordArtifactRevision']>[1]; path: string; checksum: string; metadata?: Record<string, unknown> }
-      requireRepository().recordArtifactRevision(payload.taskId, payload.kind, payload.path, payload.checksum, payload.metadata ?? {})
+      const payload = request.payload as { taskId: string; kind: Parameters<V2TaskRepositoryCompat['recordArtifactRevision']>[1]; path: string; checksum: string; metadata?: Record<string, unknown>; jobId?: string }
+      requireRepository().recordArtifactRevision(payload.taskId, payload.kind, payload.path, payload.checksum, payload.metadata ?? {}, payload.jobId)
       return { changed: true }
     },
     'translation:block-upsert': (request) => {
@@ -185,8 +185,8 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'annotations:mutate': (request) => requireRepository().mutateDocumentAnnotations((request.payload as { request: Parameters<V2TaskRepositoryCompat['mutateDocumentAnnotations']>[0] }).request),
     'compute:hash-file': async (request) => ({ sha256: await hashFile((request.payload as { path: string }).path) }),
     'compute:normalize-parser': async (request) => {
-      const payload = request.payload as { task: MinerUTask; extractedDir: string }
-      await normalizeParserOutput(payload.task, payload.extractedDir, requireRepository())
+      const payload = request.payload as { task: MinerUTask; extractedDir: string; jobId?: string }
+      await normalizeParserOutput(payload.task, payload.extractedDir, requireRepository(), payload.jobId)
       return { normalized: true }
     },
     'compute:rebuild-mappings': async (request) => {
@@ -261,7 +261,7 @@ async function hashFile(path: string): Promise<string> {
   return hash.digest('hex')
 }
 
-async function normalizeParserOutput(task: MinerUTask, extractedDir: string, repository: V2TaskRepositoryCompat): Promise<void> {
+async function normalizeParserOutput(task: MinerUTask, extractedDir: string, repository: V2TaskRepositoryCompat, jobId?: string): Promise<void> {
   assertTaskPath(task.outputDir)
   assertTaskPath(extractedDir)
   const files = await walkFiles(extractedDir)
@@ -274,12 +274,12 @@ async function normalizeParserOutput(task: MinerUTask, extractedDir: string, rep
   const layoutPath = join(task.outputDir, 'layout.json')
   await copyFile(markdown, markdownPath)
   await copyFile(layout, layoutPath)
-  repository.recordArtifactRevision(task.id, 'parsed_markdown', markdownPath, await hashFile(markdownPath))
-  repository.recordArtifactRevision(task.id, 'layout', layoutPath, await hashFile(layoutPath))
+  repository.recordArtifactRevision(task.id, 'parsed_markdown', markdownPath, await hashFile(markdownPath), {}, jobId)
+  repository.recordArtifactRevision(task.id, 'layout', layoutPath, await hashFile(layoutPath), {}, jobId)
   if (contentList) {
     const contentPath = join(task.outputDir, 'content_list.json')
     await copyFile(contentList, contentPath)
-    repository.recordArtifactRevision(task.id, 'content_list', contentPath, await hashFile(contentPath))
+    repository.recordArtifactRevision(task.id, 'content_list', contentPath, await hashFile(contentPath), {}, jobId)
   }
   for (const file of files) {
     const rel = relative(extractedDir, file)
@@ -292,7 +292,7 @@ async function normalizeParserOutput(task: MinerUTask, extractedDir: string, rep
   const mappings = buildUtilityBlockMappings(task.id, layoutData)
   const blockPath = join(task.outputDir, 'block_list.json')
   await writeFile(blockPath, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2), 'utf8')
-  repository.recordArtifactRevision(task.id, 'block_mappings', blockPath, await hashFile(blockPath))
+  repository.recordArtifactRevision(task.id, 'block_mappings', blockPath, await hashFile(blockPath), {}, jobId)
 }
 
 async function rebuildMappings(taskId: string, outputDir: string, repository: V2TaskRepositoryCompat): Promise<void> {

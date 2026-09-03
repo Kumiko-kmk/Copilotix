@@ -58,9 +58,9 @@ export class ArtifactService {
     })
   }
 
-  async recordArtifact(task: MinerUTask, kind: ArtifactKind, path: string): Promise<void> {
+  async recordArtifact(task: MinerUTask, kind: ArtifactKind, path: string, jobId?: string): Promise<void> {
     if (!this.repository.recordArtifactRevision) return
-    await this.repository.recordArtifactRevision(task.id, kind, path, await this.compute.hashFile(path))
+    await this.repository.recordArtifactRevision(task.id, kind, path, await this.compute.hashFile(path), {}, jobId)
   }
 
   async loadMappings(task: MinerUTask): Promise<BlockMapping[]> {
@@ -111,7 +111,7 @@ export class ArtifactService {
     }
   }
 
-  async writeManifest(task: MinerUTask, result: TranslationResult): Promise<void> {
+  async writeManifest(task: MinerUTask, result: TranslationResult, jobId?: string): Promise<void> {
     const path = join(task.outputDir, 'translation.manifest.json')
     const manifest = {
       version: 2,
@@ -135,7 +135,7 @@ export class ArtifactService {
       }))
     }
     await writeFile(path, JSON.stringify(manifest, null, 2), 'utf8')
-    await this.recordArtifact(task, 'manifest', path)
+    await this.recordArtifact(task, 'manifest', path, jobId)
   }
 
   async readOptional(path: string, fallback = ''): Promise<string> {

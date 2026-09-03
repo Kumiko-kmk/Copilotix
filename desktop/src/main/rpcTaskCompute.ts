@@ -11,8 +11,12 @@ export class RpcTaskCompute implements TaskComputePort {
     return result.sha256
   }
 
-  async normalizeParserOutput(task: MinerUTask, extractedDir: string): Promise<void> {
-    await this.supervisor.request('compute:normalize-parser', { task, extractedDir })
+  async normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<void> {
+    await this.supervisor.request('compute:normalize-parser', {
+      task,
+      extractedDir,
+      ...(jobId === undefined ? {} : { jobId })
+    })
   }
 
   async rebuildMappings(taskId: string, outputDir: string): Promise<void> {

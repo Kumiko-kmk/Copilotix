@@ -120,8 +120,16 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     kind: ArtifactKind,
     path: string,
     checksum: string,
-    metadata: Record<string, unknown> = {}
+    metadata: Record<string, unknown> = {},
+    jobId?: string
   ): Promise<void> {
-    await this.supervisor.request('artifacts:record-revision', { taskId, kind, path, checksum, metadata })
+    await this.supervisor.request('artifacts:record-revision', {
+      taskId,
+      kind,
+      path,
+      checksum,
+      metadata,
+      ...(jobId === undefined ? {} : { jobId })
+    })
   }
 }

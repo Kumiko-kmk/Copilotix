@@ -499,13 +499,15 @@ export class V2TaskRepositoryCompat {
     })
   }
 
-  recordArtifactRevision(taskId: string, kind: ArtifactKind, path: string, checksum: string, metadata: Record<string, unknown> = {}): void {
+  recordArtifactRevision(taskId: string, kind: ArtifactKind, path: string, checksum: string, metadata: Record<string, unknown> = {}, jobId?: string): void {
     this.database.transaction(() => {
       const document = this.readDocument(taskId)
       if (!document) throw new Error('任务不存在')
       const jobKind: V2JobKind = kind === 'translated_markdown' || kind === 'manifest' ? 'translate' : 'parse'
-      const job = this.latestJob(taskId, jobKind)
-      if (!job) throw new Error('产物对应的作业不存在')
+      const job = jobId
+        ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=?').get(jobId) as CompatJobRow | undefined
+        : this.latestJob(taskId, jobKind)
+      if (!job || job.document_id !== taskId || job.kind !== jobKind) throw new Error('产物对应的作业不存在')
       const relativePath = this.toRelativeArtifactPath(document.storage_path, path)
       const existing = this.database.connection.prepare(`
         SELECT id,relative_path,content_hash FROM artifacts

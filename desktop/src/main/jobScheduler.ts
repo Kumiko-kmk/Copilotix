@@ -16,6 +16,7 @@ export const JOB_HEARTBEAT_INTERVAL_MS = 10_000
 export const JOB_PARSE_AGGREGATION_WINDOW_MS = 250
 export const JOB_CLAIM_LIMIT = 50
 export const JOB_MAX_BACKOFF_ATTEMPTS = 5
+export const JOB_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000
 
 export interface SchedulerConcurrencyConfig {
   parse: number
@@ -43,6 +44,7 @@ export interface JobSchedulerOptions {
   parseAggregationWindowMs?: number
   leaseDurationMs?: number
   heartbeatIntervalMs?: number
+  shutdownDrainTimeoutMs?: number
   claimLimit?: number
   concurrency?: Partial<SchedulerConcurrencyConfig>
   backoff?: SchedulerBackoffOptions
@@ -136,6 +138,7 @@ export class JobScheduler extends EventEmitter {
   private readonly parseAggregationWindowMs: number
   private readonly leaseDurationMs: number
   private readonly heartbeatIntervalMs: number
+  private readonly shutdownDrainTimeoutMs: number
   private readonly claimLimit: number
   private readonly concurrency: SchedulerConcurrencyConfig
   private readonly backoff: SchedulerBackoffOptions
@@ -159,6 +162,7 @@ export class JobScheduler extends EventEmitter {
     this.parseAggregationWindowMs = nonNegativeInt(options.parseAggregationWindowMs ?? JOB_PARSE_AGGREGATION_WINDOW_MS)
     this.leaseDurationMs = positiveInt(options.leaseDurationMs ?? JOB_LEASE_DURATION_MS, JOB_LEASE_DURATION_MS)
     this.heartbeatIntervalMs = positiveInt(options.heartbeatIntervalMs ?? JOB_HEARTBEAT_INTERVAL_MS, JOB_HEARTBEAT_INTERVAL_MS)
+    this.shutdownDrainTimeoutMs = positiveInt(options.shutdownDrainTimeoutMs ?? JOB_SHUTDOWN_DRAIN_TIMEOUT_MS, JOB_SHUTDOWN_DRAIN_TIMEOUT_MS)
     this.claimLimit = Math.min(JOB_CLAIM_LIMIT, positiveInt(options.claimLimit ?? JOB_CLAIM_LIMIT, JOB_CLAIM_LIMIT))
     this.concurrency = {
       parse: positiveInt(options.concurrency?.parse ?? DEFAULT_SCHEDULER_CONCURRENCY.parse, DEFAULT_SCHEDULER_CONCURRENCY.parse),
@@ -264,8 +268,22 @@ export class JobScheduler extends EventEmitter {
     for (const work of works) work.controller.abort()
     // A normal process shutdown is not a user cancellation. Keep running
     // leases durable so the next scheduler start can recover them after expiry.
-    await Promise.all(works.map((work) => work.done))
+    await this.drainWorks(works)
     this.state = 'stopped'
+  }
+
+  private async drainWorks(works: ActiveWork[]): Promise<void> {
+    if (works.length === 0) return
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    let timedOut = false
+    const timeoutPromise = new Promise<void>((resolve) => {
+      timeout = this.schedule(() => {
+        timedOut = true
+        resolve()
+      }, this.shutdownDrainTimeoutMs)
+    })
+    await Promise.race([Promise.all(works.map((work) => work.done)), timeoutPromise])
+    if (!timedOut && timeout !== undefined) this.cancelSchedule(timeout)
   }
 
   private hasRunner(): boolean {

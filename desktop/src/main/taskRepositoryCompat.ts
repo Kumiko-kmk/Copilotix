@@ -43,7 +43,7 @@ export interface TaskRepositoryCompat {
   putCache(cacheKey: string, translated: string, provider: string, model: string): void | Promise<void>
   listReaderAnnotations(taskId: string): ReaderAnnotation[] | Promise<ReaderAnnotation[]>
   replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): ReaderAnnotation[] | Promise<ReaderAnnotation[]>
-  recordArtifactRevision?(taskId: string, kind: ArtifactKind, path: string, checksum: string, metadata?: Record<string, unknown>): void | Promise<void>
+  recordArtifactRevision?(taskId: string, kind: ArtifactKind, path: string, checksum: string, metadata?: Record<string, unknown>, jobId?: string): void | Promise<void>
 }
 
 export interface DocumentMetadataPatch {

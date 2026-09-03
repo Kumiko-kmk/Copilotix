@@ -15,6 +15,7 @@ import { TaskService } from '../src/main/taskService'
 import type { CredentialAccount, CredentialVault } from '../src/main/credentialVault'
 import type { BatchResult, BatchSubmission, MinerUClient } from '../src/main/parserClient'
 import type { HealthResult, MinerUTask } from '@shared/types'
+import type { TaskComputePort } from '../src/core/ports'
 import { fixtureTaskCompute } from './taskComputeFixture'
 
 const roots: string[] = []
@@ -78,6 +79,17 @@ describe('durable TaskService cutover', () => {
     const vault = new MemoryVault({ 'parser-token': 'parser-token', 'qwen-api-key': 'qwen-key' })
     const settings = new SettingsService(repository, vault, join(root, 'output'))
     const client = new ResumeClient(await resultZip())
+    const normalizedJobIds: string[] = []
+    const compute: TaskComputePort = {
+      ...fixtureTaskCompute,
+      async normalizeParserOutput(task, extractedDir, jobId) {
+        if (!jobId) throw new Error('parse artifact test requires an explicit job id')
+        normalizedJobIds.push(jobId)
+        await fixtureTaskCompute.normalizeParserOutput(task, extractedDir, jobId)
+        const parsedPath = join(task.outputDir, 'full.md')
+        repository.recordArtifactRevision!(task.id, 'parsed_markdown', parsedPath, await fixtureTaskCompute.hashFile(parsedPath), {}, jobId)
+      }
+    }
     const fetcher = async (input: string | URL | Request): Promise<Response> => {
       if (String(input).includes('/chat/completions')) {
         return new Response(JSON.stringify({ choices: [{ message: { content: '这是译文' } }] }), { status: 200 })
@@ -90,7 +102,7 @@ describe('durable TaskService cutover', () => {
       settingsService: settings,
       vault,
       parserClient: client,
-      compute: fixtureTaskCompute,
+      compute,
       pathPolicy: new PathPolicy()
     })
 
@@ -102,6 +114,10 @@ describe('durable TaskService cutover', () => {
       })
       expect(client.createCalls).toBe(0)
       expect(parseResult.status).toBe('succeeded')
+      expect(normalizedJobIds).toEqual([checkpointed.id])
+      expect(database.connection.prepare(
+        "SELECT created_by_job_id FROM artifacts WHERE document_id=? AND kind='parsed_markdown'"
+      ).get(task.id)).toEqual({ created_by_job_id: checkpointed.id })
       const completedParse = jobs.complete({ jobId: checkpointed.id, leaseOwner: 'runner', status: 'succeeded', progress: 100, checkpoint: parseResult.checkpoint, now })
       const translateJobs = jobs.list({ documentId: task.id, kind: 'translate' })
       expect(translateJobs).toHaveLength(1)
@@ -114,7 +130,7 @@ describe('durable TaskService cutover', () => {
         settingsService: settings,
         vault,
         fetcher,
-        compute: fixtureTaskCompute,
+        compute,
         pathPolicy: new PathPolicy()
       })
       const translationResult = await translationRunner.run({
@@ -123,6 +139,12 @@ describe('durable TaskService cutover', () => {
         updateProgress: async (progress, checkpoint) => jobs.updateProgressAndCheckpoint({ jobId: translate.id, leaseOwner: 'runner', progress, checkpoint, now })
       })
       expect(translationResult.status).toBe('succeeded')
+      expect(database.connection.prepare(
+        "SELECT kind,created_by_job_id FROM artifacts WHERE document_id=? AND kind IN ('translated_markdown','manifest') ORDER BY kind"
+      ).all(task.id)).toEqual([
+        { kind: 'manifest', created_by_job_id: translate.id },
+        { kind: 'translated_markdown', created_by_job_id: translate.id }
+      ])
       expect(jobs.list({ documentId: task.id, kind: 'translate' })).toHaveLength(1)
       expect(repository.listTranslationBlocks(task.id, translate.id).every((block) => block.jobId === undefined || block.jobId === translate.id)).toBe(true)
       await expect(readFile(join(outputDir, 'full.zh-CN.md'), 'utf8')).resolves.toContain('译文')

@@ -269,7 +269,7 @@ export class ParseJobRunner implements BatchJobRunner {
       await writeFile(zipPath, zip)
       await rm(extractedDir, { recursive: true, force: true })
       await extract(zipPath, { dir: extractedDir })
-      await this.options.compute.normalizeParserOutput(originalTask, extractedDir)
+      await this.options.compute.normalizeParserOutput(originalTask, extractedDir, job.id)
       this.logger.info('result.normalized', { taskId: originalTask.id, jobId: job.id })
     } finally {
       await rm(zipPath, { force: true }).catch(() => undefined)

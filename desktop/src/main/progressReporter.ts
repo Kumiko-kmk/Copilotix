@@ -16,6 +16,7 @@ export class ProgressReporter {
   private lastProgress = -1
   private lastStage: unknown
   private lastFlushAt = 0
+  private hasFlushed = false
 
   constructor(
     private readonly update: (progress: number, checkpoint: JobCheckpoint) => Promise<Job>,
@@ -32,12 +33,15 @@ export class ProgressReporter {
     const stage = checkpoint.stage
     const changedStage = stage !== this.lastStage
     const terminal = normalized >= 100
-    const due = this.lastFlushAt === 0 || normalized - this.lastProgress >= this.minDelta || this.now() - this.lastFlushAt >= this.minIntervalMs
+    const timestamp = this.now()
+    const due = !this.hasFlushed ||
+      (normalized - this.lastProgress >= this.minDelta && timestamp - this.lastFlushAt >= this.minIntervalMs)
     if (!force && !changedStage && !terminal && !due) return null
     const job = await this.update(normalized, checkpoint)
     this.lastProgress = normalized
     this.lastStage = stage
-    this.lastFlushAt = this.now()
+    this.lastFlushAt = timestamp
+    this.hasFlushed = true
     await this.onEmit?.(job)
     return job
   }

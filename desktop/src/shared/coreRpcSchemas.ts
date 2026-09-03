@@ -340,7 +340,8 @@ export const coreArtifactRecordPayloadSchema = z.object({
   kind: coreArtifactKindSchema,
   path: corePathSchema,
   checksum: coreHashSchema,
-  metadata: coreMetadataSchema.optional()
+  metadata: coreMetadataSchema.optional(),
+  jobId: coreIdSchema.optional()
 }).strict()
 export const coreTranslationBlockUpsertPayloadSchema = z.object({ block: coreTranslationBlockSchema }).strict()
 export const coreTranslationBlocksListPayloadSchema = z.object({ taskId: coreIdSchema, jobId: coreIdSchema.optional() }).strict()
@@ -369,7 +370,7 @@ export const coreAnnotationsMutatePayloadSchema = z.object({ request: mutateRead
 export const coreAnnotationsMutateResultSchema = readerAnnotationSnapshotSchema
 export const coreHashFilePayloadSchema = z.object({ path: corePathSchema }).strict()
 export const coreHashFileResultSchema = z.object({ sha256: coreHashSchema }).strict()
-export const coreNormalizeParserPayloadSchema = z.object({ task: minerUTaskSchema, extractedDir: corePathSchema }).strict()
+export const coreNormalizeParserPayloadSchema = z.object({ task: minerUTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()
 export const coreNormalizeParserResultSchema = z.object({ normalized: z.literal(true) }).strict()
 export const coreRebuildMappingsPayloadSchema = z.object({ taskId: coreIdSchema, outputDir: corePathSchema }).strict()
 export const coreRebuildMappingsResultSchema = z.object({ rebuilt: z.literal(true) }).strict()
