@@ -88,6 +88,10 @@ Phase 3A1 已建立 strict Zod Core RPC envelope、transport-agnostic client、�
 
 Phase 3A2 已将 SQLite、迁移、兼容 repository 与文件 hash、解析结果归一化、block mapping 放入 utility；main 仅通过严格、异步 RPC proxy 访问，并在 utility 重启后重新初始化。RPC 不传 PDF、ZIP、完整 Markdown、HTML 或 Buffer，数据库操作在 utility 内串行化。Scheduler 尚未完成，任务队列仍由现有 TaskService 管理。
 
+### 4.3 Phase 3B1 进度（Durable Job Scheduler Foundation）
+
+Phase 3B1 已加入独立 durable job repository、租约/心跳、依赖门控、过期恢复、重试退避与可测试 scheduler 基础；main 目前只初始化 scheduler，尚未注册真实 parse/translate runner，也不会 claim 作业。TaskService 接管与真实 runner 接入留在 Phase 3B2。
+
 electron-vite 与独立 Vite 配置生成四份 bundle：
 
     desktop/src/main       -> desktop/out/main

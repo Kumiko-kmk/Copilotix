@@ -5,13 +5,26 @@ import { dirname, extname, isAbsolute, join, relative } from 'node:path'
 import type { CoreOperation } from '@shared/coreRpcSchemas'
 import {
   coreDatabaseInitPayloadSchema,
-  coreTaskPatchSchema
+  coreTaskPatchSchema,
+  coreJobEnqueuePayloadSchema,
+  coreJobIdPayloadSchema,
+  coreJobListPayloadSchema,
+  coreJobClaimPayloadSchema,
+  coreJobHeartbeatPayloadSchema,
+  coreJobProgressPayloadSchema,
+  coreJobCompletePayloadSchema,
+  coreJobFailOrRetryPayloadSchema,
+  coreJobCancelPayloadSchema,
+  coreJobManualRetryPayloadSchema,
+  coreJobRecoverExpiredPayloadSchema,
+  coreJobEventsPayloadSchema
 } from '@shared/coreRpcSchemas'
 import type { MinerUTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
 import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../coreUtilityRuntime'
 import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
+import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sqliteJobRepository'
 import { PathPolicy } from './persistence/pathPolicy'
 import { BLOCK_MAPPING_VERSION, buildUtilityBlockMappings } from './compute/blockMapping'
 
@@ -20,6 +33,7 @@ type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandl
 interface UtilityPersistenceState {
   database?: V2Database
   repository?: V2TaskRepositoryCompat
+  jobRepository?: SqliteJobRepository
   databasePath?: string
   outputRoot?: string
 }
@@ -51,19 +65,29 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     if (!state.database) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
     return state.database
   }
+  const requireJobRepository = (): SqliteJobRepository => {
+    if (!state.jobRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
+    return state.jobRepository
+  }
   const handlers: UtilityHandlerMap = {
     ping: () => ({ pong: true }),
     'database:init': async (request) => {
       const payload = coreDatabaseInitPayloadSchema.parse(request.payload)
       validateBootstrapPaths(payload.databasePath, payload.outputRoot)
-      if (state.databasePath === payload.databasePath && state.repository) return { initialized: true }
+      if (state.databasePath === payload.databasePath && state.repository && state.jobRepository) return { initialized: true }
       closeState(state)
-      await mkdir(dirname(payload.databasePath), { recursive: true })
-      state.database = new V2Database(payload.databasePath)
-      state.repository = new V2TaskRepositoryCompat(state.database, new PathPolicy())
-      state.databasePath = payload.databasePath
-      state.outputRoot = payload.outputRoot
-      return { initialized: true }
+      try {
+        await mkdir(dirname(payload.databasePath), { recursive: true })
+        state.database = new V2Database(payload.databasePath)
+        state.repository = new V2TaskRepositoryCompat(state.database, new PathPolicy())
+        state.jobRepository = new SqliteJobRepository(state.database)
+        state.databasePath = payload.databasePath
+        state.outputRoot = payload.outputRoot
+        return { initialized: true }
+      } catch (error) {
+        closeState(state)
+        throw error
+      }
     },
     'database:flush': () => {
       const database = requireDatabase()
@@ -104,6 +128,18 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       requireRepository().deleteTask((request.payload as { id: string }).id)
       return { changed: true }
     },
+    'jobs:enqueue': (request) => requireJobRepository().enqueue(coreJobEnqueuePayloadSchema.parse(request.payload)),
+    'jobs:get': (request) => requireJobRepository().get(coreJobIdPayloadSchema.parse(request.payload).id),
+    'jobs:list': (request) => requireJobRepository().list(coreJobListPayloadSchema.parse(request.payload)),
+    'jobs:claim-batch': (request) => requireJobRepository().claimBatch(coreJobClaimPayloadSchema.parse(request.payload)),
+    'jobs:heartbeat': (request) => requireJobRepository().heartbeat(coreJobHeartbeatPayloadSchema.parse(request.payload)),
+    'jobs:update-progress': (request) => requireJobRepository().updateProgressAndCheckpoint(coreJobProgressPayloadSchema.parse(request.payload)),
+    'jobs:complete': (request) => requireJobRepository().complete(coreJobCompletePayloadSchema.parse(request.payload)),
+    'jobs:fail-or-retry': (request) => requireJobRepository().failOrRetry(coreJobFailOrRetryPayloadSchema.parse(request.payload)),
+    'jobs:cancel': (request) => requireJobRepository().cancel(coreJobCancelPayloadSchema.parse(request.payload)),
+    'jobs:manual-retry': (request) => requireJobRepository().manualRetry(coreJobManualRetryPayloadSchema.parse(request.payload)),
+    'jobs:recover-expired': (request) => requireJobRepository().recoverExpired(coreJobRecoverExpiredPayloadSchema.parse(request.payload)),
+    'jobs:list-events': (request) => requireJobRepository().listEvents(coreJobEventsPayloadSchema.parse(request.payload).jobId),
     'documents:list': () => requireRepository().listDocumentSummaries(),
     'documents:get-summary': (request) => requireRepository().getDocumentSummary((request.payload as { id: string }).id),
     'artifacts:get-latest': (request) => {
@@ -155,6 +191,8 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'database:init', 'database:flush', 'database:close',
     'settings:get', 'settings:save',
     'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
+    'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
+    'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
     'documents:list', 'documents:get-summary', 'artifacts:get-latest', 'artifacts:record-revision',
     'translation:block-upsert', 'translation:blocks-list', 'translation:run-update',
     'translation:cache-get', 'translation:cache-put',
@@ -164,7 +202,12 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
   for (const operation of persistenceOperations) {
     const handler = handlers[operation]
     if (!handler) continue
-    handlers[operation] = (request, signal) => serializePersistence(() => handler(request, signal))
+    handlers[operation] = (request, signal) => serializePersistence(() => handler(request, signal)).catch((error: unknown) => {
+      if (error instanceof SqliteJobRepositoryError) {
+        throw new CoreUtilityOperationError(error.code, error.message, error.retryable)
+      }
+      throw error
+    })
   }
 
   return {
@@ -177,7 +220,10 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
 }
 
 function closeState(state: UtilityPersistenceState): void {
-  try { state.repository = undefined } finally {
+  try {
+    state.repository = undefined
+    state.jobRepository = undefined
+  } finally {
     try { state.database?.close() } finally {
       state.database = undefined
       state.databasePath = undefined

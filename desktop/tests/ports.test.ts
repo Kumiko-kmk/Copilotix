@@ -71,15 +71,18 @@ describe('core ports', () => {
       delete: () => undefined
     }
     const jobs: JobRepositoryPort = {
-      create: () => undefined,
+      enqueue: () => job,
       get: () => job,
-      listForDocument: () => [job],
-      update: () => job,
-      claimNext: () => job,
+      list: () => [job],
+      claimBatch: () => [job],
       heartbeat: () => job,
-      saveCheckpoint: () => job,
-      recoverExpiredLeases: () => 0,
-      appendEvent: () => undefined
+      updateProgressAndCheckpoint: () => job,
+      complete: () => job,
+      failOrRetry: () => job,
+      cancel: () => job,
+      manualRetry: () => job,
+      recoverExpired: () => [job],
+      listEvents: () => []
     }
     const artifacts: ArtifactRepositoryPort = {
       create: () => undefined,

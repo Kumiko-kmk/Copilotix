@@ -4,8 +4,6 @@ import type {
   Document,
   DocumentId,
   Job,
-  JobEvent,
-  JobKind,
   JsonObject,
   TranslationBlock
 } from './types'
@@ -19,17 +17,7 @@ export interface DocumentRepositoryPort {
   delete(id: DocumentId): void
 }
 
-export interface JobRepositoryPort {
-  create(job: Job): void
-  get(id: string): Job | null
-  listForDocument(documentId: DocumentId): Job[]
-  update(id: string, patch: Partial<Job>): Job
-  claimNext(input: { now: string; leaseOwner: string; leaseExpiresAt: string; kind?: JobKind }): Job | null
-  heartbeat(id: string, leaseOwner: string, leaseExpiresAt: string): Job
-  saveCheckpoint(id: string, leaseOwner: string, checkpoint: JsonObject): Job
-  recoverExpiredLeases(now: string): number
-  appendEvent(event: JobEvent): void
-}
+export type { JobRepositoryPort } from './jobs'
 
 export interface ArtifactRepositoryPort {
   create(revision: ArtifactRevision): void

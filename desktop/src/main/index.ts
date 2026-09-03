@@ -54,6 +54,8 @@ import type { WindowState } from '@shared/types'
 import { computeDocumentChange, projectDocumentDetails, projectDocumentSummary } from './documentProjection'
 import { UtilitySupervisor } from './utilitySupervisor'
 import { forkUtilityProcess } from './electronUtilityFork'
+import { RpcJobRepository } from './rpcJobRepository'
+import { JobScheduler } from './jobScheduler'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -74,6 +76,7 @@ let documentRevision = 0
 let documentSummaries = new Map<string, DocumentSummary>()
 let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
+let jobScheduler: JobScheduler | null = null
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
@@ -86,6 +89,11 @@ async function bootstrap(): Promise<void> {
     }
   })
   await utilitySupervisor.start()
+  const jobRepository = new RpcJobRepository(utilitySupervisor)
+  // Scheduler execution is intentionally deferred until 3B2 registers the
+  // real parse/translate runners; with no runners it cannot claim jobs.
+  jobScheduler = new JobScheduler(jobRepository)
+  await jobScheduler.start()
   const userData = app.getPath('userData')
   await mkdir(userData, { recursive: true })
   repository = new RpcTaskRepository(utilitySupervisor)
@@ -344,7 +352,7 @@ app.on('before-quit', (event) => {
   isQuitting = true
   if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
   event.preventDefault()
-  utilityShutdownPromise = utilitySupervisor.shutdown().catch(() => undefined).then(() => {
+  utilityShutdownPromise = (jobScheduler?.shutdown() ?? Promise.resolve()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
     app.quit()
   })
 })
