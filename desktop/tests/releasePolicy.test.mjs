@@ -44,7 +44,7 @@ describe('release policy', () => {
 
   it('requires the application entry points and unpacked keyring dependency', () => {
     expect(() => assertRequiredPackagedContent({
-      asarEntries: ['out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json'],
+      asarEntries: ['\\out/main/index.js', '/out/preload/index.js', '\\out/renderer/index.html', '/package.json'],
       runtimeFiles: [{ path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js', size: 1 }]
     })).not.toThrow()
     expect(() => assertRequiredPackagedContent({

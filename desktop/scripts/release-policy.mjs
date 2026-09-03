@@ -122,5 +122,5 @@ function normalizePath(path) {
 }
 
 function normalizeEntryName(path) {
-  return String(path).replaceAll('\\', '/')
+  return String(path).replaceAll('\\', '/').replace(/^\/+/u, '')
 }
