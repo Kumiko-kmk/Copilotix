@@ -11,6 +11,10 @@ export class RpcTaskCompute implements TaskComputePort {
     return result.sha256
   }
 
+  async importPdf(sourcePath: string, documentId: string): Promise<{ sha256: string; size: number }> {
+    return this.supervisor.request('compute:import-pdf', { sourcePath, documentId })
+  }
+
   async normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<void> {
     await this.supervisor.request('compute:normalize-parser', {
       task,

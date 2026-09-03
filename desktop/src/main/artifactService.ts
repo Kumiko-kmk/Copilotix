@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
-import { access, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { access, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import archiver from 'archiver'
 import type { BlockMapping, DocumentPayload, MinerUTask, TranslatedMarkdownBlock } from '@shared/types'
 import type { ArtifactKind } from '@core/types'
@@ -61,6 +62,27 @@ export class ArtifactService {
   async recordArtifact(task: MinerUTask, kind: ArtifactKind, path: string, jobId?: string): Promise<void> {
     if (!this.repository.recordArtifactRevision) return
     await this.repository.recordArtifactRevision(task.id, kind, path, await this.compute.hashFile(path), {}, jobId)
+  }
+
+  async atomicWriteFile(path: string, content: string): Promise<void> {
+    const partialPath = `${path}.partial-${randomUUID()}`
+    try {
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(partialPath, content, 'utf8')
+      const handle = await open(partialPath, 'r+')
+      try {
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
+      await rename(partialPath, path)
+    } finally {
+      await rm(partialPath, { force: true }).catch(() => undefined)
+    }
+  }
+
+  async atomicWriteJson(path: string, value: unknown): Promise<void> {
+    await this.atomicWriteFile(path, JSON.stringify(value, null, 2))
   }
 
   async loadMappings(task: MinerUTask): Promise<BlockMapping[]> {
@@ -134,7 +156,7 @@ export class ArtifactService {
         error
       }))
     }
-    await writeFile(path, JSON.stringify(manifest, null, 2), 'utf8')
+    await this.atomicWriteJson(path, manifest)
     await this.recordArtifact(task, 'manifest', path, jobId)
   }
 

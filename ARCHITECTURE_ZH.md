@@ -96,6 +96,10 @@ Phase 3B1 已加入独立 durable job repository、租约/心跳、依赖门控�
 
 Phase 3B2 已将 parse/translate 执行切换到 JobScheduler 与独立 runners；TaskService 仅保留命令、文档与事件 facade，任务状态、租约、checkpoint 和重试由 durable jobs 管理。Phase 4 尚未开始。
 
+### 4.5 Phase 4A 进度（流式导入与解析产物发布）
+
+Phase 4A 已将生产 PDF 导入改为 utility 单次流式 hash/copy，并为 MinerU ZIP 下载、解析 staging、翻译 Markdown/checkpoint/manifest 增加受限流式写入、fsync 与原子发布；normalize 产物在文件发布后才登记并支持同作业幂等恢复。AST 与批量翻译仍未扩展，后续接入与更大范围优化留待 Phase 4B。
+
 electron-vite 与独立 Vite 配置生成四份 bundle：
 
     desktop/src/main       -> desktop/out/main

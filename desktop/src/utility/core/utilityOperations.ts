@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
-import { createReadStream } from 'node:fs'
-import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
+import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, relative } from 'node:path'
+import { Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import type { CoreOperation } from '@shared/coreRpcSchemas'
 import {
   coreDatabaseInitPayloadSchema,
@@ -18,10 +20,12 @@ import {
   coreJobManualRetryPayloadSchema,
   coreJobRecoverExpiredPayloadSchema,
   coreJobEventsPayloadSchema,
-  coreDocumentMetadataPayloadSchema
+  coreDocumentMetadataPayloadSchema,
+  coreImportPdfPayloadSchema
 } from '@shared/coreRpcSchemas'
 import type { MinerUTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
+import { MAX_PDF_BYTES } from '@shared/constants'
 import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../coreUtilityRuntime'
 import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
@@ -102,12 +106,15 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'settings:get': (request) => {
       const repository = requireRepository()
       const payload = request.payload as { outputRoot: string }
-      return appSettingsSchema.parse(repository.getSettings(payload.outputRoot))
+      const settings = appSettingsSchema.parse(repository.getSettings(payload.outputRoot))
+      state.outputRoot = settings.outputRoot
+      return settings
     },
     'settings:save': (request) => {
       const repository = requireRepository()
       const settings = appSettingsSchema.parse((request.payload as { settings: unknown }).settings)
       repository.saveSettings(settings)
+      state.outputRoot = settings.outputRoot
       return settings
     },
     'tasks:list': () => requireRepository().listTasks(),
@@ -184,6 +191,10 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     },
     'annotations:mutate': (request) => requireRepository().mutateDocumentAnnotations((request.payload as { request: Parameters<V2TaskRepositoryCompat['mutateDocumentAnnotations']>[0] }).request),
     'compute:hash-file': async (request) => ({ sha256: await hashFile((request.payload as { path: string }).path) }),
+    'compute:import-pdf': async (request, signal) => {
+      const payload = coreImportPdfPayloadSchema.parse(request.payload)
+      return importPdf(payload.sourcePath, payload.documentId, state, signal)
+    },
     'compute:normalize-parser': async (request) => {
       const payload = request.payload as { task: MinerUTask; extractedDir: string; jobId?: string }
       await normalizeParserOutput(payload.task, payload.extractedDir, requireRepository(), payload.jobId)
@@ -206,7 +217,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'translation:block-upsert', 'translation:blocks-list', 'translation:run-update',
     'translation:cache-get', 'translation:cache-put',
     'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
-    'compute:normalize-parser', 'compute:rebuild-mappings'
+    'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings'
   ]
   for (const operation of persistenceOperations) {
     const handler = handlers[operation]
@@ -261,38 +272,156 @@ async function hashFile(path: string): Promise<string> {
   return hash.digest('hex')
 }
 
+async function importPdf(
+  sourcePath: string,
+  documentId: string,
+  state: UtilityPersistenceState,
+  signal: AbortSignal
+): Promise<{ sha256: string; size: number }> {
+  if (!isAbsolute(sourcePath) || sourcePath.length > 32_768 || sourcePath.includes('\0') || extname(sourcePath).toLowerCase() !== '.pdf') {
+    throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Invalid PDF import request', false)
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(documentId)) {
+    throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Invalid document identifier', false)
+  }
+  if (!state.outputRoot || !isAbsolute(state.outputRoot) || state.outputRoot.length > 32_768 || state.outputRoot.includes('\0')) {
+    throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core output directory is unavailable', true)
+  }
+
+  let sourceInfo
+  try {
+    sourceInfo = await lstat(sourcePath)
+  } catch {
+    throw new CoreUtilityOperationError('CORE_NOT_FOUND', 'PDF source is unavailable', false)
+  }
+  if (!sourceInfo.isFile()) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'PDF source must be a regular file', false)
+  if (sourceInfo.size > MAX_PDF_BYTES) throw new CoreUtilityOperationError('CORE_LIMIT_EXCEEDED', 'PDF exceeds the supported size limit', false)
+
+  const policy = new PathPolicy()
+  await mkdir(state.outputRoot, { recursive: true })
+  const documentsRoot = policy.resolveChild(state.outputRoot, 'documents-v2')
+  await mkdir(documentsRoot, { recursive: true })
+  const documentRoot = policy.resolveChild(documentsRoot, documentId)
+  await mkdir(documentRoot, { recursive: true })
+  const verifiedDocumentRoot = policy.resolveChild(documentsRoot, documentId)
+  const destination = join(verifiedDocumentRoot, 'original.pdf')
+  const partial = `${destination}.partial-${documentId}`
+  await removeIfPresent(partial)
+  await rejectExisting(destination)
+
+  const hash = createHash('sha256')
+  let size = 0
+  let published = false
+  try {
+    const hashing = new Transform({
+      transform(chunk, _encoding, callback) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        size += buffer.length
+        if (size > MAX_PDF_BYTES) {
+          callback(new CoreUtilityOperationError('CORE_LIMIT_EXCEEDED', 'PDF exceeds the supported size limit', false))
+          return
+        }
+        hash.update(buffer)
+        callback(null, buffer)
+      }
+    })
+    await pipeline(
+      createReadStream(sourcePath),
+      hashing,
+      createWriteStream(partial, { flags: 'wx' }),
+      { signal }
+    )
+    const handle = await open(partial, 'r+')
+    try {
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+    await rename(partial, destination)
+    published = true
+    return { sha256: hash.digest('hex'), size }
+  } finally {
+    if (!published) await removeIfPresent(partial)
+  }
+}
+
+async function rejectExisting(path: string): Promise<void> {
+  try {
+    await lstat(path)
+  } catch (error) {
+    if (isNotFound(error)) return
+    throw error
+  }
+  throw new CoreUtilityOperationError('CORE_CONFLICT', 'PDF destination already exists', false)
+}
+
+async function removeIfPresent(path: string): Promise<void> {
+  await rm(path, { force: true }).catch(() => undefined)
+}
+
+function isNotFound(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'ENOENT')
+}
+
 async function normalizeParserOutput(task: MinerUTask, extractedDir: string, repository: V2TaskRepositoryCompat, jobId?: string): Promise<void> {
   assertTaskPath(task.outputDir)
   assertTaskPath(extractedDir)
-  const files = await walkFiles(extractedDir)
+  await mkdir(task.outputDir, { recursive: true })
+  const pathPolicy = new PathPolicy()
+  const extractedRoot = pathPolicy.resolveChild(task.outputDir, extractedDir)
+  const files = await walkFiles(extractedRoot, pathPolicy)
   const markdown = files.find((path) => extname(path).toLowerCase() === '.md')
   const layout = files.find((path) => /(?:layout|middle)\.json$/iu.test(path))
   const contentList = files.find((path) => /content_list(?:_v2)?\.json$/iu.test(path))
   if (!markdown || !layout) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'MinerU result is incomplete', false)
-  await mkdir(task.outputDir, { recursive: true })
-  const markdownPath = join(task.outputDir, 'full.md')
-  const layoutPath = join(task.outputDir, 'layout.json')
-  await copyFile(markdown, markdownPath)
-  await copyFile(layout, layoutPath)
-  repository.recordArtifactRevision(task.id, 'parsed_markdown', markdownPath, await hashFile(markdownPath), {}, jobId)
-  repository.recordArtifactRevision(task.id, 'layout', layoutPath, await hashFile(layoutPath), {}, jobId)
-  if (contentList) {
-    const contentPath = join(task.outputDir, 'content_list.json')
-    await copyFile(contentList, contentPath)
-    repository.recordArtifactRevision(task.id, 'content_list', contentPath, await hashFile(contentPath), {}, jobId)
-  }
-  for (const file of files) {
-    const rel = relative(extractedDir, file)
-    if (!/[/\\]images?[/\\]/iu.test(file) && !/\.(png|jpe?g|webp|gif|svg)$/iu.test(file)) continue
-    const target = join(task.outputDir, rel)
+
+  const suffix = jobId && /^[A-Za-z0-9._-]+$/u.test(jobId) ? jobId : 'legacy'
+  const stagingRoot = pathPolicy.resolveChild(task.outputDir, `.normalize.partial-${suffix}`)
+  await rm(stagingRoot, { recursive: true, force: true })
+  await mkdir(stagingRoot, { recursive: true })
+  const staged = async (source: string, targetRelativePath: string): Promise<string> => {
+    const target = pathPolicy.resolveChild(stagingRoot, targetRelativePath)
     await mkdir(dirname(target), { recursive: true })
-    await copyFile(file, target)
+    await copyFile(source, target)
+    return target
   }
-  const layoutData = JSON.parse(await readFile(layoutPath, 'utf8')) as unknown
-  const mappings = buildUtilityBlockMappings(task.id, layoutData)
-  const blockPath = join(task.outputDir, 'block_list.json')
-  await writeFile(blockPath, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2), 'utf8')
-  repository.recordArtifactRevision(task.id, 'block_mappings', blockPath, await hashFile(blockPath), {}, jobId)
+  const revisions: Array<{ taskId: string; kind: Parameters<V2TaskRepositoryCompat['recordArtifactRevision']>[1]; path: string; checksum: string; jobId?: string }> = []
+  const imageFiles: Array<{ stagedPath: string; relativePath: string }> = []
+  try {
+    const markdownStaged = await staged(markdown, 'full.md')
+    const layoutStaged = await staged(layout, 'layout.json')
+    const artifactSources: Array<{ kind: Parameters<V2TaskRepositoryCompat['recordArtifactRevision']>[1]; relativePath: string; stagedPath: string }> = [
+      { kind: 'parsed_markdown', relativePath: 'full.md', stagedPath: markdownStaged },
+      { kind: 'layout', relativePath: 'layout.json', stagedPath: layoutStaged }
+    ]
+    if (contentList) artifactSources.push({ kind: 'content_list', relativePath: 'content_list.json', stagedPath: await staged(contentList, 'content_list.json') })
+
+    for (const file of files) {
+      const rel = relative(extractedRoot, file)
+      if (!/[/\\]images?[/\\]/iu.test(file) && !/\.(png|jpe?g|webp|gif|svg)$/iu.test(file)) continue
+      imageFiles.push({ stagedPath: await staged(file, rel), relativePath: rel })
+    }
+
+    const layoutData = JSON.parse(await readFile(layoutStaged, 'utf8')) as unknown
+    const mappings = buildUtilityBlockMappings(task.id, layoutData)
+    const blockStaged = pathPolicy.resolveChild(stagingRoot, 'block_list.json')
+    await writeFile(blockStaged, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2), 'utf8')
+    artifactSources.push({ kind: 'block_mappings', relativePath: 'block_list.json', stagedPath: blockStaged })
+
+    for (const artifact of artifactSources) {
+      const destination = pathPolicy.resolveChild(task.outputDir, artifact.relativePath)
+      const checksum = await hashFile(artifact.stagedPath)
+      await publishStagedFile(artifact.stagedPath, destination, checksum)
+      revisions.push({ taskId: task.id, kind: artifact.kind, path: destination, checksum, jobId })
+    }
+    for (const image of imageFiles) {
+      const destination = pathPolicy.resolveChild(task.outputDir, image.relativePath)
+      await publishStagedFile(image.stagedPath, destination, await hashFile(image.stagedPath))
+    }
+    repository.recordArtifactRevisions(revisions)
+  } finally {
+    await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined)
+  }
 }
 
 async function rebuildMappings(taskId: string, outputDir: string, repository: V2TaskRepositoryCompat): Promise<void> {
@@ -305,12 +434,41 @@ async function rebuildMappings(taskId: string, outputDir: string, repository: V2
   if (task) repository.recordArtifactRevision(taskId, 'block_mappings', blockPath, await hashFile(blockPath))
 }
 
-async function walkFiles(root: string): Promise<string[]> {
+async function publishStagedFile(stagedPath: string, destination: string, checksum: string): Promise<void> {
+  try {
+    const existing = await lstat(destination)
+    if (!existing.isFile()) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Artifact destination is not a regular file', false)
+    if (await hashFile(destination) === checksum) {
+      await rm(stagedPath, { force: true })
+      return
+    }
+  } catch (error) {
+    if (!isNotFound(error)) throw error
+  }
+  await mkdir(dirname(destination), { recursive: true })
+  await syncFile(stagedPath)
+  await rename(stagedPath, destination)
+}
+
+async function syncFile(path: string): Promise<void> {
+  const handle = await open(path, 'r+')
+  try {
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
+}
+
+async function walkFiles(root: string, pathPolicy: PathPolicy): Promise<string[]> {
   const result: string[] = []
   for (const entry of await readdir(root, { withFileTypes: true })) {
     const path = join(root, entry.name)
-    if (entry.isDirectory()) result.push(...await walkFiles(path))
-    else if (entry.isFile()) result.push(path)
+    pathPolicy.resolveChild(root, entry.name)
+    const info = await lstat(path)
+    if (info.isSymbolicLink()) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Artifact staging contains a symbolic link', false)
+    if (info.isDirectory()) result.push(...await walkFiles(path, pathPolicy))
+    else if (info.isFile()) result.push(path)
+    else throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Artifact staging contains an unsupported file', false)
   }
   return result
 }

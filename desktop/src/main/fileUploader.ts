@@ -24,7 +24,13 @@ export class ElectronFileUploader implements FileUploader {
       redirect: 'follow',
       signal: signal ?? AbortSignal.timeout(10 * 60 * 1000)
     })
-    await response.arrayBuffer()
+    if (response.body) {
+      try {
+        await response.body.cancel()
+      } catch {
+        // The upload result body is intentionally discarded.
+      }
+    }
     if (response.status !== 200) throw new Error(`上传文件失败（HTTP ${response.status}）`)
     onProgress?.(body.size, body.size)
   }

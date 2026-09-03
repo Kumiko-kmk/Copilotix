@@ -8,6 +8,10 @@ import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/main/blockMapp
 /** Test-only local compute port; production TaskService always receives RpcTaskCompute. */
 export const fixtureTaskCompute: TaskComputePort = {
   hashFile,
+  async importPdf(sourcePath) {
+    const info = await import('node:fs/promises').then(({ stat }) => stat(sourcePath))
+    return { sha256: await hashFile(sourcePath), size: info.size }
+  },
   async normalizeParserOutput(task, extractedDir) {
     const files = await walkFiles(extractedDir)
     const markdown = files.find((path) => extname(path).toLowerCase() === '.md')

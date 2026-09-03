@@ -316,8 +316,7 @@ function registerIpc(
       if (result.canceled) return []
       paths = result.filePaths
     }
-    const selected = await tasks.inspectPdfs(paths.filter((path) => path.toLowerCase().endsWith('.pdf')))
-    const created = await tasks.create({ ...request.options, files: selected })
+    const created = await tasks.importPaths(paths.filter((path) => path.toLowerCase().endsWith('.pdf')), request.options)
     return created.map(projectDocumentSummary)
   }, validationOptions)
   registerValidatedHandler('documents:list', noRequestSchema, documentSummarySchema.array(), async () => {

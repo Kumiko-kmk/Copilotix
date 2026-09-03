@@ -70,6 +70,12 @@ export class TaskService extends EventEmitter {
     return created
   }
 
+  async importPaths(paths: readonly string[], options: Omit<CreateTasksRequest, 'files'>): Promise<MinerUTask[]> {
+    const created = await this.commands.importPaths(paths, options)
+    await this.emitTasks()
+    return created
+  }
+
   async retry(taskId: string): Promise<void> {
     await this.commands.retry(taskId)
     await this.emitTasks()
@@ -118,5 +124,5 @@ function isPathPolicyPort(value: unknown): value is PathPolicyPort {
 
 function unavailableCompute(): TaskComputePort {
   const unavailable = async (): Promise<never> => { throw new Error('核心计算服务尚未初始化') }
-  return { hashFile: unavailable, normalizeParserOutput: unavailable, rebuildMappings: unavailable }
+  return { hashFile: unavailable, importPdf: unavailable, normalizeParserOutput: unavailable, rebuildMappings: unavailable }
 }

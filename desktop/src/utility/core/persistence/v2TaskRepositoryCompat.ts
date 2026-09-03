@@ -66,6 +66,15 @@ export interface CompatJobRow {
   updated_at: string
 }
 
+export interface ArtifactRevisionInput {
+  taskId: string
+  kind: ArtifactKind
+  path: string
+  checksum: string
+  metadata?: Record<string, unknown>
+  jobId?: string
+}
+
 const TERMINAL: ReadonlySet<V2JobStatus> = new Set(['succeeded', 'partial', 'failed', 'cancelled'])
 
 export class CompatDomainError extends Error {
@@ -500,32 +509,40 @@ export class V2TaskRepositoryCompat {
   }
 
   recordArtifactRevision(taskId: string, kind: ArtifactKind, path: string, checksum: string, metadata: Record<string, unknown> = {}, jobId?: string): void {
+    this.recordArtifactRevisions([{ taskId, kind, path, checksum, metadata, jobId }])
+  }
+
+  recordArtifactRevisions(revisions: readonly ArtifactRevisionInput[]): void {
     this.database.transaction(() => {
-      const document = this.readDocument(taskId)
-      if (!document) throw new Error('任务不存在')
-      const jobKind: V2JobKind = kind === 'translated_markdown' || kind === 'manifest' ? 'translate' : 'parse'
-      const job = jobId
-        ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=?').get(jobId) as CompatJobRow | undefined
-        : this.latestJob(taskId, jobKind)
-      if (!job || job.document_id !== taskId || job.kind !== jobKind) throw new Error('产物对应的作业不存在')
-      const relativePath = this.toRelativeArtifactPath(document.storage_path, path)
-      const existing = this.database.connection.prepare(`
-        SELECT id,relative_path,content_hash FROM artifacts
-        WHERE document_id=? AND kind=? AND created_by_job_id=? LIMIT 1
-      `).get(taskId, kind, job.id) as { id: string; relative_path: string; content_hash: string } | undefined
-      if (existing) {
-        if (existing.relative_path === relativePath && existing.content_hash === checksum) return
-        throw new Error('ARTIFACT_COMMIT_CONFLICT')
-      }
-      const latest = this.database.connection.prepare(
-        'SELECT COALESCE(MAX(revision),0) as revision FROM artifacts WHERE document_id=? AND kind=?'
-      ).get(taskId, kind) as { revision: number }
-      this.database.connection.prepare(`
-        INSERT INTO artifacts(
-          id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at
-        ) VALUES(?,?,?,?,?,?,?,?,?)
-      `).run(randomUUID(), taskId, job.id, kind, latest.revision + 1, relativePath, checksum, JSON.stringify(metadata), new Date().toISOString())
+      for (const revision of revisions) this.recordArtifactRevisionUnsafe(revision)
     })
+  }
+
+  private recordArtifactRevisionUnsafe(input: ArtifactRevisionInput): void {
+    const document = this.readDocument(input.taskId)
+    if (!document) throw new Error('任务不存在')
+    const jobKind: V2JobKind = input.kind === 'translated_markdown' || input.kind === 'manifest' ? 'translate' : 'parse'
+    const job = input.jobId
+      ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=?').get(input.jobId) as CompatJobRow | undefined
+      : this.latestJob(input.taskId, jobKind)
+    if (!job || job.document_id !== input.taskId || job.kind !== jobKind) throw new Error('产物对应的作业不存在')
+    const relativePath = this.toRelativeArtifactPath(document.storage_path, input.path)
+    const existing = this.database.connection.prepare(`
+      SELECT id,relative_path,content_hash FROM artifacts
+      WHERE document_id=? AND kind=? AND created_by_job_id=? LIMIT 1
+    `).get(input.taskId, input.kind, job.id) as { id: string; relative_path: string; content_hash: string } | undefined
+    if (existing) {
+      if (existing.relative_path === relativePath && existing.content_hash === input.checksum) return
+      throw new Error('ARTIFACT_COMMIT_CONFLICT')
+    }
+    const latest = this.database.connection.prepare(
+      'SELECT COALESCE(MAX(revision),0) as revision FROM artifacts WHERE document_id=? AND kind=?'
+    ).get(input.taskId, input.kind) as { revision: number }
+    this.database.connection.prepare(`
+      INSERT INTO artifacts(
+        id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?)
+    `).run(randomUUID(), input.taskId, job.id, input.kind, latest.revision + 1, relativePath, input.checksum, JSON.stringify(input.metadata ?? {}), new Date().toISOString())
   }
 
   private insertTaskUnsafe(task: MinerUTask): void {

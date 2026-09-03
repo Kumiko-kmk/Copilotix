@@ -1,3 +1,7 @@
+import { createWriteStream } from 'node:fs'
+import { open, rm } from 'node:fs/promises'
+import { Readable, Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import type { AppSettings, HealthResult, MinerUTask } from '@shared/types'
 import { MINERU_API_ORIGIN } from '@shared/constants'
 
@@ -49,7 +53,7 @@ export interface MinerUClient {
     onUpdate: (result: BatchResult) => void,
     signal?: AbortSignal
   ): Promise<BatchResult>
-  downloadResult(resultUrl: string, signal?: AbortSignal): Promise<Uint8Array>
+  downloadResult(resultUrl: string, destinationPath: string, signal?: AbortSignal): Promise<void>
 }
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -253,16 +257,57 @@ export class OfficialMinerUClient implements MinerUClient {
     throw new Error('等待 MinerU 解析结果超时')
   }
 
-  async downloadResult(resultUrl: string, signal?: AbortSignal): Promise<Uint8Array> {
-    const response = await this.fetcher(requireHttpsUrl(resultUrl, '结果下载链接'), {
-      signal: signal ?? AbortSignal.timeout(10 * 60 * 1000)
-    })
-    if (!response.ok) throw new Error(`下载解析结果失败（HTTP ${response.status}）`)
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error('MinerU 解析结果不是有效的 ZIP 文件')
-    return bytes
+  async downloadResult(resultUrl: string, destinationPath: string, signal?: AbortSignal): Promise<void> {
+    let completed = false
+    try {
+      const response = await this.fetcher(requireHttpsUrl(resultUrl, '结果下载链接'), {
+        signal: signal ?? AbortSignal.timeout(10 * 60 * 1000)
+      })
+      if (!response.ok) throw new Error(`下载解析结果失败（HTTP ${response.status}）`)
+      const contentLengthHeader = response.headers.get('content-length')
+      if (contentLengthHeader !== null) {
+        const contentLength = Number(contentLengthHeader)
+        if (!Number.isSafeInteger(contentLength) || contentLength < 4 || contentLength > MAX_RESULT_ZIP_BYTES) {
+          throw new Error('MinerU 解析结果超过支持的 ZIP 大小限制')
+        }
+      }
+      if (!response.body) throw new Error('MinerU 解析结果缺少响应内容')
+
+      let size = 0
+      let header = Buffer.alloc(0)
+      const limiter = new Transform({
+        transform(chunk, _encoding, callback) {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+          size += buffer.length
+          if (size > MAX_RESULT_ZIP_BYTES) {
+            callback(new Error('MinerU 解析结果超过支持的 ZIP 大小限制'))
+            return
+          }
+          if (header.length < 4) header = Buffer.concat([header, buffer]).subarray(0, 4)
+          callback(null, buffer)
+        }
+      })
+      await pipeline(
+        Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>),
+        limiter,
+        createWriteStream(destinationPath, { flags: 'wx' }),
+        { signal }
+      )
+      if (header.length < 4 || header[0] !== 0x50 || header[1] !== 0x4b) throw new Error('MinerU 解析结果不是有效的 ZIP 文件')
+      const handle = await open(destinationPath, 'r+')
+      try {
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
+      completed = true
+    } finally {
+      if (!completed) await rm(destinationPath, { force: true }).catch(() => undefined)
+    }
   }
 }
+
+export const MAX_RESULT_ZIP_BYTES = 512 * 1024 * 1024
 
 function expireUnregisteredUploads(result: BatchResult, expectedDataIds: Set<string>, expired: boolean): BatchResult {
   if (!expired) return result

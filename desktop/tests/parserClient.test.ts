@@ -1,5 +1,8 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { OfficialMinerUClient, type FileUploader } from '@main/parserClient'
+import { MAX_RESULT_ZIP_BYTES, OfficialMinerUClient, type FileUploader } from '@main/parserClient'
 import type { AppSettings, MinerUTask } from '@shared/types'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -153,8 +156,45 @@ describe('OfficialMinerUClient', () => {
   it('accepts a ZIP response from the result CDN without Authorization', async () => {
     const fetcher = vi.fn<Fetcher>(async () => new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04])))
     const client = new OfficialMinerUClient(fetcher, { upload: vi.fn() })
-    await expect(client.downloadResult('https://cdn.example.test/result.zip')).resolves.toEqual(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+    const root = await mkdtemp(join(tmpdir(), 'mineru-result-'))
+    try {
+      const destination = join(root, 'result.zip.partial-job-1')
+      await expect(client.downloadResult('https://cdn.example.test/result.zip', destination)).resolves.toBeUndefined()
+      await expect(readFile(destination)).resolves.toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
     expect(fetcher.mock.calls[0]?.[1]?.headers).toBeUndefined()
+  })
+
+  it('cleans a partial ZIP when the declared size is over the limit', async () => {
+    const fetcher = vi.fn<Fetcher>(async () => new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+      headers: { 'Content-Length': String(MAX_RESULT_ZIP_BYTES + 1) }
+    }))
+    const client = new OfficialMinerUClient(fetcher, { upload: vi.fn() })
+    const root = await mkdtemp(join(tmpdir(), 'mineru-result-limit-'))
+    try {
+      const destination = join(root, 'result.zip.partial-job-1')
+      await expect(client.downloadResult('https://cdn.example.test/result.zip', destination)).rejects.toThrow('大小限制')
+      await expect(readFile(destination)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('cleans a partial ZIP when the download is aborted', async () => {
+    const fetcher = vi.fn<Fetcher>(async () => new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04])))
+    const client = new OfficialMinerUClient(fetcher, { upload: vi.fn() })
+    const root = await mkdtemp(join(tmpdir(), 'mineru-result-abort-'))
+    const controller = new AbortController()
+    controller.abort()
+    try {
+      const destination = join(root, 'result.zip.partial-job-1')
+      await expect(client.downloadResult('https://cdn.example.test/result.zip', destination, controller.signal)).rejects.toThrow()
+      await expect(readFile(destination)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   it('turns an unregistered waiting-file upload into a recoverable file failure', async () => {

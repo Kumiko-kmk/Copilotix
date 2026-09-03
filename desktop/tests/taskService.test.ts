@@ -170,7 +170,7 @@ class NeverCalledClient implements MinerUClient {
   async uploadFile(): Promise<void> { throw new Error('unused') }
   async getBatchResult(_batchId: string): Promise<BatchResult> { throw new Error('unused') }
   async waitForBatch(_batchId: string, _token: string, _expectedDataIds: Set<string>, _onUpdate: (result: BatchResult) => void): Promise<BatchResult> { throw new Error('unused') }
-  async downloadResult(): Promise<Uint8Array> { throw new Error('unused') }
+  async downloadResult(_resultUrl: string, _destinationPath: string): Promise<void> { throw new Error('unused') }
 }
 
 class ResumeClient extends NeverCalledClient {
@@ -189,7 +189,7 @@ class ResumeClient extends NeverCalledClient {
     return result
   }
 
-  override async downloadResult(): Promise<Uint8Array> { return this.zip }
+  override async downloadResult(_resultUrl: string, destinationPath: string): Promise<void> { await writeFile(destinationPath, this.zip) }
 }
 
 function makeTask(outputDir: string, sourcePath: string): MinerUTask {

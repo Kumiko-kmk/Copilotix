@@ -1,4 +1,3 @@
-import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { JobRunner, JobRunnerInput, JobRunnerResult } from '@core/jobs'
 import { JobRunnerError } from '@core/jobs'
@@ -66,7 +65,7 @@ export class TranslationJobRunner implements JobRunner {
     })
     if (input.signal.aborted) throw abortError()
 
-    await writeFile(join(task.outputDir, 'full.zh-CN.md'), result.markdown, 'utf8')
+    await this.artifacts.atomicWriteFile(join(task.outputDir, 'full.zh-CN.md'), result.markdown)
     await this.artifacts.recordArtifact(task, 'translated_markdown', join(task.outputDir, 'full.zh-CN.md'), input.job.id)
     const completed = result.blocks.filter((block) => block.status === 'completed').length
     const checkpoint = {
@@ -77,7 +76,7 @@ export class TranslationJobRunner implements JobRunner {
       failedBlockIds: result.failedBlockIds,
       updatedAt: new Date().toISOString()
     }
-    await writeFile(join(task.outputDir, 'translation.checkpoint.json'), JSON.stringify({ taskId: task.id, ...checkpoint }, null, 2), 'utf8')
+    await this.artifacts.atomicWriteJson(join(task.outputDir, 'translation.checkpoint.json'), { taskId: task.id, ...checkpoint })
     await this.artifacts.writeManifest(task, result, input.job.id)
     this.logger.info('translation.completed', { taskId: task.id, jobId: input.job.id, failedBlocks: result.failedBlockIds.length })
     return {

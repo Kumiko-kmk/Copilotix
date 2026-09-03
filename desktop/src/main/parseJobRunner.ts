@@ -1,4 +1,4 @@
-import { readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, rename, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import extract from 'extract-zip'
 import PQueue from 'p-queue'
@@ -262,17 +262,20 @@ export class ParseJobRunner implements BatchJobRunner {
     })
     await input.updateProgress(job.id, 42, checkpoint)
     const zipPath = join(originalTask.outputDir, '.mineru-result.zip')
-    const extractedDir = join(originalTask.outputDir, '.parsed')
+    const partialZipPath = `${zipPath}.partial-${job.id}`
+    const extractedDir = join(originalTask.outputDir, `.parsed.partial-${job.id}`)
     try {
-      const zip = await this.options.parserClient.downloadResult(resultUrl, input.signal)
+      await this.options.parserClient.downloadResult(resultUrl, partialZipPath, input.signal)
       if (input.signal.aborted) throw new Error('Job runner aborted')
-      await writeFile(zipPath, zip)
+      await rm(zipPath, { force: true })
+      await rename(partialZipPath, zipPath)
       await rm(extractedDir, { recursive: true, force: true })
       await extract(zipPath, { dir: extractedDir })
       await this.options.compute.normalizeParserOutput(originalTask, extractedDir, job.id)
       this.logger.info('result.normalized', { taskId: originalTask.id, jobId: job.id })
     } finally {
       await rm(zipPath, { force: true }).catch(() => undefined)
+      await rm(partialZipPath, { force: true }).catch(() => undefined)
       await rm(extractedDir, { recursive: true, force: true }).catch(() => undefined)
     }
 

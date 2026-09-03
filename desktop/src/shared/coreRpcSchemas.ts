@@ -176,7 +176,7 @@ const coreOperationNames = [
   'translation:block-upsert', 'translation:blocks-list', 'translation:run-update',
   'translation:cache-get', 'translation:cache-put',
   'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
-  'compute:hash-file', 'compute:normalize-parser', 'compute:rebuild-mappings'
+  'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings'
 ] as const
 
 export const coreOperationSchema = z.enum(coreOperationNames)
@@ -370,6 +370,8 @@ export const coreAnnotationsMutatePayloadSchema = z.object({ request: mutateRead
 export const coreAnnotationsMutateResultSchema = readerAnnotationSnapshotSchema
 export const coreHashFilePayloadSchema = z.object({ path: corePathSchema }).strict()
 export const coreHashFileResultSchema = z.object({ sha256: coreHashSchema }).strict()
+export const coreImportPdfPayloadSchema = z.object({ sourcePath: corePathSchema, documentId: coreIdSchema }).strict()
+export const coreImportPdfResultSchema = z.object({ sha256: coreHashSchema, size: z.number().int().min(0).max(200 * 1024 * 1024) }).strict()
 export const coreNormalizeParserPayloadSchema = z.object({ task: minerUTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()
 export const coreNormalizeParserResultSchema = z.object({ normalized: z.literal(true) }).strict()
 export const coreRebuildMappingsPayloadSchema = z.object({ taskId: coreIdSchema, outputDir: corePathSchema }).strict()
@@ -423,6 +425,7 @@ export const coreOperationRegistry = {
   'annotations:list-snapshot': { payload: coreAnnotationsSnapshotPayloadSchema, result: coreAnnotationsSnapshotResultSchema },
   'annotations:mutate': { payload: coreAnnotationsMutatePayloadSchema, result: coreAnnotationsMutateResultSchema },
   'compute:hash-file': { payload: coreHashFilePayloadSchema, result: coreHashFileResultSchema },
+  'compute:import-pdf': { payload: coreImportPdfPayloadSchema, result: coreImportPdfResultSchema },
   'compute:normalize-parser': { payload: coreNormalizeParserPayloadSchema, result: coreNormalizeParserResultSchema },
   'compute:rebuild-mappings': { payload: coreRebuildMappingsPayloadSchema, result: coreRebuildMappingsResultSchema }
 } as const

@@ -69,6 +69,7 @@ export interface ComputePort {
 /** Narrow compute calls used by the legacy task service during migration. */
 export interface TaskComputePort {
   hashFile(path: string): Promise<string>
+  importPdf(sourcePath: string, documentId: string): Promise<{ sha256: string; size: number }>
   normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<void>
   rebuildMappings(taskId: string, outputDir: string): Promise<void>
 }
