@@ -6,6 +6,47 @@ export default defineConfig({
   test: {
     environment: 'node',
     exclude: ['e2e/**', 'node_modules/**', 'dist/**', 'out/**'],
-    coverage: { reporter: ['text', 'html'] }
+    coverage: {
+      provider: 'v8',
+      all: true,
+      reporter: ['text', 'json-summary', 'html'],
+      reportsDirectory: './coverage',
+      include: [
+        'src/main/**/*.ts',
+        'src/main/**/*.tsx',
+        'src/core/**/*.ts',
+        'src/core/**/*.tsx',
+        'src/shared/**/*.ts',
+        'src/shared/**/*.tsx'
+      ],
+      exclude: [
+        'src/renderer/**',
+        'src/preload/**',
+        'src/utility/**',
+        'tests/**',
+        'e2e/**',
+        'out/**',
+        'dist/**',
+        'coverage/**',
+        'release/**',
+        '**/generated/**',
+        '**/*.d.ts',
+        // Electron owns process bootstrap and utility-process creation; these
+        // two adapters have no meaningful unit-test boundary.
+        'src/main/index.ts',
+        'src/main/electronUtilityFork.ts',
+        // These files are type-only contracts after TypeScript erasure.
+        'src/core/ports.ts',
+        'src/core/types.ts',
+        'src/shared/types.ts',
+        'src/main/taskRepositoryCompat.ts'
+      ],
+      thresholds: {
+        lines: 80,
+        statements: 80,
+        functions: 80,
+        branches: 75
+      }
+    }
   }
 })

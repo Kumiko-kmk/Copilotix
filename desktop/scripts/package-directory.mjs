@@ -24,7 +24,7 @@ const desktopDirectory = resolve(scriptDirectory, '..')
 const repositoryRoot = resolve(desktopDirectory, '..')
 
 /** Build and publish one verified Windows x64 directory release. */
-export async function publishRelease() {
+export async function publishRelease({ fromBuilt = false } = {}) {
   assertWindowsX64()
   assertDesktopDirectory(desktopDirectory, repositoryRoot)
   const packageJson = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
@@ -44,6 +44,7 @@ export async function publishRelease() {
   await mkdir(layout.stagingRoot)
   let swapped = false
   try {
+    if (fromBuilt) await assertBuiltBundles()
     await runElectronBuilder(layout.builderOutput)
 
     const unpackedDirectory = join(layout.builderOutput, 'win-unpacked')
@@ -143,6 +144,17 @@ export async function runElectronBuilder(outputDirectory) {
       directories: { output: resolvedOutput }
     }
   })
+}
+
+/** Verify that electron-vite and the utility bundle were built by an earlier step. */
+export async function assertBuiltBundles(outputDirectory = join(desktopDirectory, 'out')) {
+  const resolvedOutput = resolve(outputDirectory)
+  if (resolvedOutput !== resolve(desktopDirectory, 'out')) {
+    throw new Error('Refusing to package bundles outside desktop/out: ' + outputDirectory)
+  }
+  for (const relativePath of ['main/index.js', 'preload/index.js', 'renderer/index.html', 'utility/index.js']) {
+    await requireFile(join(resolvedOutput, relativePath))
+  }
 }
 
 function listAsarEntries(archivePath) {
@@ -296,7 +308,10 @@ function isMainModule() {
 
 if (isMainModule()) {
   try {
-    await publishRelease()
+    const args = process.argv.slice(2)
+    const fromBuilt = args.includes('--from-built')
+    if (args.some((arg) => arg !== '--from-built')) throw new Error('Unknown package-directory option: ' + args.join(' '))
+    await publishRelease({ fromBuilt })
   } catch (error) {
     process.stderr.write(`${readableError(error)}\n`)
     process.exitCode = 1

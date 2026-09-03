@@ -8,8 +8,11 @@
     "desktop:typecheck": "pnpm --dir desktop typecheck",
     "desktop:lint": "pnpm --dir desktop lint",
     "desktop:test": "pnpm --dir desktop test",
+    "desktop:test:coverage": "pnpm --dir desktop test:coverage",
     "desktop:test:e2e": "pnpm --dir desktop test:e2e",
     "desktop:build": "pnpm --dir desktop build",
-    "desktop:release": "pnpm --dir desktop package:directory"
+    "desktop:build:bundles": "pnpm --dir desktop build:bundles",
+    "desktop:release": "pnpm --dir desktop package:directory",
+    "desktop:release:from-built": "pnpm --dir desktop package:directory:from-built"
   }
 }

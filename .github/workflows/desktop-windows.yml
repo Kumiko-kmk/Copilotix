@@ -25,9 +25,11 @@ jobs:
           node-version: 24.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm desktop:lint
       - run: pnpm desktop:typecheck
-      - run: pnpm desktop:test
-      - run: pnpm desktop:release
+      - run: pnpm desktop:test:coverage
+      - run: pnpm desktop:build:bundles
+      - run: pnpm desktop:release:from-built
       - run: pnpm desktop:test:e2e
       - uses: actions/upload-artifact@v4
         with:

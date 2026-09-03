@@ -2,8 +2,8 @@ import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'n
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { buildBlockMappings } from '../src/main/blockMapping'
-import { V2Database } from '../src/main/v2Database'
-import { V2TaskRepositoryCompat } from '../src/main/v2TaskRepositoryCompat'
+import { V2Database } from '../src/utility/core/persistence/v2Database'
+import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { ArtifactKind } from '../src/core/types'
 import {
   alignMarkdownBlocks,
