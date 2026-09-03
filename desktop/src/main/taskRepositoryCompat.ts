@@ -1,4 +1,5 @@
 import type { ArtifactKind } from '@core/types'
+import type { TranslationBatchCommit } from '@core/types'
 import type {
   AppSettings,
   MinerUTask,
@@ -38,6 +39,7 @@ export interface TaskRepositoryCompat {
   deleteTask(id: string): void | Promise<void>
   upsertTranslationBlock(block: TranslationBlockRecord): void | Promise<void>
   listTranslationBlocks(taskId: string, jobId?: string): TranslationBlockRecord[] | Promise<TranslationBlockRecord[]>
+  commitTranslationBatch?(input: TranslationBatchCommit): void | Promise<void>
   updateTranslationRun(taskId: string, total: number, completed: number, failed: number): void | Promise<void>
   getCache(cacheKey: string): string | null | Promise<string | null>
   putCache(cacheKey: string, translated: string, provider: string, model: string): void | Promise<void>

@@ -42,7 +42,13 @@ export class TranslationJobRunner implements JobRunner {
     if (!markdown.trim()) throw new JobRunnerError('解析产物尚未生成', 'PARSED_ARTIFACT_MISSING', false)
     const mappings = await this.artifacts.loadMappings(task)
     const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher)
-    const checkpointBase = { ...input.job.checkpoint, stage: 'translating' }
+    const checkpointBase = {
+      ...input.job.checkpoint,
+      stage: 'translating',
+      failedBlockIds: Array.isArray(input.job.checkpoint.failedBlockIds)
+        ? input.job.checkpoint.failedBlockIds.filter((id): id is string => typeof id === 'string').slice(0, 64)
+        : []
+    }
     const reporter = new ProgressReporter(input.updateProgress, {
       onEmit: () => undefined
     })
@@ -55,11 +61,17 @@ export class TranslationJobRunner implements JobRunner {
       mappings,
       providers,
       repository: this.options.repository,
-      onProgress: async (completed, total, failed) => {
+      onProgress: async (completed, total, failed, failedBlockIds = []) => {
         if (input.signal.aborted) throw abortError()
         await reporter.report(
           total === 0 ? 100 : 45 + Math.round(((completed + failed) / total) * 55),
-          { ...checkpointBase, totalBlocks: total, completedBlocks: completed, failedBlocks: failed }
+          {
+            ...checkpointBase,
+            totalBlocks: total,
+            completedBlocks: completed,
+            failedBlocks: failed,
+            failedBlockIds: [...failedBlockIds].slice(0, 64)
+          }
         )
       }
     })
@@ -73,7 +85,8 @@ export class TranslationJobRunner implements JobRunner {
       stage: 'completed',
       totalBlocks: result.blocks.length,
       completedBlocks: completed,
-      failedBlockIds: result.failedBlockIds,
+      failedBlocks: result.failedBlockIds.length,
+      failedBlockIds: result.failedBlockIds.slice(0, 64),
       updatedAt: new Date().toISOString()
     }
     await this.artifacts.atomicWriteJson(join(task.outputDir, 'translation.checkpoint.json'), { taskId: task.id, ...checkpoint })

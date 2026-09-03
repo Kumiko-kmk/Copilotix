@@ -140,6 +140,20 @@ describe('SqliteJobRepository', () => {
     }
   })
 
+  it('requeues a partial job in place for manual resume', async () => {
+    const { database, repository } = await fixture()
+    try {
+      repository.enqueue({ id: 'translate-1', documentId: 'document-1', kind: 'translate', now })
+      repository.claimBatch({ now, leaseOwner: 'worker-a', leaseExpiresAt: expiry, kind: 'translate' })
+      repository.complete({ jobId: 'translate-1', leaseOwner: 'worker-a', status: 'partial', progress: 100, checkpoint: { completedBlocks: 2 }, now })
+      const retried = repository.manualRetry({ jobId: 'translate-1', now: later })
+      expect(retried).toMatchObject({ id: 'translate-1', status: 'queued', attempt: 2, checkpoint: { completedBlocks: 2 } })
+      expect(retried.errorCode).toBeNull()
+    } finally {
+      close(database)
+    }
+  })
+
   it('aborts active runners on shutdown without cancelling their durable lease', async () => {
     const job: Job = {
       id: 'parse-1', documentId: 'document-1', kind: 'parse', status: 'running', progress: 0,

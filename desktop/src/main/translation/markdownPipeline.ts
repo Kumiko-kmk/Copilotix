@@ -12,6 +12,11 @@ import type {
   TranslationBlockRecord,
   TranslationProviderId
 } from '@shared/types'
+import type {
+  TranslationBatchBlock,
+  TranslationCacheEntry,
+  TranslationCheckpointSummary
+} from '@core/types'
 import { alignMarkdownBlocks } from '@shared/markdownBlocks'
 import { FALLBACK_PROVIDER_ORDER } from '@shared/constants'
 import type { TaskRepositoryCompat } from '../taskRepositoryCompat'
@@ -33,7 +38,7 @@ interface PipelineOptions {
   mappings: BlockMapping[]
   providers: Map<TranslationProviderId, TranslationProvider>
   repository: TaskRepositoryCompat
-  onProgress(completed: number, total: number, failed: number): void | Promise<void>
+  onProgress(completed: number, total: number, failed: number, failedBlockIds?: readonly string[]): void | Promise<void>
 }
 
 export interface TranslationBlockResult extends TranslatedMarkdownBlock {
@@ -96,10 +101,10 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
   const queue = new PQueue({ concurrency: 3 })
   let completed = 0
   let failed = 0
+  const committer = new TranslationBatchCommitter(options)
 
-  await Promise.all(
-    workItems.map((workItem) =>
-      queue.add(async () => {
+  const workPromises = workItems.map((workItem) =>
+    queue.add(async () => {
         if (workItem.kind === 'reference') {
           const sourceHash = sha256(workItem.sourceBlock.markdown)
           const blockId = translationBlockId(options.task.id, workItem.sourceIndex, workItem.sourceBlock.mappingIds)
@@ -116,17 +121,22 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             error: null
           })
           results[workItem.sourceIndex] = result
-          await saveBlock(options.repository, options.task.id, result, options.jobId)
           completed += 1
-          await options.onProgress(completed, sourceBlocks.length, failed)
+          await committer.add([result], [], checkpointForResults(sourceBlocks.length, completed, failed, results))
+          await options.onProgress(completed, sourceBlocks.length, failed, failedBlockIdsForResults(results))
           return
         }
         if (workItem.kind === 'table') {
-          await translateTableWorkItem(workItem.unit, options, existing, results)
+          const tableResult = await translateTableWorkItem(workItem.unit, options, existing, results)
           const blockCount = workItem.unit.blocks.length
           if (workItem.unit.blocks.every((block) => results[block.sourceIndex]?.status === 'completed')) completed += blockCount
           else failed += blockCount
-          await options.onProgress(completed, sourceBlocks.length, failed)
+          await committer.add(
+            tableResult.blocks,
+            tableResult.cacheEntries,
+            checkpointForResults(sourceBlocks.length, completed, failed, results)
+          )
+          await options.onProgress(completed, sourceBlocks.length, failed, failedBlockIdsForResults(results))
           return
         }
 
@@ -149,7 +159,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             error: null
           })
           completed += 1
-          await options.onProgress(completed, sourceBlocks.length, failed)
+          await options.onProgress(completed, sourceBlocks.length, failed, failedBlockIdsForResults(results))
           return
         }
 
@@ -167,14 +177,15 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             status: 'completed',
             error: null
           })
-          await saveBlock(options.repository, options.task.id, results[sourceIndex]!, options.jobId)
           completed += 1
-          options.onProgress(completed, sourceBlocks.length, failed)
+          await committer.add([results[sourceIndex]!], [], checkpointForResults(sourceBlocks.length, completed, failed, results))
+          await options.onProgress(completed, sourceBlocks.length, failed, failedBlockIdsForResults(results))
           return
         }
 
+        let translated: Awaited<ReturnType<typeof translateBlock>>
         try {
-          const translated = await translateBlock(
+          translated = await translateBlock(
             sourceTree,
             sourceHash,
             options.task.translationProvider,
@@ -193,7 +204,6 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             status: 'completed',
             error: null
           })
-          await saveBlock(options.repository, options.task.id, results[sourceIndex]!, options.jobId)
           completed += 1
         } catch (error) {
           const message = readableError(error)
@@ -210,12 +220,31 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             error: message
           })
           failed += 1
-          await saveBlock(options.repository, options.task.id, results[sourceIndex]!, options.jobId)
+          await committer.add([results[sourceIndex]!], [], checkpointForResults(sourceBlocks.length, completed, failed, results))
+          await options.onProgress(completed, sourceBlocks.length, failed, failedBlockIdsForResults(results))
+          return
         }
-        await options.onProgress(completed, sourceBlocks.length, failed)
-      })
-    )
+        await committer.add(
+          [results[sourceIndex]!],
+          translated.cacheEntry ? [translated.cacheEntry] : [],
+          checkpointForResults(sourceBlocks.length, completed, failed, results)
+        )
+        await options.onProgress(completed, sourceBlocks.length, failed, failedBlockIdsForResults(results))
+    })
   )
+  const settled = await Promise.allSettled(workPromises)
+  await queue.onIdle()
+  const workerFailure = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected')
+  let flushError: unknown
+  try {
+    // All queue work is settled before this final flush, so no worker can append
+    // after the last batch has been submitted.
+    await committer.flush()
+  } catch (error) {
+    flushError = error
+  }
+  if (workerFailure) throw workerFailure.reason
+  if (flushError !== undefined) throw flushError
 
   const orderedBlocks = results.map((result, index) => {
     if (!result) throw new Error(`翻译区块 ${index} 未生成结果`)
@@ -233,15 +262,16 @@ async function translateTableWorkItem(
   options: PipelineOptions,
   existing: Map<string, TranslationBlockRecord>,
   results: Array<TranslationBlockResult | undefined>
-): Promise<void> {
+): Promise<{ blocks: TranslationBlockResult[]; cacheEntries: TranslationCacheEntry[] }> {
   const savedBlocks = unit.blocks.map((sourceBlock) => {
     const sourceHash = sha256(sourceBlock.markdown)
     const blockId = translationBlockId(options.task.id, sourceBlock.sourceIndex, sourceBlock.mappingIds)
     return { sourceBlock, sourceHash, blockId, saved: existing.get(blockId) }
   })
   if (savedBlocks.every(({ saved, sourceHash }) => saved?.status === 'completed' && saved.sourceHash === sourceHash && saved.translatedMarkdown)) {
+    const translatedBlocks: TranslationBlockResult[] = []
     for (const { sourceBlock, sourceHash, blockId, saved } of savedBlocks) {
-      results[sourceBlock.sourceIndex] = createBlockResult({
+      const result = createBlockResult({
         blockId,
         sourceIndex: sourceBlock.sourceIndex,
         sourceHash,
@@ -253,11 +283,14 @@ async function translateTableWorkItem(
         status: 'completed',
         error: null
       })
+      results[sourceBlock.sourceIndex] = result
+      translatedBlocks.push(result)
     }
-    return
+    return { blocks: translatedBlocks, cacheEntries: [] }
   }
 
   if (!unit.plan.hasTranslatableText) {
+    const translatedBlocks: TranslationBlockResult[] = []
     for (const { sourceBlock, sourceHash, blockId } of savedBlocks) {
       const result = createBlockResult({
         blockId,
@@ -272,9 +305,9 @@ async function translateTableWorkItem(
         error: null
       })
       results[sourceBlock.sourceIndex] = result
-      await saveBlock(options.repository, options.task.id, result, options.jobId)
+      translatedBlocks.push(result)
     }
-    return
+    return { blocks: translatedBlocks, cacheEntries: [] }
   }
 
   try {
@@ -284,6 +317,7 @@ async function translateTableWorkItem(
       options.providers,
       options.repository
     )
+    const translatedBlocks: TranslationBlockResult[] = []
     for (const { sourceBlock, sourceHash, blockId } of savedBlocks) {
       const markdown = translated.markdownBySourceIndex.get(sourceBlock.sourceIndex)
       if (markdown === undefined) throw new Error(`表格区块 ${sourceBlock.sourceIndex} 未生成译文`)
@@ -300,10 +334,15 @@ async function translateTableWorkItem(
         error: null
       })
       results[sourceBlock.sourceIndex] = result
-      await saveBlock(options.repository, options.task.id, result, options.jobId)
+      translatedBlocks.push(result)
+    }
+    return {
+      blocks: translatedBlocks,
+      cacheEntries: translated.cacheEntry ? [translated.cacheEntry] : []
     }
   } catch (error) {
     const message = readableError(error)
+    const failedBlocks: TranslationBlockResult[] = []
     for (const { sourceBlock, sourceHash, blockId } of savedBlocks) {
       const result = createBlockResult({
         blockId,
@@ -318,8 +357,9 @@ async function translateTableWorkItem(
         error: message
       })
       results[sourceBlock.sourceIndex] = result
-      await saveBlock(options.repository, options.task.id, result, options.jobId)
+      failedBlocks.push(result)
     }
+    return { blocks: failedBlocks, cacheEntries: [] }
   }
 }
 
@@ -328,7 +368,12 @@ async function translateTableUnit(
   preferred: TranslationProviderId,
   providers: Map<TranslationProviderId, TranslationProvider>,
   repository: TaskRepositoryCompat
-): Promise<{ markdownBySourceIndex: Map<number, string>; provider: TranslationProviderId; model: string }> {
+): Promise<{
+  markdownBySourceIndex: Map<number, string>
+  provider: TranslationProviderId
+  model: string
+  cacheEntry?: TranslationCacheEntry
+}> {
   const sourceHash = sha256(unit.blocks.map((block) => `${block.sourceIndex}\u0000${block.markdown}`).join('\u0000'))
   const order = [preferred, ...FALLBACK_PROVIDER_ORDER.filter((provider) => provider !== preferred)]
   const errors: string[] = []
@@ -360,16 +405,16 @@ async function translateTableUnit(
     try {
       const response = await withRetry(() => provider.translateTable(unit.plan.request))
       applyTableTranslation(unit.plan, response)
-      await repository.putCache(
-        cacheKey,
-        JSON.stringify({ version: TABLE_TRANSLATION_CACHE_VERSION, sourceHash, response }),
-        provider.id,
-        provider.model
-      )
       return {
         markdownBySourceIndex: new Map(unit.plan.blocks.map((block) => [block.sourceIndex, block.render()])),
         provider: provider.id,
-        model: provider.model
+        model: provider.model,
+        cacheEntry: {
+          cacheKey,
+          translated: JSON.stringify({ version: TABLE_TRANSLATION_CACHE_VERSION, sourceHash, response }),
+          provider: provider.id,
+          model: provider.model
+        }
       }
     } catch (error) {
       errors.push(`${providerId}: ${readableError(error)}`)
@@ -384,7 +429,12 @@ async function translateBlock(
   preferred: TranslationProviderId,
   providers: Map<TranslationProviderId, TranslationProvider>,
   repository: TaskRepositoryCompat
-): Promise<{ markdown: string; provider: TranslationProviderId; model: string }> {
+): Promise<{
+  markdown: string
+  provider: TranslationProviderId
+  model: string
+  cacheEntry?: TranslationCacheEntry
+}> {
   const order = [preferred, ...FALLBACK_PROVIDER_ORDER.filter((provider) => provider !== preferred)]
   const errors: string[] = []
   for (const providerId of order) {
@@ -398,8 +448,12 @@ async function translateBlock(
       const clone = structuredClone(sourceTree)
       await translateTextNodes(clone, provider)
       const markdown = stringifyTree(clone)
-      await repository.putCache(cacheKey, markdown, provider.id, provider.model)
-      return { markdown, provider: provider.id, model: provider.model }
+      return {
+        markdown,
+        provider: provider.id,
+        model: provider.model,
+        cacheEntry: { cacheKey, translated: markdown, provider: provider.id, model: provider.model }
+      }
     } catch (error) {
       errors.push(`${providerId}: ${readableError(error)}`)
     }
@@ -566,9 +620,121 @@ function createBlockResult(result: TranslationBlockResult): TranslationBlockResu
   return { ...result, mappingIds: [...result.mappingIds] }
 }
 
-async function saveBlock(repository: TaskRepositoryCompat, taskId: string, block: TranslationBlockResult, jobId?: string): Promise<void> {
-  const record: TranslationBlockRecord = {
-    taskId,
+class TranslationBatchCommitter {
+  private static readonly MAX_BLOCKS = 32
+  private static readonly MAX_PAYLOAD_BYTES = 768 * 1024
+  /** Leave room for the RPC version, request id, operation, and response envelope. */
+  private static readonly ENVELOPE_RESERVE_BYTES = 4 * 1024
+  private static readonly MAX_SEND_BYTES = TranslationBatchCommitter.MAX_PAYLOAD_BYTES - TranslationBatchCommitter.ENVELOPE_RESERVE_BYTES
+  private blocks: TranslationBatchBlock[] = []
+  private cacheEntries: TranslationCacheEntry[] = []
+  private checkpointSnapshot: TranslationCheckpointSummary | undefined
+  private tail: Promise<void> = Promise.resolve()
+
+  constructor(private readonly options: PipelineOptions) {}
+
+  add(
+    blocks: TranslationBlockResult[],
+    cacheEntries: TranslationCacheEntry[] = [],
+    checkpoint?: TranslationCheckpointSummary
+  ): Promise<void> {
+    const snapshot = checkpoint ? cloneCheckpoint(checkpoint) : undefined
+    const operation = this.tail.then(() => this.addNow(blocks, cacheEntries, snapshot))
+    // Keep the serial chain usable after a rejected operation. The returned
+    // operation still rejects so the originating worker reports the failure.
+    this.tail = operation.catch(() => undefined)
+    return operation
+  }
+
+  flush(): Promise<void> {
+    const operation = this.tail.then(() => this.flushNow())
+    this.tail = operation.catch(() => undefined)
+    return operation
+  }
+
+  private async addNow(
+    blocks: TranslationBlockResult[],
+    cacheEntries: TranslationCacheEntry[],
+    checkpoint?: TranslationCheckpointSummary
+  ): Promise<void> {
+    const batchBlocks = blocks.map(toBatchBlock)
+    if (batchBlocks.length > TranslationBatchCommitter.MAX_BLOCKS || cacheEntries.length > TranslationBatchCommitter.MAX_BLOCKS) {
+      throw new Error('翻译批次超过 32 条限制')
+    }
+    const candidateBlocks = [...this.blocks, ...batchBlocks]
+    const candidateCacheEntries = [...this.cacheEntries, ...cacheEntries]
+    const candidateCheckpoint = checkpoint ?? this.checkpointSnapshot
+    if (this.hasBufferedEntries() &&
+      (candidateBlocks.length > TranslationBatchCommitter.MAX_BLOCKS ||
+        candidateCacheEntries.length > TranslationBatchCommitter.MAX_BLOCKS ||
+        estimateTranslationBatchBytes(this.options, candidateBlocks, candidateCacheEntries, candidateCheckpoint) > TranslationBatchCommitter.MAX_SEND_BYTES)) {
+      await this.flushNow()
+    }
+
+    const standaloneBytes = estimateTranslationBatchBytes(this.options, batchBlocks, cacheEntries, checkpoint)
+    if (standaloneBytes > TranslationBatchCommitter.MAX_SEND_BYTES) {
+      throw new Error('翻译批次 UTF-8 大小超过 768KiB（已预留 RPC envelope 空间）')
+    }
+    this.blocks.push(...batchBlocks)
+    this.cacheEntries.push(...cacheEntries)
+    if (checkpoint) this.checkpointSnapshot = checkpoint
+    const bufferedBytes = estimateTranslationBatchBytes(this.options, this.blocks, this.cacheEntries, this.checkpointSnapshot)
+    if (this.blocks.length >= TranslationBatchCommitter.MAX_BLOCKS ||
+      this.cacheEntries.length >= TranslationBatchCommitter.MAX_BLOCKS ||
+      bufferedBytes >= TranslationBatchCommitter.MAX_SEND_BYTES) {
+      await this.flushNow()
+    }
+  }
+
+  private async flushNow(): Promise<void> {
+    if (!this.hasBufferedEntries()) return
+    const blocks = this.blocks
+    const cacheEntries = this.cacheEntries
+    const checkpoint = this.checkpointSnapshot
+
+    if (this.options.jobId && this.options.repository.commitTranslationBatch) {
+      await this.options.repository.commitTranslationBatch({
+        taskId: this.options.task.id,
+        jobId: this.options.jobId,
+        blocks,
+        cacheEntries,
+        ...(checkpoint ? { checkpoint } : {})
+      })
+    } else {
+      // Legacy standalone callers do not have the durable batch RPC; keep them
+      // compatible while durable runners always take the single-transaction path.
+      for (const block of blocks) {
+        await this.options.repository.upsertTranslationBlock({
+          taskId: this.options.task.id,
+          ...(this.options.jobId ? { jobId: this.options.jobId } : {}),
+          blockId: block.blockId,
+          sourceHash: block.sourceHash,
+          sourceMarkdown: block.sourceMarkdown,
+          translatedMarkdown: block.status === 'completed' ? block.translatedMarkdown : null,
+          provider: block.provider,
+          model: block.model,
+          status: block.status,
+          error: block.error
+        })
+      }
+      for (const entry of cacheEntries) {
+        await this.options.repository.putCache(entry.cacheKey, entry.translated, entry.provider, entry.model)
+      }
+    }
+    // Clear only after the complete batch has been accepted. On rejection the
+    // arrays remain intact, allowing a later final flush to retry explicitly.
+    this.blocks = []
+    this.cacheEntries = []
+    this.checkpointSnapshot = undefined
+  }
+
+  private hasBufferedEntries(): boolean {
+    return this.blocks.length > 0 || this.cacheEntries.length > 0
+  }
+}
+
+function toBatchBlock(block: TranslationBlockResult): TranslationBatchBlock {
+  return {
     blockId: block.blockId,
     sourceHash: block.sourceHash,
     sourceMarkdown: block.sourceMarkdown,
@@ -578,8 +744,51 @@ async function saveBlock(repository: TaskRepositoryCompat, taskId: string, block
     status: block.status,
     error: block.error
   }
-  if (jobId !== undefined) record.jobId = jobId
-  await repository.upsertTranslationBlock(record)
+}
+
+function estimateTranslationBatchBytes(
+  options: PipelineOptions,
+  blocks: TranslationBatchBlock[],
+  cacheEntries: TranslationCacheEntry[],
+  checkpoint?: TranslationCheckpointSummary
+): number {
+  const payload = {
+    taskId: options.task.id,
+    ...(options.jobId ? { jobId: options.jobId } : {}),
+    blocks,
+    cacheEntries,
+    ...(checkpoint ? { checkpoint } : {})
+  }
+  return utf8JsonByteLength(JSON.stringify(payload))
+}
+
+function utf8JsonByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength
+}
+
+function failedBlockIdsForResults(results: Array<TranslationBlockResult | undefined>): string[] {
+  return results
+    .filter((result): result is TranslationBlockResult => result?.status === 'failed')
+    .map((result) => result.blockId)
+    .slice(0, 64)
+}
+
+function checkpointForResults(
+  totalBlocks: number,
+  completedBlocks: number,
+  failedBlocks: number,
+  results: Array<TranslationBlockResult | undefined>
+): TranslationCheckpointSummary {
+  return {
+    totalBlocks,
+    completedBlocks,
+    failedBlocks,
+    failedBlockIds: failedBlockIdsForResults(results)
+  }
+}
+
+function cloneCheckpoint(checkpoint: TranslationCheckpointSummary): TranslationCheckpointSummary {
+  return { ...checkpoint, failedBlockIds: [...checkpoint.failedBlockIds].slice(0, 64) }
 }
 
 function translationBlockId(taskId: string, sourceIndex: number, mappingIds: string[]): string {

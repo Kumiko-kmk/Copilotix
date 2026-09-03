@@ -21,7 +21,8 @@ import {
   coreJobRecoverExpiredPayloadSchema,
   coreJobEventsPayloadSchema,
   coreDocumentMetadataPayloadSchema,
-  coreImportPdfPayloadSchema
+  coreImportPdfPayloadSchema,
+  coreTranslationBatchCommitPayloadSchema
 } from '@shared/coreRpcSchemas'
 import type { MinerUTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
@@ -168,6 +169,10 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       requireRepository().upsertTranslationBlock((request.payload as { block: Parameters<V2TaskRepositoryCompat['upsertTranslationBlock']>[0] }).block)
       return { changed: true }
     },
+    'translation:batch-commit': (request) => {
+      requireRepository().commitTranslationBatch(coreTranslationBatchCommitPayloadSchema.parse(request.payload))
+      return { changed: true }
+    },
     'translation:blocks-list': (request) => {
       const payload = request.payload as { taskId: string; jobId?: string }
       return requireRepository().listTranslationBlocks(payload.taskId, payload.jobId)
@@ -214,7 +219,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
     'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
     'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:get-latest', 'artifacts:record-revision',
-    'translation:block-upsert', 'translation:blocks-list', 'translation:run-update',
+    'translation:block-upsert', 'translation:batch-commit', 'translation:blocks-list', 'translation:run-update',
     'translation:cache-get', 'translation:cache-put',
     'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
     'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings'

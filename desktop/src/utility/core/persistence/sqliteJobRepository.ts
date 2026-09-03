@@ -365,9 +365,9 @@ export class SqliteJobRepository implements JobRepositoryPort {
     const availableAt = validateTimestamp(input.availableAt ?? now, 'retry time')
     return this.database.transaction(() => {
       const current = this.requireJobUnsafe(jobId)
-      const retryableStatus = current.status === 'failed' || current.status === 'cancelled' ? current.status : undefined
+      const retryableStatus = current.status === 'partial' || current.status === 'failed' || current.status === 'cancelled' ? current.status : undefined
       const toState = retryableStatus ? JOB_MANUAL_RETRY_TRANSITIONS[retryableStatus] : null
-      if (!toState) throw new SqliteJobRepositoryError('JOB_RETRY_NOT_ALLOWED', 'Only failed or cancelled jobs can be retried manually')
+      if (!toState) throw new SqliteJobRepositoryError('JOB_RETRY_NOT_ALLOWED', 'Only partial, failed, or cancelled jobs can be retried manually')
       assertTransition(current.status, toState, true)
       this.updateTransition.run(
         'queued', current.progress, JSON.stringify(current.checkpoint), availableAt, null, null,
@@ -498,7 +498,7 @@ function fromEventRow(row: EventRow): JobEvent {
 function assertTransition(from: JobStatus | null, to: JobStatus, manual = false, recovery = false): void {
   if (from === to) return
   if (recovery && from === 'running' && to === 'queued') return
-  if (from === 'failed' || from === 'cancelled') {
+  if (from === 'partial' || from === 'failed' || from === 'cancelled') {
     if (manual && JOB_MANUAL_RETRY_TRANSITIONS[from] === to) return
   } else if (from === null && to === 'queued') {
     return

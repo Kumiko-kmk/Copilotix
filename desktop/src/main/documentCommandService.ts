@@ -170,7 +170,7 @@ export class DocumentCommandService {
     if (this.jobRepository) {
       const jobs = await this.jobRepository.list({ documentId: taskId })
       const candidates = jobs
-        .filter((job) => job.status === 'failed' || job.status === 'cancelled')
+        .filter((job) => job.status === 'partial' || job.status === 'failed' || job.status === 'cancelled')
         .sort(compareJobs)
       const job = candidates.at(-1)
       if (!job) throw new Error('任务当前不可重试')

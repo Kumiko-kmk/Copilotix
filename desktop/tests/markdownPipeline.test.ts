@@ -11,6 +11,7 @@ import { buildBlockMappings } from '@main/blockMapping'
 import { alignMarkdownBlocks, splitMarkdownBlocks } from '@shared/markdownBlocks'
 import { flattenSegments } from '@main/translation/tableTranslation'
 import type { TaskRepository } from '../src/utility/core/persistence/database'
+import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
 import type { BlockMapping, MinerUTask, TranslationBlockRecord } from '@shared/types'
 import type { TranslationProvider } from '@main/translation/providers'
 import type { TableTranslationRequest, TableTranslationResponse } from '@main/translation/tableTranslation'
@@ -437,6 +438,33 @@ describe('markdown translation pipeline', () => {
     const second = await translateMarkdown(options)
     expect(second.blocks.map((block) => block.mappingIds[0])).toEqual(['slow', 'failed', 'fast'])
     expect(calls.length).toBe(callsAfterFirstRun + 3)
+  })
+
+  it('settles all workers before the final flush after a batch commit rejection', async () => {
+    const durable = repository() as unknown as TaskRepositoryCompat
+    const committedBlockIds: string[] = []
+    let commitAttempts = 0
+    durable.commitTranslationBatch = async (input) => {
+      commitAttempts += 1
+      if (commitAttempts === 1) throw new Error('batch commit rejected')
+      committedBlockIds.push(...input.blocks.map((block) => block.blockId))
+    }
+    const markdown = Array.from({ length: 33 }, (_, index) => `Block ${index} text.`).join('\n\n')
+    const translatingProvider = provider('qwen', true, [])
+
+    await expect(translateMarkdown({
+      task: task(),
+      jobId: 'job-1',
+      markdown,
+      mappings: [],
+      providers: new Map([['qwen', translatingProvider]]),
+      repository: durable,
+      onProgress: () => undefined
+    })).rejects.toThrow('batch commit rejected')
+
+    expect(commitAttempts).toBeGreaterThan(1)
+    expect(committedBlockIds).toHaveLength(33)
+    expect(new Set(committedBlockIds).size).toBe(33)
   })
 
   const acceptanceRoot = process.env.MINERU_TRANSLATION_ACCEPTANCE_DIR

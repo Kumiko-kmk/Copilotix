@@ -181,6 +181,48 @@ describe('temporary v2 task repository compatibility projection', () => {
     }
   })
 
+  it('commits a bounded translation batch against its explicit translate job', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 45 })
+      const job = fixture.database.connection.prepare(
+        "SELECT id FROM jobs WHERE document_id=? AND kind='translate'"
+      ).get(fixture.task.id) as { id: string }
+      fixture.repository.commitTranslationBatch({
+        taskId: fixture.task.id,
+        jobId: job.id,
+        blocks: [{
+          blockId: 'batch-block-1',
+          sourceHash: 'batch-source-hash',
+          sourceMarkdown: 'Batch source',
+          translatedMarkdown: '批量译文',
+          provider: 'qwen',
+          model: 'fixture',
+          status: 'completed',
+          error: null
+        }],
+        cacheEntries: [{ cacheKey: 'batch-cache', translated: '批量译文', provider: 'qwen', model: 'fixture' }],
+        checkpoint: { totalBlocks: 1, completedBlocks: 1, failedBlocks: 0, failedBlockIds: [] }
+      })
+
+      expect(fixture.repository.listTranslationBlocks(fixture.task.id, job.id)).toEqual([
+        expect.objectContaining({ taskId: fixture.task.id, jobId: job.id, blockId: 'batch-block-1' })
+      ])
+      expect(fixture.database.connection.prepare('SELECT translated_markdown FROM translation_cache WHERE cache_key=?').get('batch-cache'))
+        .toEqual({ translated_markdown: '批量译文' })
+      const checkpoint = fixture.database.connection.prepare('SELECT checkpoint_json FROM jobs WHERE id=?').get(job.id) as { checkpoint_json: string }
+      expect(JSON.parse(checkpoint.checkpoint_json)).toMatchObject({ totalBlocks: 1, completedBlocks: 1, failedBlocks: 0 })
+      expect(() => fixture.repository.commitTranslationBatch({
+        taskId: fixture.task.id,
+        jobId: 'not-this-job',
+        blocks: [],
+        cacheEntries: []
+      })).toThrow('翻译作业尚未创建')
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
   it('rejects source and derived artifact paths that escape the document root', async () => {
     const fixture = await createFixture()
     try {

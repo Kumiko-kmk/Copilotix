@@ -1,4 +1,5 @@
 import type { ArtifactKind } from '@core/types'
+import type { TranslationBatchCommit } from '@core/types'
 import type {
   AppSettings,
   MinerUTask,
@@ -88,6 +89,10 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
 
   async upsertTranslationBlock(block: TranslationBlockRecord): Promise<void> {
     await this.supervisor.request('translation:block-upsert', { block })
+  }
+
+  async commitTranslationBatch(input: TranslationBatchCommit): Promise<void> {
+    await this.supervisor.request('translation:batch-commit', input)
   }
 
   async listTranslationBlocks(taskId: string, jobId?: string): Promise<TranslationBlockRecord[]> {

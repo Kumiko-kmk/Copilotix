@@ -89,10 +89,8 @@ class OpenAiCompatibleProvider extends QueuedProvider {
       signal: AbortSignal.timeout(90_000)
     })
     if (!response.ok) throw await toHttpError(response, `${this.id} 翻译失败`)
-    const payload = (await response.json()) as any
-    const translated = payload?.choices?.[0]?.message?.content
-    if (typeof translated !== 'string' || !translated.trim()) throw new Error(`${this.id} 返回了空译文`)
-    return translated.trim()
+    const payload: unknown = await response.json()
+    return openAiResponseContent(payload, this.id)
   }
 
   protected async translateTableDirect(request: TableTranslationRequest): Promise<TableTranslationResponse> {
@@ -119,8 +117,8 @@ class OpenAiCompatibleProvider extends QueuedProvider {
       signal: AbortSignal.timeout(90_000)
     })
     if (!response.ok) throw await toHttpError(response, `${this.id} 表格翻译失败`)
-    const payload = (await response.json()) as any
-    const content = openAiContent(payload?.choices?.[0]?.message?.content)
+    const payload: unknown = await response.json()
+    const content = openAiResponseContent(payload, this.id)
     return parseTableTranslationResponse(content, request)
   }
 }
@@ -172,10 +170,8 @@ class BingProvider extends QueuedProvider {
       if (response.status === 401 || response.status === 403) this.session = null
       throw await toHttpError(response, 'Bing 翻译接口暂不可用')
     }
-    const payload = (await response.json()) as any
-    const translated = payload?.[0]?.translations?.[0]?.text
-    if (typeof translated !== 'string') throw new Error('Bing 返回了无法识别的结果')
-    return translated
+    const payload: unknown = await response.json()
+    return bingResponseText(payload)
   }
 
   private async getSession(): Promise<NonNullable<BingProvider['session']>> {
@@ -246,8 +242,9 @@ class TransmartProvider extends QueuedProvider {
       signal: AbortSignal.timeout(45_000)
     })
     if (!response.ok) throw await toHttpError(response, 'TranSmart 翻译接口暂不可用')
-    const payload = (await response.json()) as any
-    const translated = payload?.auto_translation ?? payload?.target?.text_list
+    const payload: unknown = await response.json()
+    const root = asRecord(payload)
+    const translated = root?.auto_translation ?? asRecord(root?.target)?.text_list
     if (!Array.isArray(translated)) throw new Error('TranSmart 返回了无法识别的结果')
     if (translated.length !== texts.length) {
       throw new Error(`TranSmart 批量响应数量不匹配：预期 ${texts.length}，实际 ${translated.length}`)
@@ -262,14 +259,45 @@ class TransmartProvider extends QueuedProvider {
 }
 
 function openAiContent(value: unknown): string {
-  if (typeof value === 'string') return value
+  if (typeof value === 'string' && value.trim()) return value.trim()
   if (Array.isArray(value)) {
-    const text = value
-      .map((part) => (part && typeof part === 'object' && typeof (part as any).text === 'string' ? (part as any).text : ''))
-      .join('')
-    if (text) return text
+    const parts = value.map((part) => {
+      const record = asRecord(part)
+      return typeof record?.text === 'string' ? record.text : null
+    })
+    if (parts.every((part): part is string => part !== null)) {
+      const text = parts.join('').trim()
+      if (text) return text
+    }
   }
   throw new Error('OpenAI 兼容接口返回了无法识别的内容')
+}
+
+function openAiResponseContent(payload: unknown, providerId: string): string {
+  const root = asRecord(payload)
+  const choices = root?.choices
+  const firstChoice = Array.isArray(choices) ? asRecord(choices[0]) : null
+  const message = asRecord(firstChoice?.message)
+  try {
+    return openAiContent(message?.content)
+  } catch {
+    throw new Error(`${providerId} 返回了无法识别的译文`)
+  }
+}
+
+function bingResponseText(payload: unknown): string {
+  const first = Array.isArray(payload) ? asRecord(payload[0]) : null
+  const translations = first?.translations
+  const firstTranslation = Array.isArray(translations) ? asRecord(translations[0]) : null
+  const text = firstTranslation?.text
+  if (typeof text !== 'string' || !text.trim()) throw new Error('Bing 返回了无法识别的结果')
+  return text.trim()
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
 }
 
 export function createTranslationProviders(

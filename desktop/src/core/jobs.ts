@@ -13,7 +13,8 @@ export const JOB_STATUS_TRANSITIONS: Readonly<Record<JobStatus, readonly JobStat
   cancelled: []
 })
 
-export const JOB_MANUAL_RETRY_TRANSITIONS: Readonly<Record<'failed' | 'cancelled', 'queued'>> = Object.freeze({
+export const JOB_MANUAL_RETRY_TRANSITIONS: Readonly<Record<'partial' | 'failed' | 'cancelled', 'queued'>> = Object.freeze({
+  partial: 'queued',
   failed: 'queued',
   cancelled: 'queued'
 })
@@ -128,7 +129,7 @@ export function canTransition(fromState: JobStatus | null, toState: JobStatus, m
   if (fromState === toState) return true
   if (recovery && fromState === 'running' && toState === 'queued') return true
   if (fromState === null) return toState === 'queued'
-  if (manual && (fromState === 'failed' || fromState === 'cancelled')) return toState === 'queued'
+  if (manual && (fromState === 'partial' || fromState === 'failed' || fromState === 'cancelled')) return toState === 'queued'
   return JOB_STATUS_TRANSITIONS[fromState].includes(toState)
 }
 

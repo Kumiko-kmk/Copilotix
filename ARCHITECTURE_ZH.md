@@ -98,7 +98,11 @@ Phase 3B2 已将 parse/translate 执行切换到 JobScheduler 与独立 runners�
 
 ### 4.5 Phase 4A 进度（流式导入与解析产物发布）
 
-Phase 4A 已将生产 PDF 导入改为 utility 单次流式 hash/copy，并为 MinerU ZIP 下载、解析 staging、翻译 Markdown/checkpoint/manifest 增加受限流式写入、fsync 与原子发布；normalize 产物在文件发布后才登记并支持同作业幂等恢复。AST 与批量翻译仍未扩展，后续接入与更大范围优化留待 Phase 4B。
+Phase 4A 已将生产 PDF 导入改为 utility 单次流式 hash/copy，并为 MinerU ZIP 下载、解析 staging、翻译 Markdown/checkpoint/manifest 增加受限流式写入、fsync 与原子发布；normalize 产物在文件发布后才登记并支持同作业幂等恢复。
+
+### 4.6 Phase 4B1 进度（批量翻译持久化）
+
+Phase 4B1 已增加显式作业绑定的翻译批量提交：blocks、cache 与受限 checkpoint 摘要在 utility 内单事务落库，pipeline 以不超过 32 条/约 768 KiB 的小缓冲提交；completed 仅在来源 hash 有效且译文非空时复用，partial 可在同一 translate job 上续跑。scheduler 租约/进度更新仍是独立事务边界；文件型 AST 迁移和更大范围批量调度留待 Phase 4B2，Phase 4B2 尚未开始。
 
 electron-vite 与独立 Vite 配置生成四份 bundle：
 

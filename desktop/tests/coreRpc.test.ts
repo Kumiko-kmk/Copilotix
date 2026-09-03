@@ -7,6 +7,7 @@ import {
   coreEventSchema,
   coreRequestSchema,
   coreResponseSchema,
+  coreTranslationBatchCommitPayloadSchema,
   deserializeCoreMessage,
   makeCoreEvent,
   serializeCoreMessage,
@@ -53,6 +54,50 @@ describe('core RPC schemas', () => {
     const throwing = { toJSON: () => { throw new Error('should not be exposed') } }
     expect(() => serializeCoreMessage({ version: 1, requestId, ok: true, value: throwing })).toThrow(CoreRpcProtocolError)
     expect(() => deserializeCoreMessage('{not json')).toThrow(CoreRpcProtocolError)
+  })
+
+  it('counts CJK batch payloads by UTF-8 bytes at the 768 KiB boundary', () => {
+    const block = (blockId: string) => ({
+      blockId,
+      sourceHash: 'source-hash',
+      sourceMarkdown: '界'.repeat(262_144),
+      translatedMarkdown: null,
+      provider: null,
+      model: null,
+      status: 'pending' as const,
+      error: null
+    })
+    const payload = {
+      taskId: '00000000-0000-4000-8000-000000000002',
+      jobId: '00000000-0000-4000-8000-000000000003',
+      blocks: [block('block-1'), block('block-2')],
+      cacheEntries: []
+    }
+    expect(JSON.stringify(payload).length).toBeLessThan(768 * 1024)
+    expect(new TextEncoder().encode(JSON.stringify(payload)).byteLength).toBeGreaterThan(768 * 1024)
+    expect(coreTranslationBatchCommitPayloadSchema.safeParse(payload).success).toBe(false)
+  })
+
+  it('counts CJK batch payloads by UTF-8 bytes at the 768 KiB boundary', () => {
+    const block = (blockId: string) => ({
+      blockId,
+      sourceHash: 'source-hash',
+      sourceMarkdown: '界'.repeat(262_144),
+      translatedMarkdown: null,
+      provider: null,
+      model: null,
+      status: 'pending' as const,
+      error: null
+    })
+    const payload = {
+      taskId: '00000000-0000-4000-8000-000000000002',
+      jobId: '00000000-0000-4000-8000-000000000003',
+      blocks: [block('block-1'), block('block-2')],
+      cacheEntries: []
+    }
+    expect(JSON.stringify(payload).length).toBeLessThan(768 * 1024)
+    expect(new TextEncoder().encode(JSON.stringify(payload)).byteLength).toBeGreaterThan(768 * 1024)
+    expect(coreTranslationBatchCommitPayloadSchema.safeParse(payload).success).toBe(false)
   })
 
   it('constructs only valid event payloads', () => {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
-import type { ArtifactKind } from '@core/types'
+import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
 import type { PathPolicyPort } from './pathPolicy'
 import type {
   AppSettings,
@@ -87,10 +88,48 @@ export class CompatDomainError extends Error {
 /** Temporary phase-2 compatibility adapter; remove when services use core ports directly in phase 3. */
 /** Utility-owned implementation. Main talks to this class only through RPC. */
 export class V2TaskRepositoryCompat {
+  private readonly translationJobById: StatementSync
+  private readonly translationBlockUpsert: StatementSync
+  private readonly translationCacheUpsert: StatementSync
+  private readonly translationCheckpointUpdate: StatementSync
+  private readonly translationBlocksByJob: StatementSync
+
   constructor(
     private readonly database: V2Database,
     private readonly pathPolicy: PathPolicyPort = new PathPolicy()
-  ) {}
+  ) {
+    this.translationJobById = database.connection.prepare(
+      "SELECT * FROM jobs WHERE id=? AND document_id=? AND kind='translate'"
+    )
+    this.translationBlockUpsert = database.connection.prepare(`
+      INSERT INTO translation_blocks(
+        job_id,block_id,source_hash,source_markdown,translated_markdown,provider,model,status,error
+      ) VALUES(?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(job_id,block_id) DO UPDATE SET
+        source_hash=excluded.source_hash,
+        source_markdown=excluded.source_markdown,
+        translated_markdown=excluded.translated_markdown,
+        provider=excluded.provider,
+        model=excluded.model,
+        status=excluded.status,
+        error=excluded.error
+    `)
+    this.translationCacheUpsert = database.connection.prepare(`
+      INSERT INTO translation_cache(cache_key,translated_markdown,provider,model,created_at)
+      VALUES(?,?,?,?,?)
+      ON CONFLICT(cache_key) DO UPDATE SET translated_markdown=excluded.translated_markdown,
+        provider=excluded.provider,model=excluded.model,created_at=excluded.created_at
+    `)
+    this.translationCheckpointUpdate = database.connection.prepare(
+      'UPDATE jobs SET checkpoint_json=?, updated_at=? WHERE id=?'
+    )
+    this.translationBlocksByJob = database.connection.prepare(`
+      SELECT ? as taskId, job_id as jobId, block_id as blockId, source_hash as sourceHash,
+        source_markdown as sourceMarkdown, translated_markdown as translatedMarkdown,
+        provider, model, status, error
+      FROM translation_blocks WHERE job_id = ? ORDER BY rowid
+    `)
+  }
 
   close(): void {
     this.database.close()
@@ -324,25 +363,47 @@ export class V2TaskRepositoryCompat {
   }
 
   upsertTranslationBlock(block: TranslationBlockRecord): void {
+    if (block.jobId) {
+      this.commitTranslationBatch({
+        taskId: block.taskId,
+        jobId: block.jobId,
+        blocks: [toBatchBlock(block)],
+        cacheEntries: []
+      })
+      return
+    }
     this.database.transaction(() => {
       const job = block.jobId
         ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=? AND document_id=? AND kind=\'translate\'').get(block.jobId, block.taskId) as CompatJobRow | undefined
         : this.latestJob(block.taskId, 'translate')
       if (!job) throw new Error('翻译作业尚未创建')
-      this.database.connection.prepare(`
-        INSERT INTO translation_blocks(
-          job_id,block_id,source_hash,source_markdown,translated_markdown,provider,model,status,error
-        ) VALUES(?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(job_id,block_id) DO UPDATE SET
-          source_hash=excluded.source_hash,
-          source_markdown=excluded.source_markdown,
-          translated_markdown=excluded.translated_markdown,
-          provider=excluded.provider,
-          model=excluded.model,
-          status=excluded.status,
-          error=excluded.error
-      `).run(job.id, block.blockId, block.sourceHash, block.sourceMarkdown, block.translatedMarkdown,
-        block.provider, block.model, block.status, block.error)
+      this.upsertTranslationBlockUnsafe(job.id, block)
+    })
+  }
+
+  commitTranslationBatch(input: TranslationBatchCommit): void {
+    if (!input.taskId || !input.jobId || input.blocks.length > 32 || input.cacheEntries.length > 32) {
+      throw new Error('翻译批次参数无效')
+    }
+    this.database.transaction(() => {
+      const job = this.translationJobById.get(input.jobId, input.taskId) as CompatJobRow | undefined
+      if (!job) throw new Error('翻译作业尚未创建')
+      for (const block of input.blocks) this.upsertTranslationBlockUnsafe(job.id, block)
+      const committedAt = new Date().toISOString()
+      for (const entry of input.cacheEntries) {
+        this.translationCacheUpsert.run(entry.cacheKey, entry.translated, entry.provider, entry.model, committedAt)
+      }
+      if (input.checkpoint) {
+        const current = parseObject(job.checkpoint_json)
+        const checkpoint = {
+          ...current,
+          totalBlocks: input.checkpoint.totalBlocks,
+          completedBlocks: input.checkpoint.completedBlocks,
+          failedBlocks: input.checkpoint.failedBlocks,
+          failedBlockIds: input.checkpoint.failedBlockIds.slice(0, 64)
+        }
+        this.translationCheckpointUpdate.run(JSON.stringify(checkpoint), committedAt, job.id)
+      }
     })
   }
 
@@ -351,12 +412,7 @@ export class V2TaskRepositoryCompat {
       ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=? AND document_id=? AND kind=\'translate\'').get(jobId, taskId) as CompatJobRow | undefined
       : this.latestJob(taskId, 'translate')
     if (!job) return []
-    return this.database.connection.prepare(`
-      SELECT ? as taskId, block_id as blockId, source_hash as sourceHash,
-        source_markdown as sourceMarkdown, translated_markdown as translatedMarkdown,
-        provider, model, status, error
-      FROM translation_blocks WHERE job_id = ? ORDER BY rowid
-    `).all(taskId, job.id) as unknown as TranslationBlockRecord[]
+    return this.translationBlocksByJob.all(taskId, job.id) as unknown as TranslationBlockRecord[]
   }
 
   updateTranslationRun(taskId: string, total: number, completed: number, failed: number): void {
@@ -543,6 +599,11 @@ export class V2TaskRepositoryCompat {
         id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at
       ) VALUES(?,?,?,?,?,?,?,?,?)
     `).run(randomUUID(), input.taskId, job.id, input.kind, latest.revision + 1, relativePath, input.checksum, JSON.stringify(input.metadata ?? {}), new Date().toISOString())
+  }
+
+  private upsertTranslationBlockUnsafe(jobId: string, block: TranslationBatchBlock | TranslationBlockRecord): void {
+    this.translationBlockUpsert.run(jobId, block.blockId, block.sourceHash, block.sourceMarkdown, block.translatedMarkdown,
+      block.provider, block.model, block.status, block.error)
   }
 
   private insertTaskUnsafe(task: MinerUTask): void {
@@ -767,6 +828,19 @@ function checkpointForTask(task: MinerUTask): Record<string, unknown> {
     remoteBatchId: task.remoteBatchId,
     remoteDataId: task.remoteDataId,
     remoteResultUrl: task.remoteResultUrl
+  }
+}
+
+function toBatchBlock(block: TranslationBlockRecord): TranslationBatchBlock {
+  return {
+    blockId: block.blockId,
+    sourceHash: block.sourceHash,
+    sourceMarkdown: block.sourceMarkdown,
+    translatedMarkdown: block.translatedMarkdown,
+    provider: block.provider,
+    model: block.model,
+    status: block.status,
+    error: block.error
   }
 }
 

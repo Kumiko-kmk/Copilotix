@@ -148,6 +148,28 @@ const coreTranslationBlockSchema = z.object({
   status: z.enum(['pending', 'completed', 'failed']),
   error: z.string().max(32_768).refine(noNul).nullable()
 }).strict()
+const coreTranslationBatchBlockSchema = z.object({
+  blockId: coreIdSchema,
+  sourceHash: coreHashSchema,
+  sourceMarkdown: z.string().max(262_144).refine(noNul),
+  translatedMarkdown: z.string().max(262_144).refine(noNul).nullable(),
+  provider: translationProviderIdSchema.nullable(),
+  model: z.string().max(512).refine(noNul).nullable(),
+  status: z.enum(['pending', 'completed', 'failed']),
+  error: z.string().max(32_768).refine(noNul).nullable()
+}).strict()
+const coreTranslationCacheEntrySchema = z.object({
+  cacheKey: z.string().min(1).max(4_096).refine(noNul),
+  translated: z.string().max(262_144).refine(noNul),
+  provider: translationProviderIdSchema,
+  model: z.string().max(512).refine(noNul)
+}).strict()
+const coreTranslationCheckpointSummarySchema = z.object({
+  totalBlocks: z.number().int().min(0).max(100_000),
+  completedBlocks: z.number().int().min(0).max(100_000),
+  failedBlocks: z.number().int().min(0).max(100_000),
+  failedBlockIds: z.array(coreIdSchema).max(64)
+}).strict()
 const coreReaderAnnotationSchema = z.object({
   id: coreIdSchema,
   taskId: coreIdSchema,
@@ -173,7 +195,7 @@ const coreOperationNames = [
   'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
   'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
   'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:get-latest', 'artifacts:record-revision',
-  'translation:block-upsert', 'translation:blocks-list', 'translation:run-update',
+  'translation:block-upsert', 'translation:batch-commit', 'translation:blocks-list', 'translation:run-update',
   'translation:cache-get', 'translation:cache-put',
   'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
   'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings'
@@ -344,6 +366,13 @@ export const coreArtifactRecordPayloadSchema = z.object({
   jobId: coreIdSchema.optional()
 }).strict()
 export const coreTranslationBlockUpsertPayloadSchema = z.object({ block: coreTranslationBlockSchema }).strict()
+export const coreTranslationBatchCommitPayloadSchema = z.object({
+  taskId: z.string().uuid().refine(noNul),
+  jobId: z.string().uuid().refine(noNul),
+  blocks: z.array(coreTranslationBatchBlockSchema).max(32),
+  cacheEntries: z.array(coreTranslationCacheEntrySchema).max(32),
+  checkpoint: coreTranslationCheckpointSummarySchema.optional()
+}).strict().refine((value) => utf8ByteLength(JSON.stringify(value)) <= 768 * 1024, 'translation batch is too large')
 export const coreTranslationBlocksListPayloadSchema = z.object({ taskId: coreIdSchema, jobId: coreIdSchema.optional() }).strict()
 export const coreTranslationBlocksListResultSchema = z.array(coreTranslationBlockSchema).max(10_000)
 export const coreTranslationRunUpdatePayloadSchema = z.object({
@@ -416,6 +445,7 @@ export const coreOperationRegistry = {
   'artifacts:get-latest': { payload: coreArtifactLatestPayloadSchema, result: coreArtifactLatestResultSchema },
   'artifacts:record-revision': { payload: coreArtifactRecordPayloadSchema, result: coreMutationResultSchema },
   'translation:block-upsert': { payload: coreTranslationBlockUpsertPayloadSchema, result: coreMutationResultSchema },
+  'translation:batch-commit': { payload: coreTranslationBatchCommitPayloadSchema, result: coreMutationResultSchema },
   'translation:blocks-list': { payload: coreTranslationBlocksListPayloadSchema, result: coreTranslationBlocksListResultSchema },
   'translation:run-update': { payload: coreTranslationRunUpdatePayloadSchema, result: coreMutationResultSchema },
   'translation:cache-get': { payload: coreCacheGetPayloadSchema, result: coreCacheGetResultSchema },

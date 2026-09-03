@@ -85,6 +85,20 @@ describe('table provider transports', () => {
     await expect(provider.translateTable(tableRequest())).rejects.toThrow(/批量响应数量不匹配/)
   })
 
+  it('rejects malformed OpenAI content so the pipeline can use its fallback provider', async () => {
+    const keyVault: CredentialVault = {
+      ...vault,
+      get: async (account) => account === 'qwen-api-key' ? 'fixture-key' : null,
+      has: async (account) => account === 'qwen-api-key'
+    }
+    const fetcher = async (): Promise<Response> => new Response(JSON.stringify({
+      choices: [{ message: { content: { unexpected: true } } }]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    const provider = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+
+    await expect(provider.translate('hello')).rejects.toThrow(/无法识别/)
+  })
+
   it('uses short per-segment Bing requests and returns one atomic response', async () => {
     const translatedTexts: string[] = []
     let sessionRequests = 0
