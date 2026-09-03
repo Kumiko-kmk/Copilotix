@@ -84,7 +84,6 @@
       }
     ],
     "directories": {
-      "output": "../release/.staging",
       "buildResources": "resources"
     },
     "files": [

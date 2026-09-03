@@ -11,6 +11,15 @@ export const RELEASE_LIMITS = Object.freeze({
 
 const EXPECTED_LOCALES = Object.freeze(['zh-CN.pak'])
 const CANVAS_PATH_PATTERN = /(^|[\\/])@napi-rs[\\/]canvas(?:[-\\/]|$)/i
+const REQUIRED_ASAR_ENTRIES = Object.freeze([
+  'out/main/index.js',
+  'out/preload/index.js',
+  'out/renderer/index.html',
+  'package.json'
+])
+const REQUIRED_RUNTIME_ENTRY_PREFIXES = Object.freeze([
+  'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/'
+])
 
 export function assertSafeBuildOutputPath(desktopDirectory, targetDirectory) {
   const desktop = resolve(desktopDirectory)
@@ -44,6 +53,24 @@ export function assertLocales(entryNames) {
 export function assertNoCanvasPaths(paths) {
   const match = paths.find((path) => CANVAS_PATH_PATTERN.test(path))
   if (match) throw new Error(`Forbidden @napi-rs/canvas release content: ${match}`)
+}
+
+/** Verify the application entry points that make a directory build runnable. */
+export function assertRequiredPackagedContent({ asarEntries, runtimeFiles }) {
+  assertRequiredAsarEntries(asarEntries)
+  assertRequiredRuntimeEntries(runtimeFiles)
+}
+
+export function assertRequiredAsarEntries(entryNames, requiredEntries = REQUIRED_ASAR_ENTRIES) {
+  const entries = new Set([...entryNames].map(normalizeEntryName))
+  const missing = requiredEntries.filter((entry) => !entries.has(normalizeEntryName(entry)))
+  if (missing.length > 0) throw new Error(`Missing required app.asar entries: ${missing.join(', ')}`)
+}
+
+export function assertRequiredRuntimeEntries(fileNames, requiredPrefixes = REQUIRED_RUNTIME_ENTRY_PREFIXES) {
+  const entries = [...fileNames].map((entry) => normalizeEntryName(typeof entry === 'string' ? entry : entry.path))
+  const missing = requiredPrefixes.filter((prefix) => !entries.some((entry) => entry.startsWith(normalizeEntryName(prefix))))
+  if (missing.length > 0) throw new Error(`Missing required unpacked runtime dependencies: ${missing.join(', ')}`)
 }
 
 export async function auditRelease({ runtimeDirectory, zipPath, asarEntries = [] }) {
@@ -92,4 +119,8 @@ export function formatMiB(bytes) {
 
 function normalizePath(path) {
   return process.platform === 'win32' ? path.toLowerCase() : path
+}
+
+function normalizeEntryName(path) {
+  return String(path).replaceAll('\\', '/')
 }

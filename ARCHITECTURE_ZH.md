@@ -634,12 +634,12 @@ electron-builder 配置：
 - Electron locale 僅保留 zh-CN
 - 目標：dir
 - build 前精確清理 desktop/out，禁止累積舊哈希 bundle
-- `desktop/scripts/package-directory.mjs` 每次只重建根目錄 release
+- `desktop/scripts/package-directory.mjs` 先在根目錄同級唯一 `.release-next-{buildId}` staging 生成並驗證，再以唯一 `.release-previous-{buildId}` 做原子 swap；失敗保留 staging 並恢復既有 release
 - ZIP 生成後立即解壓驗證 MinerU.exe 與 resources/app.asar
 - 發布門禁：app.asar ≤ 40 MiB、運行目錄 ≤ 330 MiB、ZIP ≤ 140 MiB，且不得包含 @napi-rs/canvas
 - 暫無代碼簽名
 
-`desktop:build` 只生成開發 bundle。`desktop:release` 先精確清理 `release/` 再生成唯一運行目錄、ZIP、manifest 與 SHA-256；setup、portable 及 `desktop/dist*` 都不是受支持產物。更新時關閉應用並整體替換運行目錄，userData 與 Credential Manager 數據不受影響；這是當前 Windows 流程，macOS `.app`/簽名/公證尚未接入。
+`desktop:build` 只生成開發 bundle。`desktop:release` 僅在 `.release-next-{buildId}` 完成 EXE、ASAR、locale、依賴、體積、SHA-256、fuse read-back 與 packaged smoke 驗證後，才將現有 `release/` 原子改名為唯一 previous，再將 next 改名為 `release/`；任一步失敗不覆蓋既有 release，並保留 staging 供診斷。setup、portable 及 `desktop/dist*` 都不是受支持產物。更新時關閉應用並整體替換運行目錄，userData 與 Credential Manager 數據不受影響；這是當前 Windows 流程，macOS `.app`/簽名/公證尚未接入。
 
 ## 17. CI 與發布
 

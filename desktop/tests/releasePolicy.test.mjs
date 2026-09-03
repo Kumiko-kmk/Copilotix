@@ -4,6 +4,7 @@ import {
   RELEASE_LIMITS,
   assertLocales,
   assertNoCanvasPaths,
+  assertRequiredPackagedContent,
   assertReleaseMeasurements,
   assertSafeBuildOutputPath
 } from '../scripts/release-policy.mjs'
@@ -39,5 +40,16 @@ describe('release policy', () => {
     expect(() => assertNoCanvasPaths(['resources/app.asar', 'node_modules/@napi-rs/keyring/index.js'])).not.toThrow()
     expect(() => assertNoCanvasPaths(['node_modules/@napi-rs/canvas/index.js'])).toThrow(/canvas/)
     expect(() => assertNoCanvasPaths(['resources/app.asar.unpacked/node_modules/@napi-rs/canvas-win32-x64-msvc/skia.node'])).toThrow(/canvas/)
+  })
+
+  it('requires the application entry points and unpacked keyring dependency', () => {
+    expect(() => assertRequiredPackagedContent({
+      asarEntries: ['out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json'],
+      runtimeFiles: [{ path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js', size: 1 }]
+    })).not.toThrow()
+    expect(() => assertRequiredPackagedContent({
+      asarEntries: ['out/main/index.js'],
+      runtimeFiles: []
+    })).toThrow(/required app.asar entries/i)
   })
 })
