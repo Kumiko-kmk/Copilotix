@@ -21,12 +21,16 @@ describe('release policy', () => {
     expect(() => assertReleaseMeasurements(RELEASE_LIMITS)).not.toThrow()
   })
 
-  it.each([
-    ['appAsarBytes', 40],
-    ['runtimeBytes', 330],
-    ['zipBytes', 140]
-  ])('rejects an oversized %s measurement', (key, limitMiB) => {
-    const measurements = { ...RELEASE_LIMITS, [key]: (limitMiB * MEBIBYTE) + 1 }
+  it('accepts the measured Electron 44.1.1 Windows runtime and archive sizes', () => {
+    expect(() => assertReleaseMeasurements({
+      appAsarBytes: 29.22 * MEBIBYTE,
+      runtimeBytes: 349.88 * MEBIBYTE,
+      zipBytes: 148.78 * MEBIBYTE
+    })).not.toThrow()
+  })
+
+  it.each(['appAsarBytes', 'runtimeBytes', 'zipBytes'])('rejects an oversized %s measurement', (key) => {
+    const measurements = { ...RELEASE_LIMITS, [key]: RELEASE_LIMITS[key] + 1 }
     expect(() => assertReleaseMeasurements(measurements)).toThrow(key)
   })
 

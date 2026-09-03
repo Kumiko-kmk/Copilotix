@@ -5,8 +5,8 @@ export const MEBIBYTE = 1024 * 1024
 
 export const RELEASE_LIMITS = Object.freeze({
   appAsarBytes: 40 * MEBIBYTE,
-  runtimeBytes: 330 * MEBIBYTE,
-  zipBytes: 140 * MEBIBYTE
+  runtimeBytes: 360 * MEBIBYTE,
+  zipBytes: 155 * MEBIBYTE
 })
 
 const EXPECTED_LOCALES = Object.freeze(['zh-CN.pak'])

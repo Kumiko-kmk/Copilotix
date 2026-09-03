@@ -9,7 +9,7 @@ import { listPackage } from '@electron/asar'
 import { build, createTargets, Platform } from 'electron-builder'
 import extract from 'extract-zip'
 import { applyDesktopFuses } from './electron-fuses.mjs'
-import { auditRelease, assertRequiredPackagedContent, collectRelativeFiles, formatMiB } from './release-policy.mjs'
+import { auditRelease, assertRequiredPackagedContent, collectRelativeFiles, formatMiB, RELEASE_LIMITS } from './release-policy.mjs'
 import {
   assertReleaseLayout,
   createReleaseLayout,
@@ -97,9 +97,9 @@ export async function publishRelease({ fromBuilt = false } = {}) {
 
     process.stdout.write(`Release directory: ${join(layout.releaseRoot, releaseName)}\n`)
     process.stdout.write(`Release archive:   ${join(layout.releaseRoot, `${releaseName}.zip`)}\n`)
-    process.stdout.write(`app.asar size:     ${formatMiB(measurements.appAsarBytes)} MiB / 40.00 MiB\n`)
-    process.stdout.write(`Runtime size:      ${formatMiB(measurements.runtimeBytes)} MiB / 330.00 MiB\n`)
-    process.stdout.write(`ZIP size:          ${formatMiB(measurements.zipBytes)} MiB / 140.00 MiB\n`)
+    process.stdout.write(`app.asar size:     ${formatMiB(measurements.appAsarBytes)} MiB / ${formatMiB(RELEASE_LIMITS.appAsarBytes)} MiB\n`)
+    process.stdout.write(`Runtime size:      ${formatMiB(measurements.runtimeBytes)} MiB / ${formatMiB(RELEASE_LIMITS.runtimeBytes)} MiB\n`)
+    process.stdout.write(`ZIP size:          ${formatMiB(measurements.zipBytes)} MiB / ${formatMiB(RELEASE_LIMITS.zipBytes)} MiB\n`)
     process.stdout.write(`ZIP SHA-256:       ${hashes.zip}\n`)
     return Object.freeze({ releaseName, hashes, measurements })
   } catch (error) {
