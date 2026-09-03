@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { V2Database, V2_MIGRATIONS, checksumFor, type V2Migration } from '@main/v2Database'
+import { V2Database, V2_MIGRATIONS, checksumFor, type V2Migration } from '../src/utility/core/persistence/v2Database'
 
 const directories: string[] = []
 

@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { Readable } from 'node:stream'
 
-type AssetResolver = (taskId: string, assetPath: string) => string
+type AssetResolver = (taskId: string, assetPath: string) => string | Promise<string>
 
 const MIME_TYPES: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -31,7 +31,7 @@ export async function createAssetResponse(request: Request, resolveAsset: AssetR
 
   try {
     const url = new URL(request.url)
-    const filePath = resolveAsset(url.hostname, url.pathname)
+    const filePath = await resolveAsset(url.hostname, url.pathname)
     const fileStat = await stat(filePath)
     if (!fileStat.isFile()) return new Response('Not found', { status: 404, headers: corsHeaders })
 

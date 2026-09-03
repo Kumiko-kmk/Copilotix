@@ -19,9 +19,18 @@ export interface UtilityParentPortLike {
 
 export type CoreUtilityOperationHandler = (request: CoreRequest, signal: AbortSignal) => Promise<unknown> | unknown
 
+export class CoreUtilityOperationError extends Error {
+  constructor(readonly code: string, message: string, readonly retryable = false) {
+    super(message)
+    this.name = 'CoreUtilityOperationError'
+  }
+}
+
 export interface CoreUtilityRuntimeOptions {
   /** Explicit operation handlers are the extension point for later DB/compute work. */
   handlers?: Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
+  onDrain?: () => Promise<void> | void
+  onShutdown?: () => Promise<void> | void
   scheduleExit?: (callback: () => void) => void
   exit?: (code: number) => void
 }
@@ -80,16 +89,18 @@ export function createCoreUtilityRuntime(
   const runOperation = (request: CoreRequest, controller: AbortController, resolveDone: () => void): void => {
     void (async () => {
       try {
-        if (request.operation === 'ping') {
-          const handler = options.handlers?.ping
-          const value = handler
-            ? await handler(request, controller.signal)
-            : { pong: true }
-          if (controller.signal.aborted) sendError(request.requestId, 'CORE_CANCELLED', 'Core RPC request cancelled', false)
-          else post(makeCoreSuccessResponse(request.requestId, 'ping', value as { pong: true }))
-        }
-      } catch {
+        const handler = options.handlers?.[request.operation]
+        const value = handler
+          ? await handler(request, controller.signal)
+          : request.operation === 'ping'
+            ? { pong: true }
+            : undefined
         if (controller.signal.aborted) sendError(request.requestId, 'CORE_CANCELLED', 'Core RPC request cancelled', false)
+        else if (!handler && request.operation !== 'ping') sendError(request.requestId, 'CORE_PROTOCOL_ERROR', 'Core utility operation is unavailable', false)
+        else post(makeCoreSuccessResponse(request.requestId, request.operation, value as never))
+      } catch (error) {
+        if (controller.signal.aborted) sendError(request.requestId, 'CORE_CANCELLED', 'Core RPC request cancelled', false)
+        else if (error instanceof CoreUtilityOperationError) sendError(request.requestId, error.code, error.message, error.retryable)
         else sendError(request.requestId, 'CORE_UNAVAILABLE', 'Core utility operation failed', false)
       } finally {
         active.delete(request.requestId)
@@ -108,7 +119,8 @@ export function createCoreUtilityRuntime(
     }
     if (request.operation === 'drain') {
       draining = true
-      await waitForActive()
+      if (active.size > 0) await waitForActive()
+      try { await options.onDrain?.() } catch { /* lifecycle cleanup is best effort */ }
       post(makeCoreSuccessResponse(request.requestId, 'drain', { drained: true }))
       post(makeCoreEvent('drained', { drained: true }))
       return
@@ -116,7 +128,8 @@ export function createCoreUtilityRuntime(
     if (request.operation === 'shutdown') {
       draining = true
       shuttingDown = true
-      await waitForActive()
+      if (active.size > 0) await waitForActive()
+      try { await options.onShutdown?.() } catch { /* lifecycle cleanup is best effort */ }
       post(makeCoreSuccessResponse(request.requestId, 'shutdown', { shutdown: true }))
       post(makeCoreEvent('shutdown', { shutdown: true }))
       if (!shutdownScheduled) {

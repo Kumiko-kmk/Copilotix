@@ -1,0 +1,20 @@
+import { documentSummarySchema, type DocumentSummary } from '@shared/ipcSchemas'
+import type { MinerUTask } from '@shared/types'
+
+export function projectDocumentSummary(task: MinerUTask): DocumentSummary {
+  return documentSummarySchema.parse({
+    id: task.id,
+    originalName: task.originalName,
+    displayName: task.name,
+    sourceHash: task.sourceHash,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    workflow: {
+      status: task.status,
+      progress: task.progress,
+      activeJobKind: task.status === 'uploading' || task.status === 'parsing' ? 'parse' : task.status === 'translating' ? 'translate' : null,
+      error: task.error
+    },
+    processing: { parserModel: task.parserModel, translationProvider: task.translationProvider }
+  })
+}

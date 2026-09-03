@@ -10,7 +10,7 @@ export class SettingsService {
   ) {}
 
   async get(): Promise<AppSettings> {
-    const settings = this.repository.getSettings(this.defaultOutputRoot)
+    const settings = await this.repository.getSettings(this.defaultOutputRoot)
     const [hasParserToken, qwenHasApiKey, deepseekHasApiKey] = await Promise.all([
       this.vault.has('parser-token'),
       this.vault.has('qwen-api-key'),
@@ -35,7 +35,7 @@ export class SettingsService {
       clearDeepseekApiKey: _clearDeepseekApiKey,
       ...publicUpdate
     } = update
-    this.repository.saveSettings({ ...current, ...publicUpdate })
+    await this.repository.saveSettings({ ...current, ...publicUpdate })
     return this.get()
   }
 

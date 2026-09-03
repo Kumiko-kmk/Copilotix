@@ -84,6 +84,10 @@
 
 Phase 3A1 已建立 strict Zod Core RPC envelope、transport-agnostic client、具重啟/優雅關閉的 Electron utility supervisor，以及獨立 `desktop/src/utility` entry。RPC 目前只開放 `ping`、`cancel`、`drain`、`shutdown` 控制操作；資料庫與 compute operation registry 留待後續階段擴充。這一階段尚未完成 DB 隔離：`DatabaseSync` 仍由 main process 持有，沒有把既有資料庫或 migration 移入 utility process。
 
+### 4.2 Phase 3A2 进度（Persistence / Compute 隔离）
+
+Phase 3A2 已将 SQLite、迁移、兼容 repository 与文件 hash、解析结果归一化、block mapping 放入 utility；main 仅通过严格、异步 RPC proxy 访问，并在 utility 重启后重新初始化。RPC 不传 PDF、ZIP、完整 Markdown、HTML 或 Buffer，数据库操作在 utility 内串行化。Scheduler 尚未完成，任务队列仍由现有 TaskService 管理。
+
 electron-vite 与独立 Vite 配置生成四份 bundle：
 
     desktop/src/main       -> desktop/out/main

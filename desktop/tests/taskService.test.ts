@@ -5,13 +5,14 @@ import { PassThrough } from 'node:stream'
 import archiver from 'archiver'
 import extractZip from 'extract-zip'
 import { afterEach, describe, expect, it } from 'vitest'
-import { TaskRepository } from '@main/database'
+import { TaskRepository } from '../src/utility/core/persistence/database'
 import type { CredentialAccount, CredentialVault } from '@main/credentialVault'
 import type { BatchResult, BatchSubmission, MinerUClient } from '@main/parserClient'
 import { SettingsService } from '@main/settingsService'
 import { TaskService } from '@main/taskService'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
 import type { AppSettings, HealthResult, MinerUTask } from '@shared/types'
+import { fixtureTaskCompute } from './taskComputeFixture'
 
 const temporaryRoots: string[] = []
 
@@ -31,7 +32,7 @@ describe('TaskService official MinerU batches', () => {
     const vault = new MemoryVault({ 'parser-token': 'test-token' })
     const settings = new SettingsService(repository, vault, join(root, 'output'))
     const client = new PartiallyFailingClient()
-    const service = new TaskService(repository, settings, vault, client, async () => new Response())
+    const service = new TaskService(repository, settings, vault, client, async () => new Response(), fixtureTaskCompute)
 
     try {
       const created = await service.create({
@@ -91,7 +92,7 @@ describe('TaskService official MinerU batches', () => {
     repository.insertTasks([fixtureTask])
     const vault = new MemoryVault({})
     const settings = new SettingsService(repository, vault, join(root, 'output'))
-    const service = new TaskService(repository, settings, vault, new PartiallyFailingClient(), async () => new Response())
+    const service = new TaskService(repository, settings, vault, new PartiallyFailingClient(), async () => new Response(), fixtureTaskCompute)
 
     try {
       await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
@@ -208,7 +209,7 @@ describe('TaskService official MinerU batches', () => {
     }))
     const service = new TaskService(repository, settings, vault, client, async () => new Response(JSON.stringify({
       choices: [{ message: { content: '这是一个测试段落。' } }]
-    }), { status: 200 }))
+    }), { status: 200 }), fixtureTaskCompute)
 
     try {
       const processParsedTask = (service as unknown as {
@@ -291,7 +292,7 @@ describe('TaskService official MinerU batches', () => {
     }))
     const service = new TaskService(repository, settings, vault, client, async () => new Response(JSON.stringify({
       choices: [{ message: { content: '安全标题' } }]
-    }), { status: 200 }))
+    }), { status: 200 }), fixtureTaskCompute)
 
     try {
       const processParsedTask = (service as unknown as {

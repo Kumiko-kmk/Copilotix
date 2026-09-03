@@ -2,13 +2,14 @@ import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
-import { V2Database } from '@main/v2Database'
+import { V2Database } from '../src/utility/core/persistence/v2Database'
 import type { CredentialVault } from '@main/credentialVault'
-import { V2TaskRepositoryCompat } from '@main/v2TaskRepositoryCompat'
+import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import { SettingsService } from '@main/settingsService'
 import { TaskService } from '@main/taskService'
 import type { MinerUClient } from '@main/parserClient'
 import type { MinerUTask } from '@shared/types'
+import { fixtureTaskCompute } from './taskComputeFixture'
 
 const roots: string[] = []
 
@@ -32,11 +33,11 @@ describe('TaskService v2 path integration', () => {
     try {
       repository.insertTask(task(outputDir, sourcePath))
       const settings = new SettingsService(repository, vault, outputRoot)
-      const service = new TaskService(repository, settings, vault, unusedClient(), async () => new Response())
+      const service = new TaskService(repository, settings, vault, unusedClient(), async () => new Response(), fixtureTaskCompute)
 
-      expect(service.resolveAsset('document-1', 'original.pdf')).toBe(sourcePath)
-      expect(() => service.resolveAsset('document-1', '../outside.pdf')).toThrow()
-      expect(() => service.resolveAsset('document-1', `${outputDir}\0escape.pdf`)).toThrow(/NUL/)
+      await expect(service.resolveAsset('document-1', 'original.pdf')).resolves.toBe(sourcePath)
+      await expect(service.resolveAsset('document-1', '../outside.pdf')).rejects.toThrow()
+      await expect(service.resolveAsset('document-1', `${outputDir}\0escape.pdf`)).rejects.toThrow(/NUL/)
 
       await writeFile(join(outputDir, 'sentinel.txt'), 'delete me')
       await service.delete('document-1', true)
@@ -61,7 +62,7 @@ describe('TaskService v2 path integration', () => {
     try {
       repository.insertTask(task(outsideDir, sourcePath, 'outside-document'))
       const settings = new SettingsService(repository, vault, outputRoot)
-      const service = new TaskService(repository, settings, vault, unusedClient(), async () => new Response())
+      const service = new TaskService(repository, settings, vault, unusedClient(), async () => new Response(), fixtureTaskCompute)
 
       await expect(service.delete('outside-document', true)).rejects.toThrow()
       await expect(access(outsideDir)).resolves.toBeUndefined()

@@ -12,6 +12,7 @@ import type {
   CoreOperationPayload,
   CoreOperationResult
 } from '@shared/coreRpcSchemas'
+import { isAbsolute } from 'node:path'
 
 /** Minimal process surface used by the supervisor and by deterministic tests. */
 export interface UtilityProcessLike {
@@ -35,6 +36,12 @@ export type UtilityFork = (entryPath: string, args: string[], options: {
 
 export type UtilitySupervisorState = 'idle' | 'starting' | 'ready' | 'restarting' | 'draining' | 'stopped' | 'failed'
 
+/** Non-secret paths replayed after every utility restart. */
+export interface UtilityBootstrapConfig {
+  databasePath: string
+  outputRoot: string
+}
+
 export interface UtilitySupervisorOptions {
   entryPath: string
   /** Inject this in tests; main supplies the Electron utilityProcess.fork adapter. */
@@ -49,6 +56,7 @@ export interface UtilitySupervisorOptions {
   now?: () => number
   onError?: (code: CoreClientErrorCode) => void
   onStateChange?: (state: UtilitySupervisorState) => void
+  bootstrap?: UtilityBootstrapConfig
 }
 
 interface UtilityRecord {
@@ -81,6 +89,7 @@ export class UtilitySupervisor {
   private readonly now: () => number
   private readonly errorListener?: (code: CoreClientErrorCode) => void
   private readonly stateListener?: (state: UtilitySupervisorState) => void
+  private bootstrapConfig: UtilityBootstrapConfig | undefined
   private readonly eventListeners = new Set<(event: CoreEvent) => void>()
   private state: UtilitySupervisorState = 'idle'
   private record: UtilityRecord | undefined
@@ -106,6 +115,7 @@ export class UtilitySupervisor {
     this.now = options.now ?? Date.now
     this.errorListener = options.onError
     this.stateListener = options.onStateChange
+    if (options.bootstrap) this.bootstrapConfig = validateBootstrapConfig(options.bootstrap)
   }
 
   getState(): UtilitySupervisorState {
@@ -122,6 +132,10 @@ export class UtilitySupervisor {
 
   isStopped(): boolean {
     return this.state === 'stopped' || this.state === 'failed'
+  }
+
+  setBootstrapConfig(config: UtilityBootstrapConfig): void {
+    this.bootstrapConfig = validateBootstrapConfig(config)
   }
 
   async start(): Promise<void> {
@@ -232,11 +246,24 @@ export class UtilitySupervisor {
       return
     }
 
+    if (this.bootstrapConfig) {
+      try {
+        await record.client.request('database:init', this.bootstrapConfig, { timeoutMs: this.handshakeTimeoutMs })
+      } catch {
+        this.handleStartupFailure(record)
+        return
+      }
+    }
+
     if (this.record !== record || this.stopping || generation !== this.generation || record.failureHandled) {
       record.client.close()
       this.terminateRecord(record)
       return
     }
+    // Restart limits apply to a consecutive failure streak.  Once a new
+    // utility has completed handshake and bootstrap, a later crash gets the
+    // full bounded retry budget again.
+    this.restartAttempts = 0
     this.transition('ready')
     this.resolveStart?.()
     this.resolveStart = undefined
@@ -392,6 +419,16 @@ function removeChildListener(
 
 function positiveTimeout(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function validateBootstrapConfig(config: UtilityBootstrapConfig): UtilityBootstrapConfig {
+  const validatePath = (value: string): string => {
+    if (typeof value !== 'string' || value.length === 0 || value.length > 32_768 || value.includes('\0') || !isAbsolute(value)) {
+      throw new Error('Core utility bootstrap path is invalid')
+    }
+    return value
+  }
+  return Object.freeze({ databasePath: validatePath(config.databasePath), outputRoot: validatePath(config.outputRoot) })
 }
 
 function remainingTimeout(deadline: number, now: () => number): number {

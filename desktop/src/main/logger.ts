@@ -38,7 +38,7 @@ function sanitize(value: unknown): unknown {
 
 function sanitizeText(value: unknown): unknown {
   if (typeof value !== 'string') return value
-  return value.replace(/https?:\/\/[^\s"']+/g, (rawUrl) => {
+  const withoutSensitiveUrls = value.replace(/https?:\/\/[^\s"']+/g, (rawUrl) => {
     try {
       const url = new URL(rawUrl)
       return `${url.origin}${url.pathname}${url.search ? '?[REDACTED]' : ''}`
@@ -46,6 +46,11 @@ function sanitizeText(value: unknown): unknown {
       return '[REDACTED_URL]'
     }
   })
+  return withoutSensitiveUrls
+    .replace(/\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]+/giu, '[REDACTED]')
+    .replace(/\b(?:api[-_ ]?key|token|secret|password)\b\s*[:=]\s*[^\s,;]+/giu, '[REDACTED]')
+    .replace(/(?:[A-Za-z]:[\\/]|\\\\)[^\s"'<>]+/gu, '[path]')
+    .replace(/(^|[\s('"`])\/(?:[^\s/'"`]+\/)+[^\s)'"`,;]*/gu, '$1[path]')
 }
 
 function readableError(error: unknown): string {

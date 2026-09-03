@@ -13,8 +13,8 @@ import {
   Tray
 } from 'electron'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
-import { V2Database } from './v2Database'
-import { V2TaskRepositoryCompat } from './v2TaskRepositoryCompat'
+import { RpcTaskRepository } from './rpcTaskRepository'
+import { RpcTaskCompute } from './rpcTaskCompute'
 import { WindowsCredentialVault } from './credentialVault'
 import { SettingsService } from './settingsService'
 import { OfficialMinerUClient } from './parserClient'
@@ -79,20 +79,24 @@ async function bootstrap(): Promise<void> {
   await app.whenReady()
   utilitySupervisor = new UtilitySupervisor({
     entryPath: join(__dirname, '../utility/index.js'),
-    fork: forkUtilityProcess
+    fork: forkUtilityProcess,
+    bootstrap: {
+      databasePath: join(app.getPath('userData'), 'mineru-desktop-v2.sqlite3'),
+      outputRoot: join(app.getPath('documents'), 'MinerU')
+    }
   })
   await utilitySupervisor.start()
   const userData = app.getPath('userData')
   await mkdir(userData, { recursive: true })
-  repository = new V2TaskRepositoryCompat(new V2Database(join(userData, 'mineru-desktop-v2.sqlite3')))
+  repository = new RpcTaskRepository(utilitySupervisor)
   const vault = new WindowsCredentialVault()
   const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'MinerU'))
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
     net.fetch(input instanceof URL ? input.toString() : input, init)
   const parserClient = new OfficialMinerUClient(fetcher, new ElectronFileUploader())
   const logger = new JsonLineLogger(join(userData, 'mineru-desktop.log'))
-  const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger)
-  documentSummaries = new Map(tasks.list().map((task) => {
+  const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger, new RpcTaskCompute(utilitySupervisor))
+  documentSummaries = new Map((await tasks.list()).map((task) => {
     const summary = projectDocumentSummary(task)
     return [summary.id, summary] as const
   }))
@@ -118,8 +122,8 @@ async function bootstrap(): Promise<void> {
       documentRevision = computation.event.revision
     }
   })
-  tasks.on('notification', (taskId: string, status: 'completed' | 'partial' | 'failed') => {
-    const task = repository?.getTask(taskId)
+  tasks.on('notification', async (taskId: string, status: 'completed' | 'partial' | 'failed') => {
+    const task = await repository?.getTask(taskId)
     if (!task || !Notification.isSupported()) return
     const notification = new Notification({
       title: status === 'failed' ? 'MinerU 任务失败' : status === 'partial' ? 'MinerU 部分翻译完成' : 'MinerU 任务完成',
@@ -282,9 +286,11 @@ function registerIpc(
     const created = await tasks.create({ ...request.options, files: selected })
     return created.map(projectDocumentSummary)
   }, validationOptions)
-  registerValidatedHandler('documents:list', noRequestSchema, documentSummarySchema.array(), () => {
+  registerValidatedHandler('documents:list', noRequestSchema, documentSummarySchema.array(), async () => {
     if (documentSummaries.size === 0) {
-      const current = repository?.listDocumentSummaries?.() ?? tasks.list().map(projectDocumentSummary)
+      const current = repository?.listDocumentSummaries
+        ? await repository.listDocumentSummaries()
+        : (await tasks.list()).map(projectDocumentSummary)
       documentSummaries = new Map(current.map((summary) => [summary.id, summary] as const))
     }
     return [...documentSummaries.values()]
@@ -299,13 +305,13 @@ function registerIpc(
     return projectDocumentDetails(await tasks.getDocument(documentId))
   }, validationOptions)
   registerValidatedHandler('documents:open-output', documentIdRequestSchema, voidResponseSchema, async (_event, documentId) => {
-    const task = repository?.getTask(documentId)
+    const task = await repository?.getTask(documentId)
     if (!task) throw new Error('文档不存在')
     const result = await shell.openPath(task.outputDir)
     if (result) throw new Error(result)
   }, validationOptions)
   registerValidatedHandler('documents:save-as', saveDocumentAsRequestSchema, saveDocumentAsResultSchema, async (_event, request) => {
-    const task = repository?.getTask(request.documentId)
+    const task = await repository?.getTask(request.documentId)
     if (!task) throw new Error('文档不存在')
     const source =
       request.kind === 'original-markdown'
@@ -324,11 +330,11 @@ function registerIpc(
     else await tasks.createResultZip(task.id, result.filePath)
     return { saved: true }
   }, validationOptions)
-  registerValidatedHandler('reader-annotations:list', listReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, (_event, request) => {
+  registerValidatedHandler('reader-annotations:list', listReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, async (_event, request) => {
     if (!repository?.listDocumentAnnotations) throw new Error('数据库尚未初始化')
     return repository.listDocumentAnnotations(request)
   }, validationOptions)
-  registerValidatedHandler('reader-annotations:mutate', mutateReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, (_event, request) => {
+  registerValidatedHandler('reader-annotations:mutate', mutateReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, async (_event, request) => {
     if (!repository?.mutateDocumentAnnotations) throw new Error('数据库尚未初始化')
     return repository.mutateDocumentAnnotations(request)
   }, validationOptions)
@@ -347,7 +353,7 @@ app.on('window-all-closed', () => {
   // Keep the background queue alive in the tray on Windows.
 })
 
-app.on('quit', () => repository?.close())
+app.on('quit', () => { void repository?.close() })
 
 void bootstrap().catch((_error: unknown) => {
   // Keep startup diagnostics free of stack traces, local paths and credentials.

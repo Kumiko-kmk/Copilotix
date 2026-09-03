@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { join, relative } from 'node:path'
 import type { ArtifactKind } from '@core/types'
-import type { PathPolicyPort } from '@core/ports'
+import type { PathPolicyPort } from './pathPolicy'
 import type {
   AppSettings,
   MinerUTask,
@@ -19,7 +19,7 @@ import {
   type ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { ArtifactReference, TaskRepositoryCompat } from './taskRepositoryCompat'
+import type { ArtifactReference } from './taskRepositoryCompat'
 import { PathPolicy, resolveLexicalWithinRoot } from './pathPolicy'
 import { V2Database } from './v2Database'
 import { projectDocumentSummary } from './documentProjection'
@@ -72,7 +72,8 @@ export class CompatDomainError extends Error {
 }
 
 /** Temporary phase-2 compatibility adapter; remove when services use core ports directly in phase 3. */
-export class V2TaskRepositoryCompat implements TaskRepositoryCompat {
+/** Utility-owned implementation. Main talks to this class only through RPC. */
+export class V2TaskRepositoryCompat {
   constructor(
     private readonly database: V2Database,
     private readonly pathPolicy: PathPolicyPort = new PathPolicy()

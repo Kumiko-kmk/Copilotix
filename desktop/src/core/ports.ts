@@ -9,6 +9,7 @@ import type {
   JsonObject,
   TranslationBlock
 } from './types'
+import type { MinerUTask } from '@shared/types'
 
 export interface DocumentRepositoryPort {
   create(document: Document): void
@@ -75,6 +76,13 @@ export interface ArtifactStorePort {
 
 export interface ComputePort {
   run<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>
+}
+
+/** Narrow compute calls used by the legacy task service during migration. */
+export interface TaskComputePort {
+  hashFile(path: string): Promise<string>
+  normalizeParserOutput(task: MinerUTask, extractedDir: string): Promise<void>
+  rebuildMappings(taskId: string, outputDir: string): Promise<void>
 }
 
 export interface ClockPort {

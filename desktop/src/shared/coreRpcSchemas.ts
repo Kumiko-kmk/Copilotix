@@ -1,4 +1,15 @@
 import { z } from 'zod'
+import {
+  appSettingsSchema,
+  documentAnnotationViewSchema,
+  documentAnnotationKindSchema,
+  documentSummarySchema,
+  minerUTaskSchema,
+  mutateReaderAnnotationsRequestSchema,
+  readerAnnotationSnapshotSchema,
+  replaceReaderAnnotationsRequestSchema,
+  translationProviderIdSchema
+} from './ipcSchemas'
 
 /** The protocol is deliberately small and versioned before any data operation is added. */
 export const CORE_RPC_VERSION = 1 as const
@@ -63,7 +74,70 @@ function isRpcJsonValue(value: unknown, seen = new WeakSet<object>()): boolean {
 
 export const coreJsonValueSchema = z.custom<unknown>(isRpcJsonValue, 'RPC values must be JSON-safe')
 
-export const coreOperationSchema = z.enum(['ping', 'cancel', 'drain', 'shutdown'])
+const corePathSchema = z.string().min(1).max(32_768).refine(noNul, 'path cannot contain NUL')
+const coreIdSchema = z.string().min(1).max(512).refine(noNul, 'id cannot contain NUL')
+const coreHashSchema = z.string().min(1).max(512).refine(noNul, 'hash cannot contain NUL')
+export const coreTaskPatchSchema = z.object({
+  originalName: z.string().min(1).max(32_768).refine(noNul).optional(),
+  title: z.string().max(32_768).refine(noNul).nullable().optional(),
+  name: z.string().min(1).max(32_768).refine(noNul).optional(),
+  sourcePath: corePathSchema.optional(),
+  sourceHash: coreHashSchema.optional(),
+  outputDir: corePathSchema.optional(),
+  status: z.enum(['uploading', 'parsing', 'translating', 'partial', 'completed', 'failed']).optional(),
+  progress: z.number().int().min(0).max(100).optional(),
+  parserModel: z.enum(['vlm', 'pipeline']).optional(),
+  translationProvider: translationProviderIdSchema.optional(),
+  remoteBatchId: z.string().max(4_096).refine(noNul).nullable().optional(),
+  remoteDataId: z.string().max(4_096).refine(noNul).nullable().optional(),
+  remoteResultUrl: z.string().max(8_192).refine(noNul).nullable().optional(),
+  error: z.string().max(32_768).refine(noNul).nullable().optional()
+}).strict()
+const coreMetadataSchema = z.record(z.string().max(512).refine(noNul), coreJsonValueSchema).refine((value) => Object.keys(value).length <= 128, 'metadata too large')
+const coreArtifactKindSchema = z.enum([
+  'source_pdf', 'parsed_markdown', 'layout', 'block_mappings', 'content_list', 'translated_markdown', 'manifest'
+])
+const coreTranslationBlockSchema = z.object({
+  taskId: coreIdSchema,
+  blockId: coreIdSchema,
+  sourceHash: coreHashSchema,
+  sourceMarkdown: z.string().max(262_144).refine(noNul),
+  translatedMarkdown: z.string().max(262_144).refine(noNul).nullable(),
+  provider: translationProviderIdSchema.nullable(),
+  model: z.string().max(512).refine(noNul).nullable(),
+  status: z.enum(['pending', 'completed', 'failed']),
+  error: z.string().max(32_768).refine(noNul).nullable()
+}).strict()
+const coreReaderAnnotationSchema = z.object({
+  id: coreIdSchema,
+  taskId: coreIdSchema,
+  view: documentAnnotationViewSchema,
+  kind: documentAnnotationKindSchema,
+  color: z.enum(['yellow', 'green', 'blue', 'pink', 'purple']).nullable(),
+  blockKey: z.string().min(1).max(4_096).refine(noNul),
+  startOffset: z.number().int().min(0),
+  endOffset: z.number().int().min(1),
+  quote: z.string().min(1).max(262_144).refine(noNul),
+  prefix: z.string().max(256).refine(noNul),
+  suffix: z.string().max(256).refine(noNul),
+  createdAt: z.string().min(1).max(128).refine(noNul),
+  updatedAt: z.string().min(1).max(128).refine(noNul)
+}).strict()
+const coreReaderAnnotationsSchema = z.array(coreReaderAnnotationSchema).max(10_000)
+
+const coreOperationNames = [
+  'ping', 'cancel', 'drain', 'shutdown',
+  'database:init', 'database:flush', 'database:close',
+  'settings:get', 'settings:save',
+  'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
+  'documents:list', 'documents:get-summary', 'artifacts:get-latest', 'artifacts:record-revision',
+  'translation:block-upsert', 'translation:blocks-list', 'translation:run-update',
+  'translation:cache-get', 'translation:cache-put',
+  'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
+  'compute:hash-file', 'compute:normalize-parser', 'compute:rebuild-mappings'
+] as const
+
+export const coreOperationSchema = z.enum(coreOperationNames)
 export type CoreOperation = z.infer<typeof coreOperationSchema>
 
 export const corePingPayloadSchema = emptyPayloadSchema
@@ -75,6 +149,76 @@ export const coreDrainResultSchema = z.object({ drained: z.literal(true) }).stri
 export const coreShutdownPayloadSchema = emptyPayloadSchema
 export const coreShutdownResultSchema = z.object({ shutdown: z.literal(true) }).strict()
 
+export const coreDatabaseInitPayloadSchema = z.object({ databasePath: corePathSchema, outputRoot: corePathSchema }).strict()
+export const coreDatabaseInitResultSchema = z.object({ initialized: z.literal(true) }).strict()
+export const coreDatabaseFlushPayloadSchema = emptyPayloadSchema
+export const coreDatabaseFlushResultSchema = z.object({ flushed: z.literal(true) }).strict()
+export const coreDatabaseClosePayloadSchema = emptyPayloadSchema
+export const coreDatabaseCloseResultSchema = z.object({ closed: z.literal(true) }).strict()
+export const coreSettingsGetPayloadSchema = z.object({ outputRoot: corePathSchema }).strict()
+export const coreSettingsGetResultSchema = appSettingsSchema
+export const coreSettingsSavePayloadSchema = z.object({ settings: appSettingsSchema }).strict()
+export const coreSettingsSaveResultSchema = appSettingsSchema
+export const coreTasksListPayloadSchema = emptyPayloadSchema
+export const coreTasksListResultSchema = z.array(minerUTaskSchema).max(10_000)
+export const coreTaskIdPayloadSchema = z.object({ id: coreIdSchema }).strict()
+export const coreTaskResultSchema = minerUTaskSchema.nullable()
+export const coreFindTaskByHashPayloadSchema = z.object({ hash: coreHashSchema }).strict()
+export const coreInsertTaskPayloadSchema = z.object({ task: minerUTaskSchema }).strict()
+export const coreInsertTasksPayloadSchema = z.object({ tasks: z.array(minerUTaskSchema).max(100) }).strict()
+export const coreMutationResultSchema = z.object({ changed: z.literal(true) }).strict()
+export const coreUpdateTaskPayloadSchema = z.object({ id: coreIdSchema, patch: coreTaskPatchSchema }).strict()
+export const coreDocumentsListResultSchema = z.array(documentSummarySchema).max(10_000)
+export const coreArtifactLatestPayloadSchema = z.object({ documentId: coreIdSchema, kind: coreArtifactKindSchema }).strict()
+export const coreArtifactReferenceSchema = z.object({
+  id: coreIdSchema,
+  documentId: coreIdSchema,
+  kind: coreArtifactKindSchema,
+  revision: z.number().int().min(1),
+  relativePath: corePathSchema,
+  contentHash: coreHashSchema,
+  metadata: coreMetadataSchema
+}).strict()
+export const coreArtifactLatestResultSchema = coreArtifactReferenceSchema.nullable()
+export const coreArtifactRecordPayloadSchema = z.object({
+  taskId: coreIdSchema,
+  kind: coreArtifactKindSchema,
+  path: corePathSchema,
+  checksum: coreHashSchema,
+  metadata: coreMetadataSchema.optional()
+}).strict()
+export const coreTranslationBlockUpsertPayloadSchema = z.object({ block: coreTranslationBlockSchema }).strict()
+export const coreTranslationBlocksListPayloadSchema = z.object({ taskId: coreIdSchema }).strict()
+export const coreTranslationBlocksListResultSchema = z.array(coreTranslationBlockSchema).max(10_000)
+export const coreTranslationRunUpdatePayloadSchema = z.object({
+  taskId: coreIdSchema,
+  total: z.number().int().min(0).max(100_000),
+  completed: z.number().int().min(0).max(100_000),
+  failed: z.number().int().min(0).max(100_000)
+}).strict()
+export const coreCacheGetPayloadSchema = z.object({ cacheKey: z.string().min(1).max(4_096).refine(noNul) }).strict()
+export const coreCacheGetResultSchema = z.object({ translated: z.string().max(262_144).refine(noNul).nullable() }).strict()
+export const coreCachePutPayloadSchema = z.object({
+  cacheKey: z.string().min(1).max(4_096).refine(noNul),
+  translated: z.string().max(262_144).refine(noNul),
+  provider: translationProviderIdSchema,
+  model: z.string().min(1).max(512).refine(noNul)
+}).strict()
+export const coreAnnotationsListPayloadSchema = z.object({ taskId: coreIdSchema }).strict()
+export const coreAnnotationsListResultSchema = coreReaderAnnotationsSchema
+export const coreAnnotationsReplacePayloadSchema = z.object({ request: replaceReaderAnnotationsRequestSchema }).strict()
+export const coreAnnotationsReplaceResultSchema = coreReaderAnnotationsSchema
+export const coreAnnotationsSnapshotPayloadSchema = z.object({ documentId: coreIdSchema, view: documentAnnotationViewSchema }).strict()
+export const coreAnnotationsSnapshotResultSchema = readerAnnotationSnapshotSchema
+export const coreAnnotationsMutatePayloadSchema = z.object({ request: mutateReaderAnnotationsRequestSchema }).strict()
+export const coreAnnotationsMutateResultSchema = readerAnnotationSnapshotSchema
+export const coreHashFilePayloadSchema = z.object({ path: corePathSchema }).strict()
+export const coreHashFileResultSchema = z.object({ sha256: coreHashSchema }).strict()
+export const coreNormalizeParserPayloadSchema = z.object({ task: minerUTaskSchema, extractedDir: corePathSchema }).strict()
+export const coreNormalizeParserResultSchema = z.object({ normalized: z.literal(true) }).strict()
+export const coreRebuildMappingsPayloadSchema = z.object({ taskId: coreIdSchema, outputDir: corePathSchema }).strict()
+export const coreRebuildMappingsResultSchema = z.object({ rebuilt: z.literal(true) }).strict()
+
 /**
  * The registry is the only source of operation payload/result types. Later DB or
  * compute operations must add one entry here with strict schemas on both sides.
@@ -83,7 +227,35 @@ export const coreOperationRegistry = {
   ping: { payload: corePingPayloadSchema, result: corePingResultSchema },
   cancel: { payload: coreCancelPayloadSchema, result: coreCancelResultSchema },
   drain: { payload: coreDrainPayloadSchema, result: coreDrainResultSchema },
-  shutdown: { payload: coreShutdownPayloadSchema, result: coreShutdownResultSchema }
+  shutdown: { payload: coreShutdownPayloadSchema, result: coreShutdownResultSchema },
+  'database:init': { payload: coreDatabaseInitPayloadSchema, result: coreDatabaseInitResultSchema },
+  'database:flush': { payload: coreDatabaseFlushPayloadSchema, result: coreDatabaseFlushResultSchema },
+  'database:close': { payload: coreDatabaseClosePayloadSchema, result: coreDatabaseCloseResultSchema },
+  'settings:get': { payload: coreSettingsGetPayloadSchema, result: coreSettingsGetResultSchema },
+  'settings:save': { payload: coreSettingsSavePayloadSchema, result: coreSettingsSaveResultSchema },
+  'tasks:list': { payload: coreTasksListPayloadSchema, result: coreTasksListResultSchema },
+  'tasks:get': { payload: coreTaskIdPayloadSchema, result: coreTaskResultSchema },
+  'tasks:find-by-hash': { payload: coreFindTaskByHashPayloadSchema, result: coreTaskResultSchema },
+  'tasks:insert': { payload: coreInsertTaskPayloadSchema, result: coreMutationResultSchema },
+  'tasks:insert-many': { payload: coreInsertTasksPayloadSchema, result: coreMutationResultSchema },
+  'tasks:update': { payload: coreUpdateTaskPayloadSchema, result: minerUTaskSchema },
+  'tasks:delete': { payload: coreTaskIdPayloadSchema, result: coreMutationResultSchema },
+  'documents:list': { payload: coreTasksListPayloadSchema, result: coreDocumentsListResultSchema },
+  'documents:get-summary': { payload: coreTaskIdPayloadSchema, result: documentSummarySchema.nullable() },
+  'artifacts:get-latest': { payload: coreArtifactLatestPayloadSchema, result: coreArtifactLatestResultSchema },
+  'artifacts:record-revision': { payload: coreArtifactRecordPayloadSchema, result: coreMutationResultSchema },
+  'translation:block-upsert': { payload: coreTranslationBlockUpsertPayloadSchema, result: coreMutationResultSchema },
+  'translation:blocks-list': { payload: coreTranslationBlocksListPayloadSchema, result: coreTranslationBlocksListResultSchema },
+  'translation:run-update': { payload: coreTranslationRunUpdatePayloadSchema, result: coreMutationResultSchema },
+  'translation:cache-get': { payload: coreCacheGetPayloadSchema, result: coreCacheGetResultSchema },
+  'translation:cache-put': { payload: coreCachePutPayloadSchema, result: coreMutationResultSchema },
+  'annotations:list': { payload: coreAnnotationsListPayloadSchema, result: coreAnnotationsListResultSchema },
+  'annotations:replace': { payload: coreAnnotationsReplacePayloadSchema, result: coreAnnotationsReplaceResultSchema },
+  'annotations:list-snapshot': { payload: coreAnnotationsSnapshotPayloadSchema, result: coreAnnotationsSnapshotResultSchema },
+  'annotations:mutate': { payload: coreAnnotationsMutatePayloadSchema, result: coreAnnotationsMutateResultSchema },
+  'compute:hash-file': { payload: coreHashFilePayloadSchema, result: coreHashFileResultSchema },
+  'compute:normalize-parser': { payload: coreNormalizeParserPayloadSchema, result: coreNormalizeParserResultSchema },
+  'compute:rebuild-mappings': { payload: coreRebuildMappingsPayloadSchema, result: coreRebuildMappingsResultSchema }
 } as const
 
 export type CoreOperationPayload = {
@@ -94,15 +266,27 @@ export type CoreOperationResult = {
   [K in CoreOperation]: z.infer<(typeof coreOperationRegistry)[K]['result']>
 }
 
-const coreRequestVariants = [
-  z.object({ version: z.literal(CORE_RPC_VERSION), requestId: requestIdSchema, operation: z.literal('ping'), payload: corePingPayloadSchema }).strict(),
-  z.object({ version: z.literal(CORE_RPC_VERSION), requestId: requestIdSchema, operation: z.literal('cancel'), payload: coreCancelPayloadSchema }).strict(),
-  z.object({ version: z.literal(CORE_RPC_VERSION), requestId: requestIdSchema, operation: z.literal('drain'), payload: coreDrainPayloadSchema }).strict(),
-  z.object({ version: z.literal(CORE_RPC_VERSION), requestId: requestIdSchema, operation: z.literal('shutdown'), payload: coreShutdownPayloadSchema }).strict()
-] as const
+export type CoreRequest = {
+  [K in CoreOperation]: {
+    version: typeof CORE_RPC_VERSION
+    requestId: string
+    operation: K
+    payload: z.infer<(typeof coreOperationRegistry)[K]['payload']>
+  }
+}[CoreOperation]
 
-export const coreRequestSchema = z.discriminatedUnion('operation', coreRequestVariants)
-export type CoreRequest = z.infer<typeof coreRequestSchema>
+const coreRequestVariants = (Object.entries(coreOperationRegistry) as Array<[CoreOperation, (typeof coreOperationRegistry)[CoreOperation]]>)
+  .map(([operation, entry]) => z.object({
+    version: z.literal(CORE_RPC_VERSION),
+    requestId: requestIdSchema,
+    operation: z.literal(operation),
+    payload: entry.payload
+  }).strict()) as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]
+
+// The registry above is the authoritative runtime union. The cast only keeps
+// Zod's tuple requirement out of the operation declaration; every variant is
+// still strict and discriminated by `operation` at runtime.
+export const coreRequestSchema = z.discriminatedUnion('operation', coreRequestVariants as any) as unknown as z.ZodType<CoreRequest>
 
 export const coreErrorSchema = z.object({
   code: z.string().min(1).max(128).refine(noNul, 'error code cannot contain NUL'),

@@ -18,7 +18,9 @@ export default defineConfig({
       fileName: () => 'index.js'
     },
     rollupOptions: {
-      external: ['electron']
+      // The utility is a Node process. Keep every Node builtin external so
+      // runtime-only modules such as node:sqlite are not browser-shimmed.
+      external: [/^node:/u, 'electron']
     }
   }
 })

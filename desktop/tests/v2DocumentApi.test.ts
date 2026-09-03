@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { V2Database } from '@main/v2Database'
-import { CompatDomainError, V2TaskRepositoryCompat } from '@main/v2TaskRepositoryCompat'
+import { V2Database } from '../src/utility/core/persistence/v2Database'
+import { CompatDomainError, V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { MinerUTask } from '@shared/types'
 
 const roots: string[] = []

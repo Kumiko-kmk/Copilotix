@@ -62,7 +62,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
   const sourceBlocks = alignMarkdownBlocks(options.markdown, options.mappings)
   const referenceActions = buildReferenceActions(sourceBlocks, options.mappings)
   const existing = new Map(
-    options.repository.listTranslationBlocks(options.task.id).map((block) => [block.blockId, block])
+    (await options.repository.listTranslationBlocks(options.task.id)).map((block) => [block.blockId, block])
   )
   const results = new Array<TranslationBlockResult | undefined>(sourceBlocks.length)
   const tableUnits = buildTableTranslationUnits(sourceBlocks, options.mappings)
@@ -114,7 +114,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             error: null
           })
           results[workItem.sourceIndex] = result
-          saveBlock(options.repository, options.task.id, result)
+          await saveBlock(options.repository, options.task.id, result)
           completed += 1
           options.onProgress(completed, sourceBlocks.length, failed)
           return
@@ -165,7 +165,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             status: 'completed',
             error: null
           })
-          saveBlock(options.repository, options.task.id, results[sourceIndex]!)
+          await saveBlock(options.repository, options.task.id, results[sourceIndex]!)
           completed += 1
           options.onProgress(completed, sourceBlocks.length, failed)
           return
@@ -191,7 +191,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             status: 'completed',
             error: null
           })
-          saveBlock(options.repository, options.task.id, results[sourceIndex]!)
+          await saveBlock(options.repository, options.task.id, results[sourceIndex]!)
           completed += 1
         } catch (error) {
           const message = readableError(error)
@@ -208,7 +208,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             error: message
           })
           failed += 1
-          saveBlock(options.repository, options.task.id, results[sourceIndex]!)
+          await saveBlock(options.repository, options.task.id, results[sourceIndex]!)
         }
         options.onProgress(completed, sourceBlocks.length, failed)
       })
@@ -270,7 +270,7 @@ async function translateTableWorkItem(
         error: null
       })
       results[sourceBlock.sourceIndex] = result
-      saveBlock(options.repository, options.task.id, result)
+      await saveBlock(options.repository, options.task.id, result)
     }
     return
   }
@@ -298,7 +298,7 @@ async function translateTableWorkItem(
         error: null
       })
       results[sourceBlock.sourceIndex] = result
-      saveBlock(options.repository, options.task.id, result)
+      await saveBlock(options.repository, options.task.id, result)
     }
   } catch (error) {
     const message = readableError(error)
@@ -316,7 +316,7 @@ async function translateTableWorkItem(
         error: message
       })
       results[sourceBlock.sourceIndex] = result
-      saveBlock(options.repository, options.task.id, result)
+      await saveBlock(options.repository, options.task.id, result)
     }
   }
 }
@@ -336,7 +336,7 @@ async function translateTableUnit(
     const cacheKey = sha256(
       `${TRANSLATION_PIPELINE_VERSION}|table|${TABLE_TRANSLATION_CACHE_VERSION}|${provider.id}|${provider.model}|zh-CN|${sourceHash}`
     )
-    const cached = repository.getCache(cacheKey)
+    const cached = await repository.getCache(cacheKey)
     if (cached) {
       try {
         const cache = JSON.parse(cached) as { version?: unknown; sourceHash?: unknown; response?: unknown }
@@ -358,7 +358,7 @@ async function translateTableUnit(
     try {
       const response = await withRetry(() => provider.translateTable(unit.plan.request))
       applyTableTranslation(unit.plan, response)
-      repository.putCache(
+      await repository.putCache(
         cacheKey,
         JSON.stringify({ version: TABLE_TRANSLATION_CACHE_VERSION, sourceHash, response }),
         provider.id,
@@ -389,14 +389,14 @@ async function translateBlock(
     const provider = providers.get(providerId)
     if (!provider || !(await provider.isAvailable())) continue
     const cacheKey = sha256(`${TRANSLATION_PIPELINE_VERSION}|${provider.id}|${provider.model}|zh-CN|${sourceHash}`)
-    const cached = repository.getCache(cacheKey)
+    const cached = await repository.getCache(cacheKey)
     if (cached) return { markdown: cached, provider: provider.id, model: provider.model }
 
     try {
       const clone = structuredClone(sourceTree)
       await translateTextNodes(clone, provider)
       const markdown = stringifyTree(clone)
-      repository.putCache(cacheKey, markdown, provider.id, provider.model)
+      await repository.putCache(cacheKey, markdown, provider.id, provider.model)
       return { markdown, provider: provider.id, model: provider.model }
     } catch (error) {
       errors.push(`${providerId}: ${readableError(error)}`)
@@ -564,8 +564,8 @@ function createBlockResult(result: TranslationBlockResult): TranslationBlockResu
   return { ...result, mappingIds: [...result.mappingIds] }
 }
 
-function saveBlock(repository: TaskRepositoryCompat, taskId: string, block: TranslationBlockResult): void {
-  repository.upsertTranslationBlock({
+async function saveBlock(repository: TaskRepositoryCompat, taskId: string, block: TranslationBlockResult): Promise<void> {
+  await repository.upsertTranslationBlock({
     taskId,
     blockId: block.blockId,
     sourceHash: block.sourceHash,
