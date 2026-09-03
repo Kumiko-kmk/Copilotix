@@ -13,6 +13,10 @@ import {
   serializeCoreMessage,
   validateCoreOperationResult
 } from '@shared/coreRpcSchemas'
+import {
+  translationPlanResponseEnvelopeSchema,
+  translationPlanWorkDescriptorSchema
+} from '@shared/translationPlanProtocol'
 
 const requestId = '00000000-0000-4000-8000-000000000001'
 
@@ -104,5 +108,50 @@ describe('core RPC schemas', () => {
     expect(makeCoreEvent('ready')).toEqual({ version: 1, type: 'ready', payload: {} })
     expect(makeCoreEvent('drained', { drained: true })).toEqual({ version: 1, type: 'drained', payload: { drained: true } })
     expect(() => makeCoreEvent('error', { code: 'x', message: 'bad', retryable: false, extra: true } as never)).toThrow(CoreRpcProtocolError)
+  })
+
+  it('binds translation response kind to its protocol and keeps descriptors metadata-only', () => {
+    const unitId = '00000000-0000-4000-8000-000000000002'
+    const sourceHash = 'a'.repeat(64)
+    const plainResponse = {
+      protocol: 'mineru-translation-plain-v1' as const,
+      unitId,
+      sourceHash,
+      translations: []
+    }
+    const tableResponse = {
+      protocol: 'mineru-table-translation-v2' as const,
+      translations: []
+    }
+    expect(translationPlanResponseEnvelopeSchema.safeParse({
+      protocol: 'mineru-translation-response-v1', unitId, kind: 'plain', sourceHash, response: plainResponse
+    }).success).toBe(true)
+    expect(translationPlanResponseEnvelopeSchema.safeParse({
+      protocol: 'mineru-translation-response-v1', unitId, kind: 'plain', sourceHash, response: tableResponse
+    }).success).toBe(false)
+    expect(translationPlanResponseEnvelopeSchema.safeParse({
+      protocol: 'mineru-translation-response-v1', unitId, kind: 'table', sourceHash, response: plainResponse
+    }).success).toBe(false)
+    expect(translationPlanResponseEnvelopeSchema.safeParse({
+      protocol: 'mineru-translation-response-v1',
+      unitId,
+      kind: 'plain',
+      sourceHash,
+      response: { ...plainResponse, sourceHash: 'b'.repeat(64) }
+    }).success).toBe(false)
+
+    const descriptor = {
+      unitId,
+      kind: 'plain' as const,
+      sourceHash,
+      blockIds: ['translation-block-1'],
+      requestPath: '.translation/job/requests/unit.json',
+      responsePath: '.translation/job/responses/unit.json',
+      resultPath: '.translation/job/results/unit.md',
+      status: 'pending' as const
+    }
+    expect(translationPlanWorkDescriptorSchema.safeParse(descriptor).success).toBe(true)
+    expect(translationPlanWorkDescriptorSchema.safeParse({ ...descriptor, sourceMarkdown: '正文' }).success).toBe(false)
+    expect(translationPlanWorkDescriptorSchema.safeParse({ ...descriptor, requestPath: 'C:/outside/request.json' }).success).toBe(false)
   })
 })

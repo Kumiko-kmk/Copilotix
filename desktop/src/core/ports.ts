@@ -8,6 +8,12 @@ import type {
   TranslationBlock
 } from './types'
 import type { MinerUTask } from '@shared/types'
+import type {
+  TranslationPlanFinalizeResult,
+  TranslationPlanListResult,
+  TranslationPlanMutationResult,
+  TranslationPlanOpenResult
+} from '@shared/translationPlanProtocol'
 
 export interface DocumentRepositoryPort {
   create(document: Document): void
@@ -72,6 +78,25 @@ export interface TaskComputePort {
   importPdf(sourcePath: string, documentId: string): Promise<{ sha256: string; size: number }>
   normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<void>
   rebuildMappings(taskId: string, outputDir: string): Promise<void>
+  openTranslationPlan?(taskId: string, jobId: string): Promise<TranslationPlanOpenResult>
+  listTranslationWork?(taskId: string, jobId: string, cursor?: number, limit?: number): Promise<TranslationPlanListResult>
+  tryTranslationCache?(
+    taskId: string,
+    jobId: string,
+    unitId: string,
+    provider: MinerUTask['translationProvider'],
+    model: string
+  ): Promise<TranslationPlanMutationResult>
+  applyTranslation?(
+    taskId: string,
+    jobId: string,
+    unitId: string,
+    responsePath?: string,
+    provider?: MinerUTask['translationProvider'] | null,
+    model?: string | null
+  ): Promise<TranslationPlanMutationResult>
+  failTranslation?(taskId: string, jobId: string, unitId: string, error?: string): Promise<TranslationPlanMutationResult>
+  finalizeTranslation?(taskId: string, jobId: string): Promise<TranslationPlanFinalizeResult>
 }
 
 export interface ClockPort {

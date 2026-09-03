@@ -10,6 +10,12 @@ import {
   replaceReaderAnnotationsRequestSchema,
   translationProviderIdSchema
 } from './ipcSchemas'
+import {
+  translationPlanFinalizeResultSchema,
+  translationPlanListResultSchema,
+  translationPlanMutationResultSchema,
+  translationPlanOpenResultSchema
+} from './translationPlanProtocol'
 
 /** The protocol is deliberately small and versioned before any data operation is added. */
 export const CORE_RPC_VERSION = 1 as const
@@ -198,7 +204,9 @@ const coreOperationNames = [
   'translation:block-upsert', 'translation:batch-commit', 'translation:blocks-list', 'translation:run-update',
   'translation:cache-get', 'translation:cache-put',
   'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
-  'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings'
+  'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
+  'compute:translation-plan-open', 'compute:translation-plan-list', 'compute:translation-plan-cache',
+  'compute:translation-plan-apply', 'compute:translation-plan-fail', 'compute:translation-plan-finalize'
 ] as const
 
 export const coreOperationSchema = z.enum(coreOperationNames)
@@ -406,6 +414,55 @@ export const coreNormalizeParserResultSchema = z.object({ normalized: z.literal(
 export const coreRebuildMappingsPayloadSchema = z.object({ taskId: coreIdSchema, outputDir: corePathSchema }).strict()
 export const coreRebuildMappingsResultSchema = z.object({ rebuilt: z.literal(true) }).strict()
 
+const coreTranslationPlanIdSchema = z.string().uuid().refine(noNul, 'translation plan id cannot contain NUL')
+const coreTranslationPlanPathSchema = z.string().min(1).max(1_024).refine(noNul, 'translation plan path cannot contain NUL').refine((value) =>
+  value.startsWith('.translation/') && !value.startsWith('/') && !value.includes('\\') &&
+  !value.split('/').some((part) => part === '..' || part.length === 0),
+  'translation plan path must be a normalized relative .translation path'
+)
+const coreTranslationPlanErrorSchema = z.string().max(32_768).refine(noNul, 'translation plan error cannot contain NUL')
+export const coreTranslationPlanOpenPayloadSchema = z.object({
+  taskId: coreTranslationPlanIdSchema,
+  jobId: coreTranslationPlanIdSchema
+}).strict()
+export const coreTranslationPlanOpenResultSchema = translationPlanOpenResultSchema
+export const coreTranslationPlanListPayloadSchema = z.object({
+  taskId: coreTranslationPlanIdSchema,
+  jobId: coreTranslationPlanIdSchema,
+  cursor: z.number().int().min(0).max(100_000).optional(),
+  limit: z.number().int().min(1).max(32).optional()
+}).strict()
+export const coreTranslationPlanListResultSchema = translationPlanListResultSchema
+export const coreTranslationPlanCachePayloadSchema = z.object({
+  taskId: coreTranslationPlanIdSchema,
+  jobId: coreTranslationPlanIdSchema,
+  unitId: coreTranslationPlanIdSchema,
+  provider: translationProviderIdSchema,
+  model: z.string().min(1).max(512).refine(noNul)
+}).strict()
+export const coreTranslationPlanCacheResultSchema = translationPlanMutationResultSchema
+export const coreTranslationPlanApplyPayloadSchema = z.object({
+  taskId: coreTranslationPlanIdSchema,
+  jobId: coreTranslationPlanIdSchema,
+  unitId: coreTranslationPlanIdSchema,
+  responsePath: coreTranslationPlanPathSchema.optional(),
+  provider: translationProviderIdSchema.nullable().optional(),
+  model: z.string().max(512).refine(noNul).nullable().optional()
+}).strict()
+export const coreTranslationPlanApplyResultSchema = translationPlanMutationResultSchema
+export const coreTranslationPlanFailPayloadSchema = z.object({
+  taskId: coreTranslationPlanIdSchema,
+  jobId: coreTranslationPlanIdSchema,
+  unitId: coreTranslationPlanIdSchema,
+  error: coreTranslationPlanErrorSchema.optional()
+}).strict()
+export const coreTranslationPlanFailResultSchema = translationPlanMutationResultSchema
+export const coreTranslationPlanFinalizePayloadSchema = z.object({
+  taskId: coreTranslationPlanIdSchema,
+  jobId: coreTranslationPlanIdSchema
+}).strict()
+export const coreTranslationPlanFinalizeResultSchema = translationPlanFinalizeResultSchema
+
 /**
  * The registry is the only source of operation payload/result types. Later DB or
  * compute operations must add one entry here with strict schemas on both sides.
@@ -457,7 +514,13 @@ export const coreOperationRegistry = {
   'compute:hash-file': { payload: coreHashFilePayloadSchema, result: coreHashFileResultSchema },
   'compute:import-pdf': { payload: coreImportPdfPayloadSchema, result: coreImportPdfResultSchema },
   'compute:normalize-parser': { payload: coreNormalizeParserPayloadSchema, result: coreNormalizeParserResultSchema },
-  'compute:rebuild-mappings': { payload: coreRebuildMappingsPayloadSchema, result: coreRebuildMappingsResultSchema }
+  'compute:rebuild-mappings': { payload: coreRebuildMappingsPayloadSchema, result: coreRebuildMappingsResultSchema },
+  'compute:translation-plan-open': { payload: coreTranslationPlanOpenPayloadSchema, result: coreTranslationPlanOpenResultSchema },
+  'compute:translation-plan-list': { payload: coreTranslationPlanListPayloadSchema, result: coreTranslationPlanListResultSchema },
+  'compute:translation-plan-cache': { payload: coreTranslationPlanCachePayloadSchema, result: coreTranslationPlanCacheResultSchema },
+  'compute:translation-plan-apply': { payload: coreTranslationPlanApplyPayloadSchema, result: coreTranslationPlanApplyResultSchema },
+  'compute:translation-plan-fail': { payload: coreTranslationPlanFailPayloadSchema, result: coreTranslationPlanFailResultSchema },
+  'compute:translation-plan-finalize': { payload: coreTranslationPlanFinalizePayloadSchema, result: coreTranslationPlanFinalizeResultSchema }
 } as const
 
 export type CoreOperationPayload = {

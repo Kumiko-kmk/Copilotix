@@ -22,7 +22,13 @@ import {
   coreJobEventsPayloadSchema,
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
-  coreTranslationBatchCommitPayloadSchema
+  coreTranslationBatchCommitPayloadSchema,
+  coreTranslationPlanOpenPayloadSchema,
+  coreTranslationPlanListPayloadSchema,
+  coreTranslationPlanCachePayloadSchema,
+  coreTranslationPlanApplyPayloadSchema,
+  coreTranslationPlanFailPayloadSchema,
+  coreTranslationPlanFinalizePayloadSchema
 } from '@shared/coreRpcSchemas'
 import type { MinerUTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
@@ -33,6 +39,7 @@ import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
 import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sqliteJobRepository'
 import { PathPolicy } from './persistence/pathPolicy'
 import { BLOCK_MAPPING_VERSION, buildUtilityBlockMappings } from './compute/blockMapping'
+import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
 
 type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
 
@@ -40,6 +47,7 @@ interface UtilityPersistenceState {
   database?: V2Database
   repository?: V2TaskRepositoryCompat
   jobRepository?: SqliteJobRepository
+  translationPlanManager?: MarkdownTranslationPlanManager
   databasePath?: string
   outputRoot?: string
 }
@@ -75,20 +83,32 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     if (!state.jobRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
     return state.jobRepository
   }
+  const requireTranslationPlanManager = (): MarkdownTranslationPlanManager => {
+    if (!state.repository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
+    if (!state.translationPlanManager) {
+      state.translationPlanManager = new MarkdownTranslationPlanManager(
+        state.repository,
+        new PathPolicy(),
+        state.outputRoot ? { outputRoot: state.outputRoot } : {}
+      )
+    }
+    return state.translationPlanManager
+  }
   const handlers: UtilityHandlerMap = {
     ping: () => ({ pong: true }),
     'database:init': async (request) => {
       const payload = coreDatabaseInitPayloadSchema.parse(request.payload)
       validateBootstrapPaths(payload.databasePath, payload.outputRoot)
-      if (state.databasePath === payload.databasePath && state.repository && state.jobRepository) return { initialized: true }
+      if (state.databasePath === payload.databasePath && state.outputRoot === payload.outputRoot && state.repository && state.jobRepository) return { initialized: true }
       closeState(state)
       try {
         await mkdir(dirname(payload.databasePath), { recursive: true })
+        state.outputRoot = payload.outputRoot
         state.database = new V2Database(payload.databasePath)
         state.repository = new V2TaskRepositoryCompat(state.database, new PathPolicy())
         state.jobRepository = new SqliteJobRepository(state.database)
+        state.translationPlanManager = new MarkdownTranslationPlanManager(state.repository, new PathPolicy(), { outputRoot: payload.outputRoot })
         state.databasePath = payload.databasePath
-        state.outputRoot = payload.outputRoot
         return { initialized: true }
       } catch (error) {
         closeState(state)
@@ -109,6 +129,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const payload = request.payload as { outputRoot: string }
       const settings = appSettingsSchema.parse(repository.getSettings(payload.outputRoot))
       state.outputRoot = settings.outputRoot
+      state.translationPlanManager = undefined
       return settings
     },
     'settings:save': (request) => {
@@ -116,6 +137,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const settings = appSettingsSchema.parse((request.payload as { settings: unknown }).settings)
       repository.saveSettings(settings)
       state.outputRoot = settings.outputRoot
+      state.translationPlanManager = undefined
       return settings
     },
     'tasks:list': () => requireRepository().listTasks(),
@@ -209,6 +231,37 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const payload = request.payload as { taskId: string; outputDir: string }
       await rebuildMappings(payload.taskId, payload.outputDir, requireRepository())
       return { rebuilt: true }
+    },
+    'compute:translation-plan-open': async (request) => {
+      const payload = coreTranslationPlanOpenPayloadSchema.parse(request.payload)
+      return requireTranslationPlanManager().open(payload.taskId, payload.jobId)
+    },
+    'compute:translation-plan-list': async (request) => {
+      const payload = coreTranslationPlanListPayloadSchema.parse(request.payload)
+      return requireTranslationPlanManager().listWork(payload.taskId, payload.jobId, payload.cursor, payload.limit)
+    },
+    'compute:translation-plan-cache': async (request) => {
+      const payload = coreTranslationPlanCachePayloadSchema.parse(request.payload)
+      return requireTranslationPlanManager().tryCache(payload.taskId, payload.jobId, payload.unitId, payload.provider, payload.model)
+    },
+    'compute:translation-plan-apply': async (request) => {
+      const payload = coreTranslationPlanApplyPayloadSchema.parse(request.payload)
+      return requireTranslationPlanManager().apply(
+        payload.taskId,
+        payload.jobId,
+        payload.unitId,
+        payload.responsePath,
+        payload.provider ?? null,
+        payload.model ?? null
+      )
+    },
+    'compute:translation-plan-fail': async (request) => {
+      const payload = coreTranslationPlanFailPayloadSchema.parse(request.payload)
+      return requireTranslationPlanManager().fail(payload.taskId, payload.jobId, payload.unitId, payload.error)
+    },
+    'compute:translation-plan-finalize': async (request) => {
+      const payload = coreTranslationPlanFinalizePayloadSchema.parse(request.payload)
+      return requireTranslationPlanManager().finalize(payload.taskId, payload.jobId)
     }
   }
 
@@ -222,7 +275,9 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'translation:block-upsert', 'translation:batch-commit', 'translation:blocks-list', 'translation:run-update',
     'translation:cache-get', 'translation:cache-put',
     'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
-    'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings'
+    'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
+    'compute:translation-plan-open', 'compute:translation-plan-list', 'compute:translation-plan-cache',
+    'compute:translation-plan-apply', 'compute:translation-plan-fail', 'compute:translation-plan-finalize'
   ]
   for (const operation of persistenceOperations) {
     const handler = handlers[operation]
@@ -246,6 +301,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
 
 function closeState(state: UtilityPersistenceState): void {
   try {
+    state.translationPlanManager = undefined
     state.repository = undefined
     state.jobRepository = undefined
   } finally {

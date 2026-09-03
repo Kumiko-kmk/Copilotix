@@ -104,6 +104,10 @@ Phase 4A 已将生产 PDF 导入改为 utility 单次流式 hash/copy，并为 M
 
 Phase 4B1 已增加显式作业绑定的翻译批量提交：blocks、cache 与受限 checkpoint 摘要在 utility 内单事务落库，pipeline 以不超过 32 条/约 768 KiB 的小缓冲提交；completed 仅在来源 hash 有效且译文非空时复用，partial 可在同一 translate job 上续跑。scheduler 租约/进度更新仍是独立事务边界；文件型 AST 迁移和更大范围批量调度留待 Phase 4B2，Phase 4B2 尚未开始。
 
+### 4.7 Phase 4B2-A 进度（翻译计划 foundation）
+
+Phase 4B2-A 已建立 utility-owned、可重启的 Markdown/table 翻译计划 foundation：请求/响应正文留在受限文件路径，Core RPC 只传绑定作业的有界描述符；计划与持久化操作进入同一 serialized lane，并按 UTF-8 大小动态分批。此阶段仍未切换生产 `TranslationJobRunner`；provider 调度与 production cutover 留待 Phase 4B2-B。
+
 electron-vite 与独立 Vite 配置生成四份 bundle：
 
     desktop/src/main       -> desktop/out/main

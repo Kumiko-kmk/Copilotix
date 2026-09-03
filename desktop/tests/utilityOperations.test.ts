@@ -3,6 +3,9 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { MinerUTask } from '@shared/types'
+import { DEFAULT_SETTINGS } from '../src/shared/constants'
+import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
 
 describe('utility persistence lifecycle', () => {
@@ -81,6 +84,68 @@ describe('utility persistence lifecycle', () => {
       expect(revisions).toHaveLength(3)
       await expect(readFile(join(outputDir, 'full.md'), 'utf8')).resolves.toBe('# parsed\n')
       await expect(readdir(outputDir).then((entries) => entries.sort())).resolves.toEqual(['.parsed.partial-job-1', 'block_list.json', 'full.md', 'layout.json'])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('clears and rebuilds the translation manager when outputRoot changes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mineru-manager-lifecycle-'))
+    try {
+      const outputRoot = join(root, 'output-a')
+      const nextOutputRoot = join(root, 'output-b')
+      const databasePath = join(root, 'state', 'mineru.sqlite3')
+      const taskId = '11111111-1111-4111-8111-111111111111'
+      const documentRoot = join(outputRoot, 'documents-v2', taskId)
+      await mkdir(documentRoot, { recursive: true })
+      await writeFile(join(documentRoot, 'full.md'), '# lifecycle\n', 'utf8')
+      await writeFile(join(documentRoot, 'block_list.json'), JSON.stringify({ version: 2, mappings: [] }), 'utf8')
+
+      const state = {} as {
+        database?: V2Database
+        outputRoot?: string
+        translationPlanManager?: unknown
+      }
+      const persistence = createUtilityOperationHandlers(state as never)
+      const signal = new AbortController().signal
+      await persistence.handlers['database:init']!({ payload: { databasePath, outputRoot } } as never, signal)
+      const task: MinerUTask = {
+        id: taskId,
+        originalName: 'lifecycle.pdf',
+        title: null,
+        name: 'lifecycle.pdf',
+        sourcePath: join(documentRoot, 'original.pdf'),
+        sourceHash: 'fixture-source-hash',
+        outputDir: documentRoot,
+        status: 'uploading',
+        progress: 0,
+        parserModel: 'vlm',
+        translationProvider: 'qwen',
+        remoteBatchId: null,
+        remoteDataId: null,
+        remoteResultUrl: null,
+        error: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      }
+      await persistence.handlers['tasks:insert']!({ payload: { task } } as never, signal)
+      await persistence.handlers['tasks:update']!({ payload: { id: taskId, patch: { status: 'translating' } } } as never, signal)
+      const job = state.database!.connection.prepare(
+        "SELECT id FROM jobs WHERE document_id=? AND kind='translate'"
+      ).get(taskId) as { id: string }
+      const originalManager = state.translationPlanManager
+      await persistence.handlers['compute:translation-plan-open']!({ payload: { taskId, jobId: job.id } } as never, signal)
+      expect(state.translationPlanManager).toBe(originalManager)
+
+      await persistence.handlers['settings:save']!({
+        payload: { settings: { ...DEFAULT_SETTINGS, outputRoot: nextOutputRoot } }
+      } as never, signal)
+      expect(state.outputRoot).toBe(nextOutputRoot)
+      expect(state.translationPlanManager).toBeUndefined()
+      await expect(persistence.handlers['compute:translation-plan-open']!({ payload: { taskId, jobId: job.id } } as never, signal))
+        .rejects.toThrow()
+      expect(state.translationPlanManager).not.toBe(originalManager)
+      await persistence.close()
     } finally {
       await rm(root, { recursive: true, force: true })
     }

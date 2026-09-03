@@ -67,6 +67,15 @@ export interface CompatJobRow {
   updated_at: string
 }
 
+export interface TranslationJobBinding {
+  taskId: string
+  jobId: string
+  attempt: number
+  outputDir: string
+  checkpoint: Record<string, unknown>
+  status: V2JobStatus
+}
+
 export interface ArtifactRevisionInput {
   taskId: string
   kind: ArtifactKind
@@ -77,6 +86,9 @@ export interface ArtifactRevisionInput {
 }
 
 const TERMINAL: ReadonlySet<V2JobStatus> = new Set(['succeeded', 'partial', 'failed', 'cancelled'])
+const MAX_TRANSLATION_BATCH_ITEMS = 32
+const MAX_TRANSLATION_BATCH_BYTES = 768 * 1024
+const MAX_TRANSLATION_FIELD_BYTES = 262_144
 
 export class CompatDomainError extends Error {
   constructor(readonly code: string, message: string) {
@@ -174,6 +186,26 @@ export class V2TaskRepositoryCompat {
 
   getTask(id: string): MinerUTask | null {
     return this.readProjection(id)
+  }
+
+  /**
+   * Return the only filesystem binding a translation plan may use.  Keeping
+   * this lookup narrow prevents callers from accepting an arbitrary output
+   * directory or a parse job that happens to share the same document.
+   */
+  requireTranslationJobBinding(taskId: string, jobId: string): TranslationJobBinding {
+    const document = this.readDocument(taskId)
+    if (!document) throw new CompatDomainError('TRANSLATION_TASK_NOT_FOUND', '翻译任务不存在')
+    const job = this.translationJobById.get(jobId, taskId) as CompatJobRow | undefined
+    if (!job) throw new CompatDomainError('TRANSLATION_JOB_NOT_FOUND', '翻译作业不存在')
+    return {
+      taskId,
+      jobId,
+      attempt: job.attempt,
+      outputDir: document.storage_path,
+      checkpoint: parseObject(job.checkpoint_json),
+      status: job.status
+    }
   }
 
   listDocumentSummaries(): DocumentSummary[] {
@@ -382,7 +414,8 @@ export class V2TaskRepositoryCompat {
   }
 
   commitTranslationBatch(input: TranslationBatchCommit): void {
-    if (!input.taskId || !input.jobId || input.blocks.length > 32 || input.cacheEntries.length > 32) {
+    assertTranslationBatchWithinLimits(input)
+    if (!input.taskId || !input.jobId) {
       throw new Error('翻译批次参数无效')
     }
     this.database.transaction(() => {
@@ -761,6 +794,33 @@ export class V2TaskRepositoryCompat {
       SELECT * FROM jobs WHERE document_id=? ORDER BY updated_at DESC,id DESC
     `).all(id) as unknown as CompatJobRow[]
     return projectCompatTask(document, jobs)
+  }
+}
+
+function assertTranslationBatchWithinLimits(input: TranslationBatchCommit): void {
+  if (!input || !Array.isArray(input.blocks) || !Array.isArray(input.cacheEntries) ||
+    input.blocks.length > MAX_TRANSLATION_BATCH_ITEMS || input.cacheEntries.length > MAX_TRANSLATION_BATCH_ITEMS) {
+    throw new Error('翻译批次参数无效：最多 32 条 block/cache')
+  }
+  for (const block of input.blocks) {
+    assertTranslationField(block.sourceMarkdown, `翻译块 ${block.blockId} 的原文`)
+    if (block.translatedMarkdown !== null) assertTranslationField(block.translatedMarkdown, `翻译块 ${block.blockId} 的译文`)
+  }
+  for (const entry of input.cacheEntries) assertTranslationField(entry.translated, `翻译缓存 ${entry.cacheKey}`)
+  let serialized: string
+  try {
+    serialized = JSON.stringify(input)
+  } catch {
+    throw new Error('翻译批次参数不可序列化')
+  }
+  if (typeof serialized !== 'string' || Buffer.byteLength(serialized, 'utf8') > MAX_TRANSLATION_BATCH_BYTES) {
+    throw new Error('翻译批次 UTF-8 大小超过 768KiB')
+  }
+}
+
+function assertTranslationField(value: unknown, label: string): void {
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_TRANSLATION_FIELD_BYTES) {
+    throw new Error(`${label}超过 262KiB 持久化字段限制，请保留正文文件并避免通过 RPC`)
   }
 }
 
