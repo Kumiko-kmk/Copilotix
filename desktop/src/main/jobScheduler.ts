@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import type {
+  BatchJobRunner,
   JobCheckpoint,
   JobRepositoryPort,
   JobRunner,
   JobRunnerRegistry,
   JobRunnerResult
 } from '@core/jobs'
+import { JobRunnerError } from '@core/jobs'
 import type { Job, JobKind } from '@core/types'
 
 export const JOB_LEASE_DURATION_MS = 30_000
@@ -51,11 +54,18 @@ export interface JobSchedulerOptions {
 
 export type JobSchedulerState = 'idle' | 'running' | 'stopping' | 'stopped'
 
+interface ActiveWork {
+  controller: AbortController
+  semaphore: AsyncSemaphore
+  jobIds: string[]
+  done: Promise<void>
+  released: boolean
+}
+
 interface ActiveJob {
   job: Job
   runner: JobRunner
-  controller: AbortController
-  semaphore: AsyncSemaphore
+  work: ActiveWork
   done: Promise<void>
 }
 
@@ -119,7 +129,7 @@ export class AsyncSemaphore {
  * Durable scheduler foundation. It intentionally claims work only for kinds
  * with a registered runner; 3B2 will register the real parse/translate work.
  */
-export class JobScheduler {
+export class JobScheduler extends EventEmitter {
   private readonly repository: JobRepositoryPort
   private readonly leaseOwner: string
   private readonly pollIntervalMs: number
@@ -142,6 +152,7 @@ export class JobScheduler {
   private pollInFlight: Promise<void> | undefined
 
   constructor(repository: JobRepositoryPort, options: JobSchedulerOptions = {}) {
+    super()
     this.repository = repository
     this.leaseOwner = validateLeaseOwner(options.leaseOwner ?? `scheduler-${randomUUID()}`)
     this.pollIntervalMs = positiveInt(options.pollIntervalMs ?? 1_000, 1_000)
@@ -176,6 +187,12 @@ export class JobScheduler {
 
   getLeaseOwner(): string {
     return this.leaseOwner
+  }
+
+  /** Wake a running scheduler after a command enqueues or requeues work. */
+  wake(): void {
+    if (this.state !== 'running' || !this.hasRunner()) return
+    void this.pollOnce().catch(() => undefined)
   }
 
   getConcurrency(): SchedulerConcurrencyConfig {
@@ -216,13 +233,20 @@ export class JobScheduler {
   async cancel(jobId: string): Promise<void> {
     const active = this.active.get(jobId)
     if (!active) return
-    active.controller.abort()
+    active.work.controller.abort()
     try {
       await Promise.resolve(this.repository.cancel({ jobId, leaseOwner: this.leaseOwner, now: this.now() }))
     } catch {
       // The runner may have completed or lost its lease concurrently.
     }
     await active.done
+  }
+
+  async cancelDocument(documentId: string): Promise<void> {
+    const jobs = [...this.active.values()]
+      .filter((entry) => entry.job.documentId === documentId)
+      .map((entry) => entry.job.id)
+    await Promise.all([...new Set(jobs)].map((jobId) => this.cancel(jobId)))
   }
 
   async shutdown(): Promise<void> {
@@ -236,12 +260,11 @@ export class JobScheduler {
     this.cancelTimer('poll')
     this.cancelTimer('heartbeat')
     const active = [...this.active.values()]
-    for (const entry of active) {
-      entry.controller.abort()
-    }
+    const works = [...new Set(active.map((entry) => entry.work))]
+    for (const work of works) work.controller.abort()
     // A normal process shutdown is not a user cancellation. Keep running
     // leases durable so the next scheduler start can recover them after expiry.
-    await Promise.all(active.map((entry) => entry.done))
+    await Promise.all(works.map((work) => work.done))
     this.state = 'stopped'
   }
 
@@ -281,9 +304,15 @@ export class JobScheduler {
       now: claimedAt,
       leaseOwner: this.leaseOwner,
       leaseExpiresAt: addMilliseconds(claimedAt, this.leaseDurationMs),
-      limit: Math.min(this.claimLimit, available, JOB_CLAIM_LIMIT),
+      limit: Math.min(this.claimLimit, kind === 'parse' && isBatchRunner(runner) ? JOB_CLAIM_LIMIT : available, JOB_CLAIM_LIMIT),
       kind
     }))
+
+    if (kind === 'parse' && isBatchRunner(runner)) {
+      if (jobs.length === 0 || signal.aborted || !semaphore.tryAcquire()) return
+      this.startBatch(jobs, runner, semaphore)
+      return
+    }
     for (const job of jobs) {
       if (signal.aborted || !semaphore.tryAcquire()) break
       this.startJob(job, runner, semaphore)
@@ -292,28 +321,57 @@ export class JobScheduler {
 
   private startJob(job: Job, runner: JobRunner, semaphore: AsyncSemaphore): void {
     const controller = new AbortController()
+    const work: ActiveWork = { controller, semaphore, jobIds: [job.id], done: Promise.resolve(), released: false }
     const entry = {
       job,
       runner,
-      controller,
-      semaphore,
+      work,
       done: Promise.resolve()
     } as ActiveJob
     entry.done = this.executeJob(entry)
       .catch(() => undefined)
       .finally(() => {
         this.active.delete(job.id)
-        semaphore.release()
+        if (!work.released) {
+          work.released = true
+          semaphore.release()
+        }
       })
+    work.done = entry.done
     this.active.set(job.id, entry)
   }
 
+  private startBatch(jobs: Job[], runner: BatchJobRunner, semaphore: AsyncSemaphore): void {
+    const controller = new AbortController()
+    const work: ActiveWork = {
+      controller,
+      semaphore,
+      jobIds: jobs.map((job) => job.id),
+      done: Promise.resolve(),
+      released: false
+    }
+    const entries = jobs.map((job) => ({ job, runner, work, done: Promise.resolve() })) as ActiveJob[]
+    work.done = this.executeBatch(entries, runner)
+      .catch(() => undefined)
+      .finally(() => {
+        for (const entry of entries) this.active.delete(entry.job.id)
+        if (!work.released) {
+          work.released = true
+          semaphore.release()
+        }
+      })
+    for (const entry of entries) {
+      entry.done = work.done
+      this.active.set(entry.job.id, entry)
+    }
+  }
+
   private async executeJob(entry: ActiveJob): Promise<void> {
-    const { runner, controller } = entry
+    const { runner, work } = entry
     try {
       const result = await runner.run({
         job: entry.job,
-        signal: controller.signal,
+        signal: work.controller.signal,
         updateProgress: async (progress: number, checkpoint: JobCheckpoint): Promise<Job> => {
           entry.job = await Promise.resolve(this.repository.updateProgressAndCheckpoint({
             jobId: entry.job.id,
@@ -322,10 +380,11 @@ export class JobScheduler {
             checkpoint,
             now: this.now()
           }))
+          this.emit('job-changed', entry.job)
           return entry.job
         }
       })
-      if (controller.signal.aborted) return
+      if (work.controller.signal.aborted) return
       const normalized = normalizeRunnerResult(result, entry.job)
       entry.job = await Promise.resolve(this.repository.complete({
         jobId: entry.job.id,
@@ -336,19 +395,78 @@ export class JobScheduler {
         now: this.now(),
         detail: normalized.detail
       }))
+      this.emit('job-changed', entry.job)
+      this.emit('job-notification', entry.job.id, entry.job.status, entry.job.kind)
     } catch (error) {
-      if (controller.signal.aborted) return
-      const attempt = entry.job.attempt
-      const delayMs = fullJitterExponentialBackoff(attempt, this.backoff)
-      await Promise.resolve(this.repository.failOrRetry({
-        jobId: entry.job.id,
-        leaseOwner: this.leaseOwner,
-        errorCode: sanitizeErrorCode(error),
-        errorMessage: sanitizeErrorMessage(error),
-        availableAt: addMilliseconds(this.now(), delayMs),
-        now: this.now()
-      }))
+      if (work.controller.signal.aborted) return
+      await this.failJob(entry, error)
     }
+  }
+
+  private async executeBatch(entries: ActiveJob[], runner: BatchJobRunner): Promise<void> {
+    const work = entries[0]?.work
+    if (!work) return
+    try {
+      const results = await runner.runBatch({
+        jobs: entries.map((entry) => entry.job),
+        signal: work.controller.signal,
+        updateProgress: async (jobId, progress, checkpoint): Promise<Job> => {
+          const entry = entries.find((candidate) => candidate.job.id === jobId)
+          if (!entry) throw new Error('Batch runner referenced an unknown job')
+          entry.job = await Promise.resolve(this.repository.updateProgressAndCheckpoint({
+            jobId,
+            leaseOwner: this.leaseOwner,
+            progress,
+            checkpoint,
+            now: this.now()
+          }))
+          this.emit('job-changed', entry.job)
+          return entry.job
+        }
+      })
+      if (work.controller.signal.aborted) return
+      const byId = new Map(results.map((result) => [result.jobId, result]))
+      for (const entry of entries) {
+        const item = byId.get(entry.job.id)
+        if (!item) throw new Error('Batch runner did not return every claimed job')
+        if (item.error !== undefined) await this.failJob(entry, item.error)
+        else {
+          const normalized = normalizeRunnerResult(item.result, entry.job)
+          entry.job = await Promise.resolve(this.repository.complete({
+            jobId: entry.job.id,
+            leaseOwner: this.leaseOwner,
+            status: normalized.status,
+            progress: normalized.progress,
+            checkpoint: normalized.checkpoint,
+            now: this.now(),
+            detail: normalized.detail
+          }))
+          this.emit('job-changed', entry.job)
+          this.emit('job-notification', entry.job.id, entry.job.status, entry.job.kind)
+        }
+      }
+    } catch (error) {
+      if (work.controller.signal.aborted) return
+      await Promise.all(entries.map((entry) => this.failJob(entry, error)))
+    }
+  }
+
+  private async failJob(entry: ActiveJob, error: unknown): Promise<void> {
+    const retryable = isRetryableError(error)
+    const now = this.now()
+    const delayMs = retryable ? fullJitterExponentialBackoff(entry.job.attempt, this.backoff) : 0
+    const updated = await Promise.resolve(this.repository.failOrRetry({
+      jobId: entry.job.id,
+      leaseOwner: this.leaseOwner,
+      errorCode: sanitizeErrorCode(error),
+      errorMessage: sanitizeErrorMessage(error),
+      availableAt: addMilliseconds(now, delayMs),
+      now,
+      terminal: !retryable
+    }))
+    entry.job = updated
+    this.emit('job-changed', updated)
+    if (updated.status === 'failed') this.emit('job-notification', updated.id, updated.status, updated.kind)
   }
 
   private schedulePoll(): void {
@@ -371,7 +489,7 @@ export class JobScheduler {
     if (this.state !== 'running') return
     const jobs = [...this.active.values()]
     await Promise.all(jobs.map(async (entry) => {
-      if (entry.controller.signal.aborted) return
+      if (entry.work.controller.signal.aborted) return
       try {
         const heartbeatAt = this.now()
         entry.job = await Promise.resolve(this.repository.heartbeat({
@@ -381,7 +499,7 @@ export class JobScheduler {
           now: heartbeatAt
         }))
       } catch {
-        entry.controller.abort()
+        entry.work.controller.abort()
       }
     }))
   }
@@ -412,7 +530,7 @@ export function fullJitterExponentialBackoff(attempt: number, options: Scheduler
   return Math.floor(Math.max(0, Math.min(1, sample)) * cap)
 }
 
-function normalizeRunnerResult(result: JobRunnerResult, job: Job): JobRunnerResult {
+function normalizeRunnerResult(result: JobRunnerResult | undefined, job: Job): JobRunnerResult {
   if (!result || (result.status !== 'succeeded' && result.status !== 'partial')) {
     throw new Error('Job runner returned an invalid result')
   }
@@ -468,8 +586,21 @@ function nonNegativeInt(value: number): number {
   return Number.isInteger(value) && value >= 0 ? value : 0
 }
 
+function isBatchRunner(runner: JobRunner): runner is BatchJobRunner {
+  return typeof (runner as Partial<BatchJobRunner>).runBatch === 'function'
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof JobRunnerError) return error.retryable
+  if (!error || typeof error !== 'object') return false
+  const status = (error as { status?: unknown }).status
+  if (typeof status === 'number' && (status === 408 || status === 429 || status >= 500)) return true
+  const message = error instanceof Error ? error.message : ''
+  return /(?:timeout|timed out|timedout|network|econn|socket|temporar|HTTP\s*(?:408|429|5\d{2}))/iu.test(message)
+}
+
 function sanitizeErrorCode(error: unknown): string {
-  const raw = error instanceof Error ? error.name : 'JOB_RUNNER_FAILED'
+  const raw = error instanceof JobRunnerError ? error.code : error instanceof Error ? error.name : 'JOB_RUNNER_FAILED'
   return raw.replace(/[^A-Za-z0-9_.:-]/gu, '_').slice(0, 128) || 'JOB_RUNNER_FAILED'
 }
 

@@ -92,6 +92,8 @@ export interface JobFailOrRetryInput {
   errorMessage: string
   availableAt?: string
   now?: string
+  /** Permanent failures bypass retry-wait even when attempts remain. */
+  terminal?: boolean
   detail?: JsonObject
 }
 
@@ -143,11 +145,40 @@ export interface JobRunnerResult {
   detail?: JsonObject
 }
 
+/** Runner failures carry a safe code and retry classification to the scheduler. */
+export class JobRunnerError extends Error {
+  constructor(
+    message: string,
+    readonly code = 'JOB_RUNNER_FAILED',
+    readonly retryable = false
+  ) {
+    super(message)
+    this.name = 'JobRunnerError'
+  }
+}
+
 export interface JobRunner {
   run(input: JobRunnerInput): Promise<JobRunnerResult>
 }
 
-export type JobRunnerRegistry = Partial<Record<JobKind, JobRunner>>
+export interface JobBatchRunnerInput {
+  jobs: Job[]
+  signal: AbortSignal
+  updateProgress: (jobId: string, progress: number, checkpoint: JobCheckpoint) => Promise<Job>
+}
+
+export interface JobBatchResult {
+  jobId: string
+  result?: JobRunnerResult
+  error?: unknown
+}
+
+/** Optional batch entry point. A scheduler semaphore slot represents one batch. */
+export interface BatchJobRunner extends JobRunner {
+  runBatch(input: JobBatchRunnerInput): Promise<readonly JobBatchResult[]>
+}
+
+export type JobRunnerRegistry = Partial<Record<JobKind, JobRunner | BatchJobRunner>>
 
 export type JobRepositoryResult<T> = T | Promise<T>
 

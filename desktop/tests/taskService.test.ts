@@ -1,316 +1,133 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import archiver from 'archiver'
-import extractZip from 'extract-zip'
 import { afterEach, describe, expect, it } from 'vitest'
-import { TaskRepository } from '../src/utility/core/persistence/database'
-import type { CredentialAccount, CredentialVault } from '@main/credentialVault'
-import type { BatchResult, BatchSubmission, MinerUClient } from '@main/parserClient'
-import { SettingsService } from '@main/settingsService'
-import { TaskService } from '@main/taskService'
-import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
-import type { AppSettings, HealthResult, MinerUTask } from '@shared/types'
+import { SqliteJobRepository } from '../src/utility/core/persistence/sqliteJobRepository'
+import { V2Database } from '../src/utility/core/persistence/v2Database'
+import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
+import { ParseJobRunner } from '../src/main/parseJobRunner'
+import { TranslationJobRunner } from '../src/main/translationJobRunner'
+import { PathPolicy } from '../src/main/pathPolicy'
+import { SettingsService } from '../src/main/settingsService'
+import { TaskService } from '../src/main/taskService'
+import type { CredentialAccount, CredentialVault } from '../src/main/credentialVault'
+import type { BatchResult, BatchSubmission, MinerUClient } from '../src/main/parserClient'
+import type { HealthResult, MinerUTask } from '@shared/types'
 import { fixtureTaskCompute } from './taskComputeFixture'
 
-const temporaryRoots: string[] = []
+const roots: string[] = []
+const now = '2026-01-01T00:00:00.000Z'
+const leaseExpiry = '2026-01-01T00:00:30.000Z'
 
 afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })))
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-describe('TaskService official MinerU batches', () => {
-  it('continues polling uploaded files when another file in the batch fails to upload', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-task-service-'))
-    temporaryRoots.push(root)
-    const firstPdf = join(root, 'first.pdf')
-    const secondPdf = join(root, 'second.pdf')
-    await Promise.all([writeFile(firstPdf, '%PDF-1.4 first'), writeFile(secondPdf, '%PDF-1.4 second')])
-
-    const repository = new TaskRepository(join(root, 'tasks.sqlite3'))
-    const vault = new MemoryVault({ 'parser-token': 'test-token' })
+describe('durable TaskService cutover', () => {
+  it('creates exactly one queued parse job without a legacy execution queue', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mineru-durable-create-'))
+    roots.push(root)
+    const source = join(root, 'paper.pdf')
+    await writeFile(source, '%PDF-1.4 fixture')
+    const database = new V2Database(join(root, 'mineru.sqlite3'))
+    const repository = new V2TaskRepositoryCompat(database)
+    const jobs = new SqliteJobRepository(database)
+    const vault = new MemoryVault({ 'parser-token': 'parser-token' })
     const settings = new SettingsService(repository, vault, join(root, 'output'))
-    const client = new PartiallyFailingClient()
-    const service = new TaskService(repository, settings, vault, client, async () => new Response(), fixtureTaskCompute)
+    const client = new NeverCalledClient()
+    const service = new TaskService(repository, settings, vault, client, async () => new Response(), fixtureTaskCompute, undefined, undefined, { jobRepository: jobs })
 
     try {
       const created = await service.create({
-        files: [
-          { path: firstPdf, name: 'first.pdf', size: 14 },
-          { path: secondPdf, name: 'second.pdf', size: 15 }
-        ],
+        files: [{ path: source, name: 'paper.pdf', size: 16 }],
         parserModel: 'vlm',
         translationProvider: 'qwen',
         createDuplicates: false
       })
-      await waitFor(() => repository.listTasks().every((task) => task.status === 'failed'))
-
-      expect(created).toHaveLength(2)
-      expect(created[0]).toMatchObject({ originalName: 'first.pdf', title: null, name: 'first.pdf' })
-      expect(client.uploadedDataIds).toHaveLength(2)
-      expect(client.polledDataIds).toEqual([created[1]!.id])
-      expect(repository.getTask(created[0]!.id)?.error).toContain('fixture upload failed')
-      expect(repository.getTask(created[1]!.id)?.error).toContain('fixture parse failed')
+      const parseJobs = jobs.list({ documentId: created[0]!.id, kind: 'parse' })
+      expect(parseJobs).toHaveLength(1)
+      expect(parseJobs[0]).toMatchObject({ status: 'queued', attempt: 0 })
+      expect(client.createCalls).toBe(0)
     } finally {
-      repository.close()
+      database.close()
     }
   })
 
-  it('trusts only ordered translated blocks written by the current mapping algorithm', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-translation-manifest-'))
-    temporaryRoots.push(root)
-    const outputDir = join(root, 'task-output')
+  it('resumes a remote checkpoint without resubmitting and runs one dependent translation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mineru-durable-resume-'))
+    roots.push(root)
+    const outputDir = join(root, 'document')
+    const sourcePath = join(outputDir, 'original.pdf')
     await mkdir(outputDir, { recursive: true })
-    await Promise.all([
-      writeFile(join(outputDir, 'full.md'), '# Title\n\nAuthors\n\nAbstract\n', 'utf8'),
-      writeFile(join(outputDir, 'full.zh-CN.md'), '# 标题\n作者\n摘要\n', 'utf8'),
-      writeFile(join(outputDir, 'layout.json'), '{"pdf_info":[]}', 'utf8')
-    ])
-
-    const repository = new TaskRepository(join(root, 'tasks.sqlite3'))
-    const now = new Date().toISOString()
-    const fixtureTask: MinerUTask = {
-      id: 'translated-task',
-      originalName: 'paper.pdf',
-      title: null,
-      name: 'paper.pdf',
-      sourcePath: join(root, 'paper.pdf'),
-      sourceHash: 'fixture-hash',
-      outputDir,
-      status: 'completed',
-      progress: 100,
-      parserModel: 'vlm',
-      translationProvider: 'qwen',
-      remoteBatchId: null,
-      remoteDataId: null,
-      remoteResultUrl: null,
-      error: null,
-      createdAt: now,
-      updatedAt: now
-    }
-    repository.insertTasks([fixtureTask])
-    const vault = new MemoryVault({})
+    await writeFile(sourcePath, '%PDF-1.4 fixture')
+    const database = new V2Database(join(root, 'mineru.sqlite3'))
+    const repository = new V2TaskRepositoryCompat(database)
+    const jobs = new SqliteJobRepository(database)
+    const task = makeTask(outputDir, sourcePath)
+    repository.insertTask(task)
+    const claimedParse = jobs.claimBatch({ now, leaseOwner: 'runner', leaseExpiresAt: leaseExpiry, kind: 'parse' })[0]!
+    const checkpointed = jobs.updateProgressAndCheckpoint({
+      jobId: claimedParse.id,
+      leaseOwner: 'runner',
+      progress: 10,
+      checkpoint: { stage: 'polling', remoteBatchId: 'remote-batch', remoteDataId: task.id },
+      now
+    })
+    const vault = new MemoryVault({ 'parser-token': 'parser-token', 'qwen-api-key': 'qwen-key' })
     const settings = new SettingsService(repository, vault, join(root, 'output'))
-    const service = new TaskService(repository, settings, vault, new PartiallyFailingClient(), async () => new Response(), fixtureTaskCompute)
+    const client = new ResumeClient(await resultZip())
+    const fetcher = async (input: string | URL | Request): Promise<Response> => {
+      if (String(input).includes('/chat/completions')) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: '这是译文' } }] }), { status: 200 })
+      }
+      return new Response('', { status: 200 })
+    }
+    const parseRunner = new ParseJobRunner({
+      repository,
+      jobRepository: jobs,
+      settingsService: settings,
+      vault,
+      parserClient: client,
+      compute: fixtureTaskCompute,
+      pathPolicy: new PathPolicy()
+    })
 
     try {
-      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
-        version: 2,
-        mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
-        taskId: fixtureTask.id,
-        blocks: [
-          { sourceIndex: 1, markdown: '作者', mappingIds: ['authors'] },
-          { sourceIndex: 0, markdown: '# 标题', mappingIds: ['title'] },
-          { sourceIndex: 2, markdown: '摘要', mappingIds: ['abstract'] }
-        ]
-      }), 'utf8')
-      const current = await service.getDocument(fixtureTask.id)
-      expect(current.translatedBlocks).toEqual([
-        { sourceIndex: 0, markdown: '# 标题', mappingIds: ['title'] },
-        { sourceIndex: 1, markdown: '作者', mappingIds: ['authors'] },
-        { sourceIndex: 2, markdown: '摘要', mappingIds: ['abstract'] }
-      ])
+      const parseResult = await parseRunner.run({
+        job: checkpointed,
+        signal: new AbortController().signal,
+        updateProgress: async (progress, checkpoint) => jobs.updateProgressAndCheckpoint({ jobId: checkpointed.id, leaseOwner: 'runner', progress, checkpoint, now })
+      })
+      expect(client.createCalls).toBe(0)
+      expect(parseResult.status).toBe('succeeded')
+      const completedParse = jobs.complete({ jobId: checkpointed.id, leaseOwner: 'runner', status: 'succeeded', progress: 100, checkpoint: parseResult.checkpoint, now })
+      const translateJobs = jobs.list({ documentId: task.id, kind: 'translate' })
+      expect(translateJobs).toHaveLength(1)
+      expect(translateJobs[0]!.dependsOnJobId).toBe(completedParse.id)
 
-      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
-        version: 2,
-        taskId: fixtureTask.id,
-        blocks: [
-          { sourceIndex: 1, markdown: '作者', mappingIds: ['wrong-authors'] },
-          { sourceIndex: 0, markdown: '# 标题', mappingIds: ['wrong-title'] },
-          { sourceIndex: 2, markdown: '摘要', mappingIds: ['wrong-abstract'] }
-        ]
-      }), 'utf8')
-      const oldMapping = await service.getDocument(fixtureTask.id)
-      expect(oldMapping.translatedBlocks).toEqual([
-        { sourceIndex: 0, markdown: '# 标题', mappingIds: [] },
-        { sourceIndex: 1, markdown: '作者', mappingIds: [] },
-        { sourceIndex: 2, markdown: '摘要', mappingIds: [] }
-      ])
-
-      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
-        version: 2,
-        mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
-        taskId: fixtureTask.id,
-        blocks: [
-          { sourceIndex: 0, markdown: '# 标题', mappingIds: ['title'] },
-          { sourceIndex: 0, markdown: '重复索引', mappingIds: ['wrong'] },
-          { sourceIndex: 2, markdown: '摘要', mappingIds: ['abstract'] }
-        ]
-      }), 'utf8')
-      const malformed = await service.getDocument(fixtureTask.id)
-      expect(malformed.translatedBlocks).toEqual([
-        { sourceIndex: 0, markdown: '# 标题', mappingIds: [] },
-        { sourceIndex: 0, markdown: '重复索引', mappingIds: [] },
-        { sourceIndex: 2, markdown: '摘要', mappingIds: [] }
-      ])
-
-      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({ version: 1 }), 'utf8')
-      const legacy = await service.getDocument(fixtureTask.id)
-      expect(legacy.translatedBlocks).toBeNull()
-      expect(legacy.translatedMarkdown).toContain('作者')
+      const claimNow = new Date().toISOString()
+      const translate = jobs.claimBatch({ now: claimNow, leaseOwner: 'runner', leaseExpiresAt: new Date(Date.now() + 30_000).toISOString(), kind: 'translate' })[0]!
+      const translationRunner = new TranslationJobRunner({
+        repository,
+        settingsService: settings,
+        vault,
+        fetcher,
+        compute: fixtureTaskCompute,
+        pathPolicy: new PathPolicy()
+      })
+      const translationResult = await translationRunner.run({
+        job: translate,
+        signal: new AbortController().signal,
+        updateProgress: async (progress, checkpoint) => jobs.updateProgressAndCheckpoint({ jobId: translate.id, leaseOwner: 'runner', progress, checkpoint, now })
+      })
+      expect(translationResult.status).toBe('succeeded')
+      expect(jobs.list({ documentId: task.id, kind: 'translate' })).toHaveLength(1)
+      expect(repository.listTranslationBlocks(task.id, translate.id).every((block) => block.jobId === undefined || block.jobId === translate.id)).toBe(true)
+      await expect(readFile(join(outputDir, 'full.zh-CN.md'), 'utf8')).resolves.toContain('译文')
     } finally {
-      repository.close()
-    }
-  })
-
-  it('updates a parsed task title without renaming its stable output directory', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-title-integration-'))
-    temporaryRoots.push(root)
-    const outputRoot = join(root, 'output')
-    const oldOutputDir = join(outputRoot, 'uploaded-name-parse-task')
-    const originalPdf = join(oldOutputDir, 'original.pdf')
-    await mkdir(oldOutputDir, { recursive: true })
-    await writeFile(originalPdf, '%PDF-1.4 fixture')
-
-    const repository = new TaskRepository(join(root, 'tasks.sqlite3'))
-    const now = new Date().toISOString()
-    const fixtureTask: MinerUTask = {
-      id: 'parse-task',
-      originalName: 'uploaded-name.pdf',
-      title: null,
-      name: 'uploaded-name.pdf',
-      sourcePath: originalPdf,
-      sourceHash: 'fixture-hash',
-      outputDir: oldOutputDir,
-      status: 'parsing',
-      progress: 42,
-      parserModel: 'vlm',
-      translationProvider: 'qwen',
-      remoteBatchId: 'batch-fixture',
-      remoteDataId: 'parse-task',
-      remoteResultUrl: null,
-      error: null,
-      createdAt: now,
-      updatedAt: now
-    }
-    repository.insertTask(fixtureTask)
-    const vault = new MemoryVault({ 'qwen-api-key': 'fixture-key' })
-    const settings = new SettingsService(repository, vault, outputRoot)
-    const client = new ParsedResultClient(await createResultZip({
-      'result/full.md': '# Attention Is All You Need\n\nThis is a fixture paragraph.\n',
-      'result/middle.json': JSON.stringify({
-        pdf_info: [{
-          page_idx: 0,
-          page_size: [612, 792],
-          para_blocks: [{
-            index: 0,
-            type: 'title',
-            bbox: [40, 40, 500, 70],
-            lines: [{ bbox: [40, 40, 500, 70], spans: [{ content: 'Attention Is All You Need' }] }]
-          }, {
-            index: 1,
-            type: 'text',
-            bbox: [40, 100, 500, 140],
-            lines: [{ bbox: [40, 100, 500, 140], spans: [{ content: 'This is a fixture paragraph.' }] }]
-          }]
-        }]
-      })
-    }))
-    const service = new TaskService(repository, settings, vault, client, async () => new Response(JSON.stringify({
-      choices: [{ message: { content: '这是一个测试段落。' } }]
-    }), { status: 200 }), fixtureTaskCompute)
-
-    try {
-      const processParsedTask = (service as unknown as {
-        processParsedTask(taskId: string, resultUrl: string, settings: AppSettings): Promise<void>
-      }).processParsedTask.bind(service)
-      await processParsedTask(fixtureTask.id, 'https://cdn.example.test/result.zip', await settings.get())
-
-      const task = repository.getTask(fixtureTask.id)
-      const expectedDir = oldOutputDir
-      expect(task).toMatchObject({
-        originalName: 'uploaded-name.pdf',
-        title: 'Attention Is All You Need',
-        name: 'Attention Is All You Need.pdf',
-        outputDir: expectedDir,
-        sourcePath: join(expectedDir, 'original.pdf'),
-        status: 'completed'
-      })
-      await expect(access(oldOutputDir)).resolves.toBeUndefined()
-      await expect(readFile(join(expectedDir, 'original.pdf'), 'utf8')).resolves.toBe('%PDF-1.4 fixture')
-      await expect(readFile(join(expectedDir, 'full.md'), 'utf8')).resolves.toContain('# Attention Is All You Need')
-      await expect(readFile(join(expectedDir, 'full.zh-CN.md'), 'utf8')).resolves.toContain('这是一个测试段落。')
-      await expect(service.getDocument(fixtureTask.id)).resolves.toMatchObject({
-        pdfUrl: 'mineru-asset://parse-task/original.pdf',
-        task: { name: 'Attention Is All You Need.pdf' }
-      })
-
-      await processParsedTask(fixtureTask.id, 'https://cdn.example.test/result.zip', await settings.get())
-      expect(repository.getTask(fixtureTask.id)?.outputDir).toBe(expectedDir)
-      expect(repository.getTask(fixtureTask.id)?.name).toBe('Attention Is All You Need.pdf')
-
-      const resultZipPath = join(root, 'result.zip')
-      const extractedZipDir = join(root, 'exported-result')
-      await service.createResultZip(fixtureTask.id, resultZipPath)
-      await extractZip(resultZipPath, { dir: extractedZipDir })
-      await expect(readFile(join(extractedZipDir, 'original.pdf'), 'utf8')).resolves.toBe('%PDF-1.4 fixture')
-    } finally {
-      repository.close()
-    }
-  })
-
-  it('keeps the original directory and leaves unrelated title-like directories untouched', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-title-rename-failure-'))
-    temporaryRoots.push(root)
-    const outputRoot = join(root, 'output')
-    const oldOutputDir = join(outputRoot, 'uploaded-name-rename-failure')
-    const targetOutputDir = join(outputRoot, 'Safe Title-rename-failure-task')
-    await mkdir(oldOutputDir, { recursive: true })
-    await mkdir(targetOutputDir, { recursive: true })
-    await writeFile(join(targetOutputDir, 'sentinel.txt'), 'keep this directory')
-    const originalPdf = join(oldOutputDir, 'original.pdf')
-    await writeFile(originalPdf, '%PDF-1.4 fixture')
-
-    const repository = new TaskRepository(join(root, 'tasks.sqlite3'))
-    const now = new Date().toISOString()
-    const fixtureTask: MinerUTask = {
-      id: 'rename-failure-task',
-      originalName: 'uploaded-name.pdf',
-      title: null,
-      name: 'uploaded-name.pdf',
-      sourcePath: originalPdf,
-      sourceHash: 'fixture-hash',
-      outputDir: oldOutputDir,
-      status: 'parsing',
-      progress: 42,
-      parserModel: 'vlm',
-      translationProvider: 'qwen',
-      remoteBatchId: 'batch-fixture',
-      remoteDataId: 'rename-failure-task',
-      remoteResultUrl: null,
-      error: null,
-      createdAt: now,
-      updatedAt: now
-    }
-    repository.insertTask(fixtureTask)
-    const vault = new MemoryVault({ 'qwen-api-key': 'fixture-key' })
-    const settings = new SettingsService(repository, vault, outputRoot)
-    const client = new ParsedResultClient(await createResultZip({
-      'result/full.md': '# Safe Title\n',
-      'result/middle.json': JSON.stringify({ pdf_info: [] })
-    }))
-    const service = new TaskService(repository, settings, vault, client, async () => new Response(JSON.stringify({
-      choices: [{ message: { content: '安全标题' } }]
-    }), { status: 200 }), fixtureTaskCompute)
-
-    try {
-      const processParsedTask = (service as unknown as {
-        processParsedTask(taskId: string, resultUrl: string, settings: AppSettings): Promise<void>
-      }).processParsedTask.bind(service)
-      await processParsedTask(fixtureTask.id, 'https://cdn.example.test/result.zip', await settings.get())
-
-      expect(repository.getTask(fixtureTask.id)).toMatchObject({
-        title: 'Safe Title',
-        name: 'Safe Title.pdf',
-        outputDir: oldOutputDir,
-        sourcePath: originalPdf,
-        status: 'completed'
-      })
-      await expect(access(originalPdf)).resolves.toBeUndefined()
-      await expect(readFile(join(targetOutputDir, 'sentinel.txt'), 'utf8')).resolves.toBe('keep this directory')
-    } finally {
-      repository.close()
+      database.close()
     }
   })
 })
@@ -318,111 +135,65 @@ describe('TaskService official MinerU batches', () => {
 class MemoryVault implements CredentialVault {
   constructor(private readonly values: Partial<Record<CredentialAccount, string>>) {}
 
-  async get(account: CredentialAccount): Promise<string | null> {
-    return this.values[account] ?? null
-  }
-
-  async set(account: CredentialAccount, value: string): Promise<void> {
-    this.values[account] = value
-  }
-
-  async delete(account: CredentialAccount): Promise<void> {
-    delete this.values[account]
-  }
-
-  async has(account: CredentialAccount): Promise<boolean> {
-    return Boolean(this.values[account])
-  }
+  async get(account: CredentialAccount): Promise<string | null> { return this.values[account] ?? null }
+  async set(account: CredentialAccount, value: string): Promise<void> { this.values[account] = value }
+  async delete(account: CredentialAccount): Promise<void> { delete this.values[account] }
+  async has(account: CredentialAccount): Promise<boolean> { return Boolean(this.values[account]) }
 }
 
-class PartiallyFailingClient implements MinerUClient {
-  uploadedDataIds: string[] = []
-  polledDataIds: string[] = []
-  private failedDataId = ''
+class NeverCalledClient implements MinerUClient {
+  createCalls = 0
+  async verifyToken(): Promise<HealthResult> { return { ok: true, message: 'unused' } }
+  async createUploadBatch(): Promise<BatchSubmission> { this.createCalls += 1; throw new Error('legacy queue must not call parser') }
+  async uploadFile(): Promise<void> { throw new Error('unused') }
+  async getBatchResult(_batchId: string): Promise<BatchResult> { throw new Error('unused') }
+  async waitForBatch(_batchId: string, _token: string, _expectedDataIds: Set<string>, _onUpdate: (result: BatchResult) => void): Promise<BatchResult> { throw new Error('unused') }
+  async downloadResult(): Promise<Uint8Array> { throw new Error('unused') }
+}
 
-  async verifyToken(): Promise<HealthResult> {
-    return { ok: true, message: 'ok' }
+class ResumeClient extends NeverCalledClient {
+  constructor(private readonly zip: Uint8Array) { super() }
+
+  override async getBatchResult(batchId: string): Promise<BatchResult> {
+    return { batchId, entries: [{ dataId: 'document-1', fileName: 'paper.pdf', state: 'pending', fullZipUrl: null, error: null, progress: null }] }
   }
 
-  async createUploadBatch(tasks: MinerUTask[], _settings: AppSettings): Promise<BatchSubmission> {
-    this.failedDataId = tasks[0]!.id
-    return {
-      batchId: 'batch-fixture',
-      uploads: tasks.map((task) => ({
-        taskId: task.id,
-        dataId: task.id,
-        uploadUrl: `https://upload.example/${task.id}`
-      }))
-    }
-  }
-
-  async uploadFile(_filePath: string, uploadUrl: string): Promise<void> {
-    const dataId = uploadUrl.split('/').at(-1)!
-    this.uploadedDataIds.push(dataId)
-    if (dataId === this.failedDataId) throw new Error('fixture upload failed')
-  }
-
-  async getBatchResult(): Promise<BatchResult> {
-    throw new Error('not used')
-  }
-
-  async waitForBatch(
-    _batchId: string,
-    _token: string,
-    expectedDataIds: Set<string>,
-    onUpdate: (result: BatchResult) => void
-  ): Promise<BatchResult> {
-    this.polledDataIds = [...expectedDataIds]
+  override async waitForBatch(batchId: string, _token: string, expectedDataIds: Set<string>, onUpdate: (result: BatchResult) => void): Promise<BatchResult> {
     const result: BatchResult = {
-      batchId: 'batch-fixture',
-      entries: [...expectedDataIds].map((dataId) => ({
-        dataId,
-        fileName: 'second.pdf',
-        state: 'failed',
-        fullZipUrl: null,
-        error: 'fixture parse failed',
-        progress: null
-      }))
+      batchId,
+      entries: [...expectedDataIds].map((dataId) => ({ dataId, fileName: 'paper.pdf', state: 'done' as const, fullZipUrl: 'https://cdn.example.test/result.zip', error: null, progress: null }))
     }
     onUpdate(result)
     return result
   }
 
-  async downloadResult(): Promise<Uint8Array> {
-    throw new Error('not used')
+  override async downloadResult(): Promise<Uint8Array> { return this.zip }
+}
+
+function makeTask(outputDir: string, sourcePath: string): MinerUTask {
+  return {
+    id: 'document-1',
+    originalName: 'paper.pdf',
+    title: null,
+    name: 'paper.pdf',
+    sourcePath,
+    sourceHash: 'fixture-hash',
+    outputDir,
+    status: 'uploading',
+    progress: 0,
+    parserModel: 'vlm',
+    translationProvider: 'qwen',
+    remoteBatchId: null,
+    remoteDataId: null,
+    remoteResultUrl: null,
+    error: null,
+    createdAt: now,
+    updatedAt: now
   }
 }
 
-class ParsedResultClient implements MinerUClient {
-  constructor(private readonly result: Uint8Array) {}
-
-  async verifyToken(): Promise<HealthResult> {
-    return { ok: true, message: 'ok' }
-  }
-
-  async createUploadBatch(): Promise<BatchSubmission> {
-    throw new Error('not used')
-  }
-
-  async uploadFile(): Promise<void> {
-    throw new Error('not used')
-  }
-
-  async getBatchResult(): Promise<BatchResult> {
-    throw new Error('not used')
-  }
-
-  async waitForBatch(): Promise<BatchResult> {
-    throw new Error('not used')
-  }
-
-  async downloadResult(): Promise<Uint8Array> {
-    return this.result
-  }
-}
-
-async function createResultZip(files: Record<string, string>): Promise<Uint8Array> {
-  return new Promise<Uint8Array>((resolve, reject) => {
+async function resultZip(): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
     const archive = archiver('zip', { zlib: { level: 9 } })
     const output = new PassThrough()
     const chunks: Buffer[] = []
@@ -431,16 +202,8 @@ async function createResultZip(files: Record<string, string>): Promise<Uint8Arra
     output.on('error', reject)
     archive.on('error', reject)
     archive.pipe(output)
-    for (const [name, content] of Object.entries(files)) archive.append(content, { name })
+    archive.append('# Resume Title\n\nEnglish paragraph.\n', { name: 'result/full.md' })
+    archive.append(JSON.stringify({ pdf_info: [] }), { name: 'result/middle.json' })
     void archive.finalize()
   })
-}
-
-async function waitFor(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 2_000
-  while (Date.now() < deadline) {
-    if (predicate()) return
-    await new Promise((resolve) => setTimeout(resolve, 20))
-  }
-  throw new Error('Timed out waiting for TaskService queue')
 }

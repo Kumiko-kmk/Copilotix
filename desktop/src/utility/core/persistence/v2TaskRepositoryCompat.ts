@@ -39,6 +39,10 @@ export interface CompatDocumentRow {
 type V2JobKind = 'parse' | 'translate'
 type V2JobStatus = 'queued' | 'running' | 'retry-wait' | 'succeeded' | 'partial' | 'failed' | 'cancelled'
 
+export interface DocumentMetadataPatch {
+  displayTitle?: string | null
+}
+
 export interface CompatJobRow {
   id: string
   document_id: string
@@ -282,6 +286,15 @@ export class V2TaskRepositoryCompat {
     })
   }
 
+  updateDocumentMetadata(id: string, patch: DocumentMetadataPatch): void {
+    const current = this.readDocument(id)
+    if (!current) throw new Error('文档不存在')
+    const title = patch.displayTitle === undefined ? current.display_title : patch.displayTitle
+    if (title !== null && typeof title !== 'string') throw new Error('文档元数据无效')
+    this.database.connection.prepare('UPDATE documents SET display_title=?, updated_at=? WHERE id=?')
+      .run(title, new Date().toISOString(), id)
+  }
+
   updateTask(id: string, patch: Partial<MinerUTask>): MinerUTask {
     this.database.transaction(() => {
       const current = this.readProjection(id)
@@ -303,7 +316,9 @@ export class V2TaskRepositoryCompat {
 
   upsertTranslationBlock(block: TranslationBlockRecord): void {
     this.database.transaction(() => {
-      const job = this.latestJob(block.taskId, 'translate')
+      const job = block.jobId
+        ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=? AND document_id=? AND kind=\'translate\'').get(block.jobId, block.taskId) as CompatJobRow | undefined
+        : this.latestJob(block.taskId, 'translate')
       if (!job) throw new Error('翻译作业尚未创建')
       this.database.connection.prepare(`
         INSERT INTO translation_blocks(
@@ -322,8 +337,10 @@ export class V2TaskRepositoryCompat {
     })
   }
 
-  listTranslationBlocks(taskId: string): TranslationBlockRecord[] {
-    const job = this.latestJob(taskId, 'translate')
+  listTranslationBlocks(taskId: string, jobId?: string): TranslationBlockRecord[] {
+    const job = jobId
+      ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=? AND document_id=? AND kind=\'translate\'').get(jobId, taskId) as CompatJobRow | undefined
+      : this.latestJob(taskId, 'translate')
     if (!job) return []
     return this.database.connection.prepare(`
       SELECT ? as taskId, block_id as blockId, source_hash as sourceHash,

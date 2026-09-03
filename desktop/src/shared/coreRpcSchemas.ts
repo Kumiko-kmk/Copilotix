@@ -138,6 +138,7 @@ const coreArtifactKindSchema = z.enum([
 ])
 const coreTranslationBlockSchema = z.object({
   taskId: coreIdSchema,
+  jobId: coreIdSchema.optional(),
   blockId: coreIdSchema,
   sourceHash: coreHashSchema,
   sourceMarkdown: z.string().max(262_144).refine(noNul),
@@ -171,7 +172,7 @@ const coreOperationNames = [
   'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
   'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
   'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
-  'documents:list', 'documents:get-summary', 'artifacts:get-latest', 'artifacts:record-revision',
+  'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:get-latest', 'artifacts:record-revision',
   'translation:block-upsert', 'translation:blocks-list', 'translation:run-update',
   'translation:cache-get', 'translation:cache-put',
   'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
@@ -209,6 +210,13 @@ export const coreInsertTaskPayloadSchema = z.object({ task: minerUTaskSchema }).
 export const coreInsertTasksPayloadSchema = z.object({ tasks: z.array(minerUTaskSchema).max(100) }).strict()
 export const coreMutationResultSchema = z.object({ changed: z.literal(true) }).strict()
 export const coreUpdateTaskPayloadSchema = z.object({ id: coreIdSchema, patch: coreTaskPatchSchema }).strict()
+export const coreDocumentMetadataPatchSchema = z.object({
+  displayTitle: z.string().max(32_768).refine(noNul).nullable().optional()
+}).strict()
+export const coreDocumentMetadataPayloadSchema = z.object({
+  id: coreIdSchema,
+  patch: coreDocumentMetadataPatchSchema
+}).strict()
 export const coreJobSchema = z.object({
   id: coreIdSchema,
   documentId: coreIdSchema,
@@ -298,6 +306,7 @@ export const coreJobFailOrRetryPayloadSchema = z.object({
   errorMessage: z.string().min(1).max(32_768).refine(noNul),
   availableAt: coreTimestampSchema.optional(),
   now: coreTimestampSchema.optional(),
+  terminal: z.boolean().optional(),
   detail: coreJobJsonObjectSchema.optional()
 }).strict()
 export const coreJobCancelPayloadSchema = z.object({
@@ -334,7 +343,7 @@ export const coreArtifactRecordPayloadSchema = z.object({
   metadata: coreMetadataSchema.optional()
 }).strict()
 export const coreTranslationBlockUpsertPayloadSchema = z.object({ block: coreTranslationBlockSchema }).strict()
-export const coreTranslationBlocksListPayloadSchema = z.object({ taskId: coreIdSchema }).strict()
+export const coreTranslationBlocksListPayloadSchema = z.object({ taskId: coreIdSchema, jobId: coreIdSchema.optional() }).strict()
 export const coreTranslationBlocksListResultSchema = z.array(coreTranslationBlockSchema).max(10_000)
 export const coreTranslationRunUpdatePayloadSchema = z.object({
   taskId: coreIdSchema,
@@ -400,6 +409,7 @@ export const coreOperationRegistry = {
   'jobs:list-events': { payload: coreJobEventsPayloadSchema, result: coreJobEventsResultSchema },
   'documents:list': { payload: coreTasksListPayloadSchema, result: coreDocumentsListResultSchema },
   'documents:get-summary': { payload: coreTaskIdPayloadSchema, result: documentSummarySchema.nullable() },
+  'documents:update-metadata': { payload: coreDocumentMetadataPayloadSchema, result: coreMutationResultSchema },
   'artifacts:get-latest': { payload: coreArtifactLatestPayloadSchema, result: coreArtifactLatestResultSchema },
   'artifacts:record-revision': { payload: coreArtifactRecordPayloadSchema, result: coreMutationResultSchema },
   'translation:block-upsert': { payload: coreTranslationBlockUpsertPayloadSchema, result: coreMutationResultSchema },

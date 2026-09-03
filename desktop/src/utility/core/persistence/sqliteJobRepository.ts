@@ -317,7 +317,7 @@ export class SqliteJobRepository implements JobRepositoryPort {
     return this.database.transaction(() => {
       const current = this.requireJobUnsafe(jobId)
       if (current.status !== 'running' || current.leaseOwner !== owner) throw leaseLost()
-      const toState: JobStatus = current.attempt < current.maxAttempts ? 'retry-wait' : 'failed'
+      const toState: JobStatus = input.terminal || current.attempt >= current.maxAttempts ? 'failed' : 'retry-wait'
       const availableAt = validateTimestamp(input.availableAt ?? now, 'retry time')
       assertTransition(current.status, toState)
       this.updateTransition.run(

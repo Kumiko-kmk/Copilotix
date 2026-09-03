@@ -269,6 +269,15 @@ export class TaskRepository {
     return next
   }
 
+  updateDocumentMetadata(id: string, patch: { displayTitle?: string | null }): void {
+    const current = this.getTask(id)
+    if (!current) throw new Error('任务不存在')
+    const title = patch.displayTitle === undefined ? current.title : patch.displayTitle
+    const name = title ? `${title}.pdf` : current.originalName || current.name
+    this.db.prepare('UPDATE tasks SET title=?,name=?,updated_at=? WHERE id=?')
+      .run(title, name, new Date().toISOString(), id)
+  }
+
   deleteTask(id: string): void {
     this.db.prepare('DELETE FROM tasks WHERE id = ?').run(id)
   }

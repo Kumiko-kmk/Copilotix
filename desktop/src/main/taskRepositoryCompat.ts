@@ -32,16 +32,22 @@ export interface TaskRepositoryCompat {
   mutateDocumentAnnotations?(request: MutateReaderAnnotationsRequest): ReaderAnnotationSnapshot | Promise<ReaderAnnotationSnapshot>
   insertTask(task: MinerUTask): void | Promise<void>
   insertTasks(tasks: MinerUTask[]): void | Promise<void>
+  /** Narrow metadata-only update; it must not derive or mutate job state. */
+  updateDocumentMetadata?(id: string, patch: DocumentMetadataPatch): void | Promise<void>
   updateTask(id: string, patch: Partial<MinerUTask>): MinerUTask | Promise<MinerUTask>
   deleteTask(id: string): void | Promise<void>
   upsertTranslationBlock(block: TranslationBlockRecord): void | Promise<void>
-  listTranslationBlocks(taskId: string): TranslationBlockRecord[] | Promise<TranslationBlockRecord[]>
+  listTranslationBlocks(taskId: string, jobId?: string): TranslationBlockRecord[] | Promise<TranslationBlockRecord[]>
   updateTranslationRun(taskId: string, total: number, completed: number, failed: number): void | Promise<void>
   getCache(cacheKey: string): string | null | Promise<string | null>
   putCache(cacheKey: string, translated: string, provider: string, model: string): void | Promise<void>
   listReaderAnnotations(taskId: string): ReaderAnnotation[] | Promise<ReaderAnnotation[]>
   replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): ReaderAnnotation[] | Promise<ReaderAnnotation[]>
   recordArtifactRevision?(taskId: string, kind: ArtifactKind, path: string, checksum: string, metadata?: Record<string, unknown>): void | Promise<void>
+}
+
+export interface DocumentMetadataPatch {
+  displayTitle?: string | null
 }
 
 export interface ArtifactReference {

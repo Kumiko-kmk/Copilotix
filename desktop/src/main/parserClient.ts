@@ -34,21 +34,22 @@ export interface BatchResult {
 }
 
 export interface FileUploader {
-  upload(filePath: string, uploadUrl: string, onProgress?: (sent: number, total: number) => void): Promise<void>
+  upload(filePath: string, uploadUrl: string, onProgress?: (sent: number, total: number) => void, signal?: AbortSignal): Promise<void>
 }
 
 export interface MinerUClient {
   verifyToken(token?: string | null): Promise<HealthResult>
-  createUploadBatch(tasks: MinerUTask[], settings: AppSettings, token?: string | null): Promise<BatchSubmission>
-  uploadFile(filePath: string, uploadUrl: string, onProgress?: (sent: number, total: number) => void): Promise<void>
-  getBatchResult(batchId: string, token?: string | null): Promise<BatchResult>
+  createUploadBatch(tasks: MinerUTask[], settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission>
+  uploadFile(filePath: string, uploadUrl: string, onProgress?: (sent: number, total: number) => void, signal?: AbortSignal): Promise<void>
+  getBatchResult(batchId: string, token?: string | null, signal?: AbortSignal): Promise<BatchResult>
   waitForBatch(
     batchId: string,
     token: string,
     expectedDataIds: Set<string>,
-    onUpdate: (result: BatchResult) => void
+    onUpdate: (result: BatchResult) => void,
+    signal?: AbortSignal
   ): Promise<BatchResult>
-  downloadResult(resultUrl: string): Promise<Uint8Array>
+  downloadResult(resultUrl: string, signal?: AbortSignal): Promise<Uint8Array>
 }
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -143,7 +144,7 @@ export class OfficialMinerUClient implements MinerUClient {
     }
   }
 
-  async createUploadBatch(tasks: MinerUTask[], settings: AppSettings, token?: string | null): Promise<BatchSubmission> {
+  async createUploadBatch(tasks: MinerUTask[], settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission> {
     if (!token?.trim()) throw new Error('未配置 MinerU API Token')
     if (tasks.length === 0) throw new Error('没有可提交的 PDF')
     const parserModel = tasks[0]?.parserModel
@@ -159,7 +160,7 @@ export class OfficialMinerUClient implements MinerUClient {
         enable_table: settings.tableEnabled,
         language: settings.ocrLanguage
       }),
-      signal: AbortSignal.timeout(30_000)
+      signal: signal ?? AbortSignal.timeout(30_000)
     })
     const payload = await requireSuccess<UploadBatchData>(response, '申请文件上传链接失败')
     if (!payload.data || typeof payload.data.batch_id !== 'string' || !Array.isArray(payload.data.file_urls)) {
@@ -180,16 +181,20 @@ export class OfficialMinerUClient implements MinerUClient {
   uploadFile(
     filePath: string,
     uploadUrl: string,
-    onProgress?: (sent: number, total: number) => void
+    onProgress?: (sent: number, total: number) => void,
+    signal?: AbortSignal
   ): Promise<void> {
-    return this.uploader.upload(filePath, requireHttpsUrl(uploadUrl, '上传链接'), onProgress)
+    const target = requireHttpsUrl(uploadUrl, '上传链接')
+    return signal === undefined
+      ? this.uploader.upload(filePath, target, onProgress)
+      : this.uploader.upload(filePath, target, onProgress, signal)
   }
 
-  async getBatchResult(batchId: string, token?: string | null): Promise<BatchResult> {
+  async getBatchResult(batchId: string, token?: string | null, signal?: AbortSignal): Promise<BatchResult> {
     if (!token?.trim()) throw new Error('未配置 MinerU API Token')
     const response = await this.fetcher(
       `${MINERU_API_ORIGIN}/api/v4/extract-results/batch/${encodeURIComponent(batchId)}`,
-      { headers: authHeaders(token), signal: AbortSignal.timeout(30_000) }
+      { headers: authHeaders(token), signal: signal ?? AbortSignal.timeout(30_000) }
     )
     const payload = await requireSuccess<RawBatchResultData>(response, '查询 MinerU 批次结果失败')
     if (!payload.data || !Array.isArray(payload.data.extract_result)) throw new Error('MinerU API 返回了无效的批次结果')
@@ -221,14 +226,15 @@ export class OfficialMinerUClient implements MinerUClient {
     batchId: string,
     token: string,
     expectedDataIds: Set<string>,
-    onUpdate: (result: BatchResult) => void
+    onUpdate: (result: BatchResult) => void,
+    signal?: AbortSignal
   ): Promise<BatchResult> {
     const startedAt = Date.now()
     const deadline = startedAt + this.maxWaitMs
     let delayMs = this.pollIntervalMs
     while (Date.now() < deadline) {
       const result = expireUnregisteredUploads(
-        await this.getBatchResult(batchId, token),
+        await this.getBatchResult(batchId, token, signal),
         expectedDataIds,
         Date.now() - startedAt >= this.waitingFileTimeoutMs
       )
@@ -241,15 +247,15 @@ export class OfficialMinerUClient implements MinerUClient {
           return Boolean(entry && TERMINAL_STATES.has(entry.state))
         })
       ) return result
-      await delay(delayMs)
+      await delay(delayMs, signal)
       delayMs = Math.min(10_000, Math.max(this.pollIntervalMs, Math.round(delayMs * 1.15)))
     }
     throw new Error('等待 MinerU 解析结果超时')
   }
 
-  async downloadResult(resultUrl: string): Promise<Uint8Array> {
+  async downloadResult(resultUrl: string, signal?: AbortSignal): Promise<Uint8Array> {
     const response = await this.fetcher(requireHttpsUrl(resultUrl, '结果下载链接'), {
-      signal: AbortSignal.timeout(10 * 60 * 1000)
+      signal: signal ?? AbortSignal.timeout(10 * 60 * 1000)
     })
     if (!response.ok) throw new Error(`下载解析结果失败（HTTP ${response.status}）`)
     const bytes = new Uint8Array(await response.arrayBuffer())
@@ -335,6 +341,13 @@ function readableError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new Error('请求已取消'))
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, milliseconds)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer)
+      reject(new Error('请求已取消'))
+    }, { once: true })
+  })
 }

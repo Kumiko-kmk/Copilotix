@@ -192,6 +192,8 @@ export interface TranslationCheckpoint {
 
 export interface TranslationBlockRecord {
   taskId: string
+  /** Durable translate job owning this block; omitted only by legacy adapters. */
+  jobId?: string
   blockId: string
   sourceHash: string
   sourceMarkdown: string

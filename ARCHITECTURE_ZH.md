@@ -90,7 +90,11 @@ Phase 3A2 已将 SQLite、迁移、兼容 repository 与文件 hash、解析结�
 
 ### 4.3 Phase 3B1 进度（Durable Job Scheduler Foundation）
 
-Phase 3B1 已加入独立 durable job repository、租约/心跳、依赖门控、过期恢复、重试退避与可测试 scheduler 基础；main 目前只初始化 scheduler，尚未注册真实 parse/translate runner，也不会 claim 作业。TaskService 接管与真实 runner 接入留在 Phase 3B2。
+Phase 3B1 已加入独立 durable job repository、租约/心跳、依赖门控、过期恢复、重试退避与可测试 scheduler 基础；真实工作流接入在随后 Phase 3B2 完成。
+
+### 4.4 Phase 3B2 进度（Durable Workflow Cutover）
+
+Phase 3B2 已将 parse/translate 执行切换到 JobScheduler 与独立 runners；TaskService 仅保留命令、文档与事件 facade，任务状态、租约、checkpoint 和重试由 durable jobs 管理。Phase 4 尚未开始。
 
 electron-vite 与独立 Vite 配置生成四份 bundle：
 

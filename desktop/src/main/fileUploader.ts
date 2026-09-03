@@ -12,7 +12,8 @@ export class ElectronFileUploader implements FileUploader {
   async upload(
     filePath: string,
     uploadUrl: string,
-    onProgress?: (sent: number, total: number) => void
+    onProgress?: (sent: number, total: number) => void,
+    signal?: AbortSignal
   ): Promise<void> {
     const body = await openAsBlob(filePath)
     onProgress?.(0, body.size)
@@ -21,7 +22,7 @@ export class ElectronFileUploader implements FileUploader {
       body,
       credentials: 'omit',
       redirect: 'follow',
-      signal: AbortSignal.timeout(10 * 60 * 1000)
+      signal: signal ?? AbortSignal.timeout(10 * 60 * 1000)
     })
     await response.arrayBuffer()
     if (response.status !== 200) throw new Error(`上传文件失败（HTTP ${response.status}）`)

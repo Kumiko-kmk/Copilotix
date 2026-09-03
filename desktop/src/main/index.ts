@@ -56,6 +56,9 @@ import { UtilitySupervisor } from './utilitySupervisor'
 import { forkUtilityProcess } from './electronUtilityFork'
 import { RpcJobRepository } from './rpcJobRepository'
 import { JobScheduler } from './jobScheduler'
+import { ParseJobRunner } from './parseJobRunner'
+import { TranslationJobRunner } from './translationJobRunner'
+import { PathPolicy } from './pathPolicy'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -90,10 +93,7 @@ async function bootstrap(): Promise<void> {
   })
   await utilitySupervisor.start()
   const jobRepository = new RpcJobRepository(utilitySupervisor)
-  // Scheduler execution is intentionally deferred until 3B2 registers the
-  // real parse/translate runners; with no runners it cannot claim jobs.
   jobScheduler = new JobScheduler(jobRepository)
-  await jobScheduler.start()
   const userData = app.getPath('userData')
   await mkdir(userData, { recursive: true })
   repository = new RpcTaskRepository(utilitySupervisor)
@@ -103,7 +103,12 @@ async function bootstrap(): Promise<void> {
     net.fetch(input instanceof URL ? input.toString() : input, init)
   const parserClient = new OfficialMinerUClient(fetcher, new ElectronFileUploader())
   const logger = new JsonLineLogger(join(userData, 'mineru-desktop.log'))
-  const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger, new RpcTaskCompute(utilitySupervisor))
+  const compute = new RpcTaskCompute(utilitySupervisor)
+  const pathPolicy = new PathPolicy()
+  const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger, compute, pathPolicy, {
+    jobRepository,
+    scheduler: jobScheduler
+  })
   documentSummaries = new Map((await tasks.list()).map((task) => {
     const summary = projectDocumentSummary(task)
     return [summary.id, summary] as const
@@ -143,6 +148,27 @@ async function bootstrap(): Promise<void> {
     })
     notification.show()
   })
+
+  jobScheduler.registerRunner('parse', new ParseJobRunner({
+    repository,
+    jobRepository,
+    settingsService: settings,
+    vault,
+    parserClient,
+    compute,
+    pathPolicy,
+    logger
+  }))
+  jobScheduler.registerRunner('translate', new TranslationJobRunner({
+    repository,
+    settingsService: settings,
+    vault,
+    fetcher,
+    compute,
+    pathPolicy,
+    logger
+  }))
+  await jobScheduler.start()
 
   app.on('activate', showMainWindow)
 }

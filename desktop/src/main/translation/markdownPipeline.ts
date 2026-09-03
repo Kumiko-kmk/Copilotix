@@ -27,11 +27,13 @@ import {
 
 interface PipelineOptions {
   task: MinerUTask
+  /** Explicit durable job binding; omitted by legacy standalone callers. */
+  jobId?: string
   markdown: string
   mappings: BlockMapping[]
   providers: Map<TranslationProviderId, TranslationProvider>
   repository: TaskRepositoryCompat
-  onProgress(completed: number, total: number, failed: number): void
+  onProgress(completed: number, total: number, failed: number): void | Promise<void>
 }
 
 export interface TranslationBlockResult extends TranslatedMarkdownBlock {
@@ -62,7 +64,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
   const sourceBlocks = alignMarkdownBlocks(options.markdown, options.mappings)
   const referenceActions = buildReferenceActions(sourceBlocks, options.mappings)
   const existing = new Map(
-    (await options.repository.listTranslationBlocks(options.task.id)).map((block) => [block.blockId, block])
+    (await options.repository.listTranslationBlocks(options.task.id, options.jobId)).map((block) => [block.blockId, block])
   )
   const results = new Array<TranslationBlockResult | undefined>(sourceBlocks.length)
   const tableUnits = buildTableTranslationUnits(sourceBlocks, options.mappings)
@@ -114,9 +116,9 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             error: null
           })
           results[workItem.sourceIndex] = result
-          await saveBlock(options.repository, options.task.id, result)
+          await saveBlock(options.repository, options.task.id, result, options.jobId)
           completed += 1
-          options.onProgress(completed, sourceBlocks.length, failed)
+          await options.onProgress(completed, sourceBlocks.length, failed)
           return
         }
         if (workItem.kind === 'table') {
@@ -124,7 +126,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
           const blockCount = workItem.unit.blocks.length
           if (workItem.unit.blocks.every((block) => results[block.sourceIndex]?.status === 'completed')) completed += blockCount
           else failed += blockCount
-          options.onProgress(completed, sourceBlocks.length, failed)
+          await options.onProgress(completed, sourceBlocks.length, failed)
           return
         }
 
@@ -147,7 +149,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             error: null
           })
           completed += 1
-          options.onProgress(completed, sourceBlocks.length, failed)
+          await options.onProgress(completed, sourceBlocks.length, failed)
           return
         }
 
@@ -165,7 +167,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             status: 'completed',
             error: null
           })
-          await saveBlock(options.repository, options.task.id, results[sourceIndex]!)
+          await saveBlock(options.repository, options.task.id, results[sourceIndex]!, options.jobId)
           completed += 1
           options.onProgress(completed, sourceBlocks.length, failed)
           return
@@ -191,7 +193,7 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             status: 'completed',
             error: null
           })
-          await saveBlock(options.repository, options.task.id, results[sourceIndex]!)
+          await saveBlock(options.repository, options.task.id, results[sourceIndex]!, options.jobId)
           completed += 1
         } catch (error) {
           const message = readableError(error)
@@ -208,9 +210,9 @@ export async function translateMarkdown(options: PipelineOptions): Promise<Trans
             error: message
           })
           failed += 1
-          await saveBlock(options.repository, options.task.id, results[sourceIndex]!)
+          await saveBlock(options.repository, options.task.id, results[sourceIndex]!, options.jobId)
         }
-        options.onProgress(completed, sourceBlocks.length, failed)
+        await options.onProgress(completed, sourceBlocks.length, failed)
       })
     )
   )
@@ -270,7 +272,7 @@ async function translateTableWorkItem(
         error: null
       })
       results[sourceBlock.sourceIndex] = result
-      await saveBlock(options.repository, options.task.id, result)
+      await saveBlock(options.repository, options.task.id, result, options.jobId)
     }
     return
   }
@@ -298,7 +300,7 @@ async function translateTableWorkItem(
         error: null
       })
       results[sourceBlock.sourceIndex] = result
-      await saveBlock(options.repository, options.task.id, result)
+      await saveBlock(options.repository, options.task.id, result, options.jobId)
     }
   } catch (error) {
     const message = readableError(error)
@@ -316,7 +318,7 @@ async function translateTableWorkItem(
         error: message
       })
       results[sourceBlock.sourceIndex] = result
-      await saveBlock(options.repository, options.task.id, result)
+      await saveBlock(options.repository, options.task.id, result, options.jobId)
     }
   }
 }
@@ -564,8 +566,8 @@ function createBlockResult(result: TranslationBlockResult): TranslationBlockResu
   return { ...result, mappingIds: [...result.mappingIds] }
 }
 
-async function saveBlock(repository: TaskRepositoryCompat, taskId: string, block: TranslationBlockResult): Promise<void> {
-  await repository.upsertTranslationBlock({
+async function saveBlock(repository: TaskRepositoryCompat, taskId: string, block: TranslationBlockResult, jobId?: string): Promise<void> {
+  const record: TranslationBlockRecord = {
     taskId,
     blockId: block.blockId,
     sourceHash: block.sourceHash,
@@ -575,7 +577,9 @@ async function saveBlock(repository: TaskRepositoryCompat, taskId: string, block
     model: block.model,
     status: block.status,
     error: block.error
-  })
+  }
+  if (jobId !== undefined) record.jobId = jobId
+  await repository.upsertTranslationBlock(record)
 }
 
 function translationBlockId(taskId: string, sourceIndex: number, mappingIds: string[]): string {

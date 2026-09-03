@@ -12,7 +12,7 @@ import type {
   ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
 import type { UtilitySupervisor } from './utilitySupervisor'
-import type { ArtifactReference, TaskRepositoryCompat } from './taskRepositoryCompat'
+import type { ArtifactReference, DocumentMetadataPatch, TaskRepositoryCompat } from './taskRepositoryCompat'
 
 /**
  * Main-side asynchronous repository port. The concrete SQLite repository is
@@ -74,6 +74,10 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     await this.supervisor.request('tasks:insert-many', { tasks })
   }
 
+  async updateDocumentMetadata(id: string, patch: DocumentMetadataPatch): Promise<void> {
+    await this.supervisor.request('documents:update-metadata', { id, patch })
+  }
+
   async updateTask(id: string, patch: Partial<MinerUTask>): Promise<MinerUTask> {
     return this.supervisor.request('tasks:update', { id, patch })
   }
@@ -86,8 +90,8 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     await this.supervisor.request('translation:block-upsert', { block })
   }
 
-  async listTranslationBlocks(taskId: string): Promise<TranslationBlockRecord[]> {
-    return this.supervisor.request('translation:blocks-list', { taskId })
+  async listTranslationBlocks(taskId: string, jobId?: string): Promise<TranslationBlockRecord[]> {
+    return this.supervisor.request('translation:blocks-list', jobId === undefined ? { taskId } : { taskId, jobId })
   }
 
   async updateTranslationRun(taskId: string, total: number, completed: number, failed: number): Promise<void> {

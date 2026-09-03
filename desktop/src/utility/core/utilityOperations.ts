@@ -17,7 +17,8 @@ import {
   coreJobCancelPayloadSchema,
   coreJobManualRetryPayloadSchema,
   coreJobRecoverExpiredPayloadSchema,
-  coreJobEventsPayloadSchema
+  coreJobEventsPayloadSchema,
+  coreDocumentMetadataPayloadSchema
 } from '@shared/coreRpcSchemas'
 import type { MinerUTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
@@ -142,6 +143,11 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'jobs:list-events': (request) => requireJobRepository().listEvents(coreJobEventsPayloadSchema.parse(request.payload).jobId),
     'documents:list': () => requireRepository().listDocumentSummaries(),
     'documents:get-summary': (request) => requireRepository().getDocumentSummary((request.payload as { id: string }).id),
+    'documents:update-metadata': (request) => {
+      const payload = coreDocumentMetadataPayloadSchema.parse(request.payload)
+      requireRepository().updateDocumentMetadata(payload.id, payload.patch)
+      return { changed: true }
+    },
     'artifacts:get-latest': (request) => {
       const payload = request.payload as { documentId: string; kind: Parameters<V2TaskRepositoryCompat['getLatestArtifactReference']>[1] }
       return requireRepository().getLatestArtifactReference(payload.documentId, payload.kind)
@@ -155,7 +161,10 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       requireRepository().upsertTranslationBlock((request.payload as { block: Parameters<V2TaskRepositoryCompat['upsertTranslationBlock']>[0] }).block)
       return { changed: true }
     },
-    'translation:blocks-list': (request) => requireRepository().listTranslationBlocks((request.payload as { taskId: string }).taskId),
+    'translation:blocks-list': (request) => {
+      const payload = request.payload as { taskId: string; jobId?: string }
+      return requireRepository().listTranslationBlocks(payload.taskId, payload.jobId)
+    },
     'translation:run-update': (request) => {
       const payload = request.payload as { taskId: string; total: number; completed: number; failed: number }
       requireRepository().updateTranslationRun(payload.taskId, payload.total, payload.completed, payload.failed)
@@ -193,7 +202,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
     'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
     'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
-    'documents:list', 'documents:get-summary', 'artifacts:get-latest', 'artifacts:record-revision',
+    'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:get-latest', 'artifacts:record-revision',
     'translation:block-upsert', 'translation:blocks-list', 'translation:run-update',
     'translation:cache-get', 'translation:cache-put',
     'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
