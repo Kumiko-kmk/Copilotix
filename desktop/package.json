@@ -8,7 +8,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm build:utility && electron-vite dev",
-    "build:utility": "vite build --config utility.vite.config.ts",
+    "build:utility": "vite build --config utility.vite.config.ts && node scripts/utility-bundle-smoke.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

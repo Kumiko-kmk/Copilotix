@@ -27,11 +27,14 @@ export interface UtilityProcessLike {
   removeListener?(event: 'error', listener: (...args: unknown[]) => void): this
   postMessage(message: string): void
   kill(): boolean
+  stderr?: {
+    on(event: 'data', listener: (chunk: unknown) => void): unknown
+  }
 }
 
 export type UtilityFork = (entryPath: string, args: string[], options: {
   serviceName: string
-  stdio: 'ignore'
+  stdio: 'ignore' | 'pipe'
 }) => UtilityProcessLike
 
 export type UtilitySupervisorState = 'idle' | 'starting' | 'ready' | 'restarting' | 'draining' | 'stopped' | 'failed'
@@ -195,7 +198,10 @@ export class UtilitySupervisor {
     let child: UtilityProcessLike
     try {
       // No process.argv, token, path, or renderer data crosses this boundary.
-      child = this.fork(this.entryPath, [], { serviceName: 'MinerU Core Utility', stdio: 'ignore' })
+      child = this.fork(this.entryPath, [], {
+        serviceName: 'MinerU Core Utility',
+        stdio: utilityDiagnosticsEnabled() ? 'pipe' : 'ignore'
+      })
     } catch {
       this.reportError(CORE_UNAVAILABLE)
       this.scheduleRestart()
@@ -214,6 +220,7 @@ export class UtilitySupervisor {
     record.onExit = (code: number): void => this.handleExit(record, code)
     record.onError = (..._args: unknown[]): void => this.handleProcessError(record)
     this.record = record
+    attachUtilityDiagnostics(child)
     child.on('exit', record.onExit)
     child.on('error', record.onError)
 
@@ -361,6 +368,22 @@ export class UtilitySupervisor {
     }
 
     record.suppressRestart = true
+    // A utility that has not completed its handshake cannot service drain or
+    // shutdown RPCs.  Closing the client first rejects waitReady(), then kill
+    // the child immediately instead of waiting for the handshake timeout.
+    if (record.client.getState() !== 'ready') {
+      record.failureHandled = true
+      const startupError = new CoreClientError(CORE_UNAVAILABLE, 'Core utility stopped before becoming ready', false)
+      record.client.close()
+      this.terminateRecord(record)
+      if (this.record === record) this.record = undefined
+      this.rejectStart?.(startupError)
+      this.resolveStart = undefined
+      this.rejectStart = undefined
+      this.startPromise = undefined
+      this.transition('stopped')
+      return
+    }
     this.transition('draining')
     const deadline = this.now() + this.shutdownTimeoutMs
     try {
@@ -419,6 +442,31 @@ function removeChildListener(
 
 function positiveTimeout(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+export function utilityDiagnosticsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.NODE_ENV === 'test' || env.MINERU_UTILITY_DIAGNOSTICS === 'true'
+}
+
+/** Return a bounded category only; never echo utility stderr or local paths. */
+export function classifyUtilityDiagnostic(chunk: unknown): string {
+  const text = String(chunk).slice(0, 4_096)
+  if (/document(?:\.createElement|\s+is\s+not\s+defined)|\bDOM\b/iu.test(text)) return 'UTILITY_DOM_GLOBAL'
+  if (/parent\s*port|parentPort/iu.test(text)) return 'UTILITY_PARENT_PORT'
+  if (/MODULE_NOT_FOUND|cannot\s+find\s+module/iu.test(text)) return 'UTILITY_MODULE_LOAD'
+  if (/timeout|timed\s+out/iu.test(text)) return 'UTILITY_TIMEOUT'
+  if (/GPU|sandbox/iu.test(text)) return 'UTILITY_GPU'
+  return 'UTILITY_STDERR'
+}
+
+function attachUtilityDiagnostics(child: UtilityProcessLike): void {
+  if (!utilityDiagnosticsEnabled() || !child.stderr) return
+  let emitted = 0
+  child.stderr.on('data', (chunk) => {
+    if (emitted >= 8) return
+    emitted += 1
+    console.error(`Core utility diagnostic: ${classifyUtilityDiagnostic(chunk)}`)
+  })
 }
 
 function validateBootstrapConfig(config: UtilityBootstrapConfig): UtilityBootstrapConfig {

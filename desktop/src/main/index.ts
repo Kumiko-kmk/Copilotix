@@ -386,11 +386,20 @@ app.on('window-all-closed', () => {
   // Keep the background queue alive in the tray on Windows.
 })
 
-app.on('quit', () => { void repository?.close() })
-
-void bootstrap().catch((_error: unknown) => {
+void bootstrap().catch((error: unknown) => {
   // Keep startup diagnostics free of stack traces, local paths and credentials.
-  console.error('MinerU startup failed')
-  dialog.showErrorBox('MinerU 启动失败', '核心服务无法启动，请重试。')
+  const code = startupErrorCode(error)
+  console.error(`MinerU startup failed [${code}]`)
+  // Playwright and other headless checks must not wait on a native modal.
+  if (process.env.NODE_ENV !== 'test') dialog.showErrorBox('MinerU 启动失败', '核心服务无法启动，请重试。')
   app.quit()
 })
+
+function startupErrorCode(error: unknown): 'CORE_TIMEOUT' | 'CORE_UNAVAILABLE' | 'CORE_PROTOCOL_ERROR' {
+  const code = error && typeof error === 'object' && 'code' in error
+    ? (error as { code?: unknown }).code
+    : undefined
+  return code === 'CORE_TIMEOUT' || code === 'CORE_PROTOCOL_ERROR' || code === 'CORE_UNAVAILABLE'
+    ? code
+    : 'CORE_UNAVAILABLE'
+}

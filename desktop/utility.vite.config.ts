@@ -3,6 +3,10 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   resolve: {
+    // Utility is a Node-only process.  Vite's browser defaults can otherwise
+    // select the `browser` export of packages that also ship a DOM build.
+    conditions: ['node', 'default'],
+    mainFields: ['main'],
     alias: {
       '@shared': resolve(__dirname, 'src/shared'),
       '@core': resolve(__dirname, 'src/core')

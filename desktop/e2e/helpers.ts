@@ -1,10 +1,12 @@
 import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { _electron as electron } from '@playwright/test'
 import { buildBlockMappings } from '../src/main/blockMapping'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { ArtifactKind } from '../src/core/types'
+import { shouldDisableGpuSandbox } from '../src/shared/e2eLaunchPolicy'
 import {
   alignMarkdownBlocks,
   MARKDOWN_MAPPING_ALGORITHM_VERSION,
@@ -181,6 +183,22 @@ export async function seedReaderTask(
   }
   repository.close()
   return taskId
+}
+
+/**
+ * All Electron launches share the same opt-in GPU workaround.  Keep the
+ * production default untouched: only an explicit, exact `true` adds the
+ * switch, and it is inserted before the development entry path.
+ */
+export function launchElectron(options: {
+  args?: string[]
+  executablePath?: string
+  env?: NodeJS.ProcessEnv
+}) {
+  const env = { ...process.env, ...(options.env ?? {}) }
+  const args = [...(options.args ?? [])]
+  if (shouldDisableGpuSandbox(env)) args.unshift('--disable-gpu-sandbox')
+  return electron.launch({ ...options, args, env })
 }
 
 function createLayoutFixture(supplementalBlocks = false): object {

@@ -1,7 +1,7 @@
-import { _electron as electron, expect, test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { createE2EWorkspace } from './helpers'
+import { createE2EWorkspace, launchElectron } from './helpers'
 
 const desktopPackage = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as {
   version: string
@@ -11,7 +11,7 @@ const releaseName = `${desktopPackage.build?.productName ?? 'MinerU'}-${desktopP
 
 test('opens the minimal new parse page', async () => {
   const workspace = await createE2EWorkspace()
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await expect(window.locator('aside[aria-label="主导航"]')).toHaveCount(0)
@@ -39,7 +39,7 @@ test('opens the minimal new parse page', async () => {
 
 test('supports the custom traffic-light window controls', async () => {
   const workspace = await createE2EWorkspace()
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await window.locator('[data-window-control="toggle-maximize"]').click()
@@ -70,7 +70,7 @@ test('opens the packaged Windows executable', async () => {
   const workspace = await createE2EWorkspace()
   const executablePath = process.env.MINERU_E2E_EXECUTABLE_PATH
     ?? join(__dirname, `../../release/${releaseName}/MinerU.exe`)
-  const app = await electron.launch({ executablePath, args: [], env: workspace.env })
+  const app = await launchElectron({ executablePath, args: [], env: workspace.env })
   try {
     const window = await app.firstWindow()
     const settingsResult = await window.evaluate(async () => {

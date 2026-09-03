@@ -1,6 +1,6 @@
-import { _electron as electron, expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { join } from 'node:path'
-import { createE2EWorkspace, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
 import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
 import type { MinerUDesktopApi } from '../src/shared/types'
 
@@ -63,7 +63,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
     legacyTranslationManifest: true
   })
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)
@@ -190,7 +190,7 @@ test('persists original and translated Markdown annotations with color and under
     translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
     legacyTranslationManifest: true
   })
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)
@@ -260,7 +260,7 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
     translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
     legacyTranslationManifest: true
   })
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)
@@ -317,7 +317,7 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
 test('keeps repeated short phrases in source order and maps each one to one PDF block', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, { alignmentRegression: true })
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)
@@ -363,7 +363,7 @@ test('keeps repeated short phrases in source order and maps each one to one PDF 
 test('shows a recoverable error when the local PDF is missing', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, { missingPdf: true })
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)
@@ -378,7 +378,7 @@ test('shows a recoverable error when the local PDF is missing', async () => {
 test('shows the parsed English title in recent tasks and the Reader header', async () => {
   const workspace = await createE2EWorkspace()
   await seedReaderTask(workspace, { englishTitle: 'Attention Is All You Need' })
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await window.getByRole('button', { name: '展开论文切换' }).click()
@@ -397,7 +397,7 @@ test('renders an optional real MinerU PDF fixture', async () => {
   test.skip(!sourcePdf, 'Set MINERU_E2E_REAL_PDF for the local non-CI acceptance check')
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, { sourcePdf: sourcePdf! })
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)
@@ -414,7 +414,7 @@ test('renders and safely links an optional real MinerU task', async () => {
   test.skip(!sourceTaskDir, 'Set MINERU_E2E_REAL_TASK_DIR for the local layout acceptance check')
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, { sourceTaskDir: sourceTaskDir! })
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)

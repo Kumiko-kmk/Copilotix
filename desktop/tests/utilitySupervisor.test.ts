@@ -176,4 +176,18 @@ describe('UtilitySupervisor', () => {
       vi.useRealTimers()
     }
   })
+
+  it('kills a utility that never handshakes without waiting for the handshake timeout', async () => {
+    const child = new FakeUtilityProcess()
+    const fork: UtilityFork = () => child
+    const supervisor = new UtilitySupervisor({ entryPath: 'utility.js', fork, handshakeTimeoutMs: 10_000 })
+    const starting = supervisor.start()
+    await Promise.resolve()
+    const startedAt = Date.now()
+    await supervisor.shutdown()
+    expect(Date.now() - startedAt).toBeLessThan(5_000)
+    expect(child.killed).toBe(true)
+    await expect(starting).rejects.toMatchObject({ code: 'CORE_UNAVAILABLE' })
+    expect(supervisor.getState()).toBe('stopped')
+  })
 })

@@ -1,12 +1,12 @@
-import { _electron as electron, expect, test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { createE2EWorkspace, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
 
 test('keeps hover chrome inside the minimum supported window size', async () => {
   const workspace = await createE2EWorkspace()
   await seedReaderTask(workspace)
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await app.evaluate(({ BrowserWindow, nativeTheme }) => {
@@ -48,7 +48,7 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
 
 test('keeps the particle lake legible across supported sizes and themes', async () => {
   const workspace = await createE2EWorkspace()
-  const app = await electron.launch({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     const particleLake = window.getByTestId('particle-lake')
