@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import archiver from 'archiver'
@@ -40,6 +41,9 @@ export {
 export async function publishRelease({ fromBuilt = false } = {}) {
   assertWindowsX64()
   assertDesktopDirectory(desktopDirectory, repositoryRoot)
+  const workspacePackageJson = JSON.parse(await readFile(join(repositoryRoot, 'package.json'), 'utf8'))
+  assertPnpmInvocation(process.env, workspacePackageJson.packageManager)
+  await assertLocalDependencyGraph(repositoryRoot, desktopDirectory)
   const packageJson = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
   const packagedSmokeVersions = assertPackagedSmokeVersions(packageJson)
   const productName = packageJson.build?.productName ?? 'MinerU'
@@ -138,6 +142,43 @@ export function createBuildId(now = Date.now(), pid = process.pid, suffix = rand
     throw new TypeError('Invalid release build id inputs')
   }
   return `${Math.trunc(now).toString(36)}-${pid}-${suffix}`
+}
+
+export function assertPnpmInvocation(environment, expectedPackageManager = 'pnpm@11.19.0') {
+  const match = /^pnpm@([0-9]+(?:\.[0-9]+){2})$/u.exec(String(expectedPackageManager))
+  if (!match) throw new Error(`Unsupported package manager declaration: ${String(expectedPackageManager)}`)
+  const actual = /^pnpm\/([^\s]+)/u.exec(String(environment?.npm_config_user_agent ?? ''))?.[1]
+  if (actual !== match[1]) {
+    throw new Error(`Release packaging must run through ${expectedPackageManager}; received ${actual ? `pnpm@${actual}` : 'a direct Node/npm invocation'}`)
+  }
+}
+
+export function assertDependencyRoots(repository, dependencyRoots) {
+  const root = resolve(repository)
+  for (const candidate of dependencyRoots) {
+    const resolved = resolve(candidate)
+    const relation = relative(root, resolved)
+    if (relation === '..' || relation.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(relation)) {
+      throw new Error(`Release dependency resolves outside the current worktree: ${resolved}`)
+    }
+  }
+}
+
+export async function assertLocalDependencyGraph(repository, desktop) {
+  const requireFromDesktop = createRequire(join(desktop, 'package.json'))
+  const keyringEntry = requireFromDesktop.resolve('@napi-rs/keyring')
+  const requireFromKeyring = createRequire(keyringEntry)
+  const nativeManifest = requireFromKeyring.resolve('@napi-rs/keyring-win32-x64-msvc/package.json')
+  const nativeBinding = join(dirname(nativeManifest), 'keyring.win32-x64-msvc.node')
+  const dependencyRoots = await Promise.all([
+    realpath(join(repository, 'node_modules')),
+    realpath(join(desktop, 'node_modules')),
+    realpath(keyringEntry),
+    realpath(nativeManifest),
+    realpath(nativeBinding)
+  ])
+  assertDependencyRoots(repository, dependencyRoots)
+  await requireFile(nativeBinding)
 }
 
 export async function runElectronBuilder(outputDirectory) {

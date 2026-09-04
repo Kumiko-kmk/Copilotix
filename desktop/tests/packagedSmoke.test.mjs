@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   PACKAGED_SMOKE_ARG,
+  assertDependencyRoots,
   assertPackagedSmokeVersions,
+  assertPnpmInvocation,
   formatPackagedSmokeMarker,
   shouldRunPackagedSmoke,
   validatePackagedSmokeOutput
@@ -10,6 +12,14 @@ import {
 const expectedVersions = Object.freeze({ appVersion: '0.1.0', electronVersion: '44.1.1' })
 
 describe('packaged startup smoke contract', () => {
+  it('requires the declared pnpm version and worktree-local dependencies', () => {
+    expect(() => assertPnpmInvocation({ npm_config_user_agent: 'pnpm/11.19.0 npm/? node/v24.11.1 win32 x64' })).not.toThrow()
+    expect(() => assertPnpmInvocation({})).toThrow(/direct Node\/npm invocation/)
+    expect(() => assertPnpmInvocation({ npm_config_user_agent: 'pnpm/10.0.0 npm/?' })).toThrow(/pnpm@10.0.0/)
+    expect(() => assertDependencyRoots('C:/workspace', ['C:/workspace/node_modules', 'C:/workspace/desktop/node_modules'])).not.toThrow()
+    expect(() => assertDependencyRoots('C:/workspace', ['D:/shared/node_modules'])).toThrow(/outside the current worktree/)
+  })
+
   it('gates the dedicated mode on the packaged app flag', () => {
     expect(shouldRunPackagedSmoke([PACKAGED_SMOKE_ARG], true)).toBe(true)
     expect(shouldRunPackagedSmoke([PACKAGED_SMOKE_ARG], false)).toBe(false)

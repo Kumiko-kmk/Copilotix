@@ -79,7 +79,8 @@
       "zh-CN"
     ],
     "asarUnpack": [
-      "node_modules/@napi-rs/keyring/**"
+      "node_modules/@napi-rs/keyring/**",
+      "node_modules/@napi-rs/keyring-win32-x64-msvc/**"
     ],
     "extraResources": [
       {

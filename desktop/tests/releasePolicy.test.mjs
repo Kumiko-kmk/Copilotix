@@ -47,13 +47,28 @@ describe('release policy', () => {
   })
 
   it('requires the application entry points and unpacked keyring dependency', () => {
+    const runtimeFiles = [
+      { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js', size: 1 },
+      { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/package.json', size: 1 },
+      { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/keyring.win32-x64-msvc.node', size: 1 }
+    ]
     expect(() => assertRequiredPackagedContent({
       asarEntries: ['\\out/main/index.js', '/out/preload/index.js', '\\out/renderer/index.html', '/package.json'],
-      runtimeFiles: [{ path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js', size: 1 }]
+      runtimeFiles
     })).not.toThrow()
     expect(() => assertRequiredPackagedContent({
       asarEntries: ['out/main/index.js'],
       runtimeFiles: []
     })).toThrow(/required app.asar entries/i)
+    for (const missing of runtimeFiles) {
+      expect(() => assertRequiredPackagedContent({
+        asarEntries: ['out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json'],
+        runtimeFiles: runtimeFiles.filter((entry) => entry !== missing)
+      })).toThrow(/Missing required unpacked runtime dependencies/)
+    }
+    expect(() => assertRequiredPackagedContent({
+      asarEntries: ['out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json'],
+      runtimeFiles: runtimeFiles.map((entry, index) => index === 2 ? { ...entry, size: 0 } : entry)
+    })).toThrow(/Empty required unpacked runtime dependencies/)
   })
 })

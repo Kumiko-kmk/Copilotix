@@ -17,8 +17,10 @@ const REQUIRED_ASAR_ENTRIES = Object.freeze([
   'out/renderer/index.html',
   'package.json'
 ])
-const REQUIRED_RUNTIME_ENTRY_PREFIXES = Object.freeze([
-  'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/'
+const REQUIRED_RUNTIME_ENTRIES = Object.freeze([
+  'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js',
+  'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/package.json',
+  'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/keyring.win32-x64-msvc.node'
 ])
 
 export function assertSafeBuildOutputPath(desktopDirectory, targetDirectory) {
@@ -67,10 +69,18 @@ export function assertRequiredAsarEntries(entryNames, requiredEntries = REQUIRED
   if (missing.length > 0) throw new Error(`Missing required app.asar entries: ${missing.join(', ')}`)
 }
 
-export function assertRequiredRuntimeEntries(fileNames, requiredPrefixes = REQUIRED_RUNTIME_ENTRY_PREFIXES) {
-  const entries = [...fileNames].map((entry) => normalizeEntryName(typeof entry === 'string' ? entry : entry.path))
-  const missing = requiredPrefixes.filter((prefix) => !entries.some((entry) => entry.startsWith(normalizeEntryName(prefix))))
+export function assertRequiredRuntimeEntries(files, requiredEntries = REQUIRED_RUNTIME_ENTRIES) {
+  const entries = new Map([...files].map((entry) => [
+    normalizeEntryName(typeof entry === 'string' ? entry : entry.path),
+    typeof entry === 'string' ? null : entry.size
+  ]))
+  const missing = requiredEntries.filter((entry) => !entries.has(normalizeEntryName(entry)))
   if (missing.length > 0) throw new Error(`Missing required unpacked runtime dependencies: ${missing.join(', ')}`)
+  const empty = requiredEntries.filter((entry) => {
+    const size = entries.get(normalizeEntryName(entry))
+    return size !== null && (!Number.isFinite(size) || size <= 0)
+  })
+  if (empty.length > 0) throw new Error(`Empty required unpacked runtime dependencies: ${empty.join(', ')}`)
 }
 
 export async function auditRelease({ runtimeDirectory, zipPath, asarEntries = [] }) {
