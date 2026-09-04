@@ -111,6 +111,28 @@ describe('reader document model', () => {
     expect(result.some((block) => block.text === 'Unclassified margin text')).toBe(false)
   })
 
+  it('places each physical page divider after its last mapped Markdown block', () => {
+    const mappings = [
+      mapping('page-1-body', 0, 'First page body', 'text', 0),
+      mapping('page-2-figure', 1, 'Figure 1 caption', 'image', 1),
+      mapping('page-3-body', 2, 'Third page body', 'text', 2)
+    ]
+    const result = mergeReaderBlocks([
+      { markdown: 'First page body', mappingIds: ['page-1-body'] },
+      { markdown: '![figure](images/figure.png)\n\nFigure 1 caption', mappingIds: ['page-2-figure'] },
+      { markdown: 'Third page body', mappingIds: ['page-3-body'] }
+    ], mappings)
+
+    expect(result.map((block) => block.text ?? block.markdown)).toEqual([
+      'First page body',
+      '第 1 页',
+      '![figure](images/figure.png)\n\nFigure 1 caption',
+      '第 2 页',
+      'Third page body',
+      '第 3 页'
+    ])
+  })
+
   it('never reorders source blocks even when their mappings are contaminated', () => {
     const mappings = [
       mapping('abstract', 0, 'Abstract paragraph', 'text', 0),

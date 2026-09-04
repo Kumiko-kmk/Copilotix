@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, relative } from 'node:path'
@@ -34,12 +34,12 @@ import type { MinerUTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
 import { MAX_PDF_BYTES } from '@shared/constants'
 import { extractPaperTitle, sanitizeTitleStem } from '@shared/titleNaming'
+import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '@core/blockMapping'
 import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../coreUtilityRuntime'
 import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
 import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sqliteJobRepository'
 import { PathPolicy } from './persistence/pathPolicy'
-import { BLOCK_MAPPING_VERSION, buildUtilityBlockMappings } from './compute/blockMapping'
 import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
 
 type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
@@ -469,7 +469,7 @@ async function normalizeParserOutput(
     }
 
     const layoutData = JSON.parse(await readFile(layoutStaged, 'utf8')) as unknown
-    const mappings = buildUtilityBlockMappings(task.id, layoutData)
+    const mappings = buildBlockMappings(task.id, layoutData)
     const markdownText = await readFile(markdownStaged, 'utf8')
     const extractedTitle = extractPaperTitle(markdownText, mappings)
     const displayTitle = extractedTitle ? sanitizeTitleStem(extractedTitle) : null
@@ -498,10 +498,17 @@ async function rebuildMappings(taskId: string, outputDir: string, repository: V2
   assertTaskPath(outputDir)
   const layoutPath = join(outputDir, 'layout.json')
   const blockPath = join(outputDir, 'block_list.json')
-  const mappings = buildUtilityBlockMappings(taskId, JSON.parse(await readFile(layoutPath, 'utf8')) as unknown)
-  await writeFile(blockPath, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2), 'utf8')
-  const task = repository.getTask(taskId)
-  if (task) repository.recordArtifactRevision(taskId, 'block_mappings', blockPath, await hashFile(blockPath))
+  const mappings = buildBlockMappings(taskId, JSON.parse(await readFile(layoutPath, 'utf8')) as unknown)
+  const stagedPath = join(outputDir, `.block_list.partial-${randomUUID()}.json`)
+  try {
+    await writeFile(stagedPath, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2), 'utf8')
+    const checksum = await hashFile(stagedPath)
+    await publishStagedFile(stagedPath, blockPath, checksum)
+    const task = repository.getTask(taskId)
+    if (task) repository.recordArtifactRevision(taskId, 'block_mappings', blockPath, checksum)
+  } finally {
+    await rm(stagedPath, { force: true }).catch(() => undefined)
+  }
 }
 
 async function publishStagedFile(stagedPath: string, destination: string, checksum: string): Promise<void> {

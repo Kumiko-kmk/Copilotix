@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { TranslationBatchCommit } from '@core/types'
 import type { MinerUTask } from '@shared/types'
 import { flattenSegments, TRANSLATION_PIPELINE_VERSION, type TableTranslationRequest } from '@shared/translationPlanProtocol'
@@ -33,7 +34,7 @@ async function createFixture(markdown: string): Promise<Fixture> {
   const outputDir = join(root, 'document')
   await mkdir(outputDir, { recursive: true })
   await writeFile(join(outputDir, 'full.md'), markdown, 'utf8')
-  await writeFile(join(outputDir, 'block_list.json'), JSON.stringify({ version: 2, mappings: [] }), 'utf8')
+  await writeFile(join(outputDir, 'block_list.json'), JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: [] }), 'utf8')
 
   const database = new V2Database(join(root, 'mineru-desktop-v2.sqlite3'))
   const repository = new V2TaskRepositoryCompat(database)

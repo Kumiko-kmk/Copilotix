@@ -238,6 +238,8 @@ Utility-owned `MarkdownTranslationPlanManager` 读取受限的计划 descriptor�
 - provider fallback 不得跨 document/job 混写状态，最终结果必须记录 provider/model；
 - Renderer 不能直接请求任一 provider 或任意 URL。
 
+解析结果的 `layout.json` 是保留的权威原始产物：设置中的视觉模型 `vlm` 当前对应 MinerU `hybrid` 后端，标准模型对应 `pipeline` 后端。两者可能产生不同的段落切分、复合 image/chart/table block、`lines_deleted` 跨栏/跨页延续和 discarded block 数量，但都必须通过同一个 Core block-mapping 正规化器投影为版本化的 `block_list.json`；Main 与 Utility 不得各自维护不同算法。页面编号以 `layout.json` 的零基 `page_idx` 为准，Renderer 只把它显示为一基物理页码。
+
 结果数据流是：
 
 ```text

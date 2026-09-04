@@ -7,10 +7,9 @@ import type { BlockMapping, DocumentPayload, MinerUTask, TranslatedMarkdownBlock
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
 import type { ArtifactKind } from '@core/types'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
+import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
-
-const BLOCK_MAPPING_VERSION = 2
 
 /** Filesystem-facing document/artifact operations kept out of command and runner orchestration. */
 export class ArtifactService {
@@ -124,6 +123,7 @@ export class ArtifactService {
         ? [...validBlocks].sort((left, right) => left.sourceIndex - right.sourceIndex)
         : validBlocks
       const trustMappings = validSourceOrder && manifest.mappingAlgorithmVersion === MARKDOWN_MAPPING_ALGORITHM_VERSION &&
+        manifest.blockMappingVersion === BLOCK_MAPPING_VERSION &&
         ordered.every((block) => Array.isArray(block.mappingIds))
       return ordered.map(({ sourceIndex, markdown, mappingIds }) => ({
         sourceIndex,

@@ -16,6 +16,7 @@ import { RpcTaskRepository } from '@main/rpcTaskRepository'
 import { SettingsService } from '@main/settingsService'
 import { splitIntoMinerUBatches } from '@main/taskService'
 import { canTransition, JobRunnerError } from '@core/jobs'
+import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { TaskComputePort } from '@core/ports'
 import type { Job } from '@core/types'
 import type { JobRepositoryPort } from '@core/jobs'
@@ -232,7 +233,7 @@ describe('main quality boundaries', () => {
     const compute = {
       hashFile: vi.fn(async () => 'checksum'),
       rebuildMappings: vi.fn(async () => {
-        await writeFile(blockPath, JSON.stringify({ version: 2, mappings: [mapping] }), 'utf8')
+        await writeFile(blockPath, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: [mapping] }), 'utf8')
       })
     } as unknown as TaskComputePort
     const revisions: unknown[] = []
@@ -244,26 +245,41 @@ describe('main quality boundaries', () => {
     await writeFile(join(root, 'full.md'), '# Source', 'utf8')
     await writeFile(join(root, 'full.zh-CN.md'), '# 译文', 'utf8')
     await writeFile(join(root, 'layout.json'), '{"pages":[]}', 'utf8')
-    await writeFile(blockPath, JSON.stringify({ version: 2, mappings: [mapping] }), 'utf8')
+    await writeFile(blockPath, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: [mapping] }), 'utf8')
     await writeFile(join(root, 'translation.manifest.json'), JSON.stringify({
       version: 2,
       taskId: task.id,
       translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
       tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
       mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
+      blockMappingVersion: BLOCK_MAPPING_VERSION,
       blocks: [{ sourceIndex: 0, markdown: '# 译文', mappingIds: ['mapping-1'] }]
     }), 'utf8')
 
     const payload = await service.getDocument(task.id)
     expect(payload.markdown).toBe('# Source')
     expect(payload.translatedBlocks).toEqual([{ sourceIndex: 0, markdown: '# 译文', mappingIds: ['mapping-1'] }])
+
+    await writeFile(join(root, 'translation.manifest.json'), JSON.stringify({
+      version: 2,
+      taskId: task.id,
+      translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
+      tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
+      mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
+      blockMappingVersion: BLOCK_MAPPING_VERSION - 1,
+      blocks: [{ sourceIndex: 0, markdown: '# 译文', mappingIds: ['stale-mapping'] }]
+    }), 'utf8')
+    await expect(service.loadTranslatedBlocks(task)).resolves.toEqual([
+      { sourceIndex: 0, markdown: '# 译文', mappingIds: [] }
+    ])
+
     expect(await service.resolveAsset(task.id, '/images/figure.png')).toBe(join(root, 'images', 'figure.png'))
     await service.recordArtifact(task, 'parsed_markdown', join(root, 'full.md'), 'job')
     expect(revisions).toHaveLength(1)
     await service.atomicWriteJson(join(root, 'atomic.json'), { ok: true })
     await expect(readFile(join(root, 'atomic.json'), 'utf8')).resolves.toContain('"ok": true')
 
-    await writeFile(blockPath, '{"version":1,"mappings":[]}', 'utf8')
+    await writeFile(blockPath, '{"version":2,"mappings":[]}', 'utf8')
     await expect(service.loadMappings(task)).resolves.toEqual([mapping])
     await writeFile(join(root, 'translation.manifest.json'), '{"version":2}', 'utf8')
     await expect(service.loadTranslatedBlocks(task)).resolves.toEqual(null)

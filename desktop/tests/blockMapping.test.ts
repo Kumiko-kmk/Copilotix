@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { buildBlockMappings, stableBlockId } from '@main/blockMapping'
+import { BLOCK_MAPPING_VERSION, buildBlockMappings, stableBlockId } from '@core/blockMapping'
 
 describe('block mapping', () => {
+  it('uses the canonical v3 artifact format', () => {
+    expect(BLOCK_MAPPING_VERSION).toBe(3)
+  })
+
   it('builds deterministic ids from layout para blocks', () => {
     const layout = {
       pdf_info: [
@@ -85,6 +89,40 @@ describe('block mapping', () => {
     })
     expect(mappings).toHaveLength(2)
     expect(mappings[1]?.boxes[0]?.isDiscarded).toBe(true)
+  })
+
+  it.each(['hybrid', 'pipeline'])('normalizes nested %s text, media and finite geometry', (backend) => {
+    const mappings = buildBlockMappings('nested-task', {
+      _backend: backend,
+      pdf_info: [{
+        page_idx: 0,
+        page_size: { width: 612, height: 792 },
+        para_blocks: [
+          {
+            type: 'text',
+            index: 1,
+            bbox: [10, 20, 500, 80],
+            lines: [{ bbox: [10, 20, 500, 80], spans: [{ content: 'Nested paragraph text' }] }]
+          },
+          {
+            type: 'image',
+            index: 2,
+            bbox: [20, 100, 400, 300],
+            blocks: [{
+              type: 'image_body',
+              bbox: [20, 100, 400, 260],
+              lines: [{ bbox: [20, 100, 400, 260], spans: [{ image_path: 'images/figure.png' }] }]
+            }]
+          },
+          { type: 'text', index: 3, bbox: [Number.NaN, 1, 2, 3], lines: [] }
+        ]
+      }]
+    })
+
+    expect(mappings).toHaveLength(2)
+    expect(mappings[0]).toMatchObject({ type: 'text', sourceText: 'Nested paragraph text' })
+    expect(mappings[1]).toMatchObject({ type: 'image', sourceAsset: 'images/figure.png' })
+    expect(mappings.every((mapping) => mapping.boxes.every((box) => box.pageIndex === 0))).toBe(true)
   })
 
   const oracleRoot = process.env.MINERU_LAYOUT_ORACLE_DIR

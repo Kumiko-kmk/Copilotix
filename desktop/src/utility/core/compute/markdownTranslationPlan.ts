@@ -8,6 +8,7 @@ import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
 import { z } from 'zod'
 import type { TranslationBatchBlock, TranslationBatchCommit, TranslationCacheEntry } from '@core/types'
+import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { BlockMapping, TranslationBlockRecord, TranslationProviderId } from '@shared/types'
 import { blockMappingSchema } from '@shared/ipcSchemas'
 import {
@@ -47,7 +48,6 @@ import {
   type TableTranslationPlan,
   type TableTranslationUnit
 } from './tableTranslation'
-import { BLOCK_MAPPING_VERSION } from './blockMapping'
 import { PathPolicy, type PathPolicyPort } from '../persistence/pathPolicy'
 import type { TranslationJobBinding, V2TaskRepositoryCompat } from '../persistence/v2TaskRepositoryCompat'
 
@@ -356,6 +356,7 @@ export class MarkdownTranslationPlanManager {
     const manifest = {
       version: 2,
       mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
+      blockMappingVersion: this.blockMappingVersion,
       taskId,
       jobId,
       targetLanguage: 'zh-CN',

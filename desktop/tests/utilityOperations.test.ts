@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { MinerUTask } from '@shared/types'
 import { DEFAULT_SETTINGS } from '../src/shared/constants'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
@@ -78,12 +79,81 @@ describe('utility persistence lifecycle', () => {
       expect(revisions).toHaveLength(0)
       await expect(readFile(join(outputDir, 'full.md'))).rejects.toMatchObject({ code: 'ENOENT' })
 
-      await writeFile(join(extractedDir, 'layout.json'), JSON.stringify({ pdf_info: [] }), 'utf8')
+      await writeFile(join(extractedDir, 'layout.json'), JSON.stringify({
+        _backend: 'hybrid',
+        pdf_info: [{
+          page_idx: 0,
+          page_size: [612, 792],
+          para_blocks: [{
+            type: 'text',
+            bbox: [10, 20, 400, 80],
+            lines: [{ bbox: [10, 20, 400, 80], spans: [{ content: 'Nested parser text' }] }]
+          }]
+        }]
+      }), 'utf8')
       await normalize({ payload: { task, extractedDir, jobId: 'job-1' } } as never, signal)
       await normalize({ payload: { task, extractedDir, jobId: 'job-1' } } as never, signal)
       expect(revisions).toHaveLength(3)
       await expect(readFile(join(outputDir, 'full.md'), 'utf8')).resolves.toBe('# parsed\n')
+      await expect(readFile(join(outputDir, 'block_list.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
+        version: BLOCK_MAPPING_VERSION,
+        mappings: [{ sourceText: 'Nested parser text' }]
+      })
       await expect(readdir(outputDir).then((entries) => entries.sort())).resolves.toEqual(['.parsed.partial-job-1', 'block_list.json', 'full.md', 'layout.json'])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('atomically upgrades a legacy mapping projection and preserves it when rebuild input is invalid', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mineru-rebuild-mapping-'))
+    try {
+      const outputDir = join(root, 'document')
+      const taskId = '11111111-1111-4111-8111-111111111111'
+      const revisions: Array<{ kind: string; path: string; checksum: string }> = []
+      await mkdir(outputDir, { recursive: true })
+      await writeFile(join(outputDir, 'layout.json'), JSON.stringify({
+        _backend: 'pipeline',
+        pdf_info: [{
+          page_idx: 0,
+          page_size: [612, 792],
+          para_blocks: [{
+            type: 'text',
+            bbox: [10, 10, 200, 40],
+            lines: [{ bbox: [10, 10, 200, 40], spans: [{ content: 'Repair me' }] }]
+          }]
+        }]
+      }), 'utf8')
+      await writeFile(join(outputDir, 'block_list.json'), '{"version":2,"mappings":[]}', 'utf8')
+      const persistence = createUtilityOperationHandlers({
+        repository: {
+          getTask: (id: string) => id === taskId ? { id } : null,
+          recordArtifactRevision: (_id: string, kind: string, path: string, checksum: string) => {
+            revisions.push({ kind, path, checksum })
+          }
+        }
+      } as never)
+
+      await persistence.handlers['compute:rebuild-mappings']!({ payload: { taskId, outputDir } } as never, new AbortController().signal)
+      const repaired = await readFile(join(outputDir, 'block_list.json'), 'utf8')
+      expect(JSON.parse(repaired)).toMatchObject({
+        version: BLOCK_MAPPING_VERSION,
+        mappings: [{ sourceText: 'Repair me' }]
+      })
+      expect(revisions).toEqual([expect.objectContaining({
+        kind: 'block_mappings',
+        path: join(outputDir, 'block_list.json'),
+        checksum: createHash('sha256').update(repaired).digest('hex')
+      })])
+      expect((await readdir(outputDir)).some((entry) => entry.startsWith('.block_list.partial-'))).toBe(false)
+
+      await writeFile(join(outputDir, 'layout.json'), '{invalid', 'utf8')
+      await expect(persistence.handlers['compute:rebuild-mappings']!(
+        { payload: { taskId, outputDir } } as never,
+        new AbortController().signal
+      )).rejects.toThrow()
+      await expect(readFile(join(outputDir, 'block_list.json'), 'utf8')).resolves.toBe(repaired)
+      expect((await readdir(outputDir)).some((entry) => entry.startsWith('.block_list.partial-'))).toBe(false)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -99,7 +169,7 @@ describe('utility persistence lifecycle', () => {
       const documentRoot = join(outputRoot, 'documents-v2', taskId)
       await mkdir(documentRoot, { recursive: true })
       await writeFile(join(documentRoot, 'full.md'), '# lifecycle\n', 'utf8')
-      await writeFile(join(documentRoot, 'block_list.json'), JSON.stringify({ version: 2, mappings: [] }), 'utf8')
+      await writeFile(join(documentRoot, 'block_list.json'), JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: [] }), 'utf8')
 
       const state = {} as {
         database?: V2Database

@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import type { TaskComputePort } from '../src/core/ports'
-import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/main/blockMapping'
+import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '@core/blockMapping'
 
 /** Test-only local compute port; production TaskService always receives RpcTaskCompute. */
 export const fixtureTaskCompute: TaskComputePort = {

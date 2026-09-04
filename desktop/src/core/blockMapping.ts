@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import type { BlockBox, BlockMapping } from '@shared/types'
 
 interface LayoutBlock {
@@ -45,7 +44,7 @@ interface MappingGroup {
   firstOrder: number
 }
 
-export const BLOCK_MAPPING_VERSION = 2
+export const BLOCK_MAPPING_VERSION = 3
 
 export function buildBlockMappings(taskId: string, layout: unknown): BlockMapping[] {
   const existing = parseExistingBlockList(taskId, layout)
@@ -57,7 +56,7 @@ export function buildBlockMappings(taskId: string, layout: unknown): BlockMappin
 
   pages.forEach((pageValue, pageOrder) => {
     const page = pageValue as LayoutPage
-    const pageIndex = typeof page.page_idx === 'number' ? page.page_idx : pageOrder
+    const pageIndex = isFiniteNumber(page.page_idx) ? page.page_idx : pageOrder
     const pageSize = toPageSize(page.page_size)
     const contentBlocks = (Array.isArray(page.para_blocks) ? page.para_blocks : []).flatMap(expandLayoutBlock)
     const discardedBlocks = (Array.isArray(page.discarded_blocks) ? page.discarded_blocks : []).flatMap(expandLayoutBlock)
@@ -119,7 +118,19 @@ export function buildBlockMappings(taskId: string, layout: unknown): BlockMappin
 }
 
 export function stableBlockId(taskId: string, positions: string[]): string {
-  return `block-${createHash('sha256').update(`${taskId}:${positions.join('|')}`).digest('hex').slice(0, 20)}`
+  const input = `${taskId}:${positions.join('|')}`
+  let first = 0x811c9dc5
+  let second = 0x9e3779b9
+
+  for (let index = 0; index < input.length; index += 1) {
+    const code = input.charCodeAt(index)
+    first = Math.imul(first ^ code, 0x01000193)
+    second = Math.imul(second ^ code, 0x85ebca6b)
+  }
+
+  const hex = (value: number): string => (value >>> 0).toString(16).padStart(8, '0')
+  const length = hex(input.length)
+  return `block-${hex(first)}${hex(second)}${length.slice(-4)}`
 }
 
 function parseExistingBlockList(taskId: string, input: unknown): BlockMapping[] {
@@ -135,7 +146,7 @@ function parseExistingBlockList(taskId: string, input: unknown): BlockMapping[] 
       const block = asObject(blockValue)
       const bbox = toBbox(block?.bbox)
       if (!bbox) continue
-      const pageIndex = typeof block?.page_idx === 'number' ? block.page_idx : pageOrder
+      const pageIndex = isFiniteNumber(block?.page_idx) ? block.page_idx : pageOrder
       const position = typeof block?.block_position === 'string' ? block.block_position : `${pageIndex}-${byLogicalId.size}`
       const sourceId = typeof block?.id === 'string' ? block.id : position
       const entry = byLogicalId.get(sourceId) ?? {
@@ -194,7 +205,7 @@ function normalizeCompoundType(type: string): string {
 }
 
 function layoutSortIndex(block: LayoutBlock, isDiscarded: boolean): number {
-  const index = typeof block.index === 'number' ? block.index : Number.MAX_SAFE_INTEGER / 2
+  const index = isFiniteNumber(block.index) ? block.index : Number.MAX_SAFE_INTEGER / 2
   if (!isDiscarded) return index
   const type = typeof block.type === 'string' ? block.type : ''
   return ['header', 'page_header'].includes(type) ? index - 100_000 : index + 1_000_000
@@ -304,15 +315,19 @@ function asObject(value: unknown): Record<string, any> | null {
 }
 
 function toBbox(value: unknown): [number, number, number, number] | null {
-  if (!Array.isArray(value) || value.length !== 4 || value.some((part) => typeof part !== 'number')) return null
+  if (!Array.isArray(value) || value.length !== 4 || value.some((part) => !isFiniteNumber(part))) return null
   return [value[0], value[1], value[2], value[3]]
 }
 
 function toPageSize(value: unknown): [number, number] {
-  if (Array.isArray(value) && value.length >= 2 && typeof value[0] === 'number' && typeof value[1] === 'number') {
+  if (Array.isArray(value) && value.length >= 2 && isFiniteNumber(value[0]) && isFiniteNumber(value[1])) {
     return [value[0], value[1]]
   }
   const object = asObject(value)
-  if (typeof object?.width === 'number' && typeof object?.height === 'number') return [object.width, object.height]
+  if (isFiniteNumber(object?.width) && isFiniteNumber(object?.height)) return [object.width, object.height]
   return [612, 792]
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
 }

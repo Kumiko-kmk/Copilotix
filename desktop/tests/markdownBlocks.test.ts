@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { buildBlockMappings } from '@main/blockMapping'
+import { buildBlockMappings } from '@core/blockMapping'
 import { alignMarkdownBlocks } from '@shared/markdownBlocks'
 import type { BlockMapping } from '@shared/types'
 
