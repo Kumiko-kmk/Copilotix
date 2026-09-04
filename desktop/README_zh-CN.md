@@ -1,62 +1,85 @@
-# MinerU 桌面翻译版
+# MinerU Desktop 桌面翻译版
 
-这是基于 MinerU 开源项目构建的非官方个人桌面客户端。它不包含本地解析模型，也不会启动仓库内的 Python `mineru-api`，而是连接 MinerU 官方 API v4，在解析完成后于本地生成简体中文 Markdown，并提供 PDF 版面区块联动阅读。
+这是基于 MinerU 开源项目的非官方个人 Electron 客户端。当前版本连接 MinerU 官方 v4 API，在本地保存解析产物并生成简体中文 Markdown；它不在运行时启动仓库内的 Python `mineru-api`，也不包含本地解析模型。
 
-阅读器会以灰色还原 layout JSON 中的页眉、页脚与脚注，并在页面边界显示“第 N 页”。原文与中文译文视图都会隐藏容易被误认成图片的单独打印页码方块，只保留统一分页线。灰色补充元素不参与 PDF 跳转或滚动联动，但与正文、表格、代码和公式一样支持持久化荧光笔与下划线；图片和分页线不可标注。`<sub>`、`<sup>` 与链接仍按安全 Markdown 渲染。译文正文按可信 `sourceIndex` 重新使用当前原文映射，因此旧 version 2 任务也能安全恢复 PDF 联动。原文 Markdown、中文 Markdown 与 JSON 采用常驻视图和空闲预热，长文档切换时不会反复销毁并重建已渲染内容。
+完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`../ARCHITECTURE_ZH.md`](../ARCHITECTURE_ZH.md)；RAG 未来计划见 [`../RAG_DEVELOPMENT_PLAN_ZH.md`](../RAG_DEVELOPMENT_PLAN_ZH.md)。
 
-划选原文或译文文本后，选区上方会显示荧光笔、下划线和“添加到对话”三个操作。荧光笔默认黄色，悬停或右键图标可选择黄、绿、蓝、粉、紫五色；选色只改变当前笔色，点击荧光笔后才应用。再次划选已覆盖范围并执行相同样式可精确删除该范围。标注按任务及原文/译文分别保存在本地 SQLite，不写回 Markdown 或结果 ZIP；“添加到对话”当前只保留内部载荷接口。
+## 当前架构基线
 
-完整的进程边界、任务状态机、API 契约、输出文件、翻译流水线和模块修改地图见 [`../ARCHITECTURE_ZH.md`](../ARCHITECTURE_ZH.md)。
+```text
+Renderer（React，sandbox，无 Node）
+  -> Preload（contextBridge；Zod 验证的领域 API）
+  -> Main（协调、Electron net、Credential Vault、作业调度）
+  -> Core RPC（versioned envelope；JSON；每个 payload/envelope ≤ 1 MiB）
+  -> Utility（SQLite 与 compute 的唯一拥有者）
+```
 
-## 开发环境
+Main 不持有 SQLite 连接；Utility 使用 `node:sqlite`、WAL 和 STRICT migrations。跨进程不传 PDF、ZIP、完整 Markdown、Buffer 或 stream。IPC/Core RPC 具备 sender/frame/来源校验、schema 验证、request timeout/cancel、Utility heartbeat/restart 和错误 envelope。
 
-- Windows 10/11 x64
-- Node.js 24.11.1
-- pnpm 11.19.0
-- MinerU 官方 API Token（在 [MinerU API 管理](https://mineru.net/apiManage) 获取）
+### 版本与本地数据
+
+- Electron `44.1.1`
+- Node.js `24.19.0`
+- pnpm `11.19.0`
+- Windows x64 目录版是当前发布目标
+- Electron `userData`：`%APPDATA%\MinerU-Translation-v2`
+- 数据库：`%APPDATA%\MinerU-Translation-v2\mineru-desktop-v2.sqlite3`
+- 结果：`<outputRoot>\documents-v2\{documentId}`
+
+每个文档目录以 UUID 命名，通常包含 `original.pdf`、`full.md`、`full.zh-CN.md`、`layout.json`、`block_list.json`、可选 `content_list.json` 和图片。所有 artifact 使用 PathPolicy、受控 staging、hash、fsync 和 atomic rename；内部 `.translation/` 不进入结果 ZIP。
+
+## 开发
+
+需要 Windows x64、Node `24.19.0`、pnpm `11.19.0`，以及 MinerU 官方 API Token（[MinerU API 管理](https://mineru.net/apiManage)）。
 
 ```powershell
 pnpm install
 pnpm desktop:dev
 ```
 
-首次安装依赖时，pnpm 可能要求批准 Electron、esbuild 和 electron-builder 的构建脚本。不要批准清单之外的未知脚本。
+首次安装依赖时，pnpm 可能要求批准 Electron、esbuild 和 electron-builder 的构建脚本；只批准已审阅的依赖脚本。
 
-## 测试与构建
+## 测试与实际门禁
 
 ```powershell
+pnpm desktop:lint
 pnpm desktop:typecheck
-pnpm desktop:test
-pnpm desktop:build
-pnpm desktop:release
-pnpm desktop:test:e2e
+pnpm desktop:test:coverage
 ```
 
-开发中间文件只位于 `desktop/out/`；每次 build 都会先安全清空该目录，避免旧哈希 bundle 混入新产物。正式发布文件统一位于仓库根目录 `release/`，每次执行 `desktop:release` 都会先精确清理再重建该目录（失败时不保留旧发布物）：
+当前 Vitest coverage gate（`desktop/vitest.config.ts`）是：lines `80%`、statements `80%`、functions `80%`、branches `75%`。统计范围主要是 `src/main/**`、`src/core/**`、`src/shared/**`，renderer、preload、utility、测试、生成文件及纯类型文件等按配置排除；新代码不可通过扩大排除项规避门禁。
 
-- `MinerU-<版本>-win-x64/`：唯一可运行目录，入口为其中的 `MinerU.exe`
-- `MinerU-<版本>-win-x64.zip`：上述目录的传输副本，解压后运行
-- `release-manifest.json`：版本、入口和 SHA-256 元数据
-- `SHA256SUMS.txt`：ZIP 与主程序校验值
+CI 还执行 bundle build、verified directory release、脚本/发布校验和 Playwright E2E。真实 API、真实翻译、真实 PDF 和 GUI E2E 是有条件的验证，不得用未运行的本机命令补写通过结论。
 
-不再生成 setup 或单文件 portable。运行时必须保留整个目录，不能只复制 `MinerU.exe`；更新时关闭程序并整体替换目录即可。程序没有代码签名，Windows SmartScreen 可能显示未知发布者。自制版使用独立的 `%APPDATA%\MinerU-Translation` 数据目录，整体替换程序目录不会删除任务、设置或官方解析结果。
+### 当前 Windows 环境说明
 
-发布包仅保留 Electron 的简体中文语言资源，并在生成 manifest 前强制检查：`app.asar` 不超过 40 MiB、运行目录不超过 330 MiB、ZIP 不超过 140 MiB，且不得包含非浏览器端所需的 `@napi-rs/canvas`。任一检查失败都会中止发布。
+在当前 Windows build `26200` + GameViewer 环境，sandboxed Renderer/GPU 原生启动失败；因此没有本机 GUI E2E 通过证据。专用 packaged CLI smoke 已通过，且不启动 Renderer，它不能证明 GUI、GPU、Renderer 或 RAG 可用。
 
-## 配置
+该限制不授权修改产品安全基线：不得降低产品默认、发布配置或 CI 的 Renderer/GPU sandbox，也不得把 `--disable-gpu-sandbox` 作为产品建议。GUI E2E 的通过证据必须来自具备原生启动条件的受控环境。
 
-1. 在“设置 → 系统设置”填写必需的 MinerU 官方 API Token，然后点击“验证 Token”。API 地址固定为 `https://mineru.net`。
-2. 设置结果保存目录。
-3. 在“参数设置”选择解析模型和翻译源。千问、DeepSeek API Key 写入 Windows Credential Manager，不会保存到 SQLite 或前端。
-4. Bing 与腾讯 TranSmart 使用非官方网页接口，可能限流、变化或失效；客户端会重试并按配置回退。表格在完整校验后才会整体回填：TranSmart 使用原生数组请求，Bing 兜底时使用多次短请求，避免长 marker 文本被改写或截断。
+## 构建与发布
 
-任务异常时可检查 `%APPDATA%\MinerU-Translation\mineru-desktop.log`。日志只记录任务阶段、远端状态和错误，Token、API Key 及预签名 URL 查询参数会被遮蔽。
+```powershell
+pnpm desktop:build:bundles
+pnpm desktop:release:from-built
+```
 
-## 隐私与安全
+正式发布由 `desktop/scripts/package-directory.mjs` 生成 Windows x64 完整目录和 ZIP。它在精确 `.release-next-{buildId}` staging 中校验四个 bundle、ASAR entry、locale、fuses、资源、体积（当前 app.asar < 40 MiB、运行目录 < 360 MiB、ZIP < 155 MiB），生成 `release-manifest.json`/`SHA256SUMS.txt`，解压复核并运行：
 
-- PDF 会通过官方预签名上传地址发送到 MinerU 服务。
-- 待翻译文本会发送到选定翻译服务；表格会连同 caption、footnote 作为一个逻辑整体处理，备用策略可能使同一文档使用多个服务。参考文献标题固定显示为“参考文献”，具体文献条目保持原文且不会发送到翻译服务。
-- Token 只发送到固定的 `https://mineru.net/api/v4` 接口；预签名上传及结果下载请求不携带 Token。
-- 日志、任务数据库和渲染进程不保存或返回 API Key。
+```text
+MinerU.exe --mineru-packaged-smoke
+```
 
-本客户端为非官方个人改编，MinerU 名称、图标和解析引擎归其原项目所有。根仓库 `LICENSE.md` 使用附带额外条款的 MinerU Open Source License；`desktop/package.json` 当前声明 `AGPL-3.0-only`。正式分发前应由维护者确认并统一桌面客户端适用的许可证与署名要求。
+只有精确的 `MINERU_PACKAGED_SMOKE_OK app=0.1.0 electron=44.1.1` marker、空 stderr、哈希/manifest 审计全部成功后，才会把新目录原子发布到根目录 `release/`；失败时恢复旧目录并保留 staging。发布包是完整目录，不要只复制 `MinerU.exe`；`userData` 和 Credential Manager 不在发布包内。
+
+## 功能与隐私
+
+当前提供 PDF 导入、官方解析、Markdown/表格翻译、原文/译文/布局阅读、PDF 与 block mapping 联动、荧光笔/下划线标注和另存结果。`ReaderChatSelection` 目前只是 Renderer 选区 payload；当前没有 chunk、index、embedding、vector、FTS、reranker、retrieval 或 chat backend，不要把“添加到对话”当作已实现聊天。
+
+PDF 会上传到 MinerU 官方预签名地址；待翻译文本会发送到所选翻译 Provider。Token 只发送到固定 `https://mineru.net` API；API Key 进入 Credential Manager，不写 SQLite、Renderer、日志或结果 ZIP。日志会遮蔽 Token、API Key、Authorization 和预签名 URL 查询参数，不记录论文正文。
+
+## 协作与已知事项
+
+共享工作区中的公共契约必须有唯一 owner：`shared` schema、Preload API、Main IPC、Core RPC、v2 migration、JobRepository、Artifact/PathPolicy 和发布脚本均需先登记变更、兼容策略、测试和恢复语义。开始/结束记录 `git status --short --branch`；不得覆盖他人改动、stash、清理 release、升级无关依赖或修改其他 worktree。文档中的 `implemented`、`verified`、`planned`、`blocked` 必须有源码/测试证据。
+
+根仓库许可证文件与 `desktop/package.json` 的许可证元数据当前不一致；这是后续法务/发布事项，本次不修改许可证文本、package 声明或署名信息。
