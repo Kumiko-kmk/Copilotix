@@ -32,7 +32,9 @@ export default function ReaderTextPane(props: {
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
 }): React.JSX.Element {
-  const [prewarmStage, setPrewarmStage] = React.useState<0 | 1 | 2>(0)
+  const [originalReady, setOriginalReady] = React.useState(false)
+  const [mountTranslated, setMountTranslated] = React.useState(false)
+  const [mountJson, setMountJson] = React.useState(false)
   const [highlightColor, setHighlightColor] = React.useState<HighlightColor>('yellow')
   const originalAnnotations = React.useMemo(
     () => props.annotations.filter((annotation) => annotation.view === 'original'),
@@ -51,14 +53,24 @@ export default function ReaderTextPane(props: {
     [props.onReplaceAnnotations]
   )
 
-  React.useEffect(() => scheduleIdle(() => setPrewarmStage(1)), [])
-  React.useEffect(() => {
-    if (prewarmStage !== 1) return
-    return scheduleIdle(() => setPrewarmStage(2))
-  }, [prewarmStage])
+  const markOriginalReady = React.useCallback(() => setOriginalReady(true), [])
 
-  const mountTranslated = props.translatedReady && (prewarmStage >= 1 || props.tab === 'translated')
-  const mountJson = prewarmStage >= 2 || props.tab === 'json'
+  React.useEffect(() => scheduleIdle(() => setMountJson(true)), [])
+  React.useEffect(() => {
+    if (!props.translatedReady) {
+      setMountTranslated(false)
+      return
+    }
+    if (props.tab === 'translated') {
+      setMountTranslated(true)
+      return
+    }
+    if (!originalReady) return
+    return scheduleIdle(() => setMountTranslated(true))
+  }, [originalReady, props.tab, props.translatedReady])
+
+  const shouldMountTranslated = props.translatedReady && (mountTranslated || props.tab === 'translated')
+  const shouldMountJson = mountJson || props.tab === 'json'
 
   return (
     <div className="text-pane">
@@ -99,10 +111,11 @@ export default function ReaderTextPane(props: {
           onAddToChat={props.onAddToChat}
           selection={props.selection}
           onSelect={props.onSelect}
+          onRenderReady={markOriginalReady}
         />
       </ReaderPanel>
       <ReaderPanel tab="translated" activeTab={props.tab}>
-        {mountTranslated ? (
+        {shouldMountTranslated ? (
           <MarkdownPane
             active={props.tab === 'translated'}
             blocks={props.translatedBlocks}
@@ -122,7 +135,7 @@ export default function ReaderTextPane(props: {
         )}
       </ReaderPanel>
       <ReaderPanel tab="json" activeTab={props.tab}>
-        {mountJson ? <JsonPane json={props.layoutJson} query={props.jsonQuery} active={props.tab === 'json'} /> : null}
+        {shouldMountJson ? <JsonPane json={props.layoutJson} query={props.jsonQuery} active={props.tab === 'json'} /> : null}
       </ReaderPanel>
     </div>
   )

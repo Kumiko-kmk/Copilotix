@@ -2,7 +2,7 @@ import React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Space, Spin, Tag, Typography, message } from 'antd'
-import { buildReaderDocumentBlocks } from '@shared/readerDocument'
+import { buildOriginalReaderBlocks, buildTranslatedReaderBlocks } from '@shared/readerDocument'
 import type {
   DocumentAnnotation,
   DocumentDetails,
@@ -42,16 +42,17 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
     setJsonQuery('')
   }, [props.documentId])
 
-  const readerBlocks = React.useMemo(
-    () => document
-      ? buildReaderDocumentBlocks(
-          document.markdown,
-          document.translatedMarkdown,
-          document.translatedBlocks,
-          document.mappings
-        )
-      : { original: [], translated: [] },
-    [document]
+  const markdown = document?.markdown ?? ''
+  const translatedMarkdown = document?.translatedMarkdown ?? ''
+  const translatedSourceBlocks = document?.translatedBlocks ?? null
+  const mappings = document?.mappings ?? EMPTY_MAPPINGS
+  const originalBlocks = React.useMemo(
+    () => buildOriginalReaderBlocks(markdown, mappings),
+    [markdown, mappings]
+  )
+  const translatedBlocks = React.useMemo(
+    () => buildTranslatedReaderBlocks(markdown, translatedMarkdown, translatedSourceBlocks, mappings),
+    [markdown, mappings, translatedMarkdown, translatedSourceBlocks]
   )
   const selectBlock = React.useCallback((next: BlockSelection) => setSelection(next), [])
   const changeTab = React.useCallback((next: ReaderTab) => {
@@ -121,8 +122,8 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
           key={document.summary.id}
           tab={tab}
           onTabChange={changeTab}
-          originalBlocks={readerBlocks.original}
-          translatedBlocks={readerBlocks.translated}
+          originalBlocks={originalBlocks}
+          translatedBlocks={translatedBlocks}
           translatedReady={translatedReady}
           taskStatus={document.summary.workflow.status}
           layoutJson={document.layoutJson}
@@ -139,6 +140,8 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
     </section>
   )
 }
+
+const EMPTY_MAPPINGS: DocumentDetails['mappings'] = []
 
 function useAnnotationQuery(documentId: string, view: ReaderAnnotationView) {
   const request: ListReaderAnnotationsRequest = { documentId, view }

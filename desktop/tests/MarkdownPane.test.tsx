@@ -85,6 +85,60 @@ describe('MarkdownPane', () => {
     expect(decodeImage).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps a ready pane stable when equivalent blocks arrive in a new array', async () => {
+    const selection: BlockSelection = { mappingId: 'image', origin: 'pdf', blockPosition: '0-1' }
+    const blocks = [block('image', 'Before\n\n![figure](images/figure.png)\n\nAfter')]
+    const view = renderPane(blocks, selection, vi.fn())
+    const scroller = view.container.querySelector<HTMLElement>('.markdown-scroll')!
+    const article = view.container.querySelector('article')!
+    const image = view.container.querySelector('img')!
+
+    fireEvent.load(image)
+    await waitFor(() => expect(scroller.getAttribute('data-render-state')).toBe('ready'))
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
+    scroller.scrollTop = 420
+
+    view.rerender(
+      <MarkdownPane
+        active
+        blocks={blocks.map((item) => ({ ...item, mappingIds: [...item.mappingIds] }))}
+        assetBaseUrl="mineru-asset://task/"
+        taskId="task"
+        view="original"
+        annotations={[]}
+        highlightColor="yellow"
+        onHighlightColorChange={() => undefined}
+        onReplaceAnnotations={async () => undefined}
+        selection={selection}
+        onSelect={() => undefined}
+      />
+    )
+
+    expect(scroller.getAttribute('data-render-state')).toBe('ready')
+    expect(view.container.querySelector('article')).toBe(article)
+    expect(view.container.querySelector('img')).toBe(image)
+    expect(scroller.scrollTop).toBe(420)
+    expect(decodeImage).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+
+    view.rerender(
+      <MarkdownPane
+        active
+        blocks={blocks}
+        assetBaseUrl="mineru-asset://task/"
+        taskId="task"
+        view="original"
+        annotations={[]}
+        highlightColor="yellow"
+        onHighlightColorChange={() => undefined}
+        onReplaceAnnotations={async () => undefined}
+        selection={{ ...selection }}
+        onSelect={() => undefined}
+      />
+    )
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2))
+  })
+
   it('shows a complete-render error and retries with a fresh image tree', async () => {
     const view = renderPane([block('image', '![figure](images/broken.png)')], null, vi.fn())
     const firstImage = view.container.querySelector('img')!

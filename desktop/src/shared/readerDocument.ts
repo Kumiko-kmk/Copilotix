@@ -40,6 +40,28 @@ export function buildReaderDocumentBlocks(
   translatedBlocks: TranslatedMarkdownBlock[] | null,
   mappings: BlockMapping[]
 ): ReaderDocumentBlocks {
+  const original = buildOriginalReaderBlocks(markdown, mappings)
+  const translated = buildTranslatedReaderBlocks(markdown, translatedMarkdown, translatedBlocks, mappings)
+
+  return { original, translated }
+}
+
+export function buildOriginalReaderBlocks(
+  markdown: string,
+  mappings: BlockMapping[]
+): ReaderBlock[] {
+  const contentMappings = mappings.filter((mapping) => supplementalRole(mapping) === null)
+  const originalContent = alignMarkdownBlocks(markdown, contentMappings)
+  return mergeReaderBlocks(originalContent, mappings)
+}
+
+export function buildTranslatedReaderBlocks(
+  markdown: string,
+  translatedMarkdown: string,
+  translatedBlocks: TranslatedMarkdownBlock[] | null,
+  mappings: BlockMapping[]
+): ReaderBlock[] {
+  if (!translatedMarkdown) return []
   const contentMappings = mappings.filter((mapping) => supplementalRole(mapping) === null)
   const originalContent = alignMarkdownBlocks(markdown, contentMappings)
   const translatedContent = translatedMarkdown
@@ -47,11 +69,7 @@ export function buildReaderDocumentBlocks(
       ? remapTranslatedContent(translatedBlocks, originalContent)
       : reuseOriginalMapping(translatedMarkdown)
     : []
-
-  return {
-    original: mergeReaderBlocks(originalContent, mappings),
-    translated: translatedContent.length > 0 ? mergeReaderBlocks(translatedContent, mappings) : []
-  }
+  return translatedContent.length > 0 ? mergeReaderBlocks(translatedContent, mappings) : []
 }
 
 export function mergeReaderBlocks(

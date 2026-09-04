@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildReaderDocumentBlocks, mergeReaderBlocks } from '@shared/readerDocument'
+import {
+  buildOriginalReaderBlocks,
+  buildReaderDocumentBlocks,
+  buildTranslatedReaderBlocks,
+  mergeReaderBlocks
+} from '@shared/readerDocument'
 import type { BlockMapping, TranslatedMarkdownBlock } from '@shared/types'
 
 describe('reader document model', () => {
@@ -66,6 +71,13 @@ describe('reader document model', () => {
     ])
     expect(result.translated.filter((block) => block.role === 'content').map((block) => block.annotationKey))
       .toEqual(['content:0', 'content:1'])
+    expect(buildOriginalReaderBlocks('# Document title\n\nBody paragraph', mappings)).toEqual(result.original)
+    expect(buildTranslatedReaderBlocks(
+      '# Document title\n\nBody paragraph',
+      '# 文档标题\n\n正文段落',
+      translatedBlocks,
+      mappings
+    )).toEqual(result.translated)
   })
 
   it('keeps malformed translated source indexes readable but unlinked', () => {

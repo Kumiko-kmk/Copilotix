@@ -71,6 +71,7 @@ export default function MarkdownPane(props: {
   onAddToChat?(selection: ReaderChatSelection): void
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
+  onRenderReady?(): void
 }): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const articleRef = React.useRef<HTMLElement>(null)
@@ -81,6 +82,17 @@ export default function MarkdownPane(props: {
   const blockPositionsRef = React.useRef<BlockPosition[]>([])
   const blockElementsRef = React.useRef<Map<string, HTMLElement>>(new Map())
   const ambiguousMappingIdsRef = React.useRef<Set<string>>(new Set())
+  const lastNavigatedSelectionRef = React.useRef<BlockSelection | null>(null)
+  const onRenderReadyRef = React.useRef(props.onRenderReady)
+  onRenderReadyRef.current = props.onRenderReady
+  const contentRevisionRef = React.useRef({ blocks: props.blocks, revision: 0 })
+  if (!readerBlocksEqual(contentRevisionRef.current.blocks, props.blocks)) {
+    contentRevisionRef.current = {
+      blocks: props.blocks,
+      revision: contentRevisionRef.current.revision + 1
+    }
+  }
+  const contentRevision = contentRevisionRef.current.revision
   const [annotationOwner] = React.useState(() => `reader-annotations-${crypto.randomUUID()}`)
   const selectionFrameRef = React.useRef<number | null>(null)
   const paletteTimerRef = React.useRef<number | null>(null)
@@ -144,7 +156,10 @@ export default function MarkdownPane(props: {
         const fonts = document.fonts?.ready ?? Promise.resolve()
         await Promise.race([Promise.all([assets, fonts]), timeout])
         await waitForAnimationFrames(2, controller.signal)
-        if (!controller.signal.aborted) setRenderState({ status: 'ready' })
+        if (!controller.signal.aborted) {
+          setRenderState({ status: 'ready' })
+          onRenderReadyRef.current?.()
+        }
       } catch (error) {
         if (controller.signal.aborted) return
         controller.abort()
@@ -159,7 +174,7 @@ export default function MarkdownPane(props: {
       controller.abort()
       if (timeoutId !== null) window.clearTimeout(timeoutId)
     }
-  }, [props.assetBaseUrl, props.blocks, renderAttempt])
+  }, [props.assetBaseUrl, contentRevision, renderAttempt])
 
   const rebuildBlockPositions = React.useCallback(() => {
     const container = containerRef.current
@@ -255,15 +270,20 @@ export default function MarkdownPane(props: {
   }, [closeTextSelection, props.active])
 
   React.useLayoutEffect(() => {
+    if (!props.selection) {
+      lastNavigatedSelectionRef.current = null
+      return
+    }
     if (
       !props.active ||
       !ready ||
-      !props.selection ||
       props.selection.origin === 'scroll' ||
       !containerRef.current
     ) return
+    if (lastNavigatedSelectionRef.current === props.selection) return
     const element = blockElementsRef.current.get(props.selection.mappingId)
     if (!element) return
+    lastNavigatedSelectionRef.current = props.selection
     suppressScrollSelectionRef.current = true
     element.scrollIntoView({ behavior: 'auto', block: 'center' })
     releaseScrollSelectionSuppression()
@@ -425,6 +445,26 @@ export default function MarkdownPane(props: {
       ) : null}
     </div>
   )
+}
+
+function readerBlocksEqual(left: ReaderBlock[], right: ReaderBlock[]): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  return left.every((block, index) => {
+    const candidate = right[index]
+    return candidate !== undefined &&
+      block.role === candidate.role &&
+      block.markdown === candidate.markdown &&
+      block.annotationKey === candidate.annotationKey &&
+      block.text === candidate.text &&
+      block.pageIndex === candidate.pageIndex &&
+      block.order === candidate.order &&
+      stringArraysEqual(block.mappingIds, candidate.mappingIds)
+  })
+}
+
+function stringArraysEqual(left: string[], right: string[]): boolean {
+  return left === right || (left.length === right.length && left.every((value, index) => value === right[index]))
 }
 
 const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
