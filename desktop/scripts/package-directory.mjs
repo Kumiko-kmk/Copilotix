@@ -11,6 +11,12 @@ import extract from 'extract-zip'
 import { applyDesktopFuses } from './electron-fuses.mjs'
 import { auditRelease, assertRequiredPackagedContent, collectRelativeFiles, formatMiB, RELEASE_LIMITS } from './release-policy.mjs'
 import {
+  PACKAGED_SMOKE_ARG,
+  formatPackagedSmokeMarker,
+  shouldRunPackagedSmoke,
+  validatePackagedSmokeOutput
+} from '../src/shared/packagedSmoke.mjs'
+import {
   assertReleaseLayout,
   createReleaseLayout,
   pathExists,
@@ -23,11 +29,19 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const desktopDirectory = resolve(scriptDirectory, '..')
 const repositoryRoot = resolve(desktopDirectory, '..')
 
+export {
+  PACKAGED_SMOKE_ARG,
+  formatPackagedSmokeMarker,
+  shouldRunPackagedSmoke,
+  validatePackagedSmokeOutput
+}
+
 /** Build and publish one verified Windows x64 directory release. */
 export async function publishRelease({ fromBuilt = false } = {}) {
   assertWindowsX64()
   assertDesktopDirectory(desktopDirectory, repositoryRoot)
   const packageJson = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
+  const packagedSmokeVersions = assertPackagedSmokeVersions(packageJson)
   const productName = packageJson.build?.productName ?? 'MinerU'
   const executableName = `${packageJson.build?.executableName ?? productName}.exe`
   const releaseName = `${productName}-${packageJson.version}-win-x64`
@@ -73,7 +87,7 @@ export async function publishRelease({ fromBuilt = false } = {}) {
       zipPath: layout.zipPath,
       asarEntries
     })
-    await runPackagedSmoke(executablePath)
+    await runPackagedSmoke(executablePath, packagedSmokeVersions)
 
     const hashes = {
       executable: await sha256(executablePath),
@@ -241,14 +255,23 @@ async function verifyReleaseZip(archivePath, verificationDirectory, rootName, ma
   }
 }
 
-async function runPackagedSmoke(executablePath) {
+export function assertPackagedSmokeVersions(packageJson) {
+  const appVersion = packageJson?.version
+  const electronVersion = packageJson?.devDependencies?.electron ?? packageJson?.dependencies?.electron
+  if (electronVersion !== '44.1.1') throw new Error('Packaged smoke requires Electron 44.1.1')
+  formatPackagedSmokeMarker({ appVersion, electronVersion })
+  return Object.freeze({ appVersion, electronVersion })
+}
+
+export async function runPackagedSmoke(executablePath, expectedVersions) {
   await new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(executablePath, ['--version'], {
+    const child = spawn(executablePath, [PACKAGED_SMOKE_ARG], {
       cwd: dirname(executablePath),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     })
-    let output = ''
+    let stdout = ''
+    let stderr = ''
     let settled = false
     const finish = (error) => {
       if (settled) return
@@ -261,14 +284,14 @@ async function runPackagedSmoke(executablePath) {
       child.kill()
       finish(new Error('Packaged smoke timed out'))
     }, 30_000)
-    child.stdout?.on('data', (chunk) => { output += String(chunk) })
-    child.stderr?.on('data', (chunk) => { output += String(chunk) })
+    child.stdout?.on('data', (chunk) => { stdout += String(chunk) })
+    child.stderr?.on('data', (chunk) => { stderr += String(chunk) })
     child.once('error', (error) => finish(error))
-    child.once('exit', (code, signal) => {
+    child.once('close', (code, signal) => {
       if (code !== 0) {
         finish(new Error(`Packaged smoke exited with ${String(code ?? signal)}`))
-      } else if (!/\d+\.\d+/u.test(output)) {
-        finish(new Error('Packaged smoke produced no Electron version output'))
+      } else if (!validatePackagedSmokeOutput({ stdout, stderr }, expectedVersions)) {
+        finish(new Error('Packaged smoke marker validation failed'))
       } else {
         finish()
       }

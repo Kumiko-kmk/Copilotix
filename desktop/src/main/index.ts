@@ -59,17 +59,7 @@ import { JobScheduler } from './jobScheduler'
 import { ParseJobRunner } from './parseJobRunner'
 import { TranslationJobRunner } from './translationJobRunner'
 import { PathPolicy } from './pathPolicy'
-
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'mineru-asset',
-    privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true, stream: true }
-  }
-])
-
-app.setName('MinerU')
-const isolatedUserData = process.env.NODE_ENV === 'test' ? process.env.MINERU_E2E_USER_DATA : undefined
-app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'MinerU-Translation-v2'))
+import { formatPackagedSmokeMarker, shouldRunPackagedSmoke } from '@shared/packagedSmoke'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -80,6 +70,14 @@ let documentSummaries = new Map<string, DocumentSummary>()
 let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
 let jobScheduler: JobScheduler | null = null
+
+const packagedSmokeMode = shouldRunPackagedSmoke(process.argv, app.isPackaged)
+
+if (packagedSmokeMode) {
+  writePackagedSmokeMarker()
+} else {
+  startNormalApp()
+}
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
@@ -373,28 +371,6 @@ function registerIpc(
   }, validationOptions)
 }
 
-app.on('before-quit', (event) => {
-  isQuitting = true
-  if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
-  event.preventDefault()
-  utilityShutdownPromise = (jobScheduler?.shutdown() ?? Promise.resolve()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
-    app.quit()
-  })
-})
-
-app.on('window-all-closed', () => {
-  // Keep the background queue alive in the tray on Windows.
-})
-
-void bootstrap().catch((error: unknown) => {
-  // Keep startup diagnostics free of stack traces, local paths and credentials.
-  const code = startupErrorCode(error)
-  console.error(`MinerU startup failed [${code}]`)
-  // Playwright and other headless checks must not wait on a native modal.
-  if (process.env.NODE_ENV !== 'test') dialog.showErrorBox('MinerU 启动失败', '核心服务无法启动，请重试。')
-  app.quit()
-})
-
 function startupErrorCode(error: unknown): 'CORE_TIMEOUT' | 'CORE_UNAVAILABLE' | 'CORE_PROTOCOL_ERROR' {
   const code = error && typeof error === 'object' && 'code' in error
     ? (error as { code?: unknown }).code
@@ -402,4 +378,53 @@ function startupErrorCode(error: unknown): 'CORE_TIMEOUT' | 'CORE_UNAVAILABLE' |
   return code === 'CORE_TIMEOUT' || code === 'CORE_PROTOCOL_ERROR' || code === 'CORE_UNAVAILABLE'
     ? code
     : 'CORE_UNAVAILABLE'
+}
+
+function startNormalApp(): void {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'mineru-asset',
+      privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true, stream: true }
+    }
+  ])
+
+  app.setName('MinerU')
+  const isolatedUserData = process.env.NODE_ENV === 'test' ? process.env.MINERU_E2E_USER_DATA : undefined
+  app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'MinerU-Translation-v2'))
+
+  app.on('before-quit', (event) => {
+    isQuitting = true
+    if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
+    event.preventDefault()
+    utilityShutdownPromise = (jobScheduler?.shutdown() ?? Promise.resolve()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
+      app.quit()
+    })
+  })
+
+  app.on('window-all-closed', () => {
+    // Keep the background queue alive in the tray on Windows.
+  })
+
+  void bootstrap().catch((error: unknown) => {
+    // Keep startup diagnostics free of stack traces, local paths and credentials.
+    const code = startupErrorCode(error)
+    console.error(`MinerU startup failed [${code}]`)
+    // Playwright and other headless checks must not wait on a native modal.
+    if (process.env.NODE_ENV !== 'test') dialog.showErrorBox('MinerU 启动失败', '核心服务无法启动，请重试。')
+    app.quit()
+  })
+}
+
+function writePackagedSmokeMarker(): void {
+  try {
+    const marker = formatPackagedSmokeMarker({
+      appVersion: app.getVersion(),
+      electronVersion: process.versions.electron ?? ''
+    })
+    process.stdout.write(marker, 'utf8', (error) => {
+      app.exit(error ? 1 : 0)
+    })
+  } catch {
+    app.exit(1)
+  }
 }
