@@ -2,7 +2,7 @@ import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'n
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { _electron as electron } from '@playwright/test'
-import { buildBlockMappings } from '../src/main/blockMapping'
+import { buildBlockMappings } from '../src/core/blockMapping'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { ArtifactKind } from '../src/core/types'

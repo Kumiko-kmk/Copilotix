@@ -5,7 +5,6 @@ import {
   BrowserWindow,
   dialog,
   Menu,
-  nativeTheme,
   net,
   Notification,
   protocol,
@@ -185,7 +184,7 @@ function createMainWindow(): void {
     roundedCorners: true,
     thickFrame: true,
     autoHideMenuBar: true,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#15171b' : '#f7f8fa',
+    backgroundColor: '#f7f2e8',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

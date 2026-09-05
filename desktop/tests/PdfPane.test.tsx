@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BlockMapping, BlockSelection } from '@shared/types'
 
@@ -104,4 +104,78 @@ describe('PdfPane mapping navigation', () => {
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
     expect(continuation.classList.contains('active')).toBe(true)
   })
+
+  it('reveals only the overflowing scrollbar nearest the pointer edge', () => {
+    const view = render(
+      <PdfPane url="mineru-asset://document/original.pdf" mappings={[]} selection={null} onSelect={vi.fn()} />
+    )
+    const scroller = view.container.querySelector<HTMLElement>('.pdf-scroll')!
+    setScrollerMetrics(scroller, { clientWidth: 400, clientHeight: 300, scrollWidth: 800, scrollHeight: 900 })
+
+    fireEvent.pointerMove(scroller, { clientX: 200, clientY: 150 })
+    expect(scroller.classList.contains('pdf-scrollbar-x-visible')).toBe(false)
+    expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(false)
+
+    fireEvent.pointerMove(scroller, { clientX: 390, clientY: 150 })
+    expect(scroller.classList.contains('pdf-scrollbar-x-visible')).toBe(false)
+    expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(true)
+
+    fireEvent.pointerMove(scroller, { clientX: 200, clientY: 290 })
+    expect(scroller.classList.contains('pdf-scrollbar-x-visible')).toBe(true)
+    expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(false)
+
+    setScrollerMetrics(scroller, { clientWidth: 400, clientHeight: 300, scrollWidth: 400, scrollHeight: 300 })
+    fireEvent.pointerMove(scroller, { clientX: 399, clientY: 299 })
+    expect(scroller.classList.contains('pdf-scrollbar-x-visible')).toBe(false)
+    expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(false)
+  })
+
+  it('delays hiding near-edge scrollbars and keeps them visible while dragging', () => {
+    vi.useFakeTimers()
+    try {
+      const view = render(
+        <PdfPane url="mineru-asset://document/original.pdf" mappings={[]} selection={null} onSelect={vi.fn()} />
+      )
+      const scroller = view.container.querySelector<HTMLElement>('.pdf-scroll')!
+      setScrollerMetrics(scroller, { clientWidth: 400, clientHeight: 300, scrollWidth: 800, scrollHeight: 900 })
+
+      fireEvent.pointerMove(scroller, { clientX: 390, clientY: 150 })
+      fireEvent.pointerMove(scroller, { clientX: 200, clientY: 150 })
+      act(() => vi.advanceTimersByTime(299))
+      expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(true)
+      act(() => vi.advanceTimersByTime(1))
+      expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(false)
+
+      fireEvent.pointerMove(scroller, { clientX: 390, clientY: 150 })
+      fireEvent.pointerDown(scroller)
+      fireEvent.pointerMove(scroller, { clientX: 200, clientY: 150 })
+      act(() => vi.advanceTimersByTime(500))
+      expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(true)
+      fireEvent.pointerUp(window)
+      act(() => vi.advanceTimersByTime(300))
+      expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
+
+function setScrollerMetrics(
+  scroller: HTMLElement,
+  metrics: { clientWidth: number; clientHeight: number; scrollWidth: number; scrollHeight: number }
+): void {
+  for (const [key, value] of Object.entries(metrics)) {
+    Object.defineProperty(scroller, key, { configurable: true, value })
+  }
+  vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue({
+    bottom: metrics.clientHeight,
+    height: metrics.clientHeight,
+    left: 0,
+    right: metrics.clientWidth,
+    top: 0,
+    width: metrics.clientWidth,
+    x: 0,
+    y: 0,
+    toJSON: () => ({})
+  })
+}

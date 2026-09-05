@@ -14,6 +14,15 @@ type LoadingState =
 
 const RANGE_CHUNK_SIZE = 256 * 1024
 const PAGE_RENDER_RADIUS = 2
+const SCROLLBAR_HOT_ZONE_PX = 16
+const SCROLLBAR_HIDE_DELAY_MS = 300
+
+interface ScrollbarVisibility {
+  horizontal: boolean
+  vertical: boolean
+}
+
+const HIDDEN_SCROLLBARS: ScrollbarVisibility = { horizontal: false, vertical: false }
 
 export default function PdfPane(props: {
   url: string
@@ -26,7 +35,76 @@ export default function PdfPane(props: {
   const [currentPage, setCurrentPage] = React.useState(1)
   const [zoom, setZoom] = React.useState(1)
   const [reloadKey, setReloadKey] = React.useState(0)
+  const [scrollbars, setScrollbars] = React.useState<ScrollbarVisibility>(HIDDEN_SCROLLBARS)
   const scrollerRef = React.useRef<HTMLDivElement>(null)
+  const scrollbarHideTimerRef = React.useRef<number | null>(null)
+  const scrollbarDraggingRef = React.useRef(false)
+
+  const cancelScrollbarHide = React.useCallback(() => {
+    if (scrollbarHideTimerRef.current === null) return
+    window.clearTimeout(scrollbarHideTimerRef.current)
+    scrollbarHideTimerRef.current = null
+  }, [])
+
+  const hideScrollbars = React.useCallback(() => {
+    setScrollbars((current) => current.horizontal || current.vertical ? HIDDEN_SCROLLBARS : current)
+  }, [])
+
+  const scheduleScrollbarHide = React.useCallback(() => {
+    if (scrollbarDraggingRef.current || scrollbarHideTimerRef.current !== null) return
+    scrollbarHideTimerRef.current = window.setTimeout(() => {
+      scrollbarHideTimerRef.current = null
+      hideScrollbars()
+    }, SCROLLBAR_HIDE_DELAY_MS)
+  }, [hideScrollbars])
+
+  const revealScrollbarsNearEdge = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (scrollbarDraggingRef.current) return
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const bounds = scroller.getBoundingClientRect()
+    const hasHorizontalOverflow = scroller.scrollWidth > scroller.clientWidth
+    const hasVerticalOverflow = scroller.scrollHeight > scroller.clientHeight
+    if (!hasHorizontalOverflow && !hasVerticalOverflow) {
+      cancelScrollbarHide()
+      hideScrollbars()
+      return
+    }
+    const nearRight = bounds.right - event.clientX >= 0 && bounds.right - event.clientX <= SCROLLBAR_HOT_ZONE_PX
+    const nearBottom = bounds.bottom - event.clientY >= 0 && bounds.bottom - event.clientY <= SCROLLBAR_HOT_ZONE_PX
+    const next: ScrollbarVisibility = {
+      horizontal: nearBottom && hasHorizontalOverflow,
+      vertical: nearRight && hasVerticalOverflow
+    }
+    if (!next.horizontal && !next.vertical) {
+      scheduleScrollbarHide()
+      return
+    }
+    cancelScrollbarHide()
+    setScrollbars((current) => current.horizontal === next.horizontal && current.vertical === next.vertical ? current : next)
+  }, [cancelScrollbarHide, hideScrollbars, scheduleScrollbarHide])
+
+  const startScrollbarDrag = React.useCallback(() => {
+    if (!scrollbars.horizontal && !scrollbars.vertical) return
+    cancelScrollbarHide()
+    scrollbarDraggingRef.current = true
+  }, [cancelScrollbarHide, scrollbars.horizontal, scrollbars.vertical])
+
+  const finishScrollbarDrag = React.useCallback(() => {
+    if (!scrollbarDraggingRef.current) return
+    scrollbarDraggingRef.current = false
+    scheduleScrollbarHide()
+  }, [scheduleScrollbarHide])
+
+  React.useEffect(() => {
+    window.addEventListener('pointerup', finishScrollbarDrag)
+    window.addEventListener('pointercancel', finishScrollbarDrag)
+    return () => {
+      window.removeEventListener('pointerup', finishScrollbarDrag)
+      window.removeEventListener('pointercancel', finishScrollbarDrag)
+      cancelScrollbarHide()
+    }
+  }, [cancelScrollbarHide, finishScrollbarDrag])
 
   React.useEffect(() => {
     let cancelled = false
@@ -111,7 +189,14 @@ export default function PdfPane(props: {
           <Button disabled={!document} type="text" icon={<PlusOutlined />} onClick={() => setZoom((value) => Math.min(2, value + 0.1))} aria-label="放大" />
         </Space>
       </div>
-      <div className="pdf-scroll" ref={scrollerRef} aria-live="polite">
+      <div
+        className={`pdf-scroll${scrollbars.vertical ? ' pdf-scrollbar-y-visible' : ''}${scrollbars.horizontal ? ' pdf-scrollbar-x-visible' : ''}`}
+        ref={scrollerRef}
+        aria-live="polite"
+        onPointerMove={revealScrollbarsNearEdge}
+        onPointerLeave={scheduleScrollbarHide}
+        onPointerDown={startScrollbarDrag}
+      >
         {loadingState.status === 'loading' ? (
           <div className="pdf-loading">
             <span>正在加载 PDF…</span>

@@ -7,23 +7,20 @@ import App from './App'
 import './styles.css'
 
 function Root(): React.JSX.Element {
-  const [dark, setDark] = React.useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-  React.useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const listener = (event: MediaQueryListEvent): void => setDark(event.matches)
-    media.addEventListener('change', listener)
-    return () => media.removeEventListener('change', listener)
-  }, [])
   return (
     <ConfigProvider
       locale={zhCN}
       theme={{
-        algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+        algorithm: theme.defaultAlgorithm,
         token: {
           colorPrimary: '#5b6cff',
           borderRadius: 10,
           fontFamily: 'Inter, "Microsoft YaHei UI", "PingFang SC", sans-serif',
-          colorBgLayout: dark ? '#111317' : '#f6f7f9'
+          colorBgBase: '#f7f2e8',
+          colorBgContainer: '#fbf8f2',
+          colorBgLayout: '#f7f2e8',
+          colorBorder: '#dcd4c7',
+          colorText: '#27231e'
         }
       }}
     >
