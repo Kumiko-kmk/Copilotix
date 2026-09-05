@@ -30,8 +30,13 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
     await expect(window.locator('.app-shell')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(window.locator('.main-surface')).toHaveCSS('border-radius', '0px')
     await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
-    await expect(window.locator('[data-window-control="close"]')).toHaveCSS('width', '15px')
-    await expect(window.locator('[data-window-control="close"]')).toHaveCSS('height', '15px')
+    const closeControl = window.locator('[data-window-control="close"]')
+    await expect(closeControl).toHaveCSS('width', '12px')
+    await expect(closeControl).toHaveCSS('height', '12px')
+    const closeBounds = await closeControl.boundingBox()
+    expect(closeBounds).not.toBeNull()
+    expect(closeBounds!.y).toBeGreaterThanOrEqual(14)
+    expect(closeBounds!.y + closeBounds!.height).toBeLessThanOrEqual(27)
 
     await window.locator('[data-edge-dock="top"]').hover()
     await window.waitForTimeout(300)
@@ -57,12 +62,11 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
   }
 })
 
-test('keeps the particle lake legible across supported sizes and themes', async () => {
+test('keeps the new parse page static across supported sizes and themes', async () => {
   const workspace = await createE2EWorkspace()
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    const particleLake = window.getByTestId('particle-lake')
     const uploadEntry = window.getByTestId('pdf-upload-entry')
 
     await app.evaluate(({ BrowserWindow, nativeTheme }) => {
@@ -75,13 +79,10 @@ test('keeps the particle lake legible across supported sizes and themes', async 
     expect(compactViewport[0]).toBeLessThanOrEqual(1102)
     expect(compactViewport[1]).toBeGreaterThanOrEqual(700)
     expect(compactViewport[1]).toBeLessThanOrEqual(702)
-    await expect(particleLake).toHaveAttribute('data-renderer', 'webgl2')
-    await expect(particleLake).toHaveAttribute('data-render-state', 'animated')
-    await expect.poll(() => particleLake.getAttribute('data-particle-count').then(Number)).toBeGreaterThanOrEqual(120_000)
-    const compactRidgeCount = Number(await particleLake.getAttribute('data-ridge-count'))
-    expect(compactRidgeCount).toBeGreaterThanOrEqual(7)
-    await expect(uploadEntry).toHaveCSS('backdrop-filter', /blur\(18px\)/)
-    await capture(window, 'new-parse-1100x700-light.png')
+    await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
+    await expect(uploadEntry).toHaveCSS('background-color', 'rgb(247, 242, 232)')
+    await expect(uploadEntry).toHaveCSS('backdrop-filter', 'none')
+    await capture(window, 'new-parse-1100x700-static.png')
 
     await app.evaluate(({ BrowserWindow, nativeTheme }) => {
       nativeTheme.themeSource = 'dark'
@@ -95,31 +96,11 @@ test('keeps the particle lake legible across supported sizes and themes', async 
     expect(spaciousViewport[0]).toBeLessThanOrEqual(1442)
     expect(spaciousViewport[1]).toBeGreaterThanOrEqual(900)
     expect(spaciousViewport[1]).toBeLessThanOrEqual(902)
-    await expect.poll(() => particleLake.getAttribute('data-particle-count').then(Number)).toBeGreaterThanOrEqual(200_000)
-    const spaciousRidgeCount = Number(await particleLake.getAttribute('data-ridge-count'))
-    expect(spaciousRidgeCount).toBeGreaterThan(compactRidgeCount)
-    const firstMotionSample = await particleLake.getAttribute('data-motion-sample')
-    const firstWaveSample = await particleLake.getAttribute('data-wave-sample')
-    expect(firstMotionSample).toBeTruthy()
-    expect(firstWaveSample).toBeTruthy()
-    await expect.poll(() => particleLake.getAttribute('data-motion-sample')).not.toBe(firstMotionSample)
-    await expect.poll(() => particleLake.getAttribute('data-wave-sample')).not.toBe(firstWaveSample)
-    const tangentSample = (await particleLake.getAttribute('data-tangent-sample'))!.split(',').map(Number)
-    const [tangentX, tangentY, normalX, normalY] = tangentSample
-    expect(Math.hypot(tangentX ?? 0, tangentY ?? 0)).toBeCloseTo(1, 2)
-    expect(Math.hypot(normalX ?? 0, normalY ?? 0)).toBeCloseTo(1, 2)
-    expect(Math.abs((tangentX ?? 0) * (normalX ?? 0) + (tangentY ?? 0) * (normalY ?? 0))).toBeLessThan(0.01)
-    const depthProfile = (await particleLake.getAttribute('data-depth-profile'))!.split(',').map(Number)
-    expect(depthProfile[1]).toBeGreaterThan(depthProfile[0] ?? 0)
-    expect(depthProfile[2]).toBeGreaterThan(depthProfile[0] ?? 0)
-    await expect.poll(() => particleLake.getAttribute('data-average-frame-ms').then(Number), { timeout: 10_000 }).toBeLessThan(22)
+    await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
     await expect(window.locator('.app-shell')).toHaveCSS('border-radius', '16px')
     await expect(window.locator('.main-surface')).toHaveCSS('border-radius', '0px')
     await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
-    await capture(window, 'new-parse-1440x900-fixed-light.png')
-
-    await window.emulateMedia({ reducedMotion: 'reduce' })
-    await expect(particleLake).toHaveAttribute('data-render-state', 'static')
+    await capture(window, 'new-parse-1440x900-static.png')
   } finally {
     await app.close()
     await workspace.cleanup()

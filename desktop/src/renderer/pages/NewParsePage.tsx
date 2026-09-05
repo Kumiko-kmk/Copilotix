@@ -3,7 +3,6 @@ import { CloudUploadOutlined, FilePdfOutlined, InboxOutlined } from '@ant-design
 import { Alert, Button, Checkbox, Modal, Select, Space, Tag, message } from 'antd'
 import { MAX_PDF_BYTES, PROVIDER_LABELS } from '@shared/constants'
 import type { AppSettings, ParserModel, TranslationProviderId } from '@shared/types'
-import ParticleLakeBackground from '../components/ParticleLakeBackground'
 
 interface PendingPdf {
   file: File
@@ -63,7 +62,6 @@ export default function NewParsePage(props: {
   return (
     <section className="page new-parse-page">
       {contextHolder}
-      <ParticleLakeBackground />
       <div className="new-parse-content">
         <div
           className={dragging ? 'upload-entry dragging' : 'upload-entry'}
