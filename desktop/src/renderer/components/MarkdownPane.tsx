@@ -31,6 +31,7 @@ import {
   registerReaderHighlightRanges,
   type ReaderTextSelection
 } from '../readerAnnotations'
+import MarkdownMinimap from './MarkdownMinimap'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 
@@ -75,6 +76,7 @@ export default function MarkdownPane(props: {
 }): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const articleRef = React.useRef<HTMLElement>(null)
+  const documentId = React.useId()
   const scrollFrameRef = React.useRef<number | null>(null)
   const resizeFrameRef = React.useRef<number | null>(null)
   const navigationReleaseFrameRef = React.useRef<number | null>(null)
@@ -99,6 +101,7 @@ export default function MarkdownPane(props: {
   const [textSelection, setTextSelection] = React.useState<ReaderTextSelection | null>(null)
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [renderAttempt, setRenderAttempt] = React.useState(0)
+  const [layoutRevision, setLayoutRevision] = React.useState(0)
   const [renderState, setRenderState] = React.useState<RenderState>({
     status: 'loading',
     completedImages: 0,
@@ -211,6 +214,7 @@ export default function MarkdownPane(props: {
     ambiguousMappingIdsRef.current = ambiguousMappingIds
     blockElementsRef.current = elementsByMappingId
     blockPositionsRef.current = positions.sort((left, right) => left.center - right.center)
+    setLayoutRevision((revision) => revision + 1)
   }, [])
 
   React.useLayoutEffect(() => {
@@ -375,74 +379,85 @@ export default function MarkdownPane(props: {
   }, [])
 
   return (
-    <div
-      className={`markdown-scroll markdown-render-${renderState.status}`}
-      ref={containerRef}
-      onScroll={onScroll}
-      aria-busy={!ready}
-      data-render-state={renderState.status}
-    >
-      {renderState.status === 'loading' ? (
-        <div className="markdown-render-status" role="status">
-          <Spin size="large" />
-          <span>正在渲染 Markdown…</span>
-          {renderState.totalImages > 0 ? (
-            <small>图片 {renderState.completedImages} / {renderState.totalImages}</small>
-          ) : null}
-        </div>
-      ) : null}
-      {renderState.status === 'error' ? (
-        <div className="markdown-render-status">
-          <Alert
-            type="error"
-            showIcon
-            message="Markdown 无法完整显示"
-            description={renderState.message}
-            action={<Button onClick={retry}>重新加载</Button>}
-          />
-        </div>
-      ) : null}
-      <article
-        key={renderAttempt}
-        ref={articleRef}
-        className="markdown-body"
-        aria-hidden={!ready}
+    <div className="markdown-pane">
+      <div
+        id={documentId}
+        className={`markdown-scroll markdown-render-${renderState.status}`}
+        ref={containerRef}
+        onScroll={onScroll}
+        aria-busy={!ready}
+        data-render-state={renderState.status}
       >
-        {props.blocks.map((block, index) => {
-          const blockId = block.mappingIds[0] ?? `markdown-${index}`
-          return (
-            <MarkdownBlockView
-              key={`${blockId}-${index}`}
-              block={block}
-              active={props.selection !== null && block.mappingIds.includes(props.selection.mappingId)}
-              assetBaseUrl={props.assetBaseUrl}
-              onSelect={selectFromMarkdown}
+        {renderState.status === 'loading' ? (
+          <div className="markdown-render-status" role="status">
+            <Spin size="large" />
+            <span>正在渲染 Markdown…</span>
+            {renderState.totalImages > 0 ? (
+              <small>图片 {renderState.completedImages} / {renderState.totalImages}</small>
+            ) : null}
+          </div>
+        ) : null}
+        {renderState.status === 'error' ? (
+          <div className="markdown-render-status">
+            <Alert
+              type="error"
+              showIcon
+              message="Markdown 无法完整显示"
+              description={renderState.message}
+              action={<Button onClick={retry}>重新加载</Button>}
             />
-          )
-        })}
-      </article>
-      {props.active && ready && textSelection ? createPortal(
-        <ReaderAnnotationToolbar
-          selection={textSelection}
-          color={props.highlightColor}
-          paletteOpen={paletteOpen}
-          onPaletteOpen={() => setPaletteOpen(true)}
-          onPaletteClose={() => setPaletteOpen(false)}
-          onPaletteHover={() => {
-            if (paletteTimerRef.current !== null) window.clearTimeout(paletteTimerRef.current)
-            paletteTimerRef.current = window.setTimeout(() => setPaletteOpen(true), 250)
-          }}
-          onPaletteHoverEnd={() => {
-            if (paletteTimerRef.current !== null) window.clearTimeout(paletteTimerRef.current)
-            paletteTimerRef.current = null
-          }}
-          onColorChange={props.onHighlightColorChange}
-          onHighlight={() => applyTextAnnotation('highlight')}
-          onUnderline={() => applyTextAnnotation('underline')}
-          onAddToChat={addToChat}
-        />,
-        document.body
-      ) : null}
+          </div>
+        ) : null}
+        <article
+          key={renderAttempt}
+          ref={articleRef}
+          className="markdown-body"
+          aria-hidden={!ready}
+        >
+          {props.blocks.map((block, index) => {
+            const blockId = block.mappingIds[0] ?? `markdown-${index}`
+            return (
+              <MarkdownBlockView
+                key={`${blockId}-${index}`}
+                block={block}
+                active={props.selection !== null && block.mappingIds.includes(props.selection.mappingId)}
+                assetBaseUrl={props.assetBaseUrl}
+                onSelect={selectFromMarkdown}
+              />
+            )
+          })}
+        </article>
+        {props.active && ready && textSelection ? createPortal(
+          <ReaderAnnotationToolbar
+            selection={textSelection}
+            color={props.highlightColor}
+            paletteOpen={paletteOpen}
+            onPaletteOpen={() => setPaletteOpen(true)}
+            onPaletteClose={() => setPaletteOpen(false)}
+            onPaletteHover={() => {
+              if (paletteTimerRef.current !== null) window.clearTimeout(paletteTimerRef.current)
+              paletteTimerRef.current = window.setTimeout(() => setPaletteOpen(true), 250)
+            }}
+            onPaletteHoverEnd={() => {
+              if (paletteTimerRef.current !== null) window.clearTimeout(paletteTimerRef.current)
+              paletteTimerRef.current = null
+            }}
+            onColorChange={props.onHighlightColorChange}
+            onHighlight={() => applyTextAnnotation('highlight')}
+            onUnderline={() => applyTextAnnotation('underline')}
+            onAddToChat={addToChat}
+          />,
+          document.body
+        ) : null}
+      </div>
+      <MarkdownMinimap
+        active={props.active}
+        ready={ready}
+        layoutRevision={layoutRevision}
+        controlledId={documentId}
+        scrollerRef={containerRef}
+        articleRef={articleRef}
+      />
     </div>
   )
 }

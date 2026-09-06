@@ -154,9 +154,19 @@ button, input, select { font: inherit; }
 .reader-tab-panel { min-width: 0; min-height: 0; overflow: hidden; }
 .reader-tab-panel.active { display: grid; }
 .reader-tab-panel.inactive { display: none; }
-.reader-tab-panel > .markdown-scroll, .reader-tab-panel > .json-view, .reader-tab-panel > .translation-empty { min-width: 0; min-height: 0; }
-.markdown-scroll { position: relative; overflow: auto; }
+.reader-tab-panel > .markdown-pane, .reader-tab-panel > .json-view, .reader-tab-panel > .translation-empty { min-width: 0; min-height: 0; }
+.markdown-pane { display: grid; grid-template-columns: minmax(0, 1fr) 84px; min-width: 0; min-height: 0; overflow: hidden; }
+.markdown-scroll { position: relative; min-width: 0; min-height: 0; overflow: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.markdown-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .markdown-scroll:not(.markdown-render-ready) { overflow: hidden; }
+.markdown-minimap { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--border); outline: 0; background: var(--muted-surface); cursor: pointer; touch-action: none; user-select: none; }
+.markdown-minimap:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 64%, transparent); }
+.markdown-minimap-content { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.markdown-minimap-line { position: absolute; display: block; min-height: 2px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 42%, transparent); }
+.markdown-minimap-heading { position: absolute; z-index: 1; display: block; padding: 0; overflow: hidden; border: 0; outline: 0; color: color-mix(in srgb, var(--text) 82%, var(--muted)); background: transparent; font: 600 7px/10px Inter, "Microsoft YaHei UI", sans-serif; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.markdown-minimap-heading:hover, .markdown-minimap-heading:focus-visible { color: var(--primary); }
+.markdown-minimap-frame { --markdown-minimap-frame-top: 0px; --markdown-minimap-frame-height: 100%; position: absolute; z-index: 2; top: var(--markdown-minimap-frame-top); right: 2px; left: 2px; height: var(--markdown-minimap-frame-height); border: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); border-radius: 3px; background: color-mix(in srgb, var(--primary) 9%, transparent); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); pointer-events: none; transition: top .08s linear, height .12s ease, background-color .12s ease; }
+.markdown-minimap-frame[data-preview="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 15%, transparent); }
 .markdown-render-status { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px; color: var(--muted); background: var(--surface); }
 .markdown-render-status .ant-alert { width: min(560px, 90%); }
 .markdown-render-loading .markdown-body, .markdown-render-error .markdown-body { visibility: hidden; pointer-events: none; }
