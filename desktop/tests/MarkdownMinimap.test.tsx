@@ -4,31 +4,76 @@ import React from 'react'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import MarkdownMinimap, {
-  measureMarkdownMinimapItems,
+  measureMarkdownMinimapContent,
+  paintMarkdownMinimap,
   minimapFrameMetrics
 } from '../src/renderer/components/MarkdownMinimap'
 
-afterEach(() => cleanup())
+const canvasContext = {
+  setTransform: vi.fn(),
+  clearRect: vi.fn(),
+  strokeRect: vi.fn(),
+  fillText: vi.fn(),
+  strokeStyle: '',
+  fillStyle: '',
+  globalAlpha: 1,
+  lineWidth: 1,
+  textBaseline: 'alphabetic' as CanvasTextBaseline,
+  font: ''
+}
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  Object.values(canvasContext).forEach((value) => {
+    if (typeof value === 'function' && 'mockClear' in value) value.mockClear()
+  })
+})
 
 describe('MarkdownMinimap', () => {
   it('measures document content and indents headings by level', () => {
     const scroller = document.createElement('div')
     const article = document.createElement('article')
-    article.innerHTML = '<div class="markdown-block"><h1>Overview</h1><h2>Method</h2><h3>Details</h3><h4>Case</h4><h5>Note</h5><h6>Leaf</h6><p>Body paragraph with enough text.</p></div>'
+    article.innerHTML = '<div class="markdown-block"><h1>Overview</h1><h2>Method</h2><h3>Details</h3><h4>Case</h4><h5>Note</h5><h6>Leaf</h6><p>Body paragraph with enough text.</p><pre><code>const answer = 42</code></pre><span class="katex-mathml">duplicate formula text</span><img alt="figure"></div>'
     scroller.append(article)
     setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 1_000, scrollTop: 100 })
     vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(rect(0, 10, 400, 200))
-    const elements = Array.from(article.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6, p'))
+    vi.spyOn(article, 'getBoundingClientRect').mockReturnValue(rect(0, 10, 400, 1_000))
+    const elements = Array.from(article.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6, p, code, img'))
     elements.forEach((element, index) => {
       vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(rect(0, 110 + index * 40, 300, 24))
     })
 
-    const items = measureMarkdownMinimapItems(article, scroller, 500)
+    const content = measureMarkdownMinimapContent(article, scroller, 84, 500)
 
-    expect(items).toHaveLength(7)
-    expect(items[0]).toMatchObject({ headingLevel: 1, title: 'Overview', left: 4, top: 100 })
-    expect(items.slice(0, 6).map((item) => item.left)).toEqual([4, 10, 16, 22, 28, 34])
-    expect(items[6]).toMatchObject({ headingLevel: null, left: 5 })
+    expect(content.headings).toHaveLength(6)
+    expect(content.headings[0]).toMatchObject({ headingLevel: 1, title: 'Overview', left: 4, top: 100 })
+    expect(content.headings.map((item) => item.left)).toEqual([4, 10, 16, 22, 28, 34])
+    expect(content.textRuns.map((run) => run.text)).toContain('Body paragraph with enough text.')
+    expect(content.textRuns.map((run) => run.text)).toContain('const answer = 42')
+    expect(content.textRuns.map((run) => run.text)).not.toContain('duplicate formula text')
+    expect(content.textRuns.some((run) => run.tone === 'body')).toBe(true)
+    expect(content.textRuns.some((run) => run.tone === 'code')).toBe(true)
+    expect(content.images).toHaveLength(1)
+  })
+
+  it('paints actual text glyphs and image outlines on a high-DPI canvas', () => {
+    const canvas = document.createElement('canvas')
+    const rail = document.createElement('div')
+    rail.append(canvas)
+    paintMarkdownMinimap(canvas, {
+      textRuns: [{
+        id: 'text-1', text: 'Complete paragraph text', left: 4, baseline: 12, width: 70,
+        fontSize: 2, fontWeight: '400', fontStyle: 'normal', tone: 'body'
+      }],
+      headings: [],
+      images: [{ id: 'image-1', left: 5, top: 20, width: 60, height: 30 }]
+    }, 84, 400, 2, canvasContext as unknown as CanvasRenderingContext2D)
+
+    expect(canvas.width).toBe(168)
+    expect(canvas.height).toBe(800)
+    expect(canvasContext.fillText).toHaveBeenCalledWith('Complete paragraph text', 4, 12, 70)
+    expect(canvasContext.strokeRect).toHaveBeenCalledWith(5, 20, 60, 30)
   })
 
   it('calculates the viewport frame and handles documents without overflow', () => {
@@ -44,6 +89,7 @@ describe('MarkdownMinimap', () => {
     const rail = view.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
     setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 1_000, scrollTop: 0 })
     Object.defineProperty(rail, 'clientHeight', { configurable: true, value: 400 })
+    Object.defineProperty(rail, 'clientWidth', { configurable: true, value: 84 })
     vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 84, 400))
     const heading = view.container.querySelector('h2')!
     vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 400, 200))
@@ -54,6 +100,7 @@ describe('MarkdownMinimap', () => {
     view.rerender(<Harness revision={1} />)
     const frame = view.container.querySelector<HTMLElement>('.markdown-minimap-frame')!
     await waitFor(() => expect(view.getByRole('button', { name: '跳转到Chapter' })).toBeTruthy())
+    expect(view.container.querySelector('article')?.classList.contains('markdown-minimap-measuring')).toBe(false)
     expect(frame.style.getPropertyValue('--markdown-minimap-frame-height')).toBe('80px')
 
     fireEvent.pointerMove(rail, { clientY: 300 })

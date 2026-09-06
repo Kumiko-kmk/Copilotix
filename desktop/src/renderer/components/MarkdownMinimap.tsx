@@ -3,17 +3,43 @@ import React from 'react'
 const MINIMAP_FRAME_MIN_HEIGHT = 24
 const MINIMAP_HEADING_INDENTS = [4, 10, 16, 22, 28, 34] as const
 const MINIMAP_KEYBOARD_STEP = 48
-const MINIMAP_CONTENT_WIDTH = 80
+const MINIMAP_HORIZONTAL_PADDING = 4
 
-export interface MarkdownMinimapItem {
+export interface MarkdownMinimapTextRun {
+  id: string
+  text: string
+  left: number
+  baseline: number
+  width: number
+  fontSize: number
+  fontWeight: string
+  fontStyle: string
+  tone: 'body' | 'code' | 'heading'
+}
+
+export interface MarkdownMinimapHeading {
   id: string
   top: number
   height: number
   left: number
   width: number
   documentTop: number
-  headingLevel: number | null
-  title: string | null
+  headingLevel: number
+  title: string
+}
+
+export interface MarkdownMinimapImage {
+  id: string
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+export interface MarkdownMinimapContent {
+  textRuns: MarkdownMinimapTextRun[]
+  headings: MarkdownMinimapHeading[]
+  images: MarkdownMinimapImage[]
 }
 
 export default function MarkdownMinimap(props: {
@@ -25,10 +51,11 @@ export default function MarkdownMinimap(props: {
   articleRef: React.RefObject<HTMLElement | null>
 }): React.JSX.Element {
   const railRef = React.useRef<HTMLDivElement>(null)
+  const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const frameRef = React.useRef<HTMLDivElement>(null)
   const frameRequestRef = React.useRef<number | null>(null)
   const draggingRef = React.useRef(false)
-  const [items, setItems] = React.useState<MarkdownMinimapItem[]>([])
+  const [content, setContent] = React.useState<MarkdownMinimapContent>(emptyMinimapContent)
 
   const updateFrame = React.useCallback(() => {
     const rail = railRef.current
@@ -53,16 +80,29 @@ export default function MarkdownMinimap(props: {
 
   React.useLayoutEffect(() => {
     if (!props.active || !props.ready) {
-      setItems([])
+      setContent(emptyMinimapContent)
       return
     }
     const rail = railRef.current
     const scroller = props.scrollerRef.current
     const article = props.articleRef.current
     if (!rail || !scroller || !article) return
-    setItems(measureMarkdownMinimapItems(article, scroller, rail.clientHeight))
+    article.classList.add('markdown-minimap-measuring')
+    try {
+      setContent(measureMarkdownMinimapContent(article, scroller, rail.clientWidth, rail.clientHeight))
+    } finally {
+      article.classList.remove('markdown-minimap-measuring')
+    }
     updateFrame()
   }, [props.active, props.articleRef, props.layoutRevision, props.ready, props.scrollerRef, updateFrame])
+
+  React.useLayoutEffect(() => {
+    const rail = railRef.current
+    const canvas = canvasRef.current
+    if (!rail || !canvas) return
+    paintMarkdownMinimap(canvas, content, rail.clientWidth, rail.clientHeight, window.devicePixelRatio || 1)
+    updateFrame()
+  }, [content, updateFrame])
 
   React.useEffect(() => {
     if (!props.active || !props.ready) return
@@ -71,10 +111,6 @@ export default function MarkdownMinimap(props: {
     scroller.addEventListener('scroll', scheduleFrameUpdate, { passive: true })
     return () => scroller.removeEventListener('scroll', scheduleFrameUpdate)
   }, [props.active, props.ready, props.scrollerRef, scheduleFrameUpdate])
-
-  React.useLayoutEffect(() => {
-    updateFrame()
-  }, [items, updateFrame])
 
   React.useEffect(() => () => {
     if (frameRequestRef.current !== null) window.cancelAnimationFrame(frameRequestRef.current)
@@ -154,10 +190,10 @@ export default function MarkdownMinimap(props: {
     scheduleFrameUpdate()
   }, [props.scrollerRef, scheduleFrameUpdate])
 
-  const jumpToHeading = React.useCallback((item: MarkdownMinimapItem) => {
+  const jumpToHeading = React.useCallback((heading: MarkdownMinimapHeading) => {
     const scroller = props.scrollerRef.current
     if (!scroller) return
-    scrollScrollerTo(scroller, item.documentTop - 16)
+    scrollScrollerTo(scroller, heading.documentTop - 16)
     scheduleFrameUpdate()
   }, [props.scrollerRef, scheduleFrameUpdate])
 
@@ -176,87 +212,131 @@ export default function MarkdownMinimap(props: {
       tabIndex={props.active && props.ready ? 0 : -1}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerLeave={() => {
-        if (!draggingRef.current) updateFrame()
-      }}
+      onPointerLeave={() => { if (!draggingRef.current) updateFrame() }}
       onPointerUp={finishPointerDrag}
       onPointerCancel={finishPointerDrag}
       onLostPointerCapture={finishPointerDrag}
       onWheel={onWheel}
       onKeyDown={onKeyDown}
     >
-      <div className="markdown-minimap-content" aria-hidden="true">
-        {items.filter((item) => item.headingLevel === null).map((item) => (
-          <span
-            key={item.id}
-            className="markdown-minimap-line"
-            style={{ top: item.top, left: item.left, width: item.width, height: item.height }}
-          />
-        ))}
-      </div>
-      {items.filter((item) => item.headingLevel !== null).map((item) => (
+      <canvas ref={canvasRef} className="markdown-minimap-canvas" aria-hidden="true" />
+      {content.headings.map((heading) => (
         <button
-          key={item.id}
+          key={heading.id}
           type="button"
-          className={`markdown-minimap-heading heading-${item.headingLevel}`}
-          data-minimap-heading={item.headingLevel}
-          title={item.title ?? undefined}
-          aria-label={`跳转到${item.title ?? '章节标题'}`}
-          style={{ top: item.top, left: item.left, width: item.width, height: item.height }}
+          className={`markdown-minimap-heading heading-${heading.headingLevel}`}
+          data-minimap-heading={heading.headingLevel}
+          title={heading.title}
+          aria-label={`跳转到${heading.title}`}
+          style={{ top: heading.top, left: heading.left, width: heading.width, height: heading.height }}
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => jumpToHeading(item)}
-        >
-          {item.title}
-        </button>
+          onClick={() => jumpToHeading(heading)}
+        />
       ))}
       <div ref={frameRef} className="markdown-minimap-frame" data-preview="false" aria-hidden="true" />
     </div>
   )
 }
 
-export function measureMarkdownMinimapItems(
+export function measureMarkdownMinimapContent(
   article: HTMLElement,
   scroller: HTMLElement,
+  railWidth: number,
   railHeight: number
-): MarkdownMinimapItem[] {
-  if (railHeight <= 0 || scroller.scrollHeight <= 0) return []
+): MarkdownMinimapContent {
+  if (railWidth <= 0 || railHeight <= 0 || scroller.scrollHeight <= 0) return emptyMinimapContent
+  const articleBounds = article.getBoundingClientRect()
   const scrollerBounds = scroller.getBoundingClientRect()
-  const candidates: HTMLElement[] = []
-  for (const wrapper of Array.from(article.children)) {
-    if (!(wrapper instanceof HTMLElement)) continue
-    if (wrapper.classList.contains('markdown-block')) {
-      const children = Array.from(wrapper.children).filter((child): child is HTMLElement => child instanceof HTMLElement)
-      candidates.push(...(children.length > 0 ? children : [wrapper]))
-    } else {
-      candidates.push(wrapper)
+  const horizontalScale = Math.max(0, railWidth - MINIMAP_HORIZONTAL_PADDING * 2) / Math.max(1, articleBounds.width)
+  const verticalScale = railHeight / scroller.scrollHeight
+  const textRuns: MarkdownMinimapTextRun[] = []
+  const headings = measureHeadings(article, scroller, scrollerBounds, railWidth, railHeight)
+  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT)
+  let node = walker.nextNode()
+  let runIndex = 0
+  while (node) {
+    const textNode = node as Text
+    const parent = textNode.parentElement
+    if (parent && isVisibleMinimapContent(parent) && textNode.data.trim()) {
+      const style = window.getComputedStyle(parent)
+      const heading = parent.closest<HTMLElement>('h1, h2, h3, h4, h5, h6')
+      const headingLevel = heading ? headingLevelOf(heading) : null
+      const headingBounds = heading?.getBoundingClientRect()
+      for (const fragment of measureTextFragments(textNode, parent)) {
+        const documentTop = fragment.bounds.top - scrollerBounds.top + scroller.scrollTop
+        const sourceLeft = headingBounds && headingLevel
+          ? (MINIMAP_HEADING_INDENTS[headingLevel - 1] ?? 34) + (fragment.bounds.left - headingBounds.left) * horizontalScale
+          : MINIMAP_HORIZONTAL_PADDING + (fragment.bounds.left - articleBounds.left) * horizontalScale
+        const sourceFontSize = Number.parseFloat(style.fontSize) || 16
+        const tone = headingLevel !== null ? 'heading' : parent.closest('pre, code') ? 'code' : 'body'
+        textRuns.push({
+          id: `minimap-text-${runIndex++}`,
+          text: normalizeCanvasText(fragment.text, parent),
+          left: clamp(sourceLeft, 0, railWidth),
+          baseline: clamp((documentTop + fragment.bounds.height * 0.82) * verticalScale, 0, railHeight),
+          width: Math.max(0.75, Math.min(Math.max(0.75, railWidth - sourceLeft), fragment.bounds.width * horizontalScale)),
+          fontSize: clamp(
+            sourceFontSize * Math.min(horizontalScale, Math.max(verticalScale, 0.07)),
+            tone === 'heading' ? 2 : 1.15,
+            tone === 'heading' ? 3.8 : 2.6
+          ),
+          fontWeight: style.fontWeight || '400',
+          fontStyle: style.fontStyle || 'normal',
+          tone
+        })
+      }
     }
+    node = walker.nextNode()
   }
 
-  return candidates.map((element, index) => {
-    const bounds = element.getBoundingClientRect()
+  const images = Array.from(article.querySelectorAll<HTMLImageElement>('img')).flatMap((image, index) => {
+    if (!isVisibleMinimapContent(image)) return []
+    const bounds = image.getBoundingClientRect()
     const documentTop = bounds.top - scrollerBounds.top + scroller.scrollTop
-    const headingLevel = headingLevelOf(element)
-    const title = headingLevel === null ? null : normalizeMinimapTitle(element.textContent)
-    const top = clamp(documentTop / scroller.scrollHeight * railHeight, 0, railHeight)
-    const height = headingLevel === null
-      ? clamp(bounds.height / scroller.scrollHeight * railHeight, 2, 7)
-      : 10
-    const left = headingLevel === null ? 5 : MINIMAP_HEADING_INDENTS[headingLevel - 1] ?? 34
-    const availableWidth = Math.max(8, MINIMAP_CONTENT_WIDTH - left)
-    const width = headingLevel === null
-      ? Math.min(availableWidth, Math.max(18, 14 + Math.sqrt((element.textContent ?? '').trim().length) * 5))
-      : availableWidth
-    return {
-      id: `minimap-${index}`,
-      top: clamp(top, 0, Math.max(0, railHeight - height)),
-      height,
-      left,
-      width,
-      documentTop,
-      headingLevel,
-      title
-    }
+    return [{
+      id: `minimap-image-${index}`,
+      left: clamp(MINIMAP_HORIZONTAL_PADDING + (bounds.left - articleBounds.left) * horizontalScale, 0, railWidth),
+      top: clamp(documentTop * verticalScale, 0, railHeight),
+      width: clamp(bounds.width * horizontalScale, 1, railWidth),
+      height: clamp(bounds.height * verticalScale, 1, Math.max(1, railHeight - documentTop * verticalScale))
+    }]
   })
+  return { textRuns, headings, images }
+}
+
+export function paintMarkdownMinimap(
+  canvas: HTMLCanvasElement,
+  content: MarkdownMinimapContent,
+  width: number,
+  height: number,
+  pixelRatio: number,
+  providedContext?: CanvasRenderingContext2D
+): void {
+  const ratio = Math.max(1, pixelRatio)
+  canvas.width = Math.max(1, Math.round(width * ratio))
+  canvas.height = Math.max(1, Math.round(height * ratio))
+  const context = providedContext ?? (typeof CanvasRenderingContext2D === 'undefined' ? null : canvas.getContext('2d'))
+  if (!context) return
+  context.setTransform(ratio, 0, 0, ratio, 0, 0)
+  context.clearRect(0, 0, width, height)
+  const railStyle = window.getComputedStyle(canvas.parentElement ?? canvas)
+  const textColor = railStyle.getPropertyValue('--text').trim() || '#3f3a34'
+  const mutedColor = railStyle.getPropertyValue('--muted').trim() || '#756e65'
+
+  context.strokeStyle = mutedColor
+  context.globalAlpha = 0.28
+  context.lineWidth = 0.75
+  for (const image of content.images) context.strokeRect(image.left, image.top, image.width, image.height)
+
+  context.textBaseline = 'alphabetic'
+  for (const run of content.textRuns) {
+    context.globalAlpha = run.tone === 'heading' ? 0.82 : run.tone === 'code' ? 0.62 : 0.48
+    context.fillStyle = run.tone === 'body' ? mutedColor : textColor
+    const family = run.tone === 'code' ? 'Consolas, "SFMono-Regular", monospace' : 'Inter, "Microsoft YaHei UI", sans-serif'
+    context.font = `${run.fontStyle} ${run.fontWeight} ${run.fontSize}px ${family}`
+    context.fillText(run.text, run.left, run.baseline, run.width)
+  }
+  context.globalAlpha = 1
 }
 
 export function minimapFrameMetrics(
@@ -270,6 +350,80 @@ export function minimapFrameMetrics(
   const height = Math.min(railHeight, Math.max(MINIMAP_FRAME_MIN_HEIGHT, scroller.clientHeight / scroller.scrollHeight * railHeight))
   const top = clamp(scroller.scrollTop, 0, maxScroll) / maxScroll * Math.max(0, railHeight - height)
   return { top, height, maxScroll }
+}
+
+function measureHeadings(
+  article: HTMLElement,
+  scroller: HTMLElement,
+  scrollerBounds: DOMRect,
+  railWidth: number,
+  railHeight: number
+): MarkdownMinimapHeading[] {
+  return Array.from(article.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).map((heading, index) => {
+    const bounds = heading.getBoundingClientRect()
+    const headingLevel = headingLevelOf(heading) ?? 6
+    const documentTop = bounds.top - scrollerBounds.top + scroller.scrollTop
+    const top = documentTop / scroller.scrollHeight * railHeight
+    const left = MINIMAP_HEADING_INDENTS[headingLevel - 1] ?? 34
+    return {
+      id: `minimap-heading-${index}`,
+      top: clamp(top, 0, Math.max(0, railHeight - 8)),
+      height: 8,
+      left,
+      width: Math.max(8, railWidth - left - 4),
+      documentTop,
+      headingLevel,
+      title: normalizeMinimapTitle(heading.textContent)
+    }
+  })
+}
+
+function measureTextFragments(textNode: Text, parent: HTMLElement): Array<{ text: string; bounds: DOMRect }> {
+  const fallback = [{ text: textNode.data, bounds: parent.getBoundingClientRect() }]
+  const range = document.createRange()
+  if (typeof range.getClientRects !== 'function') return fallback
+  const fragments: Array<{ text: string; bounds: DOMRect }> = []
+  for (const segment of segmentText(textNode.data)) {
+    if (!segment.text.trim()) continue
+    range.setStart(textNode, segment.start)
+    range.setEnd(textNode, segment.end)
+    const rects = Array.from(range.getClientRects()).filter((bounds) => bounds.width > 0 && bounds.height > 0)
+    if (rects.length === 1 && rects[0]) fragments.push({ text: segment.text, bounds: rects[0] })
+    else if (rects.length > 1) fragments.push(...measureGraphemeFragments(textNode, segment.start, segment.text))
+  }
+  range.detach()
+  return fragments.length > 0 ? fragments : fallback
+}
+
+function measureGraphemeFragments(textNode: Text, start: number, text: string): Array<{ text: string; bounds: DOMRect }> {
+  const fragments: Array<{ text: string; bounds: DOMRect }> = []
+  const range = document.createRange()
+  let offset = start
+  for (const grapheme of Array.from(text)) {
+    const end = offset + grapheme.length
+    range.setStart(textNode, offset)
+    range.setEnd(textNode, end)
+    const bounds = range.getBoundingClientRect()
+    if (grapheme.trim() && bounds.width > 0 && bounds.height > 0) fragments.push({ text: grapheme, bounds })
+    offset = end
+  }
+  range.detach()
+  return fragments
+}
+
+function segmentText(text: string): Array<{ text: string; start: number; end: number }> {
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' })
+  return Array.from(segmenter.segment(text), ({ segment, index }) => ({ text: segment, start: index, end: index + segment.length }))
+}
+
+function isVisibleMinimapContent(element: HTMLElement): boolean {
+  if (element.closest('script, style, noscript, template, [hidden], .katex-mathml')) return false
+  const style = window.getComputedStyle(element)
+  return style.display !== 'none' && style.visibility !== 'hidden'
+}
+
+function normalizeCanvasText(value: string, parent: HTMLElement): string {
+  return parent.closest('pre, code') ? value.replace(/[\r\n]+/g, ' ') : value.replace(/\s+/g, ' ')
 }
 
 function headingLevelOf(element: HTMLElement): number | null {
@@ -298,3 +452,5 @@ function scrollScrollerTo(scroller: HTMLElement, target: number): void {
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
 }
+
+const emptyMinimapContent: MarkdownMinimapContent = { textRuns: [], headings: [], images: [] }

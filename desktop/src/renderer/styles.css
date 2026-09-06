@@ -159,12 +159,11 @@ button, input, select { font: inherit; }
 .markdown-scroll { position: relative; min-width: 0; min-height: 0; overflow: auto; scrollbar-width: none; -ms-overflow-style: none; }
 .markdown-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .markdown-scroll:not(.markdown-render-ready) { overflow: hidden; }
-.markdown-minimap { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--border); outline: 0; background: var(--muted-surface); cursor: pointer; touch-action: none; user-select: none; }
+.markdown-minimap { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--border); outline: 0; background: var(--surface); cursor: pointer; touch-action: none; user-select: none; }
 .markdown-minimap:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 64%, transparent); }
-.markdown-minimap-content { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.markdown-minimap-line { position: absolute; display: block; min-height: 2px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 42%, transparent); }
-.markdown-minimap-heading { position: absolute; z-index: 1; display: block; padding: 0; overflow: hidden; border: 0; outline: 0; color: color-mix(in srgb, var(--text) 82%, var(--muted)); background: transparent; font: 600 7px/10px Inter, "Microsoft YaHei UI", sans-serif; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.markdown-minimap-heading:hover, .markdown-minimap-heading:focus-visible { color: var(--primary); }
+.markdown-minimap-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
+.markdown-minimap-heading { position: absolute; z-index: 1; display: block; padding: 0; overflow: hidden; border: 0; outline: 0; color: transparent; background: transparent; cursor: pointer; }
+.markdown-minimap-heading:hover, .markdown-minimap-heading:focus-visible { background: color-mix(in srgb, var(--primary) 12%, transparent); box-shadow: inset 2px 0 0 var(--primary); }
 .markdown-minimap-frame { --markdown-minimap-frame-top: 0px; --markdown-minimap-frame-height: 100%; position: absolute; z-index: 2; top: var(--markdown-minimap-frame-top); right: 2px; left: 2px; height: var(--markdown-minimap-frame-height); border: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); border-radius: 3px; background: color-mix(in srgb, var(--primary) 9%, transparent); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); pointer-events: none; transition: top .08s linear, height .12s ease, background-color .12s ease; }
 .markdown-minimap-frame[data-preview="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 15%, transparent); }
 .markdown-render-status { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px; color: var(--muted); background: var(--surface); }
@@ -172,6 +171,7 @@ button, input, select { font: inherit; }
 .markdown-render-loading .markdown-body, .markdown-render-error .markdown-body { visibility: hidden; pointer-events: none; }
 .markdown-body { max-width: 900px; margin: 0 auto; padding: 30px 42px 120px; color: var(--text); font-size: 16px; line-height: 1.78; }
 .markdown-block { margin: 0 -12px; padding: 2px 12px; border: 1px solid transparent; border-radius: 5px; content-visibility: auto; contain-intrinsic-block-size: auto 48px; transition: background .15s ease; }
+.markdown-body.markdown-minimap-measuring .markdown-block { content-visibility: visible; }
 .markdown-block:hover { background: color-mix(in srgb, var(--primary-soft) 55%, transparent); }
 .markdown-block.active { border-color: color-mix(in srgb, var(--primary) 45%, transparent); background: color-mix(in srgb, var(--primary-soft) 70%, transparent); }
 ::highlight(mineru-highlight-yellow) { color: inherit; background-color: color-mix(in srgb, #f4c542 52%, transparent); }

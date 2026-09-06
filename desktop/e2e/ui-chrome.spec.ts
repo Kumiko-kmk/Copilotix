@@ -133,7 +133,14 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await expect(scroller).toHaveAttribute('data-render-state', 'ready')
     await expect(minimap).toBeVisible()
     await expect(minimap).toHaveCSS('width', '84px')
+    await expect(minimap).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     await expect(scroller).toHaveCSS('scrollbar-width', 'none')
+    await expect(minimap.locator('.markdown-minimap-canvas')).toHaveCount(1)
+    await expect(minimap.locator('.markdown-minimap-line')).toHaveCount(0)
+    await expect.poll(() => minimap.locator('canvas').evaluate((canvas: HTMLCanvasElement) => {
+      const context = canvas.getContext('2d')
+      return context ? context.getImageData(0, 0, canvas.width, canvas.height).data.some((channel) => channel !== 0) : false
+    })).toBe(true)
     const originalHeading = minimap.getByRole('button', { name: '跳转到Fixture document' })
     await expect(originalHeading).toBeVisible()
     await expect(originalHeading).toHaveCSS('left', '4px')
@@ -162,6 +169,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
     const translatedMinimap = translatedPanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
     await expect(translatedPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(translatedMinimap.getByRole('button', { name: '跳转到测试文档' })).toHaveCSS('left', '4px')
+    await expect(translatedMinimap.locator('.markdown-minimap-canvas')).toHaveCount(1)
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await expect(translatedMinimap).toHaveCSS('width', '84px')
     await capture(window, 'reader-minimap-1440x900-translated.png')
