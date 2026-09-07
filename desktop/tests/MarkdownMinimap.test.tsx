@@ -16,6 +16,7 @@ const canvasContext = {
   clearRect: vi.fn(),
   drawImage: vi.fn(),
   strokeRect: vi.fn(),
+  fillRect: vi.fn(),
   fillText: vi.fn(),
   strokeStyle: '',
   fillStyle: '',
@@ -69,6 +70,7 @@ describe('MarkdownMinimap', () => {
     expect(content.images[0]).toMatchObject({ element: image, sourceWidth: 640, sourceHeight: 320 })
     expect(content.formulas).toHaveLength(1)
     expect(content.formulas[0]?.element.classList.contains('katex')).toBe(true)
+    expect(content.highlights).toHaveLength(0)
   })
 
   it('paints actual text glyphs and loaded images on a high-DPI canvas', () => {
@@ -91,7 +93,8 @@ describe('MarkdownMinimap', () => {
         id: 'image-1', left: 5, top: 20, width: 50, height: 30,
         element: image, sourceWidth: 200, sourceHeight: 100
       }],
-      formulas: []
+      formulas: [],
+      highlights: []
     }, 60, 400, 2, canvasContext as unknown as CanvasRenderingContext2D)
 
     expect(canvas.width).toBe(120)
@@ -116,7 +119,8 @@ describe('MarkdownMinimap', () => {
         id: 'image-1', left: 5, top: 20, width: 30, height: 30,
         element: image, sourceWidth: 200, sourceHeight: 100
       }],
-      formulas: []
+      formulas: [],
+      highlights: []
     }, 60, 400, 1, canvasContext as unknown as CanvasRenderingContext2D)
 
     expect(canvasContext.drawImage).not.toHaveBeenCalled()
@@ -149,6 +153,36 @@ describe('MarkdownMinimap', () => {
       .toEqual({ top: 0, height: 400, maxScroll: 0 })
   })
 
+  it('maps saved yellow ranges and paints them below minimap text', () => {
+    const scroller = document.createElement('div')
+    const article = document.createElement('article')
+    const paragraph = document.createElement('p')
+    const text = document.createTextNode('highlighted text')
+    paragraph.append(text)
+    article.append(paragraph)
+    scroller.append(article)
+    setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 1_000, scrollTop: 100 })
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(rect(0, 10, 400, 200))
+    vi.spyOn(article, 'getBoundingClientRect').mockReturnValue(rect(0, 10, 400, 1_000))
+    vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue(rect(20, 110, 200, 20))
+    const range = document.createRange()
+    range.selectNodeContents(text)
+    Object.defineProperty(range, 'getClientRects', {
+      configurable: true,
+      value: () => [rect(20, 110, 80, 20)] as unknown as DOMRectList
+    })
+
+    const content = measureMarkdownMinimapContent(article, scroller, 60, 500, [range])
+    expect(content.highlights).toEqual([expect.objectContaining({ left: 6.6, top: 100, width: 10.4, height: 10 })])
+
+    const canvas = document.createElement('canvas')
+    const rail = document.createElement('div')
+    rail.append(canvas)
+    paintMarkdownMinimap(canvas, content, 60, 500, 1, canvasContext as unknown as CanvasRenderingContext2D)
+    expect(canvasContext.fillRect).toHaveBeenCalledWith(6.6, 100, 10.4, 10)
+    expect(canvasContext.fillText).toHaveBeenCalled()
+  })
+
   it('previews, jumps, drags, wheels and supports keyboard navigation', async () => {
     const view = render(<Harness revision={0} />)
     const scroller = view.container.querySelector<HTMLElement>('.markdown-scroll')!
@@ -156,7 +190,7 @@ describe('MarkdownMinimap', () => {
     setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 1_000, scrollTop: 0 })
     Object.defineProperty(rail, 'clientHeight', { configurable: true, value: 400 })
     Object.defineProperty(rail, 'clientWidth', { configurable: true, value: 60 })
-    vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 60, 400))
+    const railBounds = vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 60, 400))
     const heading = view.container.querySelector('h2')!
     vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 400, 200))
     vi.spyOn(heading, 'getBoundingClientRect').mockReturnValue(rect(0, 100, 300, 30))
@@ -171,17 +205,21 @@ describe('MarkdownMinimap', () => {
 
     fireEvent.pointerMove(rail, { clientY: 300 })
     expect(frame.dataset.preview).toBe('true')
-    expect(frame.style.getPropertyValue('--markdown-minimap-frame-top')).toBe('260px')
+    expect(frame.style.getPropertyValue('--markdown-minimap-frame-offset')).toBe('260px')
     expect(scroller.scrollTop).toBe(0)
 
     fireEvent.pointerDown(rail, { clientY: 300, pointerId: 1 })
-    expect(scroller.scrollTop).toBe(650)
+    railBounds.mockClear()
+    fireEvent.pointerMove(rail, { clientY: 250, pointerId: 1 })
+    fireEvent.pointerMove(rail, { clientY: 300, pointerId: 1 })
+    await waitFor(() => expect(scroller.scrollTop).toBe(650))
+    expect(railBounds).not.toHaveBeenCalled()
     fireEvent.pointerMove(rail, { clientY: 100, pointerId: 1 })
-    expect(scroller.scrollTop).toBe(150)
+    await waitFor(() => expect(scroller.scrollTop).toBe(150))
     fireEvent.pointerUp(rail, { pointerId: 1 })
 
     fireEvent.wheel(rail, { deltaY: 50 })
-    expect(scroller.scrollTop).toBe(200)
+    await waitFor(() => expect(scroller.scrollTop).toBe(200))
     fireEvent.keyDown(rail, { key: 'PageDown' })
     expect(scroller.scrollTop).toBe(400)
     fireEvent.keyDown(rail, { key: 'End' })

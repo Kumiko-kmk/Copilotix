@@ -1,18 +1,15 @@
 import React from 'react'
 import { LeftOutlined, MinusOutlined, PlusOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons'
 import { Alert, Button, Progress, Space } from 'antd'
-import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
-import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
+import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
 import type { BlockBox, BlockMapping, BlockSelection } from '@shared/types'
-
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString()
+import { acquirePdfDocument } from '../pdfDocumentCache'
 
 type LoadingState =
   | { status: 'loading'; progress: number | null }
   | { status: 'ready' }
   | { status: 'error'; message: string }
 
-const RANGE_CHUNK_SIZE = 256 * 1024
 const PAGE_RENDER_RADIUS = 2
 const SCROLLBAR_HOT_ZONE_PX = 16
 const SCROLLBAR_HIDE_DELAY_MS = 300
@@ -108,25 +105,19 @@ export default function PdfPane(props: {
 
   React.useEffect(() => {
     let cancelled = false
-    let loadingTask: PDFDocumentLoadingTask | null = pdfjs.getDocument({
-      url: props.url,
-      rangeChunkSize: RANGE_CHUNK_SIZE
+    const handle = acquirePdfDocument(props.url, {
+      onProgress: ({ loaded, total }) => {
+        if (!cancelled) setLoadingState({ status: 'loading', progress: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null })
+      },
+      onPassword: () => {
+        if (!cancelled) setLoadingState({ status: 'error', message: '该 PDF 受密码保护，当前阅读器无法打开。' })
+      }
     })
     setDocument(null)
     setLoadingState({ status: 'loading', progress: null })
-    loadingTask.onProgress = ({ loaded, total }) => {
-      if (!cancelled) setLoadingState({ status: 'loading', progress: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null })
-    }
-    loadingTask.onPassword = () => {
-      if (!cancelled) setLoadingState({ status: 'error', message: '该 PDF 受密码保护，当前阅读器无法打开。' })
-      void loadingTask?.destroy()
-    }
-    void loadingTask.promise
+    void handle.promise
       .then((value) => {
-        if (cancelled) {
-          void value.destroy()
-          return
-        }
+        if (cancelled) return
         setDocument(value)
         setCurrentPage(1)
         setLoadingState({ status: 'ready' })
@@ -136,8 +127,7 @@ export default function PdfPane(props: {
       })
     return () => {
       cancelled = true
-      void loadingTask?.destroy()
-      loadingTask = null
+      handle.release()
     }
   }, [props.url, reloadKey])
 

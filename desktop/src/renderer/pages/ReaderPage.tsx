@@ -130,6 +130,8 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
           jsonQuery={jsonQuery}
           onJsonQueryChange={setJsonQuery}
           assetBaseUrl={document.assetBaseUrl}
+          pdfUrl={document.pdfUrl}
+          mappings={document.mappings}
           taskId={document.summary.id}
           annotations={annotations}
           onReplaceAnnotations={replaceAnnotations}

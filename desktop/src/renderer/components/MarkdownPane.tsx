@@ -33,8 +33,12 @@ import {
 } from '../readerAnnotations'
 import MarkdownMinimap from './MarkdownMinimap'
 import rehypeTableMath from '../rehypeTableMath'
+import ReaderFigureSnapshot from './ReaderFigureSnapshot'
+import type { ReaderFigureGroup } from '../readerFigureGroups'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
+const SCROLL_SELECTION_INTERVAL_MS = 80
+const SCROLL_IDLE_DELAY_MS = 120
 
 type RenderState =
   | { status: 'loading'; completedImages: number; totalImages: number }
@@ -64,6 +68,8 @@ export default function MarkdownPane(props: {
   active: boolean
   blocks: ReaderBlock[]
   assetBaseUrl: string
+  pdfUrl?: string
+  figureGroups?: ReaderFigureGroup[]
   taskId: string
   view: ReaderAnnotationView
   annotations: ReaderAnnotation[]
@@ -80,8 +86,14 @@ export default function MarkdownPane(props: {
   const documentId = React.useId()
   const scrollFrameRef = React.useRef<number | null>(null)
   const resizeFrameRef = React.useRef<number | null>(null)
+  const scrollSelectionTimerRef = React.useRef<number | null>(null)
+  const scrollIdleTimerRef = React.useRef<number | null>(null)
   const navigationReleaseFrameRef = React.useRef<number | null>(null)
   const suppressScrollSelectionRef = React.useRef(false)
+  const minimapDraggingRef = React.useRef(false)
+  const scrollActiveRef = React.useRef(false)
+  const resizePendingRef = React.useRef(false)
+  const lastScrollMappingRef = React.useRef<string | null>(null)
   const blockPositionsRef = React.useRef<BlockPosition[]>([])
   const blockElementsRef = React.useRef<Map<string, HTMLElement>>(new Map())
   const ambiguousMappingIdsRef = React.useRef<Set<string>>(new Set())
@@ -103,12 +115,20 @@ export default function MarkdownPane(props: {
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [renderAttempt, setRenderAttempt] = React.useState(0)
   const [layoutRevision, setLayoutRevision] = React.useState(0)
+  const [yellowHighlightRanges, setYellowHighlightRanges] = React.useState<readonly Range[]>([])
   const [renderState, setRenderState] = React.useState<RenderState>({
     status: 'loading',
     completedImages: 0,
     totalImages: 0
   })
   const ready = renderState.status === 'ready'
+  const figureGroupByBlockIndex = React.useMemo(() => {
+    const result = new Map<number, ReaderFigureGroup>()
+    for (const group of props.figureGroups ?? []) {
+      for (const index of group.memberBlockIndexes) result.set(index, group)
+    }
+    return result
+  }, [props.figureGroups])
 
   const closeTextSelection = React.useCallback((clearBrowser = false) => {
     if (paletteTimerRef.current !== null) {
@@ -221,9 +241,14 @@ export default function MarkdownPane(props: {
   React.useLayoutEffect(() => {
     if (!props.active || !ready || !articleRef.current || !containerRef.current) return
     const scheduleRebuild = (): void => {
+      if (scrollActiveRef.current || minimapDraggingRef.current) {
+        resizePendingRef.current = true
+        return
+      }
       if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current)
       resizeFrameRef.current = window.requestAnimationFrame(() => {
         resizeFrameRef.current = null
+        resizePendingRef.current = false
         rebuildBlockPositions()
       })
     }
@@ -242,10 +267,9 @@ export default function MarkdownPane(props: {
 
   React.useLayoutEffect(() => {
     if (!ready || !articleRef.current) return
-    return registerReaderHighlightRanges(
-      annotationOwner,
-      buildReaderHighlightRanges(articleRef.current, props.annotations)
-    )
+    const ranges = buildReaderHighlightRanges(articleRef.current, props.annotations)
+    setYellowHighlightRanges(ranges.get('mineru-highlight-yellow') ?? [])
+    return registerReaderHighlightRanges(annotationOwner, ranges)
   }, [annotationOwner, props.annotations, props.blocks, ready, renderAttempt])
 
   React.useEffect(() => {
@@ -305,23 +329,58 @@ export default function MarkdownPane(props: {
     releaseScrollSelectionSuppression()
   }, [props.onSelect, releaseScrollSelectionSuppression])
 
+  const syncScrollSelection = React.useCallback(() => {
+    if (suppressScrollSelectionRef.current || minimapDraggingRef.current) return
+    const container = containerRef.current
+    if (!container) return
+    const position = nearestBlockPosition(
+      blockPositionsRef.current,
+      container.scrollTop + container.clientHeight * 0.35
+    )
+    if (!position || position.mappingId === lastScrollMappingRef.current) return
+    lastScrollMappingRef.current = position.mappingId
+    props.onSelect({ mappingId: position.mappingId, origin: 'scroll' })
+  }, [props.onSelect])
+
+  const flushDeferredResize = React.useCallback(() => {
+    if (!resizePendingRef.current || scrollActiveRef.current || minimapDraggingRef.current) return
+    resizePendingRef.current = false
+    if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current)
+    resizeFrameRef.current = window.requestAnimationFrame(() => {
+      resizeFrameRef.current = null
+      rebuildBlockPositions()
+    })
+  }, [rebuildBlockPositions])
+
+  const onMinimapDragStateChange = React.useCallback((dragging: boolean) => {
+    minimapDraggingRef.current = dragging
+    if (dragging) {
+      if (scrollSelectionTimerRef.current !== null) {
+        window.clearTimeout(scrollSelectionTimerRef.current)
+        scrollSelectionTimerRef.current = null
+      }
+      return
+    }
+    syncScrollSelection()
+    flushDeferredResize()
+  }, [flushDeferredResize, syncScrollSelection])
+
   const onScroll = React.useCallback(() => {
     if (textSelection) closeTextSelection(true)
-    if (!props.active || !ready || suppressScrollSelectionRef.current || scrollFrameRef.current !== null) return
-    scrollFrameRef.current = window.requestAnimationFrame(() => {
-      scrollFrameRef.current = null
-      if (suppressScrollSelectionRef.current) return
-      const container = containerRef.current
-      if (!container) return
-      const position = nearestBlockPosition(
-        blockPositionsRef.current,
-        container.scrollTop + container.clientHeight * 0.35
-      )
-      if (position && (position.mappingId !== props.selection?.mappingId || props.selection?.origin !== 'scroll')) {
-        props.onSelect({ mappingId: position.mappingId, origin: 'scroll' })
-      }
-    })
-  }, [closeTextSelection, props.active, props.onSelect, props.selection, ready, textSelection])
+    if (!props.active || !ready) return
+    scrollActiveRef.current = true
+    if (scrollIdleTimerRef.current !== null) window.clearTimeout(scrollIdleTimerRef.current)
+    scrollIdleTimerRef.current = window.setTimeout(() => {
+      scrollIdleTimerRef.current = null
+      scrollActiveRef.current = false
+      flushDeferredResize()
+    }, SCROLL_IDLE_DELAY_MS)
+    if (suppressScrollSelectionRef.current || minimapDraggingRef.current || scrollSelectionTimerRef.current !== null) return
+    scrollSelectionTimerRef.current = window.setTimeout(() => {
+      scrollSelectionTimerRef.current = null
+      syncScrollSelection()
+    }, SCROLL_SELECTION_INTERVAL_MS)
+  }, [closeTextSelection, flushDeferredResize, props.active, ready, syncScrollSelection, textSelection])
 
   const applyTextAnnotation = React.useCallback((kind: ReaderAnnotationKind) => {
     const article = articleRef.current
@@ -369,6 +428,8 @@ export default function MarkdownPane(props: {
   React.useEffect(() => () => {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
     if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current)
+    if (scrollSelectionTimerRef.current !== null) window.clearTimeout(scrollSelectionTimerRef.current)
+    if (scrollIdleTimerRef.current !== null) window.clearTimeout(scrollIdleTimerRef.current)
     if (navigationReleaseFrameRef.current !== null) window.cancelAnimationFrame(navigationReleaseFrameRef.current)
     if (selectionFrameRef.current !== null) window.cancelAnimationFrame(selectionFrameRef.current)
     if (paletteTimerRef.current !== null) window.clearTimeout(paletteTimerRef.current)
@@ -377,6 +438,10 @@ export default function MarkdownPane(props: {
   const retry = React.useCallback(() => {
     setRenderState({ status: 'loading', completedImages: 0, totalImages: 0 })
     setRenderAttempt((value) => value + 1)
+  }, [])
+
+  const markFigureRendered = React.useCallback(() => {
+    setLayoutRevision((revision) => revision + 1)
   }, [])
 
   return (
@@ -417,12 +482,19 @@ export default function MarkdownPane(props: {
         >
           {props.blocks.map((block, index) => {
             const blockId = block.mappingIds[0] ?? `markdown-${index}`
+            const figureGroup = figureGroupByBlockIndex.get(index)
             return (
               <MarkdownBlockView
                 key={`${blockId}-${index}`}
                 block={block}
-                active={props.selection !== null && block.mappingIds.includes(props.selection.mappingId)}
+                active={props.selection !== null && (figureGroup
+                  ? figureGroup.ownerBlockIndex === index && figureGroup.mappingIds.includes(props.selection.mappingId)
+                  : block.mappingIds.includes(props.selection.mappingId))}
                 assetBaseUrl={props.assetBaseUrl}
+                pdfUrl={props.pdfUrl}
+                figureGroup={figureGroup}
+                blockIndex={index}
+                onFigureRendered={markFigureRendered}
                 onSelect={selectFromMarkdown}
               />
             )
@@ -458,6 +530,8 @@ export default function MarkdownPane(props: {
         controlledId={documentId}
         scrollerRef={containerRef}
         articleRef={articleRef}
+        yellowHighlightRanges={yellowHighlightRanges}
+        onDragStateChange={onMinimapDragStateChange}
       />
     </div>
   )
@@ -487,6 +561,10 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   block: ReaderBlock
   active: boolean
   assetBaseUrl: string
+  pdfUrl?: string
+  figureGroup?: ReaderFigureGroup
+  blockIndex: number
+  onFigureRendered(): void
   onSelect(selection: BlockSelection): void
 }): React.JSX.Element {
   if (props.block.role === 'page-divider') {
@@ -515,23 +593,83 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
     )
   }
 
+  const figureOwner = props.figureGroup?.ownerBlockIndex === props.blockIndex
+  const navigationMappingIds = props.figureGroup
+    ? figureOwner ? props.figureGroup.mappingIds : []
+    : props.block.mappingIds
+
   return (
     <div
-      data-block-ids={props.block.mappingIds.join(' ')}
+      data-block-ids={navigationMappingIds.join(' ')}
       data-mapping-ids={props.block.mappingIds.join(' ')}
       data-annotation-block-key={props.block.annotationKey}
       data-reader-role={props.block.role}
       className={props.active ? 'markdown-block active' : 'markdown-block'}
       onClick={() => {
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return
-        const mappingId = props.block.mappingIds[0]
+        const mappingId = navigationMappingIds[0]
         if (mappingId) props.onSelect({ mappingId, origin: 'markdown' })
       }}
     >
-      <MarkdownContent markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} />
+      {props.figureGroup && props.pdfUrl ? (
+        <FigureBlockPresentation
+          block={props.block}
+          blockIndex={props.blockIndex}
+          group={props.figureGroup}
+          pdfUrl={props.pdfUrl}
+          assetBaseUrl={props.assetBaseUrl}
+          onRendered={props.onFigureRendered}
+        />
+      ) : (
+        <MarkdownContent markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} />
+      )}
     </div>
   )
 })
+
+function FigureBlockPresentation(props: {
+  block: ReaderBlock
+  blockIndex: number
+  group: ReaderFigureGroup
+  pdfUrl: string
+  assetBaseUrl: string
+  onRendered(): void
+}): React.JSX.Element {
+  const isOwner = props.blockIndex === props.group.ownerBlockIndex
+  const isCaption = props.blockIndex === props.group.captionBlockIndex
+  const hiddenMarkdown = stripMarkdownImages(isCaption ? props.group.captionPrefixMarkdown : props.block.markdown)
+  return (
+    <>
+      {hiddenMarkdown ? (
+        <div className="reader-figure-hidden-source" aria-hidden="true">
+          <MarkdownContent markdown={hiddenMarkdown} assetBaseUrl={props.assetBaseUrl} />
+        </div>
+      ) : null}
+      {isOwner ? (
+        <ReaderFigureSnapshot
+          pdfUrl={props.pdfUrl}
+          group={props.group}
+          onRendered={props.onRendered}
+          fallback={(
+            <div className="reader-figure-fallback">
+              <div className="reader-figure-fallback-images">
+                {props.group.assetSources.map((asset) => (
+                  <img key={asset} src={resolveAsset(asset, props.assetBaseUrl)} alt="" />
+                ))}
+              </div>
+              <MarkdownContent markdown={props.group.fallbackLegendMarkdown} assetBaseUrl={props.assetBaseUrl} />
+            </div>
+          )}
+        />
+      ) : null}
+      {isCaption ? <MarkdownContent markdown={props.group.captionMarkdown} assetBaseUrl={props.assetBaseUrl} /> : null}
+    </>
+  )
+}
+
+function stripMarkdownImages(markdown: string): string {
+  return markdown.replace(/!\[[^\]]*\]\([^)]*\)\s*[\\ ]*/gu, '').trim()
+}
 
 const HIGHLIGHT_COLOR_VALUES: Record<HighlightColor, string> = {
   yellow: '#F4C542',

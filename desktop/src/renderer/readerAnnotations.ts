@@ -11,8 +11,8 @@ export interface ReaderTextSelection {
   rect: { top: number; right: number; bottom: number; left: number; width: number; height: number }
 }
 
-type HighlightBucket = `mineru-highlight-${HighlightColor}` | 'mineru-underline'
-type HighlightRanges = Map<HighlightBucket, Range[]>
+export type HighlightBucket = `mineru-highlight-${HighlightColor}` | 'mineru-underline'
+export type HighlightRanges = Map<HighlightBucket, Range[]>
 
 const highlightOwners = new Map<string, HighlightRanges>()
 
@@ -150,7 +150,7 @@ function textContent(block: HTMLElement): string {
   let value = ''
   let node = walker.nextNode()
   while (node) {
-    value += node.nodeValue ?? ''
+    if (!(node.parentElement?.closest('[data-reader-annotation-ignore]'))) value += node.nodeValue ?? ''
     node = walker.nextNode()
   }
   return value
@@ -161,7 +161,7 @@ function rangeFromOffsets(block: HTMLElement, startOffset: number, endOffset: nu
   const nodes: Text[] = []
   let node = walker.nextNode()
   while (node) {
-    nodes.push(node as Text)
+    if (!node.parentElement?.closest('[data-reader-annotation-ignore]')) nodes.push(node as Text)
     node = walker.nextNode()
   }
   const start = locateOffset(nodes, startOffset)

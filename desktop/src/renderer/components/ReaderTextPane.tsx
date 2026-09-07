@@ -2,6 +2,7 @@ import React from 'react'
 import { Empty, Input, Segmented, Tag } from 'antd'
 import type { ReaderBlock } from '@shared/readerDocument'
 import type {
+  BlockMapping,
   BlockSelection,
   HighlightColor,
   ReaderAnnotation,
@@ -11,6 +12,7 @@ import type {
 import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
 import JsonPane from './JsonPane'
 import MarkdownPane from './MarkdownPane'
+import { buildReaderFigureGroups } from '../readerFigureGroups'
 
 export type ReaderTab = 'original' | 'translated' | 'json'
 
@@ -25,6 +27,8 @@ export default function ReaderTextPane(props: {
   jsonQuery: string
   onJsonQueryChange(query: string): void
   assetBaseUrl: string
+  pdfUrl?: string
+  mappings?: BlockMapping[]
   taskId: string
   annotations: ReaderAnnotation[]
   onReplaceAnnotations(view: ReaderAnnotationView, annotations: ReaderAnnotation[]): Promise<void>
@@ -43,6 +47,14 @@ export default function ReaderTextPane(props: {
   const translatedAnnotations = React.useMemo(
     () => props.annotations.filter((annotation) => annotation.view === 'translated'),
     [props.annotations]
+  )
+  const originalFigureGroups = React.useMemo(
+    () => buildReaderFigureGroups(props.originalBlocks, props.mappings ?? []),
+    [props.mappings, props.originalBlocks]
+  )
+  const translatedFigureGroups = React.useMemo(
+    () => buildReaderFigureGroups(props.translatedBlocks, props.mappings ?? []),
+    [props.mappings, props.translatedBlocks]
   )
   const replaceOriginalAnnotations = React.useCallback(
     (annotations: ReaderAnnotation[]) => props.onReplaceAnnotations('original', annotations),
@@ -102,6 +114,8 @@ export default function ReaderTextPane(props: {
           active={props.tab === 'original'}
           blocks={props.originalBlocks}
           assetBaseUrl={props.assetBaseUrl}
+          pdfUrl={props.pdfUrl}
+          figureGroups={originalFigureGroups}
           taskId={props.taskId}
           view="original"
           annotations={originalAnnotations}
@@ -120,6 +134,8 @@ export default function ReaderTextPane(props: {
             active={props.tab === 'translated'}
             blocks={props.translatedBlocks}
             assetBaseUrl={props.assetBaseUrl}
+            pdfUrl={props.pdfUrl}
+            figureGroups={translatedFigureGroups}
             taskId={props.taskId}
             view="translated"
             annotations={translatedAnnotations}
