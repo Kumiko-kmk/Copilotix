@@ -34,7 +34,7 @@ function document(id: string, name: string, status: DocumentSummary['workflow'][
     displayName: name,
     sourceHash: id,
     workflow: { status, progress: status === 'translating' ? 64 : 100, activeJobKind: status === 'translating' ? 'translate' : null, error: null },
-    processing: { parserModel: 'pipeline', translationProvider: 'qwen' },
+    processing: { translationProvider: 'qwen' },
     createdAt: '2026-08-31T00:00:00.000Z',
     updatedAt: '2026-08-31T00:00:00.000Z'
   }

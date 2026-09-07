@@ -24,11 +24,11 @@ async function fixture(documentIds = ['document-1']): Promise<{ database: V2Data
   const insert = database.connection.prepare(`
     INSERT INTO documents(
       id,original_filename,display_title,storage_path,source_checksum,
-      parser_model,translation_provider,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,?,?,?)
+      translation_provider,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?)
   `)
   for (const id of documentIds) {
-    insert.run(id, `${id}.pdf`, null, `C:/documents/${id}`, `hash-${id}`, 'vlm', 'qwen', now, now)
+    insert.run(id, `${id}.pdf`, null, `C:/documents/${id}`, `hash-${id}`, 'qwen', now, now)
   }
   return { database, repository: new SqliteJobRepository(database) }
 }

@@ -1,6 +1,6 @@
 import React from 'react'
 import { ApiOutlined, FolderOpenOutlined, SettingOutlined } from '@ant-design/icons'
-import { Alert, Button, Collapse, Input, Radio, Select, Space, Switch, Typography, message } from 'antd'
+import { Alert, Button, Collapse, Input, Select, Space, Switch, Typography, message } from 'antd'
 import { PROVIDER_LABELS } from '@shared/constants'
 import type { AppSettings, SettingsUpdate, TranslationProviderId } from '@shared/types'
 
@@ -97,17 +97,8 @@ export default function SettingsPage(props: {
           ) : (
             <>
               <Typography.Title level={4}>解析参数</Typography.Title>
-              <SettingField label="模型版本">
-                <Radio.Group value={draft.parserModel} onChange={(event) => update('parserModel', event.target.value)}>
-                  <Radio value="vlm">视觉模型</Radio><Radio value="pipeline">标准模型</Radio>
-                </Radio.Group>
-              </SettingField>
-              <ToggleField label="强制开启 OCR" checked={draft.forceOcr} onChange={(value) => update('forceOcr', value)} />
               <ToggleField label="开启公式识别" checked={draft.formulaEnabled} onChange={(value) => update('formulaEnabled', value)} />
               <ToggleField label="开启表格识别" checked={draft.tableEnabled} onChange={(value) => update('tableEnabled', value)} />
-              <SettingField label="OCR 识别语言">
-                <Select value={draft.ocrLanguage} onChange={(value) => update('ocrLanguage', value)} options={[{ value: 'ch', label: '中文/英文' }, { value: 'en', label: '英文' }, { value: 'japan', label: '日文' }, { value: 'korean', label: '韩文' }]} />
-              </SettingField>
 
               <Typography.Title level={4} className="settings-subtitle">自动翻译</Typography.Title>
               <SettingField label="默认翻译模型">

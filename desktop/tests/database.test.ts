@@ -138,7 +138,6 @@ function task(overrides: Partial<MinerUTask> = {}): MinerUTask {
     outputDir: 'paper',
     status: 'completed',
     progress: 100,
-    parserModel: 'vlm',
     translationProvider: 'qwen',
     remoteBatchId: null,
     remoteDataId: null,

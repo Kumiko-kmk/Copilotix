@@ -31,7 +31,6 @@ async function createFixture(): Promise<{ root: string; database: V2Database; re
     outputDir,
     status: 'uploading',
     progress: 0,
-    parserModel: 'vlm',
     translationProvider: 'qwen',
     remoteBatchId: null,
     remoteDataId: null,
@@ -298,7 +297,6 @@ describe('temporary v2 task repository compatibility projection', () => {
       display_title: 'Stable title',
       storage_path: 'C:/output/documents-v2/document-1',
       source_checksum: 'hash',
-      parser_model: 'vlm',
       translation_provider: 'qwen',
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-01T00:00:00.000Z'

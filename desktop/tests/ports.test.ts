@@ -20,7 +20,6 @@ const document: Document = {
   displayTitle: null,
   storagePath: 'C:/documents-v2/document-1',
   sourceChecksum: 'sha256',
-  parserModel: 'vlm',
   translationProvider: 'qwen',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z'

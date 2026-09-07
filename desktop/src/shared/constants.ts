@@ -15,11 +15,8 @@ export const FALLBACK_PROVIDER_ORDER: TranslationProviderId[] = [
 export const DEFAULT_SETTINGS: AppSettings = {
   hasParserToken: false,
   outputRoot: '',
-  parserModel: 'vlm',
-  forceOcr: false,
   formulaEnabled: true,
   tableEnabled: true,
-  ocrLanguage: 'ch',
   translationProvider: 'qwen',
   qwenBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   qwenModel: 'qwen-mt-plus',

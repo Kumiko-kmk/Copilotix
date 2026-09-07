@@ -1,7 +1,6 @@
 export type JsonObject = Record<string, unknown>
 
 export type DocumentId = string
-export type DocumentParserModel = 'vlm' | 'pipeline'
 export type DocumentTranslationProvider = 'qwen' | 'deepseek' | 'bing' | 'transmart'
 
 export interface Document {
@@ -10,7 +9,6 @@ export interface Document {
   displayTitle: string | null
   storagePath: string
   sourceChecksum: string
-  parserModel: DocumentParserModel
   translationProvider: DocumentTranslationProvider
   createdAt: string
   updatedAt: string

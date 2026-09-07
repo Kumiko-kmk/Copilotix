@@ -21,9 +21,9 @@ function insertDocument(database: V2Database, id = 'document-1', storagePath = '
   database.connection.prepare(`
     INSERT INTO documents(
       id,original_filename,display_title,storage_path,source_checksum,
-      parser_model,translation_provider,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,?,?,?)
-  `).run(id, 'paper.pdf', null, storagePath, `hash-${id}`, 'vlm', 'qwen', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+      translation_provider,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?)
+  `).run(id, 'paper.pdf', null, storagePath, `hash-${id}`, 'qwen', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
 }
 
 function insertJob(database: V2Database, id: string, documentId = 'document-1', kind = 'parse', status = 'queued'): void {
@@ -47,13 +47,13 @@ describe('v2 migration ledger and strict persistence schema', () => {
     expect(database.connection.prepare('PRAGMA journal_mode').get()).toMatchObject({ journal_mode: 'wal' })
     const strictTables = database.connection.prepare('PRAGMA table_list').all() as Array<{ name: string; strict: number }>
     for (const table of tables) expect(strictTables.find((entry) => entry.name === table)?.strict).toBe(1)
-    expect(database.migrationRows()).toEqual([
-      { version: 1, name: 'create-v2-document-persistence', checksum: checksumFor(V2_MIGRATIONS[0]!) }
-    ])
+    expect(database.migrationRows()).toEqual(V2_MIGRATIONS.map((migration) => ({
+      version: migration.version, name: migration.name, checksum: checksumFor(migration)
+    })))
     const documentColumns = (database.connection.prepare('PRAGMA table_info(documents)').all() as Array<{ name: string }>).map((column) => column.name)
     expect(documentColumns).toEqual([
       'id', 'original_filename', 'display_title', 'storage_path', 'source_checksum',
-      'parser_model', 'translation_provider', 'created_at', 'updated_at'
+      'translation_provider', 'created_at', 'updated_at'
     ])
     database.close()
   })
@@ -84,8 +84,8 @@ describe('v2 migration ledger and strict persistence schema', () => {
     insertDocument(database, 'document-2', 'C:/output/documents-v2/document-2')
     expect(() => database.connection.prepare("INSERT INTO settings(key,value) VALUES('bad','{')").run()).toThrow()
     expect(() => database.connection.prepare(`
-      INSERT INTO documents(id,original_filename,display_title,storage_path,source_checksum,parser_model,translation_provider,created_at,updated_at)
-      VALUES('bad','paper.pdf',NULL,'C:/bad','hash','invalid','qwen','now','now')
+      INSERT INTO documents(id,original_filename,display_title,storage_path,source_checksum,translation_provider,created_at,updated_at)
+      VALUES('bad','paper.pdf',NULL,'C:/bad','hash','invalid','now','now')
     `).run()).toThrow()
     insertJob(database, 'parse-1')
     expect(database.connection.prepare('SELECT max_attempts FROM jobs WHERE id = ?').get('parse-1')).toEqual({ max_attempts: 5 })
@@ -169,12 +169,41 @@ describe('v2 migration ledger and strict persistence schema', () => {
     database.close()
   })
 
+  it('removes legacy parser settings and model metadata without losing documents or artifacts', async () => {
+    const path = await databasePath()
+    const legacy = new V2Database(path, [V2_MIGRATIONS[0]!])
+    legacy.connection.prepare(`
+      INSERT INTO documents(id,original_filename,display_title,storage_path,source_checksum,parser_model,translation_provider,created_at,updated_at)
+      VALUES('legacy-document','paper.pdf','Paper','C:/legacy','legacy-hash','pipeline','qwen','now','now')
+    `).run()
+    legacy.connection.prepare(`
+      INSERT INTO artifacts(id,document_id,kind,revision,relative_path,content_hash,metadata_json,created_at)
+      VALUES('legacy-artifact','legacy-document','parsed_markdown',1,'paper.md','artifact-hash','{}','now')
+    `).run()
+    for (const key of ['parserModel', 'forceOcr', 'ocrLanguage', 'outputRoot']) {
+      legacy.connection.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run(key, JSON.stringify(key))
+    }
+    legacy.close()
+
+    const migrated = new V2Database(path)
+    const columns = (migrated.connection.prepare('PRAGMA table_info(documents)').all() as Array<{ name: string }>).map((row) => row.name)
+    expect(columns).not.toContain('parser_model')
+    expect(migrated.connection.prepare('SELECT id,display_title FROM documents').all()).toEqual([
+      { id: 'legacy-document', display_title: 'Paper' }
+    ])
+    expect(migrated.connection.prepare('SELECT id,document_id,relative_path FROM artifacts').all()).toEqual([
+      { id: 'legacy-artifact', document_id: 'legacy-document', relative_path: 'paper.md' }
+    ])
+    expect(migrated.connection.prepare('SELECT key FROM settings ORDER BY key').all()).toEqual([{ key: 'outputRoot' }])
+    migrated.close()
+  })
+
   it('is idempotent on duplicate startup and detects checksum drift', async () => {
     const path = await databasePath()
     const first = new V2Database(path)
     first.close()
     const second = new V2Database(path)
-    expect(second.migrationRows()).toHaveLength(1)
+    expect(second.migrationRows()).toHaveLength(2)
     second.close()
     const drifted: V2Migration = { version: 1, name: 'create-v2-document-persistence', sql: 'SELECT 1;' }
     expect(() => new V2Database(path, [drifted])).toThrow(/checksum mismatch/)

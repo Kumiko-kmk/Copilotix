@@ -49,7 +49,6 @@ async function createFixture(markdown: string): Promise<Fixture> {
     outputDir,
     status: 'uploading',
     progress: 0,
-    parserModel: 'vlm',
     translationProvider: 'qwen',
     remoteBatchId: null,
     remoteDataId: null,

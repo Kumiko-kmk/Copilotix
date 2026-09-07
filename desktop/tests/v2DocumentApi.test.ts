@@ -35,7 +35,6 @@ async function fixture(): Promise<{
     outputDir,
     status: 'parsing',
     progress: 10,
-    parserModel: 'vlm',
     translationProvider: 'qwen',
     remoteBatchId: null,
     remoteDataId: null,
@@ -77,7 +76,7 @@ describe('v2 document projections and annotation CAS', () => {
         id: value.task.id,
         originalName: 'paper.pdf',
         workflow: { status: 'parsing', progress: 10, activeJobKind: 'parse' },
-        processing: { parserModel: 'vlm', translationProvider: 'qwen' }
+        processing: { translationProvider: 'qwen' }
       })
       expect(summary).not.toHaveProperty('sourcePath')
       expect(summary).not.toHaveProperty('outputDir')

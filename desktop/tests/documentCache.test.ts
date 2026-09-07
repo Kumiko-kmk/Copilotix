@@ -13,7 +13,7 @@ const first: DocumentSummary = {
   displayName: 'first.pdf',
   sourceHash: 'first-hash',
   workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null },
-  processing: { parserModel: 'vlm', translationProvider: 'qwen' },
+  processing: { translationProvider: 'qwen' },
   createdAt: '2026-01-02T00:00:00.000Z',
   updatedAt: '2026-01-02T00:00:00.000Z'
 }

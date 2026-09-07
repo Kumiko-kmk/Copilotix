@@ -135,7 +135,6 @@ async function makeFixture(sourceText = 'Hello', cacheHits: TranslationProviderI
     outputDir: root,
     status: 'translating',
     progress: 0,
-    parserModel: 'vlm',
     translationProvider: 'qwen',
     remoteBatchId: null,
     remoteDataId: null,

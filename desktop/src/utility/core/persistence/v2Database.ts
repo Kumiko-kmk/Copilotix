@@ -154,7 +154,15 @@ CREATE INDEX idx_reader_annotations_document_view
 `
 
 export const V2_MIGRATIONS: readonly V2Migration[] = Object.freeze([
-  { version: 1, name: 'create-v2-document-persistence', sql: V2_SCHEMA_SQL }
+  { version: 1, name: 'create-v2-document-persistence', sql: V2_SCHEMA_SQL },
+  {
+    version: 2,
+    name: 'remove-legacy-parser-settings',
+    sql: `
+DELETE FROM settings WHERE key IN ('parserModel', 'forceOcr', 'ocrLanguage');
+ALTER TABLE documents DROP COLUMN parser_model;
+`
+  }
 ])
 
 export class V2Database {

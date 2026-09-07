@@ -1,7 +1,7 @@
 import React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
-import { Button, Dropdown, Space, Spin, Tag, Typography, message } from 'antd'
+import { Button, Dropdown, Space, Spin, Typography, message } from 'antd'
 import { buildOriginalReaderBlocks, buildTranslatedReaderBlocks } from '@shared/readerDocument'
 import type {
   DocumentAnnotation,
@@ -107,7 +107,7 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
     <section className="reader-page">
       {contextHolder}
       <header className="reader-header">
-        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text><Tag>{document.summary.processing.parserModel === 'vlm' ? '视觉模型' : '标准模型'}</Tag></Space>
+        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
         <Space>
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.mineru.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
           <Button type="text" icon={<CopyOutlined />} onClick={() => void copyCurrent(document, tab, messageApi)} aria-label="复制当前内容" />

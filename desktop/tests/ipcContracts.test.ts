@@ -39,11 +39,8 @@ describe('IPC contracts', () => {
     const settings = {
       hasParserToken: false,
       outputRoot: 'C:/papers',
-      parserModel: 'vlm' as const,
-      forceOcr: false,
       formulaEnabled: true,
       tableEnabled: true,
-      ocrLanguage: 'ch',
       translationProvider: 'qwen' as const,
       qwenBaseUrl: 'https://example.com',
       qwenModel: 'qwen',
@@ -59,11 +56,8 @@ describe('IPC contracts', () => {
     expect(() => inspectPdfsRequestSchema.parse(['C:/papers/bad\0.pdf'])).toThrow()
     expect(() => settingsUpdateSchema.parse({
       outputRoot: 'C:/papers\0bad',
-      parserModel: 'vlm',
-      forceOcr: false,
       formulaEnabled: true,
       tableEnabled: true,
-      ocrLanguage: 'ch',
       translationProvider: 'qwen',
       qwenBaseUrl: 'https://example.com',
       qwenModel: 'qwen',

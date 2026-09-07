@@ -10,11 +10,8 @@ type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Re
 const settings: AppSettings = {
   hasParserToken: true,
   outputRoot: 'C:\\output',
-  parserModel: 'vlm',
-  forceOcr: true,
   formulaEnabled: true,
   tableEnabled: false,
-  ocrLanguage: 'en',
   translationProvider: 'qwen',
   qwenBaseUrl: 'https://example.test/v1',
   qwenModel: 'qwen-mt-plus',
@@ -34,7 +31,6 @@ const task: MinerUTask = {
   outputDir: 'C:\\output\\paper',
   status: 'uploading',
   progress: 0,
-  parserModel: 'vlm',
   translationProvider: 'qwen',
   remoteBatchId: null,
   remoteDataId: null,
@@ -70,11 +66,10 @@ describe('OfficialMinerUClient', () => {
     expect(init?.method).toBe('POST')
     expect(init?.headers).toMatchObject({ Authorization: 'Bearer token-value', 'Content-Type': 'application/json' })
     expect(JSON.parse(String(init?.body))).toEqual({
-      files: [{ name: 'paper.pdf', data_id: 'task-1', is_ocr: true }],
+      files: [{ name: 'paper.pdf', data_id: 'task-1' }],
       model_version: 'vlm',
       enable_formula: true,
-      enable_table: false,
-      language: 'en'
+      enable_table: false
     })
   })
 

@@ -18,7 +18,7 @@ function summary(overrides: Record<string, unknown> = {}) {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     workflow: { status: 'parsing', progress: 10, activeJobKind: 'parse', error: null },
-    processing: { parserModel: 'vlm', translationProvider: 'qwen' },
+    processing: { translationProvider: 'qwen' },
     ...overrides
   }
 }

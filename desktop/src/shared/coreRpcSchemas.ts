@@ -131,7 +131,6 @@ export const coreTaskPatchSchema = z.object({
   outputDir: corePathSchema.optional(),
   status: z.enum(['uploading', 'parsing', 'translating', 'partial', 'completed', 'failed']).optional(),
   progress: z.number().int().min(0).max(100).optional(),
-  parserModel: z.enum(['vlm', 'pipeline']).optional(),
   translationProvider: translationProviderIdSchema.optional(),
   remoteBatchId: z.string().max(4_096).refine(noNul).nullable().optional(),
   remoteDataId: z.string().max(4_096).refine(noNul).nullable().optional(),

@@ -21,7 +21,6 @@ interface TaskRow {
   output_dir: string
   status: TaskStatus
   progress: number
-  parser_model: string
   translation_provider: TranslationProviderId
   remote_batch_id: string | null
   remote_data_id: string | null
@@ -65,7 +64,6 @@ export class TaskRepository {
         output_dir TEXT NOT NULL,
         status TEXT NOT NULL,
         progress INTEGER NOT NULL DEFAULT 0,
-        parser_model TEXT NOT NULL,
         translation_provider TEXT NOT NULL,
         remote_batch_id TEXT,
         remote_data_id TEXT,
@@ -130,6 +128,8 @@ export class TaskRepository {
       if (!taskColumns.has('remote_batch_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN remote_batch_id TEXT')
       if (!taskColumns.has('remote_data_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN remote_data_id TEXT')
       this.db.exec("UPDATE tasks SET original_name = name WHERE original_name IS NULL OR original_name = ''")
+      if (taskColumns.has('parser_model')) this.db.exec('ALTER TABLE tasks DROP COLUMN parser_model')
+      this.db.exec("DELETE FROM settings WHERE key IN ('parserModel', 'forceOcr', 'ocrLanguage')")
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -145,23 +145,17 @@ export class TaskRepository {
       key: string
       value: string
     }>
-    const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value)])) as Partial<AppSettings> & {
-      parserModel?: AppSettings['parserModel'] | 'hybrid-engine'
-    }
-    const parserModel = stored.parserModel === 'pipeline' ? 'pipeline' : 'vlm'
+    const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value)])) as Partial<AppSettings>
     return {
       ...DEFAULT_SETTINGS,
       outputRoot: stored.outputRoot ?? outputRoot,
-      forceOcr: stored.forceOcr ?? DEFAULT_SETTINGS.forceOcr,
       formulaEnabled: stored.formulaEnabled ?? DEFAULT_SETTINGS.formulaEnabled,
       tableEnabled: stored.tableEnabled ?? DEFAULT_SETTINGS.tableEnabled,
-      ocrLanguage: stored.ocrLanguage ?? DEFAULT_SETTINGS.ocrLanguage,
       translationProvider: stored.translationProvider ?? DEFAULT_SETTINGS.translationProvider,
       qwenBaseUrl: stored.qwenBaseUrl ?? DEFAULT_SETTINGS.qwenBaseUrl,
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
       deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
-      parserModel,
       hasParserToken: false,
       qwenHasApiKey: false,
       deepseekHasApiKey: false
@@ -206,11 +200,11 @@ export class TaskRepository {
     this.db
       .prepare(`
         INSERT INTO tasks(
-          id,original_name,title,name,source_path,source_hash,output_dir,status,progress,parser_model,
+          id,original_name,title,name,source_path,source_hash,output_dir,status,progress,
           translation_provider,remote_batch_id,remote_data_id,remote_result_url,
           error,created_at,updated_at
         ) VALUES(
-          @id,@originalName,@title,@name,@sourcePath,@sourceHash,@outputDir,@status,@progress,@parserModel,
+          @id,@originalName,@title,@name,@sourcePath,@sourceHash,@outputDir,@status,@progress,
           @translationProvider,@remoteBatchId,@remoteDataId,@remoteResultUrl,
           @error,@createdAt,@updatedAt
         )
@@ -243,7 +237,7 @@ export class TaskRepository {
           original_name=@originalName, title=@title, name=@name,
           source_path=@sourcePath, source_hash=@sourceHash,
           output_dir=@outputDir, status=@status, progress=@progress,
-          parser_model=@parserModel, translation_provider=@translationProvider,
+          translation_provider=@translationProvider,
           remote_batch_id=@remoteBatchId, remote_data_id=@remoteDataId,
           remote_result_url=@remoteResultUrl, error=@error, updated_at=@updatedAt
         WHERE id=@id
@@ -258,7 +252,6 @@ export class TaskRepository {
         outputDir: next.outputDir,
         status: next.status,
         progress: next.progress,
-        parserModel: next.parserModel,
         translationProvider: next.translationProvider,
         remoteBatchId: next.remoteBatchId,
         remoteDataId: next.remoteDataId,
@@ -426,7 +419,6 @@ function toTask(row: TaskRow): MinerUTask {
     outputDir: row.output_dir,
     status: row.status,
     progress: row.progress,
-    parserModel: row.parser_model === 'pipeline' ? 'pipeline' : 'vlm',
     translationProvider: row.translation_provider,
     remoteBatchId: row.remote_batch_id,
     remoteDataId: row.remote_data_id,

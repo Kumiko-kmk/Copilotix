@@ -11,7 +11,6 @@ import type {
   SaveDocumentAsResult
 } from './ipcSchemas'
 
-export type ParserModel = 'vlm' | 'pipeline'
 export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart'
 
 export type TaskStatus =
@@ -25,11 +24,8 @@ export type TaskStatus =
 export interface AppSettings {
   hasParserToken: boolean
   outputRoot: string
-  parserModel: ParserModel
-  forceOcr: boolean
   formulaEnabled: boolean
   tableEnabled: boolean
-  ocrLanguage: string
   translationProvider: TranslationProviderId
   qwenBaseUrl: string
   qwenModel: string
@@ -61,7 +57,6 @@ export interface MinerUTask {
   outputDir: string
   status: TaskStatus
   progress: number
-  parserModel: ParserModel
   translationProvider: TranslationProviderId
   remoteBatchId: string | null
   remoteDataId: string | null
@@ -80,7 +75,6 @@ export interface SelectedPdf {
 
 export interface CreateTasksRequest {
   files: SelectedPdf[]
-  parserModel: ParserModel
   translationProvider: TranslationProviderId
   createDuplicates?: boolean
 }

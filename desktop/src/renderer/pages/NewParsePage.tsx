@@ -2,7 +2,7 @@ import React from 'react'
 import { CloudUploadOutlined, FilePdfOutlined, InboxOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Modal, Select, Space, Tag, message } from 'antd'
 import { MAX_PDF_BYTES, PROVIDER_LABELS } from '@shared/constants'
-import type { AppSettings, ParserModel, TranslationProviderId } from '@shared/types'
+import type { AppSettings, TranslationProviderId } from '@shared/types'
 
 interface PendingPdf {
   file: File
@@ -16,7 +16,6 @@ export default function NewParsePage(props: {
   onOpenSettings(): void
 }): React.JSX.Element {
   const [files, setFiles] = React.useState<PendingPdf[]>([])
-  const [parserModel, setParserModel] = React.useState<ParserModel>(props.settings.parserModel)
   const [provider, setProvider] = React.useState<TranslationProviderId>(props.settings.translationProvider)
   const [createDuplicates, setCreateDuplicates] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
@@ -40,7 +39,7 @@ export default function NewParsePage(props: {
     setSubmitting(true)
     try {
       const created = await window.mineru.importDocuments(
-        { parserModel, translationProvider: provider, createDuplicates },
+        { translationProvider: provider, createDuplicates },
         files.map(({ file }) => file)
       )
       if (created.length === 0) {
@@ -55,7 +54,7 @@ export default function NewParsePage(props: {
     } finally {
       setSubmitting(false)
     }
-  }, [createDuplicates, files, messageApi, parserModel, props.onCreated, provider])
+  }, [createDuplicates, files, messageApi, props.onCreated, provider])
 
   const oversizedFiles = files.filter((file) => file.size > MAX_PDF_BYTES)
 
@@ -130,14 +129,6 @@ export default function NewParsePage(props: {
         />
         {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="解析 API 不接受超过 200MB 的单个文件" /> : null}
         <Space className="confirm-options" size="large">
-          <label>
-            <span>解析模型</span>
-            <Select<ParserModel>
-              value={parserModel}
-              onChange={setParserModel}
-              options={[{ value: 'vlm', label: '视觉模型' }, { value: 'pipeline', label: '标准模型' }]}
-            />
-          </label>
           <label>
             <span>翻译模型</span>
             <Select<TranslationProviderId> value={provider} onChange={setProvider} options={Object.entries(PROVIDER_LABELS).map(([value, label]) => ({ value: value as TranslationProviderId, label }))} />

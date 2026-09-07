@@ -53,7 +53,7 @@ function annotation(view: 'original' | 'translated', id: string): ReaderAnnotati
 function task(): MinerUTask {
   return {
     id: 'task', originalName: 'Paper.pdf', title: null, name: 'Paper', sourcePath: 'paper.pdf', sourceHash: 'hash', outputDir: 'output',
-    status: 'completed', progress: 100, parserModel: 'vlm', translationProvider: 'qwen',
+    status: 'completed', progress: 100, translationProvider: 'qwen',
     remoteBatchId: null, remoteDataId: null, remoteResultUrl: null, error: null,
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
   }

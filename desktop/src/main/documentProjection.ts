@@ -29,10 +29,7 @@ export function projectDocumentSummary(task: MinerUTask): DocumentSummary {
       activeJobKind: activeJobKindFor(task.status),
       error: task.error
     },
-    processing: {
-      parserModel: task.parserModel,
-      translationProvider: task.translationProvider
-    }
+    processing: { translationProvider: task.translationProvider }
   })
 }
 

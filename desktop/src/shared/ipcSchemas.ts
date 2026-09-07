@@ -24,18 +24,14 @@ const boundedPath = z.string().min(1).max(32_768).refine(noNul, '路径不能包
 const safeName = z.string().min(1).max(32_768).refine(noNul, '名称不能包含 NUL 字符')
 const timestamp = z.string().min(1).max(128)
 
-export const parserModelSchema = z.enum(['vlm', 'pipeline'])
 export const translationProviderIdSchema = z.enum(['qwen', 'deepseek', 'bing', 'transmart'])
 export const taskStatusSchema = z.enum(['uploading', 'parsing', 'translating', 'partial', 'completed', 'failed'])
 
 export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   hasParserToken: z.boolean(),
   outputRoot: boundedPath,
-  parserModel: parserModelSchema,
-  forceOcr: z.boolean(),
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
-  ocrLanguage: z.string().min(1).max(64),
   translationProvider: translationProviderIdSchema,
   qwenBaseUrl: z.string().min(1).max(2_048),
   qwenModel: z.string().min(1).max(512),
@@ -47,11 +43,8 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
 
 export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
   outputRoot: boundedPath,
-  parserModel: parserModelSchema,
-  forceOcr: z.boolean(),
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
-  ocrLanguage: z.string().min(1).max(64),
   translationProvider: translationProviderIdSchema,
   qwenBaseUrl: z.string().min(1).max(2_048),
   qwenModel: z.string().min(1).max(512),
@@ -82,7 +75,6 @@ export const minerUTaskSchema: z.ZodType<MinerUTask> = z.object({
   outputDir: boundedPath,
   status: taskStatusSchema,
   progress: z.number().int().min(0).max(100),
-  parserModel: parserModelSchema,
   translationProvider: translationProviderIdSchema,
   remoteBatchId: z.string().max(4_096).nullable(),
   remoteDataId: z.string().max(4_096).nullable(),
@@ -141,7 +133,6 @@ export const selectedPdfSchema: z.ZodType<SelectedPdf> = z.object({
 
 export const createTasksRequestSchema: z.ZodType<CreateTasksRequest> = z.object({
   files: z.array(selectedPdfSchema).min(1).max(100),
-  parserModel: parserModelSchema,
   translationProvider: translationProviderIdSchema,
   createDuplicates: z.boolean().optional()
 }).strict()
@@ -223,7 +214,6 @@ export const documentWorkflowSchema = z.object({
 }).strict()
 
 export const documentProcessingSchema = z.object({
-  parserModel: parserModelSchema,
   translationProvider: translationProviderIdSchema
 }).strict()
 
@@ -274,7 +264,6 @@ export const documentDetailsSchema = z.object({
 export type DocumentDetails = z.infer<typeof documentDetailsSchema>
 
 export const importDocumentsRequestSchema = z.object({
-  parserModel: parserModelSchema,
   translationProvider: translationProviderIdSchema,
   createDuplicates: z.boolean().optional()
 }).strict()

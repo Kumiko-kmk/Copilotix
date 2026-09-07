@@ -85,7 +85,6 @@ function task(outputDir: string, sourcePath: string, id = 'document-1'): MinerUT
     outputDir,
     status: 'uploading',
     progress: 0,
-    parserModel: 'vlm',
     translationProvider: 'qwen',
     remoteBatchId: null,
     remoteDataId: null,

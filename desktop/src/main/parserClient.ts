@@ -151,18 +151,14 @@ export class OfficialMinerUClient implements MinerUClient {
   async createUploadBatch(tasks: MinerUTask[], settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission> {
     if (!token?.trim()) throw new Error('未配置 MinerU API Token')
     if (tasks.length === 0) throw new Error('没有可提交的 PDF')
-    const parserModel = tasks[0]?.parserModel
-    if (tasks.some((task) => task.parserModel !== parserModel)) throw new Error('同一批次必须使用相同解析模型')
-
     const response = await this.fetcher(`${MINERU_API_ORIGIN}/api/v4/file-urls/batch`, {
       method: 'POST',
       headers: { ...authHeaders(token), 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        files: tasks.map((task) => ({ name: task.originalName || task.name, data_id: task.id, is_ocr: settings.forceOcr })),
-        model_version: parserModel,
+        files: tasks.map((task) => ({ name: task.originalName || task.name, data_id: task.id })),
+        model_version: 'vlm',
         enable_formula: settings.formulaEnabled,
-        enable_table: settings.tableEnabled,
-        language: settings.ocrLanguage
+        enable_table: settings.tableEnabled
       }),
       signal: signal ?? AbortSignal.timeout(30_000)
     })

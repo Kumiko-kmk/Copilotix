@@ -44,7 +44,6 @@ describe('durable TaskService cutover', () => {
     try {
       const created = await service.create({
         files: [{ path: source, name: 'paper.pdf', size: 16 }],
-        parserModel: 'vlm',
         translationProvider: 'qwen',
         createDuplicates: false
       })
@@ -212,7 +211,6 @@ function makeTask(outputDir: string, sourcePath: string): MinerUTask {
     outputDir,
     status: 'uploading',
     progress: 0,
-    parserModel: 'vlm',
     translationProvider: 'qwen',
     remoteBatchId: null,
     remoteDataId: null,

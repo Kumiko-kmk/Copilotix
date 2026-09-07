@@ -15,6 +15,6 @@ export function projectDocumentSummary(task: MinerUTask): DocumentSummary {
       activeJobKind: task.status === 'uploading' || task.status === 'parsing' ? 'parse' : task.status === 'translating' ? 'translate' : null,
       error: task.error
     },
-    processing: { parserModel: task.parserModel, translationProvider: task.translationProvider }
+    processing: { translationProvider: task.translationProvider }
   })
 }

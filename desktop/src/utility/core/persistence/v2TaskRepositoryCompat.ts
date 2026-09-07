@@ -32,7 +32,6 @@ export interface CompatDocumentRow {
   display_title: string | null
   storage_path: string
   source_checksum: string
-  parser_model: 'vlm' | 'pipeline'
   translation_provider: 'qwen' | 'deepseek' | 'bing' | 'transmart'
   created_at: string
   updated_at: string
@@ -155,11 +154,8 @@ export class V2TaskRepositoryCompat {
     return {
       ...DEFAULT_SETTINGS,
       outputRoot: stored.outputRoot ?? outputRoot,
-      parserModel: stored.parserModel === 'pipeline' ? 'pipeline' : 'vlm',
-      forceOcr: stored.forceOcr ?? DEFAULT_SETTINGS.forceOcr,
       formulaEnabled: stored.formulaEnabled ?? DEFAULT_SETTINGS.formulaEnabled,
       tableEnabled: stored.tableEnabled ?? DEFAULT_SETTINGS.tableEnabled,
-      ocrLanguage: stored.ocrLanguage ?? DEFAULT_SETTINGS.ocrLanguage,
       translationProvider: stored.translationProvider ?? DEFAULT_SETTINGS.translationProvider,
       qwenBaseUrl: stored.qwenBaseUrl ?? DEFAULT_SETTINGS.qwenBaseUrl,
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
@@ -384,8 +380,8 @@ export class V2TaskRepositoryCompat {
       if (!current) throw new Error(`Task not found: ${id}`)
       const next: MinerUTask = { ...current, ...patch, id, updatedAt: new Date().toISOString() }
       this.database.connection.prepare(`
-        UPDATE documents SET display_title=?, parser_model=?, translation_provider=?, updated_at=? WHERE id=?
-      `).run(next.title, next.parserModel, next.translationProvider, next.updatedAt, id)
+        UPDATE documents SET display_title=?, translation_provider=?, updated_at=? WHERE id=?
+      `).run(next.title, next.translationProvider, next.updatedAt, id)
       this.syncJobsUnsafe(next)
     })
     return this.readProjection(id) ?? (() => { throw new Error(`Task not found: ${id}`) })()
@@ -646,10 +642,10 @@ export class V2TaskRepositoryCompat {
     this.database.connection.prepare(`
       INSERT INTO documents(
         id,original_filename,display_title,storage_path,source_checksum,
-        parser_model,translation_provider,created_at,updated_at
-      ) VALUES(?,?,?,?,?,?,?,?,?)
+        translation_provider,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?)
     `).run(task.id, task.originalName || task.name, task.title, task.outputDir, task.sourceHash,
-      task.parserModel, task.translationProvider, task.createdAt, task.updatedAt)
+      task.translationProvider, task.createdAt, task.updatedAt)
     const parseJobId = randomUUID()
     this.createJobUnsafe({
       id: parseJobId, documentId: task.id, dependsOnJobId: null, kind: 'parse', status: 'queued', progress: task.progress,
@@ -843,7 +839,6 @@ export function projectCompatTask(document: CompatDocumentRow, jobs: readonly Co
     outputDir: document.storage_path,
     status,
     progress: latest?.progress ?? 0,
-    parserModel: document.parser_model,
     translationProvider: document.translation_provider,
     remoteBatchId: stringOrNull(checkpoint.remoteBatchId),
     remoteDataId: stringOrNull(checkpoint.remoteDataId),

@@ -189,7 +189,6 @@ describe('utility persistence lifecycle', () => {
         outputDir: documentRoot,
         status: 'uploading',
         progress: 0,
-        parserModel: 'vlm',
         translationProvider: 'qwen',
         remoteBatchId: null,
         remoteDataId: null,

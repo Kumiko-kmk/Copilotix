@@ -72,7 +72,6 @@ const baseTask: MinerUTask = {
   outputDir: 'C:\\output\\task-quality',
   status: 'completed',
   progress: 100,
-  parserModel: 'vlm',
   translationProvider: 'qwen',
   remoteBatchId: null,
   remoteDataId: null,
@@ -85,11 +84,8 @@ const baseTask: MinerUTask = {
 const baseSettings = {
   hasParserToken: false,
   outputRoot: 'C:\\output',
-  parserModel: 'vlm' as const,
-  forceOcr: true,
   formulaEnabled: true,
   tableEnabled: true,
-  ocrLanguage: 'en',
   translationProvider: 'qwen' as const,
   qwenBaseUrl: 'https://qwen.example.test',
   qwenModel: 'qwen-model',
@@ -333,11 +329,8 @@ describe('main quality boundaries', () => {
       clearQwenApiKey: true,
       deepseekApiKey: 'deepseek',
       outputRoot: 'C:\\new-output',
-      parserModel: 'pipeline',
-      forceOcr: false,
       formulaEnabled: true,
       tableEnabled: false,
-      ocrLanguage: 'zh',
       translationProvider: 'deepseek',
       qwenBaseUrl: 'https://qwen.example.test',
       qwenModel: 'qwen',
@@ -406,13 +399,11 @@ describe('main quality boundaries', () => {
         { path: source, name: 'paper.pdf', size: 15 },
         { path: textFile, name: 'notes.txt', size: 9 }
       ],
-      parserModel: 'vlm',
       translationProvider: 'qwen'
     })).resolves.toHaveLength(1)
     expect(enqueued.length).toBeGreaterThan(0)
     expect(scheduler.wake).toHaveBeenCalled()
     await expect(service.importPaths([duplicateSource, duplicateSource, textFile], {
-      parserModel: 'pipeline',
       translationProvider: 'deepseek'
     })).resolves.toHaveLength(1)
     await expect(service.retry(baseTask.id)).resolves.toBeUndefined()
@@ -430,7 +421,7 @@ describe('main quality boundaries', () => {
       new PathPolicy(),
       logger
     )
-    await expect(noTokenService.create({ files: [], parserModel: 'vlm', translationProvider: 'qwen' })).rejects.toThrow('Token')
+    await expect(noTokenService.create({ files: [], translationProvider: 'qwen' })).rejects.toThrow('Token')
   })
 
   it('covers IPC URL/error/event boundary cases', () => {
