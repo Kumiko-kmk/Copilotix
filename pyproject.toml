@@ -7,7 +7,7 @@ name = "mineru"
 dynamic = ["version"]
 license = "LicenseRef-MinerU-Open-Source-License"
 license-files = ["LICENSE.md"]
-description = "A practical document parsing tool for converting PDF, images, DOCX, PPTX, and XLSX into Markdown and JSON"
+description = "A VLM document parsing tool for converting PDF and images into Markdown and JSON"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 keywords = [
@@ -19,9 +19,6 @@ keywords = [
     "markdown",
     "ocr",
     "vlm",
-    "docx",
-    "pptx",
-    "xlsx",
     "multimodal",
 ]
 classifiers = [
@@ -41,9 +38,6 @@ dependencies = [
     "pypdfium2>=4.30.0,<6.0.0",
     "pypdf>=5.6.0",
     "reportlab",
-    "pdftext>=0.6.3,<0.8.0",
-    "modelscope>=1.26.0",
-    "huggingface-hub>=0.32.4",
     "json-repair>=0.46.2",
     "opencv-python>=4.11.0.86",
     "fast-langdetect>=0.2.3,<0.3.0",
@@ -51,12 +45,6 @@ dependencies = [
     "beautifulsoup4>=4.13.5,<5",
     "magika>=0.6.2,<1.1.0",
     "mineru-vl-utils>=1.0.5,<2",
-    "python-docx>=1.2.0,<2",
-    'pypptx-with-oxml>=1.0.3,<2',
-    "mammoth>=1.11.0,<2",
-    "pylatexenc>=2.10,<3",
-    "lxml>=4.0.0,<7.0.0",
-    "openpyxl>=3.1.5,<4",
     "fastapi",
     "python-multipart",
     "uvicorn",
@@ -71,51 +59,19 @@ test = [
     "fuzzywuzzy",
     "tomli; python_version < '3.11'",
 ]
-vlm = [
-    "torch>=2.6.0,<3",
-    "transformers>=4.57.3,<5.0.0",
-    "accelerate>=1.5.1",
-]
-vllm = [
-    "vllm>=0.10.1.1,<0.22.0",
-]
-lmdeploy = [
-    "lmdeploy>=0.10.2,<0.12",
-    "qwen-vl-utils>=0.0.14,<1",
-]
-mlx = [
-    "mlx-vlm>=0.3.3,<0.4",
-    "mlx<=0.31.1",
-]
 s3 = [
     "boto3>=1.28.43",
-]
-pipeline = [
-    "PyYAML>=6.0.1,<7",
-    "ftfy>=6.3.1,<7",
-    "shapely>=2.0.7,<3",
-    "pyclipper>=1.3.0,<2",
-    "torch>=2.6.0,<3",
-    "torchvision",
-    "transformers>=4.57.3,<5.0.0",
-    "safetensors>=0.4.0,<1",
-    "onnxruntime>1.17.0",
 ]
 gradio = [
     "gradio>=5.49.1,!=6.0.0,!=6.0.1,!=6.0.2,!=6.1.0,!=6.2.0,!=6.3.0,!=6.4.0,!=6.5.0,!=6.5.1,!=6.6.0,!=6.7.0,<6.9.0",
     "gradio-pdf>=0.0.22",
 ]
 core = [
-    "mineru[vlm]",
-    "mineru[pipeline]",
     "mineru[gradio]",
 ]
 all = [
     "mineru[core]",
     "mineru[s3]",
-    "mineru[mlx] ; sys_platform == 'darwin'",
-    "mineru[vllm] ; sys_platform == 'linux'",
-    "mineru[lmdeploy] ; sys_platform == 'win32'",
 ]
 
 [project.urls]
@@ -127,10 +83,6 @@ License = "https://github.com/opendatalab/MinerU/blob/master/LICENSE.md"
 
 [project.scripts]
 mineru = "mineru.cli.client:main"
-mineru-vllm-server = "mineru.cli.vlm_server:vllm_server"
-mineru-lmdeploy-server = "mineru.cli.vlm_server:lmdeploy_server"
-mineru-openai-server = "mineru.cli.vlm_server:openai_server"
-mineru-models-download = "mineru.cli.models_download:download_models"
 mineru-api = "mineru.cli.fast_api:main"
 mineru-router = "mineru.cli.router:main"
 mineru-gradio = "mineru.cli.gradio_app:main"
@@ -144,7 +96,6 @@ namespaces = false
 
 [tool.setuptools.package-data]
 "mineru" = ["resources/**"]
-"mineru.model.utils.pytorchocr.utils" = ["resources/**"]
 
 [tool.setuptools]
 include-package-data = true
@@ -158,10 +109,8 @@ command_line = "-m pytest tests/unittest/test_e2e.py"
 source = ["mineru/"]
 omit = [
     "*/gradio_app.py",
-    "*/models_download.py",
     "*/fast_api.py",
     "*/cli/client.py",
-    "*/vlm_vllm_server.py",
     "*/cli_parser.py",
 ]
 
