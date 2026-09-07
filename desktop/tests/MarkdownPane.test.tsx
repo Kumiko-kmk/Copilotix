@@ -5,7 +5,12 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
+import type { ReaderFigureGroup } from '../src/renderer/readerFigureGroups'
 import MarkdownPane from '../src/renderer/components/MarkdownPane'
+
+vi.mock('../src/renderer/components/ReaderFigureSnapshot', () => ({
+  default: () => <div className="reader-figure-snapshot" data-rendered="true">original PDF figure</div>
+}))
 
 let naturalWidth = 320
 let decodeImage: ReturnType<typeof vi.fn>
@@ -197,6 +202,54 @@ describe('MarkdownPane', () => {
     expect(view.container.querySelector('script')).toBeNull()
     expect(view.getByText('unsafe').hasAttribute('href')).toBe(false)
     expect(view.container.textContent).toContain('<12>')
+  })
+
+  it('shows one compound PDF figure before its localized caption', async () => {
+    const blocks = [
+      { ...block('chart-a', '![](images/a.jpg)  \n(a)'), annotationKey: 'content:1' },
+      { ...block('chart-b', '![](images/b.jpg)  \n(b)  \noriginal legend'), annotationKey: 'content:2', order: 1 },
+      { ...block('caption', '图 4：模型比较。'), annotationKey: 'content:3', order: 2 }
+    ]
+    const group: ReaderFigureGroup = {
+      id: 'figure-4',
+      pageIndex: 0,
+      cropBox: [10, 20, 500, 300],
+      pageSize: [612, 792],
+      mappingIds: ['chart-a', 'chart-b', 'caption'],
+      assetSources: ['images/a.jpg', 'images/b.jpg'],
+      captionMappingId: 'caption',
+      fallbackLegendText: 'original legend',
+      fallbackLegendMarkdown: '原始图例',
+      ownerBlockIndex: 0,
+      captionBlockIndex: 2,
+      memberBlockIndexes: [0, 1, 2],
+      captionMarkdown: '图 4：模型比较。',
+      captionPrefixMarkdown: ''
+    }
+    const view = render(
+      <MarkdownPane
+        active
+        blocks={blocks}
+        assetBaseUrl="mineru-asset://task/"
+        pdfUrl="mineru-asset://task/original.pdf"
+        figureGroups={[group]}
+        taskId="task"
+        view="translated"
+        annotations={[]}
+        highlightColor="yellow"
+        onHighlightColorChange={() => undefined}
+        onReplaceAnnotations={async () => undefined}
+        selection={null}
+        onSelect={() => undefined}
+      />
+    )
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    const snapshot = view.container.querySelector('.reader-figure-snapshot')!
+    const caption = view.container.querySelector('.reader-figure-caption')!
+    expect(view.container.querySelectorAll('.reader-figure-snapshot')).toHaveLength(1)
+    expect(caption.textContent).toBe('图 4：模型比较。')
+    expect(snapshot.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(view.container.querySelectorAll('.markdown-body img')).toHaveLength(0)
   })
 
   it('uses instant PDF navigation without feeding the synthetic scroll back into selection', async () => {

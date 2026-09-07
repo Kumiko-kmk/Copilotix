@@ -662,7 +662,11 @@ function FigureBlockPresentation(props: {
           )}
         />
       ) : null}
-      {isCaption ? <MarkdownContent markdown={props.group.captionMarkdown} assetBaseUrl={props.assetBaseUrl} /> : null}
+      {isCaption ? (
+        <div className="reader-figure-caption">
+          <MarkdownContent markdown={props.group.captionMarkdown} assetBaseUrl={props.assetBaseUrl} />
+        </div>
+      ) : null}
     </>
   )
 }

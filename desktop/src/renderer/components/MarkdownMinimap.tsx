@@ -64,11 +64,21 @@ export interface MarkdownMinimapFormula {
 }
 
 export interface MarkdownMinimapContent {
+  geometry: MarkdownMinimapGeometry
   textRuns: MarkdownMinimapTextRun[]
   headings: MarkdownMinimapHeading[]
   images: MarkdownMinimapImage[]
   formulas: MarkdownMinimapFormula[]
   highlights: MarkdownMinimapHighlight[]
+}
+
+export interface MarkdownMinimapGeometry {
+  railWidth: number
+  railHeight: number
+  documentHeight: number
+  viewportHeight: number
+  verticalScale: number
+  maxScroll: number
 }
 
 export default function MarkdownMinimap(props: {
@@ -85,6 +95,7 @@ export default function MarkdownMinimap(props: {
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const formulaLayerRef = React.useRef<HTMLDivElement>(null)
   const frameRef = React.useRef<HTMLDivElement>(null)
+  const frameHitRef = React.useRef<HTMLDivElement>(null)
   const frameRequestRef = React.useRef<number | null>(null)
   const pointerRequestRef = React.useRef<number | null>(null)
   const wheelRequestRef = React.useRef<number | null>(null)
@@ -92,6 +103,7 @@ export default function MarkdownMinimap(props: {
   const pendingPointerYRef = React.useRef<number | null>(null)
   const pendingWheelDeltaRef = React.useRef(0)
   const dragMetricsRef = React.useRef<DragMetrics | null>(null)
+  const geometryRef = React.useRef<MarkdownMinimapGeometry>(emptyMinimapGeometry)
   const onDragStateChangeRef = React.useRef(props.onDragStateChange)
   onDragStateChangeRef.current = props.onDragStateChange
   const [content, setContent] = React.useState<MarkdownMinimapContent>(emptyMinimapContent)
@@ -101,10 +113,8 @@ export default function MarkdownMinimap(props: {
     const frame = frameRef.current
     const scroller = props.scrollerRef.current
     if (!rail || !frame || !scroller) return
-    const metrics = minimapFrameMetrics(scroller, rail.clientHeight)
-    frame.style.setProperty('--markdown-minimap-frame-offset', `${metrics.top}px`)
-    frame.style.setProperty('--markdown-minimap-frame-height', `${metrics.height}px`)
-    frame.dataset.preview = 'false'
+    const metrics = minimapFrameMetrics(scroller.scrollTop, geometryRef.current)
+    writeFrameStyles(frame, frameHitRef.current, metrics, false)
     rail.setAttribute('aria-valuemax', String(metrics.maxScroll))
     rail.setAttribute('aria-valuenow', String(Math.round(clamp(scroller.scrollTop, 0, metrics.maxScroll))))
   }, [props.scrollerRef])
@@ -128,13 +138,15 @@ export default function MarkdownMinimap(props: {
     if (!rail || !scroller || !article) return
     article.classList.add('markdown-minimap-measuring')
     try {
-      setContent(measureMarkdownMinimapContent(
+      const measured = measureMarkdownMinimapContent(
         article,
         scroller,
         rail.clientWidth,
         rail.clientHeight,
         props.yellowHighlightRanges
-      ))
+      )
+      geometryRef.current = measured.geometry
+      setContent(measured)
     } finally {
       article.classList.remove('markdown-minimap-measuring')
     }
@@ -172,9 +184,12 @@ export default function MarkdownMinimap(props: {
   const writeFrame = React.useCallback((top: number, height: number, preview: boolean) => {
     const frame = frameRef.current
     if (!frame) return
-    frame.style.setProperty('--markdown-minimap-frame-offset', `${top}px`)
-    frame.style.setProperty('--markdown-minimap-frame-height', `${height}px`)
-    frame.dataset.preview = String(preview)
+    writeFrameStyles(
+      frame,
+      frameHitRef.current,
+      frameDisplayMetrics(top, height, geometryRef.current.railHeight, geometryRef.current.maxScroll),
+      preview
+    )
   }, [])
 
   const previewAtPointer = React.useCallback((clientY: number) => {
@@ -183,7 +198,7 @@ export default function MarkdownMinimap(props: {
     const scroller = props.scrollerRef.current
     if (!rail || !frame || !scroller) return
     const bounds = rail.getBoundingClientRect()
-    const metrics = minimapFrameMetrics(scroller, rail.clientHeight)
+    const metrics = minimapFrameMetrics(scroller.scrollTop, geometryRef.current)
     const pointerY = clamp(clientY - bounds.top, 0, rail.clientHeight)
     const top = clamp(pointerY - metrics.height / 2, 0, Math.max(0, rail.clientHeight - metrics.height))
     writeFrame(top, metrics.height, true)
@@ -194,7 +209,7 @@ export default function MarkdownMinimap(props: {
     const scroller = props.scrollerRef.current
     if (!rail || !scroller) return null
     const bounds = rail.getBoundingClientRect()
-    const metrics = minimapFrameMetrics(scroller, rail.clientHeight)
+    const metrics = minimapFrameMetrics(scroller.scrollTop, geometryRef.current)
     const frameTravel = Math.max(0, rail.clientHeight - metrics.height)
     return {
       railTop: bounds.top,
@@ -339,6 +354,7 @@ export default function MarkdownMinimap(props: {
         />
       ))}
       <div ref={frameRef} className="markdown-minimap-frame" data-preview="false" aria-hidden="true" />
+      <div ref={frameHitRef} className="markdown-minimap-frame-hit" aria-hidden="true" />
     </div>
   )
 }
@@ -351,14 +367,16 @@ export function measureMarkdownMinimapContent(
   yellowHighlightRanges: readonly Range[] = []
 ): MarkdownMinimapContent {
   if (railWidth <= 0 || railHeight <= 0 || scroller.scrollHeight <= 0) return emptyMinimapContent
+  const geometry = createMarkdownMinimapGeometry(scroller, railWidth, railHeight)
   const articleBounds = article.getBoundingClientRect()
   const scrollerBounds = scroller.getBoundingClientRect()
   const horizontalScale = Math.max(0, railWidth - MINIMAP_HORIZONTAL_PADDING * 2) / Math.max(1, articleBounds.width)
-  const verticalScale = railHeight / scroller.scrollHeight
+  const verticalScale = geometry.verticalScale
   const textRuns: MarkdownMinimapTextRun[] = []
-  const headings = measureHeadings(article, scroller, scrollerBounds, railWidth, railHeight)
+  const headings = measureHeadings(article, scroller, scrollerBounds, railWidth, geometry)
   const highlights = measureHighlightRanges(
     yellowHighlightRanges,
+    article,
     articleBounds,
     scrollerBounds,
     scroller.scrollTop,
@@ -448,11 +466,12 @@ export function measureMarkdownMinimapContent(
       fontSize: style.fontSize
     }]
   })
-  return { textRuns, headings, images, formulas, highlights }
+  return { geometry, textRuns, headings, images, formulas, highlights }
 }
 
 function measureHighlightRanges(
   ranges: readonly Range[],
+  article: HTMLElement,
   articleBounds: DOMRect,
   scrollerBounds: DOMRect,
   scrollTop: number,
@@ -464,6 +483,7 @@ function measureHighlightRanges(
   const highlights: MarkdownMinimapHighlight[] = []
   let index = 0
   for (const range of ranges) {
+    if (!article.contains(range.startContainer) || !article.contains(range.endContainer)) continue
     let rects: DOMRect[]
     try {
       rects = Array.from(range.getClientRects())
@@ -591,16 +611,32 @@ export function renderFormulaLayer(layer: HTMLElement, formulas: MarkdownMinimap
 }
 
 export function minimapFrameMetrics(
-  scroller: Pick<HTMLElement, 'clientHeight' | 'scrollHeight' | 'scrollTop'>,
-  railHeight: number
-): { top: number; height: number; maxScroll: number } {
-  const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-  if (railHeight <= 0 || scroller.scrollHeight <= 0 || maxScroll === 0) {
-    return { top: 0, height: Math.max(0, railHeight), maxScroll }
+  scrollTop: number,
+  geometry: MarkdownMinimapGeometry
+): FrameMetrics {
+  if (geometry.railHeight <= 0 || geometry.documentHeight <= 0 || geometry.maxScroll === 0) {
+    return frameDisplayMetrics(0, Math.max(0, geometry.railHeight), geometry.railHeight)
   }
-  const height = Math.min(railHeight, Math.max(MINIMAP_FRAME_MIN_HEIGHT, scroller.clientHeight / scroller.scrollHeight * railHeight))
-  const top = clamp(scroller.scrollTop, 0, maxScroll) / maxScroll * Math.max(0, railHeight - height)
-  return { top, height, maxScroll }
+  const height = Math.min(geometry.railHeight, geometry.viewportHeight * geometry.verticalScale)
+  const top = clamp(scrollTop, 0, geometry.maxScroll) * geometry.verticalScale
+  return frameDisplayMetrics(top, height, geometry.railHeight, geometry.maxScroll)
+}
+
+export function createMarkdownMinimapGeometry(
+  scroller: Pick<HTMLElement, 'clientHeight' | 'scrollHeight'>,
+  railWidth: number,
+  railHeight: number
+): MarkdownMinimapGeometry {
+  const documentHeight = Math.max(0, scroller.scrollHeight)
+  const viewportHeight = Math.max(0, scroller.clientHeight)
+  return {
+    railWidth: Math.max(0, railWidth),
+    railHeight: Math.max(0, railHeight),
+    documentHeight,
+    viewportHeight,
+    verticalScale: documentHeight > 0 ? Math.max(0, railHeight) / documentHeight : 0,
+    maxScroll: Math.max(0, documentHeight - viewportHeight)
+  }
 }
 
 function measureHeadings(
@@ -608,17 +644,17 @@ function measureHeadings(
   scroller: HTMLElement,
   scrollerBounds: DOMRect,
   railWidth: number,
-  railHeight: number
+  geometry: MarkdownMinimapGeometry
 ): MarkdownMinimapHeading[] {
   return Array.from(article.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).map((heading, index) => {
     const bounds = heading.getBoundingClientRect()
     const headingLevel = headingLevelOf(heading) ?? 6
     const documentTop = bounds.top - scrollerBounds.top + scroller.scrollTop
-    const top = documentTop / scroller.scrollHeight * railHeight
+    const top = documentTop * geometry.verticalScale
     const left = MINIMAP_HEADING_INDENTS[headingLevel - 1] ?? 34
     return {
       id: `minimap-heading-${index}`,
-      top: clamp(top, 0, Math.max(0, railHeight - 8)),
+      top: clamp(top, 0, Math.max(0, geometry.railHeight - 8)),
       height: 8,
       left,
       width: Math.max(8, railWidth - left - 4),
@@ -712,4 +748,53 @@ interface DragMetrics {
   maxScroll: number
 }
 
-const emptyMinimapContent: MarkdownMinimapContent = { textRuns: [], headings: [], images: [], formulas: [], highlights: [] }
+interface FrameMetrics {
+  top: number
+  height: number
+  hitTop: number
+  hitHeight: number
+  maxScroll: number
+}
+
+function frameDisplayMetrics(top: number, height: number, railHeight: number, maxScroll = 0): FrameMetrics {
+  const hitHeight = Math.min(railHeight, Math.max(MINIMAP_FRAME_MIN_HEIGHT, height))
+  const center = top + height / 2
+  return {
+    top,
+    height,
+    hitTop: clamp(center - hitHeight / 2, 0, Math.max(0, railHeight - hitHeight)),
+    hitHeight,
+    maxScroll
+  }
+}
+
+function writeFrameStyles(
+  frame: HTMLElement,
+  hit: HTMLElement | null,
+  metrics: FrameMetrics,
+  preview: boolean
+): void {
+  frame.style.setProperty('--markdown-minimap-frame-offset', `${metrics.top}px`)
+  frame.style.setProperty('--markdown-minimap-frame-height', `${metrics.height}px`)
+  frame.dataset.preview = String(preview)
+  hit?.style.setProperty('--markdown-minimap-frame-hit-offset', `${metrics.hitTop}px`)
+  hit?.style.setProperty('--markdown-minimap-frame-hit-height', `${metrics.hitHeight}px`)
+}
+
+const emptyMinimapGeometry: MarkdownMinimapGeometry = {
+  railWidth: 0,
+  railHeight: 0,
+  documentHeight: 0,
+  viewportHeight: 0,
+  verticalScale: 0,
+  maxScroll: 0
+}
+
+const emptyMinimapContent: MarkdownMinimapContent = {
+  geometry: emptyMinimapGeometry,
+  textRuns: [],
+  headings: [],
+  images: [],
+  formulas: [],
+  highlights: []
+}

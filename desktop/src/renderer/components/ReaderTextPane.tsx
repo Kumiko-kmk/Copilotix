@@ -12,7 +12,7 @@ import type {
 import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
 import JsonPane from './JsonPane'
 import MarkdownPane from './MarkdownPane'
-import { buildReaderFigureGroups } from '../readerFigureGroups'
+import { buildReaderFigureGeometries, projectReaderFigureGroups } from '../readerFigureGroups'
 
 export type ReaderTab = 'original' | 'translated' | 'json'
 
@@ -48,13 +48,17 @@ export default function ReaderTextPane(props: {
     () => props.annotations.filter((annotation) => annotation.view === 'translated'),
     [props.annotations]
   )
+  const figureGeometries = React.useMemo(
+    () => buildReaderFigureGeometries(props.mappings ?? []),
+    [props.mappings]
+  )
   const originalFigureGroups = React.useMemo(
-    () => buildReaderFigureGroups(props.originalBlocks, props.mappings ?? []),
-    [props.mappings, props.originalBlocks]
+    () => projectReaderFigureGroups(figureGeometries, props.originalBlocks),
+    [figureGeometries, props.originalBlocks]
   )
   const translatedFigureGroups = React.useMemo(
-    () => buildReaderFigureGroups(props.translatedBlocks, props.mappings ?? []),
-    [props.mappings, props.translatedBlocks]
+    () => projectReaderFigureGroups(figureGeometries, props.translatedBlocks),
+    [figureGeometries, props.translatedBlocks]
   )
   const replaceOriginalAnnotations = React.useCallback(
     (annotations: ReaderAnnotation[]) => props.onReplaceAnnotations('original', annotations),

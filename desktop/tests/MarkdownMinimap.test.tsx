@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import MarkdownMinimap, {
   containRect,
+  createMarkdownMinimapGeometry,
   measureMarkdownMinimapContent,
   paintMarkdownMinimap,
   renderFormulaLayer,
@@ -84,6 +85,7 @@ describe('MarkdownMinimap', () => {
     })
     rail.append(canvas)
     paintMarkdownMinimap(canvas, {
+      geometry: testGeometry(),
       textRuns: [{
         id: 'text-1', text: 'Complete paragraph text', left: 4, baseline: 12, width: 70,
         fontSize: 2, fontWeight: '400', fontStyle: 'normal', tone: 'body'
@@ -113,6 +115,7 @@ describe('MarkdownMinimap', () => {
     rail.append(canvas)
 
     paintMarkdownMinimap(canvas, {
+      geometry: testGeometry(),
       textRuns: [],
       headings: [],
       images: [{
@@ -147,10 +150,23 @@ describe('MarkdownMinimap', () => {
   })
 
   it('calculates the viewport frame and handles documents without overflow', () => {
-    expect(minimapFrameMetrics({ clientHeight: 200, scrollHeight: 1_000, scrollTop: 400 }, 400))
-      .toEqual({ top: 160, height: 80, maxScroll: 800 })
-    expect(minimapFrameMetrics({ clientHeight: 500, scrollHeight: 500, scrollTop: 100 }, 400))
-      .toEqual({ top: 0, height: 400, maxScroll: 0 })
+    const geometry = createMarkdownMinimapGeometry({ clientHeight: 200, scrollHeight: 1_000 }, 60, 400)
+    expect(minimapFrameMetrics(400, geometry))
+      .toEqual({ top: 160, height: 80, hitTop: 160, hitHeight: 80, maxScroll: 800 })
+    const staticGeometry = createMarkdownMinimapGeometry({ clientHeight: 500, scrollHeight: 500 }, 60, 400)
+    expect(minimapFrameMetrics(100, staticGeometry))
+      .toEqual({ top: 0, height: 400, hitTop: 0, hitHeight: 400, maxScroll: 0 })
+  })
+
+  it('keeps the visible frame proportional while retaining a 24px drag hit target', () => {
+    const geometry = createMarkdownMinimapGeometry({ clientHeight: 200, scrollHeight: 20_000 }, 60, 400)
+    expect(minimapFrameMetrics(10_000, geometry)).toEqual({
+      top: 200,
+      height: 4,
+      hitTop: 190,
+      hitHeight: 24,
+      maxScroll: 19_800
+    })
   })
 
   it('maps saved yellow ranges and paints them below minimap text', () => {
@@ -172,7 +188,8 @@ describe('MarkdownMinimap', () => {
       value: () => [rect(20, 110, 80, 20)] as unknown as DOMRectList
     })
 
-    const content = measureMarkdownMinimapContent(article, scroller, 60, 500, [range])
+    const detachedRange = document.createRange()
+    const content = measureMarkdownMinimapContent(article, scroller, 60, 500, [range, detachedRange])
     expect(content.highlights).toEqual([expect.objectContaining({ left: 6.6, top: 100, width: 10.4, height: 10 })])
 
     const canvas = document.createElement('canvas')
@@ -181,6 +198,29 @@ describe('MarkdownMinimap', () => {
     paintMarkdownMinimap(canvas, content, 60, 500, 1, canvasContext as unknown as CanvasRenderingContext2D)
     expect(canvasContext.fillRect).toHaveBeenCalledWith(6.6, 100, 10.4, 10)
     expect(canvasContext.fillText).toHaveBeenCalled()
+  })
+
+  it('keeps a visible highlight inside the proportional frame in a long document', () => {
+    const scroller = document.createElement('div')
+    const article = document.createElement('article')
+    const text = document.createTextNode('selected paragraph')
+    article.append(text)
+    scroller.append(article)
+    setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 20_000, scrollTop: 10_000 })
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(rect(0, 10, 400, 200))
+    vi.spyOn(article, 'getBoundingClientRect').mockReturnValue(rect(0, -9_990, 400, 20_000))
+    const range = document.createRange()
+    range.selectNodeContents(text)
+    Object.defineProperty(range, 'getClientRects', {
+      configurable: true,
+      value: () => [rect(20, 110, 160, 20)] as unknown as DOMRectList
+    })
+
+    const content = measureMarkdownMinimapContent(article, scroller, 60, 400, [range])
+    const frame = minimapFrameMetrics(scroller.scrollTop, content.geometry)
+    expect(content.highlights[0]).toMatchObject({ top: 202, height: 1.5 })
+    expect(content.highlights[0]!.top).toBeGreaterThanOrEqual(frame.top)
+    expect(content.highlights[0]!.top + content.highlights[0]!.height).toBeLessThanOrEqual(frame.top + frame.height)
   })
 
   it('previews, jumps, drags, wheels and supports keyboard navigation', async () => {
@@ -263,6 +303,10 @@ function setElementMetrics(
     scrollHeight: { configurable: true, value: metrics.scrollHeight },
     scrollTop: { configurable: true, writable: true, value: metrics.scrollTop }
   })
+}
+
+function testGeometry() {
+  return createMarkdownMinimapGeometry({ clientHeight: 200, scrollHeight: 1_000 }, 60, 400)
 }
 
 function rect(left: number, top: number, width: number, height: number): DOMRect {
