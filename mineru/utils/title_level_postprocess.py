@@ -11,7 +11,7 @@ from mineru.utils.config_reader import get_llm_aided_config
 from mineru.utils.llm_aided import llm_aided_title
 
 
-SUPPORTED_PDF_BACKENDS = {"pipeline", "vlm", "hybrid"}
+SUPPORTED_PDF_BACKENDS = {"vlm"}
 
 
 def _resolve_title_aided_config() -> dict[str, Any] | None:
@@ -51,15 +51,7 @@ def finalize_client_side_middle_json(middle_json: dict[str, Any]) -> dict[str, A
     backend = middle_json.get("_backend")
     pdf_info = middle_json.get("pdf_info")
 
-    if backend == "pipeline":
-        from mineru.backend.pipeline.model_json_to_middle_json import (
-            finalize_middle_json_from_preproc,
-        )
-
-        finalize_middle_json_from_preproc(
-            pdf_info,
-        )
-    elif backend == "vlm":
+    if backend == "vlm":
         from mineru.backend.vlm.model_output_to_middle_json import (
             finalize_middle_json,
         )
@@ -67,14 +59,7 @@ def finalize_client_side_middle_json(middle_json: dict[str, Any]) -> dict[str, A
         finalize_middle_json(
             pdf_info,
         )
-    elif backend == "hybrid":
-        from mineru.backend.hybrid.hybrid_model_output_to_middle_json import (
-            finalize_middle_json_from_preproc,
-        )
-
-        finalize_middle_json_from_preproc(
-            pdf_info,
-            effort=middle_json.get("_effort", "medium"),
-        )
+    else:
+        raise ValueError(f"Unsupported middle json backend: {backend}")
 
     return middle_json

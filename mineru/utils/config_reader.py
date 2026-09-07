@@ -2,14 +2,6 @@
 import json
 import os
 from loguru import logger
-
-try:
-    import torch
-    import torch_npu
-except ImportError:
-    pass
-
-
 # 定义配置文件名常量
 CONFIG_FILE_NAME = os.getenv('MINERU_TOOLS_CONFIG_JSON', 'mineru.json')
 
@@ -28,36 +20,6 @@ def read_config():
         with open(config_file, 'r', encoding='utf-8') as f:
             config = json.load(f)
         return config
-
-
-def get_configured_model_source(default: str | None = None) -> str | None:
-    """读取配置文件中的固定模型来源配置，auto 或缺失时返回默认值。"""
-    supported_sources = {'huggingface', 'modelscope'}
-    config = read_config()
-    if config is None:
-        return default
-
-    model_source = config.get('model-source')
-    if model_source is None:
-        return default
-    if not isinstance(model_source, str):
-        logger.warning(
-            f"'model-source' in {CONFIG_FILE_NAME} must be a string, use {default} as default"
-        )
-        return default
-
-    normalized_model_source = model_source.strip().lower()
-    if not normalized_model_source:
-        return default
-    if normalized_model_source == "auto":
-        return default
-    if normalized_model_source in supported_sources:
-        return normalized_model_source
-
-    logger.warning(
-        f"Unsupported 'model-source' in {CONFIG_FILE_NAME}: {model_source}, use {default} as default"
-    )
-    return default
 
 
 def get_s3_config(bucket_name: str):
@@ -102,41 +64,6 @@ def parse_bucket_key(s3_full_path: str):
     return bucket, key
 
 
-def get_device():
-    device_mode = os.getenv('MINERU_DEVICE_MODE', None)
-    if device_mode is not None:
-        return device_mode
-    else:
-        if torch.cuda.is_available():
-            return "cuda"
-        elif torch.backends.mps.is_available():
-            return "mps"
-        else:
-            try:
-                if torch_npu.npu.is_available():
-                    return "npu"
-            except Exception as e:
-                try:
-                    if torch.gcu.is_available():
-                        return "gcu"
-                except Exception as e:
-                    try:
-                        if torch.musa.is_available():
-                            return "musa"
-                    except Exception as e:
-                        try:
-                            if torch.mlu.is_available():
-                                return "mlu"
-                        except Exception as e:
-                            try:
-                                if torch.sdaa.is_available():
-                                    return "sdaa"
-                            except Exception as e:
-                                pass
-                                                           
-        return "cpu"
-
-
 def get_formula_enable(formula_enable):
     formula_enable_env = os.getenv('MINERU_FORMULA_ENABLE')
     formula_enable = formula_enable if formula_enable_env is None else formula_enable_env.lower() == 'true'
@@ -147,12 +74,6 @@ def get_table_enable(table_enable):
     table_enable_env = os.getenv('MINERU_TABLE_ENABLE')
     table_enable = table_enable if table_enable_env is None else table_enable_env.lower() == 'true'
     return table_enable
-
-
-def get_ocr_det_mask_inline_formula_enable(enable):
-    enable_env = os.getenv('MINERU_OCR_DET_MASK_INLINE_FORMULA_ENABLE')
-    enable = enable if enable_env is None else enable_env.lower() == 'true'
-    return enable
 
 
 def get_processing_window_size(default: int = 64) -> int:
@@ -212,15 +133,4 @@ def get_llm_aided_config():
     if llm_aided_config is None:
         # logger.warning(f"'llm-aided-config' not found in {CONFIG_FILE_NAME}, use 'None' as default")
         return None
-    else:
-        return llm_aided_config
-
-
-def get_local_models_dir():
-    config = read_config()
-    if config is None:
-        return None
-    models_dir = config.get('models-dir')
-    if models_dir is None:
-        logger.warning(f"'models-dir' not found in {CONFIG_FILE_NAME}, use None as default")
-    return models_dir
+    return llm_aided_config

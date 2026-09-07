@@ -730,7 +730,7 @@ def are_bboxes_overlapping(first_bbox, second_bbox):
 
 
 def block_type(block, type_by_index=None):
-    """读取块类型；pipeline 会传入改写前的原始类型映射。"""
+    """读取块类型，并支持调用方提供的原始类型映射。"""
     if type_by_index is not None:
         return type_by_index[block["index"]]
     return block["type"]

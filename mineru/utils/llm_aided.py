@@ -5,7 +5,7 @@ import json_repair
 from loguru import logger
 from openai import OpenAI
 
-from mineru.backend.pipeline.pipeline_middle_json_mkcontent import merge_para_with_text
+from mineru.backend.vlm.vlm_middle_json_mkcontent import merge_para_with_text
 from mineru.utils.enum_class import BlockType
 
 

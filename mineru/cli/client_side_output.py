@@ -3,34 +3,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from mineru.utils.enum_class import MakeMode
 from mineru.utils.title_level_postprocess import finalize_client_side_middle_json
 
 
-PDF_BACKENDS = {"pipeline", "vlm", "hybrid"}
-SUPPORTED_BACKENDS = {*PDF_BACKENDS, "office"}
-
-
-def _select_union_make(backend: str) -> Callable[[list, str, str], Any]:
-    """根据 middle json 后端选择对应的 Markdown/content list 渲染函数。"""
-    if backend == "pipeline":
-        from mineru.backend.pipeline.pipeline_middle_json_mkcontent import union_make
-
-        return union_make
-    if backend in {"vlm", "hybrid"}:
-        from mineru.backend.vlm.vlm_middle_json_mkcontent import union_make
-
-        return union_make
-    if backend == "office":
-        from mineru.backend.office.office_middle_json_mkcontent import union_make
-
-        return union_make
-
-    raise ValueError(
-        f"Unsupported middle json backend for client-side output generation: {backend}"
-    )
+SUPPORTED_BACKENDS = {"vlm"}
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -67,11 +46,10 @@ def regenerate_client_side_outputs(
     if not isinstance(pdf_info, list):
         raise ValueError("middle_json must contain a list field named pdf_info.")
 
-    if backend in PDF_BACKENDS:
-        finalize_client_side_middle_json(middle_json)
-        pdf_info = middle_json["pdf_info"]
+    finalize_client_side_middle_json(middle_json)
+    pdf_info = middle_json["pdf_info"]
 
-    make_func = _select_union_make(backend)
+    from mineru.backend.vlm.vlm_middle_json_mkcontent import union_make as make_func
     image_dir = "images"
 
     markdown_path.write_text(
@@ -86,8 +64,7 @@ def regenerate_client_side_outputs(
         content_list_v2_path,
         make_func(pdf_info, MakeMode.CONTENT_LIST_V2, image_dir),
     )
-    if backend in PDF_BACKENDS:
-        _write_json(middle_json_path, middle_json)
+    _write_json(middle_json_path, middle_json)
 
     return (
         middle_json_path,

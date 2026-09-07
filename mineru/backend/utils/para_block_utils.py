@@ -406,7 +406,7 @@ def _last_non_empty_content(lines):
 
 
 def _has_mergeable_block_bbox_relation(current_block, previous_block):
-    """复刻 pipeline text 合并的核心几何条件：当前块上边界进入前块范围。"""
+    """文本块合并的核心几何条件：当前块上边界进入前块范围。"""
     return current_block["bbox"][1] < previous_block["bbox"][3]
 
 
@@ -428,7 +428,7 @@ def _can_auto_merge_vertical_text_blocks(
     current_metric_lines,
     previous_metric_lines,
 ):
-    """复刻 pipeline 纵排文本块合并规则，几何优先使用 OCR det 行。"""
+    """纵排文本块合并规则，几何优先使用检测行。"""
     first_metric_line = current_metric_lines[0]
     last_metric_line = previous_metric_lines[-1]
     first_line_width = _line_width(first_metric_line)

@@ -33,10 +33,8 @@ from base64 import b64encode
 
 from mineru.cli.common import (
     aio_do_parse,
-    do_parse,
     image_suffixes,
     normalize_upload_filename,
-    office_suffixes,
     pdf_suffixes,
     normalize_task_stem,
     read_fn,
@@ -54,13 +52,7 @@ from mineru.cli.api_protocol import (
     DEFAULT_MAX_CONCURRENT_REQUESTS,
     DEFAULT_PROCESSING_WINDOW_SIZE,
 )
-from mineru.cli.backend_options import DEFAULT_HYBRID_EFFORT
-from mineru.cli.vlm_preload import (
-    maybe_preload_vlm_model,
-    split_service_and_model_config,
-)
 from mineru.backend.vlm.vlm_analyze import shutdown_cached_models
-from mineru.utils.cli_parser import arg_parse
 from mineru.utils.check_sys_env import is_mac_environment
 from mineru.utils.config_reader import (
     get_max_concurrent_requests as read_max_concurrent_requests,
@@ -70,7 +62,6 @@ from mineru.utils.guess_suffix_or_lang import guess_suffix_by_path
 from mineru.utils.pdf_image_tools import shutdown_pdf_render_executor
 from mineru.version import __version__
 
-os.environ["TORCH_CUDNN_V8_API_DISABLED"] = "1"
 log_level = os.getenv("MINERU_LOG_LEVEL", "INFO").upper()
 logger.remove()
 logger.add(sys.stderr, level=log_level)
@@ -80,7 +71,7 @@ TASK_PROCESSING = "processing"
 TASK_COMPLETED = "completed"
 TASK_FAILED = "failed"
 TASK_TERMINAL_STATES = {TASK_COMPLETED, TASK_FAILED}
-SUPPORTED_UPLOAD_SUFFIXES = pdf_suffixes + image_suffixes + office_suffixes
+SUPPORTED_UPLOAD_SUFFIXES = pdf_suffixes + image_suffixes
 RESULT_IMAGE_SUFFIXES = set(image_suffixes) | {"svg"}
 DEFAULT_TASK_RETENTION_SECONDS = 24 * 60 * 60
 DEFAULT_TASK_CLEANUP_INTERVAL_SECONDS = 5 * 60
@@ -146,9 +137,6 @@ class AsyncParseTask:
     file_names: list[str]
     created_at: str
     output_dir: str
-    effort: str
-    parse_method: str
-    lang_list: list[str]
     formula_enable: bool
     table_enable: bool
     image_analysis: bool
@@ -244,16 +232,7 @@ def create_app():
         MINERU_API_ALLOW_PUBLIC_HTTP_CLIENT_ENV,
         default=False,
     )
-    default_service_config, default_model_config = split_service_and_model_config(
-        {
-            "enable_vlm_preload": env_flag_enabled(
-                "MINERU_API_ENABLE_VLM_PRELOAD",
-                default=False,
-            )
-        }
-    )
-    app.state.service_config = default_service_config
-    app.state.config = default_model_config
+    app.state.config = {}
     app.state.task_manager = None
     return app
 
@@ -264,18 +243,6 @@ app = create_app()
 async def startup_app_state(app: FastAPI) -> "AsyncTaskManager":
     task_manager = AsyncTaskManager(app)
     await task_manager.start()
-    try:
-        service_config = getattr(app.state, "service_config", {})
-        model_config = getattr(app.state, "config", {})
-        maybe_preload_vlm_model(
-            bool(service_config.get("enable_vlm_preload", False)),
-            model_kwargs=model_config,
-        )
-    except Exception:
-        await task_manager.shutdown()
-        app.state.task_manager = None
-        raise
-
     app.state.task_manager = task_manager
     return task_manager
 
@@ -411,23 +378,8 @@ def get_infer_result(
     return None
 
 
-def normalize_lang_list(lang_list: list[str], file_count: int) -> list[str]:
-    if len(lang_list) == file_count:
-        return lang_list
-    base_lang = lang_list[0] if lang_list else "ch"
-    return [base_lang] * file_count
-
-
-def get_parse_dir(output_dir: str, pdf_name: str, backend: str, parse_method: str) -> str:
-    return str(
-        resolve_parse_dir(
-            output_dir,
-            pdf_name,
-            backend,
-            parse_method,
-            allow_office_fallback=True,
-        )
-    )
+def get_parse_dir(output_dir: str, pdf_name: str, backend: str) -> str:
+    return str(resolve_parse_dir(output_dir, pdf_name, backend))
 
 
 def is_task_terminal(status: str) -> bool:
@@ -438,7 +390,6 @@ def build_result_dict(
     output_dir: str,
     pdf_file_names: list[str],
     backend: str,
-    parse_method: str,
     return_md: bool,
     return_middle_json: bool,
     return_model_output: bool,
@@ -451,7 +402,7 @@ def build_result_dict(
         data = result_dict[pdf_name]
 
         try:
-            parse_dir = get_parse_dir(output_dir, pdf_name, backend, parse_method)
+            parse_dir = get_parse_dir(output_dir, pdf_name, backend)
         except ValueError:
             logger.warning(f"Unknown backend type: {backend}, skipping {pdf_name}")
             continue
@@ -493,7 +444,6 @@ def create_result_zip(
     output_dir: str,
     pdf_file_names: list[str],
     backend: str,
-    parse_method: str,
     return_md: bool,
     return_middle_json: bool,
     return_model_output: bool,
@@ -507,7 +457,7 @@ def create_result_zip(
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for pdf_name in pdf_file_names:
             try:
-                parse_dir = get_parse_dir(output_dir, pdf_name, backend, parse_method)
+                parse_dir = get_parse_dir(output_dir, pdf_name, backend)
             except ValueError:
                 logger.warning(f"Unknown backend type: {backend}, skipping {pdf_name}")
                 continue
@@ -621,7 +571,6 @@ async def build_result_response(
     output_dir: str,
     pdf_file_names: list[str],
     backend: str,
-    parse_method: str,
     return_md: bool,
     return_middle_json: bool,
     return_model_output: bool,
@@ -638,7 +587,6 @@ async def build_result_response(
                 output_dir=output_dir,
                 pdf_file_names=pdf_file_names,
                 backend=backend,
-                parse_method=parse_method,
                 return_md=return_md,
                 return_middle_json=return_middle_json,
                 return_model_output=return_model_output,
@@ -665,7 +613,6 @@ async def build_result_response(
         output_dir=output_dir,
         pdf_file_names=pdf_file_names,
         backend=backend,
-        parse_method=parse_method,
         return_md=return_md,
         return_middle_json=return_middle_json,
         return_model_output=return_model_output,
@@ -705,7 +652,6 @@ async def build_sync_file_parse_response(
             output_dir=task.output_dir,
             pdf_file_names=task.file_names,
             backend=task.backend,
-            parse_method=task.parse_method,
             return_md=task.return_md,
             return_middle_json=task.return_middle_json,
             return_model_output=task.return_model_output,
@@ -726,7 +672,6 @@ async def build_sync_file_parse_response(
         output_dir=task.output_dir,
         pdf_file_names=task.file_names,
         backend=task.backend,
-        parse_method=task.parse_method,
         return_md=task.return_md,
         return_middle_json=task.return_middle_json,
         return_model_output=task.return_model_output,
@@ -826,17 +771,13 @@ async def run_parse_job(
     config: dict[str, Any],
 ) -> list[str]:
     pdf_file_names, pdf_bytes_list = await asyncio.to_thread(load_parse_inputs, uploads)
-    actual_lang_list = normalize_lang_list(request_options.lang_list, len(pdf_file_names))
     response_file_names = list(pdf_file_names)
 
     parse_kwargs = dict(
         output_dir=output_dir,
         pdf_file_names=list(pdf_file_names),
         pdf_bytes_list=list(pdf_bytes_list),
-        p_lang_list=list(actual_lang_list),
         backend=request_options.backend,
-        parse_method=request_options.parse_method,
-        effort=getattr(request_options, "effort", DEFAULT_HYBRID_EFFORT),
         formula_enable=request_options.formula_enable,
         table_enable=request_options.table_enable,
         image_analysis=request_options.image_analysis,
@@ -860,10 +801,7 @@ async def run_parse_job(
         **config,
     )
 
-    if request_options.backend == "pipeline":
-        await asyncio.to_thread(do_parse, **parse_kwargs)
-    else:
-        await aio_do_parse(**parse_kwargs)
+    await aio_do_parse(**parse_kwargs)
     return response_file_names
 
 
@@ -893,9 +831,6 @@ async def create_async_parse_task(
             file_names=file_names,
             created_at=utc_now_iso(),
             output_dir=task_output_dir,
-            effort=request_options.effort,
-            parse_method=request_options.parse_method,
-            lang_list=request_options.lang_list,
             formula_enable=request_options.formula_enable,
             table_enable=request_options.table_enable,
             image_analysis=request_options.image_analysis,
@@ -1337,7 +1272,6 @@ async def get_async_task_result(
         output_dir=task.output_dir,
         pdf_file_names=task.file_names,
         backend=task.backend,
-        parse_method=task.parse_method,
         return_md=task.return_md,
         return_middle_json=task.return_middle_json,
         return_model_output=task.return_model_output,
@@ -1392,10 +1326,7 @@ async def health_check():
     }
 
 
-@click.command(
-    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True)
-)
-@click.pass_context
+@click.command()
 @click.option("--host", default="127.0.0.1", help="Server host (default: 127.0.0.1)")
 @click.option("--port", default=8000, type=int, help="Server port (default: 8000)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload (development mode)")
@@ -1407,37 +1338,19 @@ async def health_check():
         "0.0.0.0 or ::."
     ),
 )
-@click.option(
-    "--enable-vlm-preload",
-    "enable_vlm_preload",
-    type=bool,
-    default=False,
-    help="Preload the local VLM model during mineru-api startup.",
-)
 def main(
-    ctx,
     host,
     port,
     reload,
     allow_public_http_client,
-    enable_vlm_preload,
-    **kwargs,
 ):
-    del kwargs
-    raw_config = arg_parse(ctx)
-    raw_config["enable_vlm_preload"] = enable_vlm_preload
-    service_config, model_config = split_service_and_model_config(raw_config)
     public_bind_exposed = is_public_bind_host(host)
 
-    app.state.service_config = service_config
-    app.state.config = model_config
+    app.state.config = {}
     configure_public_http_client_policy(
         app,
         public_bind_exposed=public_bind_exposed,
         allow_public_http_client=allow_public_http_client,
-    )
-    os.environ["MINERU_API_ENABLE_VLM_PRELOAD"] = (
-        "1" if service_config["enable_vlm_preload"] else "0"
     )
     os.environ[MINERU_API_PUBLIC_BIND_EXPOSED_ENV] = "1" if public_bind_exposed else "0"
     os.environ[MINERU_API_ALLOW_PUBLIC_HTTP_CLIENT_ENV] = (

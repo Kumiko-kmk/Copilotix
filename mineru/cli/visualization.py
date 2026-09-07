@@ -14,7 +14,6 @@ VISUALIZATION_SKIPPED = "skipped"
 class VisualizationJob:
     document_stem: str
     backend: str
-    parse_method: str
     parse_dir: Path
     draw_span: bool
 

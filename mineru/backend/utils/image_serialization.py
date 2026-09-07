@@ -178,7 +178,7 @@ def serialize_vector_part_with_placeholder(
     return get_standard_vector_placeholder_data_uri()
 
 
-def serialize_office_image(
+def serialize_image(
     image_data: bytes,
     *,
     part_name: object | None = None,

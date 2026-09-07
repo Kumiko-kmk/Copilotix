@@ -4,7 +4,7 @@ import re
 
 from loguru import logger
 
-from mineru.backend.utils.office_image import is_vector_image_part, serialize_office_image
+from mineru.backend.utils.image_serialization import is_vector_image_part, serialize_image
 from mineru.utils.enum_class import BlockType, ContentType
 from mineru.utils.hash_utils import str_sha256
 
@@ -25,7 +25,7 @@ def _save_inline_vector_image(
 ):
     """将 HTML 表格内联的 WMF/EMF 矢量图转换为可渲染占位图后落盘。"""
     content_type = f"image/{fmt.lower()}"
-    rendered_data_uri = serialize_office_image(
+    rendered_data_uri = serialize_image(
         img_bytes,
         content_type=content_type,
     )

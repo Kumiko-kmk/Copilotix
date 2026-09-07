@@ -23,7 +23,6 @@ import click
 import httpx
 from loguru import logger
 
-from mineru.cli.backend_options import DEFAULT_HYBRID_EFFORT
 from mineru.cli.api_protocol import (
     API_PROTOCOL_VERSION,
     DEFAULT_MAX_CONCURRENT_REQUESTS,
@@ -803,16 +802,13 @@ async def wait_for_local_api_ready(
 
 
 def build_parse_request_form_data(
-    lang_list: Sequence[str],
     backend: str,
-    parse_method: str,
     formula_enable: bool,
     table_enable: bool,
     server_url: Optional[str],
     start_page_id: int,
     end_page_id: Optional[int],
     *,
-    effort: str = DEFAULT_HYBRID_EFFORT,
     image_analysis: bool = True,
     return_md: bool,
     return_middle_json: bool,
@@ -823,12 +819,8 @@ def build_parse_request_form_data(
     return_original_file: bool,
     client_side_output_generation: bool = False,
 ) -> dict[str, str | list[str]]:
-    effective_lang_list = list(lang_list) or ["ch"]
     data: dict[str, str | list[str]] = {
-        "lang_list": effective_lang_list,
         "backend": backend,
-        "effort": effort,
-        "parse_method": parse_method,
         "formula_enable": str(formula_enable).lower(),
         "table_enable": str(table_enable).lower(),
         "image_analysis": str(image_analysis).lower(),

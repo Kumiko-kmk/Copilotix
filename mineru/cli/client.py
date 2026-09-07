@@ -20,17 +20,13 @@ from mineru.cli.api_protocol import (
 )
 from mineru.cli.backend_options import (
     DEFAULT_BACKEND,
-    DEFAULT_HYBRID_EFFORT,
-    HYBRID_EFFORT_CHOICES,
     PUBLIC_BACKEND_CHOICES,
     normalize_backend,
-    validate_effort,
 )
 from mineru.utils.config_reader import (
     get_max_concurrent_requests as read_max_concurrent_requests,
 )
 from mineru.utils.guess_suffix_or_lang import guess_suffix_by_path
-from mineru.utils.ocr_language import PUBLIC_OCR_LANGUAGES, validate_public_ocr_lang
 from mineru.utils.pdf_page_id import get_end_page_id
 from mineru.utils.pdfium_guard import (
     close_pdfium_document,
@@ -40,10 +36,7 @@ from mineru.utils.pdfium_guard import (
 
 from mineru.version import __version__
 from mineru.cli.common import (
-    HybridDependencyError,
-    ensure_backend_dependencies,
     image_suffixes,
-    office_suffixes,
     pdf_suffixes,
     uniquify_task_stems,
 )
@@ -55,7 +48,6 @@ from mineru.cli.visualization import (
     run_visualization_job,
 )
 
-os.environ["TORCH_CUDNN_V8_API_DISABLED"] = "1"
 log_level = os.getenv("MINERU_LOG_LEVEL", "INFO").upper()
 
 @dataclass(frozen=True)
@@ -102,30 +94,6 @@ def normalize_backend_option(
     """将 CLI 输入的旧 backend 名称规范为当前公开名称。"""
     try:
         return normalize_backend(value)
-    except ValueError as exc:
-        raise click.BadParameter(str(exc), ctx=ctx, param=param) from exc
-
-
-def normalize_effort_option(
-    ctx: click.Context,
-    param: click.Parameter,
-    value: str,
-) -> str:
-    """将 CLI 输入的 hybrid effort 参数规范为当前公开名称。"""
-    try:
-        return validate_effort(value)
-    except ValueError as exc:
-        raise click.BadParameter(str(exc), ctx=ctx, param=param) from exc
-
-
-def normalize_ocr_lang_option(
-    ctx: click.Context,
-    param: click.Parameter,
-    value: str,
-) -> str:
-    """校验 CLI OCR 语言参数，并将兼容别名归一到实际模型语言。"""
-    try:
-        return validate_public_ocr_lang(value)
     except ValueError as exc:
         raise click.BadParameter(str(exc), ctx=ctx, param=param) from exc
 
@@ -406,22 +374,13 @@ def build_visualization_jobs(
     planned_task: PlannedTask,
     output_dir: Path,
     backend: str,
-    parse_method: str,
 ) -> list[VisualizationJob]:
-    draw_span = backend.startswith("pipeline")
     return [
         VisualizationJob(
             document_stem=document.stem,
             backend=backend,
-            parse_method=parse_method,
-            parse_dir=resolve_parse_dir(
-                output_dir,
-                document.stem,
-                backend,
-                parse_method,
-                is_office=document.suffix in office_suffixes,
-            ),
-            draw_span=draw_span,
+            parse_dir=resolve_parse_dir(output_dir, document.stem, backend),
+            draw_span=False,
         )
         for document in planned_task.documents
     ]
@@ -555,7 +514,7 @@ def collect_input_documents(
     collected: list[InputDocument] = []
     for order, path in enumerate(documents):
         suffix = guess_suffix_by_path(path)
-        if suffix not in pdf_suffixes + image_suffixes + office_suffixes:
+        if suffix not in pdf_suffixes + image_suffixes:
             continue
 
         if suffix in pdf_suffixes:
@@ -606,58 +565,11 @@ def collect_input_documents(
     return collected
 
 
-def plan_pipeline_tasks(
-    documents: list[InputDocument],
-    processing_window_size: int,
-) -> list[PlannedTask]:
-    bins: list[PlannedTask] = []
-    sorted_docs = sorted(
-        documents,
-        key=lambda doc: (-doc.effective_pages, doc.order),
-    )
-
-    for document in sorted_docs:
-        if document.effective_pages > processing_window_size:
-            bins.append(
-                PlannedTask(
-                    index=len(bins) + 1,
-                    documents=[document],
-                    total_pages=document.effective_pages,
-                )
-            )
-            continue
-
-        candidates = [
-            task
-            for task in bins
-            if task.total_pages + document.effective_pages <= processing_window_size
-        ]
-        if candidates:
-            selected = min(candidates, key=lambda task: (task.total_pages, task.index))
-            selected.documents.append(document)
-            selected.total_pages += document.effective_pages
-            continue
-
-        bins.append(
-            PlannedTask(
-                index=len(bins) + 1,
-                documents=[document],
-                total_pages=document.effective_pages,
-            )
-        )
-
-    for index, task in enumerate(bins, start=1):
-        task.index = index
-    return bins
-
-
 def plan_tasks(
     documents: list[InputDocument],
     backend: str,
     processing_window_size: int,
 ) -> list[PlannedTask]:
-    if backend == "pipeline":
-        return plan_pipeline_tasks(documents, processing_window_size)
     return [
         PlannedTask(index=index, documents=[document], total_pages=document.effective_pages)
         for index, document in enumerate(documents, start=1)
@@ -665,9 +577,7 @@ def plan_tasks(
 
 
 def build_request_form_data(
-    lang: str,
     backend: str,
-    method: str,
     formula_enable: bool,
     table_enable: bool,
     server_url: Optional[str],
@@ -675,16 +585,12 @@ def build_request_form_data(
     end_page_id: Optional[int],
     image_analysis: bool = True,
     client_side_output_generation: bool = False,
-    effort: str = DEFAULT_HYBRID_EFFORT,
 ) -> dict[str, str | list[str]]:
     # 开启客户端输出生成时，只关闭客户端会重建的最终产物。
     return_md = not client_side_output_generation
     return_content_list = not client_side_output_generation
     return _api_client.build_parse_request_form_data(
-        lang_list=[lang],
         backend=backend,
-        effort=effort,
-        parse_method=method,
         formula_enable=formula_enable,
         table_enable=table_enable,
         image_analysis=image_analysis,
@@ -822,7 +728,6 @@ async def run_planned_task(
     planned_task: PlannedTask,
     progress: TaskExecutionProgress,
     backend: str,
-    parse_method: str,
     visualization_context: Optional[VisualizationContext],
     form_data: dict[str, str],
     output_dir: Path,
@@ -864,13 +769,7 @@ async def run_planned_task(
     if client_side_output_generation:
         for document in planned_task.documents:
             # 解压后按现有 parse_dir 结构覆盖重生客户端最终输出产物。
-            parse_dir = resolve_parse_dir(
-                output_dir,
-                document.stem,
-                backend,
-                parse_method,
-                is_office=document.suffix in office_suffixes,
-            )
+            parse_dir = resolve_parse_dir(output_dir, document.stem, backend)
             await asyncio.to_thread(
                 regenerate_client_side_outputs,
                 parse_dir,
@@ -893,7 +792,6 @@ async def run_planned_task(
             planned_task,
             output_dir,
             backend,
-            parse_method,
         )
     except Exception as exc:
         logger.warning(
@@ -910,9 +808,7 @@ async def run_planned_task(
 async def run_orchestrated_cli(
     input_path: Path,
     output_dir: Path,
-    method: str,
     backend: str,
-    lang: str,
     server_url: Optional[str],
     api_url: Optional[str],
     start_page_id: int,
@@ -921,19 +817,12 @@ async def run_orchestrated_cli(
     table_enable: bool,
     image_analysis: bool = True,
     client_side_output_generation: bool = False,
-    effort: str = DEFAULT_HYBRID_EFFORT,
     extra_cli_args: tuple[str, ...] = (),
 ) -> None:
     if start_page_id < 0:
         raise click.ClickException("--start must be greater than or equal to 0")
     if end_page_id is not None and end_page_id < 0:
         raise click.ClickException("--end must be greater than or equal to 0")
-    if api_url is None:
-        try:
-            ensure_backend_dependencies(backend)
-        except HybridDependencyError as exc:
-            raise click.ClickException(str(exc)) from exc
-
     output_dir.mkdir(parents=True, exist_ok=True)
     documents = collect_input_documents(
         input_path=input_path,
@@ -973,9 +862,7 @@ async def run_orchestrated_cli(
             planned_tasks = plan_tasks(
                 documents=documents,
                 backend=backend,
-                processing_window_size=server_health.processing_window_size
-                if backend == "pipeline"
-                else DEFAULT_PROCESSING_WINDOW_SIZE,
+                processing_window_size=DEFAULT_PROCESSING_WINDOW_SIZE,
             )
             progress = build_task_execution_progress(planned_tasks)
             concurrency = resolve_submit_concurrency(
@@ -983,9 +870,7 @@ async def run_orchestrated_cli(
                 len(planned_tasks),
             )
             form_data = build_request_form_data(
-                lang=lang,
                 backend=backend,
-                method=method,
                 formula_enable=formula_enable,
                 table_enable=table_enable,
                 image_analysis=image_analysis,
@@ -993,7 +878,6 @@ async def run_orchestrated_cli(
                 start_page_id=start_page_id,
                 end_page_id=end_page_id,
                 client_side_output_generation=client_side_output_generation,
-                effort=effort,
             )
             visualization_context = create_visualization_context()
             failures = await execute_planned_tasks(
@@ -1005,7 +889,6 @@ async def run_orchestrated_cli(
                     planned_task=planned_task,
                     progress=progress,
                     backend=backend,
-                    parse_method=method,
                     visualization_context=visualization_context,
                     form_data=form_data,
                     output_dir=output_dir,
@@ -1034,8 +917,7 @@ async def run_orchestrated_cli(
                         _stderr_sink.set_renderer(None)
 
 
-@click.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True))
-@click.pass_context
+@click.command()
 @click.version_option(__version__, "--version", "-v", help="display the version and exit")
 @click.option(
     "-p",
@@ -1043,7 +925,7 @@ async def run_orchestrated_cli(
     "input_path",
     type=click.Path(exists=True, path_type=Path),
     required=True,
-    help="local filepath or directory. support pdf, image, docx, pptx, xlsx files",
+    help="local PDF/image filepath or directory",
 )
 @click.option(
     "-o",
@@ -1061,20 +943,6 @@ async def run_orchestrated_cli(
     help="MinerU FastAPI base URL. If omitted, mineru starts a temporary local mineru-api service.",
 )
 @click.option(
-    "-m",
-    "--method",
-    "method",
-    type=click.Choice(["auto", "txt", "ocr"]),
-    default="auto",
-    help="""\b
-    the method for parsing pdf:
-      auto: Automatically determine the method based on the file type.
-      txt: Use text extraction method.
-      ocr: Use OCR method for image-based PDFs.
-    Without method specified, 'auto' will be used by default.
-    Adapted only for the case where the backend is set to 'pipeline' and 'hybrid-*'.""",
-)
-@click.option(
     "-b",
     "--backend",
     "backend",
@@ -1082,51 +950,16 @@ async def run_orchestrated_cli(
     default=DEFAULT_BACKEND,
     callback=normalize_backend_option,
     metavar="[" + "|".join(PUBLIC_BACKEND_CHOICES) + "]",
-    help="""\b
-    the backend for parsing pdf:
-      pipeline: More general.
-      vlm-engine: High accuracy via local computing power.
-      vlm-http-client: High accuracy via remote computing power(client suitable for openai-compatible servers).
-      hybrid-engine: Next-generation high accuracy solution via local computing power.
-      hybrid-http-client: High accuracy but requires a little local computing power(client suitable for openai-compatible servers).
-    Without backend specified, hybrid-engine will be used by default.""",
-)
-@click.option(
-    "--effort",
-    "effort",
-    type=str,
-    default=DEFAULT_HYBRID_EFFORT,
-    callback=normalize_effort_option,
-    metavar="[" + "|".join(HYBRID_EFFORT_CHOICES) + "]",
-    help="""\b
-    Hybrid parsing effort:
-      medium: Faster parsing for most documents, balancing accuracy and efficiency. Image/chart analysis is disabled.
-      high: Higher-accuracy parsing with image/chart analysis support, which may take longer.
-    Without effort specified, medium will be used by default.
-    Adapted only for the case where the backend is set to 'hybrid-*'.""",
-)
-@click.option(
-    "-l",
-    "--lang",
-    "lang",
-    type=str,
-    default="ch",
-    callback=normalize_ocr_lang_option,
-    metavar="[" + "|".join(PUBLIC_OCR_LANGUAGES) + "]",
-    help="""
-    Input the languages in the pdf (if known) to improve OCR accuracy.
-    Without languages specified, 'ch' will be used by default.
-    Specify document language (improves OCR accuracy, pipeline backend only).
-    """,
+    help="Remote OpenAI-compatible VLM HTTP client.",
 )
 @click.option(
     "-u",
     "--url",
     "server_url",
     type=str,
-    default=None,
+    required=True,
     help="""
-    When the backend is `<vlm/hybrid>-http-client`, you need to specify the server_url, for example:`http://127.0.0.1:30000`
+    Required for `vlm-http-client`, for example: `http://127.0.0.1:30000`
     """,
 )
 @click.option(
@@ -1167,9 +1000,7 @@ async def run_orchestrated_cli(
     type=bool,
     default=True,
     help=(
-        "Enable image/chart analysis for VLM and hybrid backends. "
-        "Hybrid medium effort automatically disables image/chart analysis. "
-        "Default is True. "
+        "Enable VLM image/chart analysis. Default is True. "
     ),
 )
 @click.option(
@@ -1183,14 +1014,10 @@ async def run_orchestrated_cli(
     ),
 )
 def main(
-    ctx: click.Context,
     input_path: Path,
     output_dir: Path,
     api_url: Optional[str],
-    method: str,
     backend: str,
-    effort: str,
-    lang: str,
     server_url: Optional[str],
     start_page_id: int,
     end_page_id: Optional[int],
@@ -1203,10 +1030,7 @@ def main(
         run_orchestrated_cli(
             input_path=input_path,
             output_dir=output_dir,
-            method=method,
             backend=backend,
-            effort=effort,
-            lang=lang,
             server_url=server_url,
             api_url=api_url,
             start_page_id=start_page_id,
@@ -1215,7 +1039,6 @@ def main(
             table_enable=table_enable,
             image_analysis=image_analysis,
             client_side_output_generation=client_side_output_generation,
-            extra_cli_args=tuple(ctx.args),
         )
     )
 
