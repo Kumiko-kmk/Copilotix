@@ -32,6 +32,7 @@ import {
   type ReaderTextSelection
 } from '../readerAnnotations'
 import MarkdownMinimap from './MarkdownMinimap'
+import rehypeTableMath from '../rehypeTableMath'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 
@@ -627,6 +628,11 @@ const MarkdownContent = React.memo(function MarkdownContent(props: {
         decoding="async"
       />
     ),
+    table: ({ node: _node, ...tableProps }) => (
+      <div className="markdown-table-scroll">
+        <table {...tableProps} />
+      </div>
+    ),
     a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>
   }), [props.assetBaseUrl])
 
@@ -636,6 +642,7 @@ const MarkdownContent = React.memo(function MarkdownContent(props: {
       rehypePlugins={[
         rehypeRaw,
         [rehypeSanitize, markdownSanitizeSchema],
+        rehypeTableMath,
         [rehypeKatex, { trust: false, throwOnError: false, strict: 'ignore' }]
       ]}
       components={components}

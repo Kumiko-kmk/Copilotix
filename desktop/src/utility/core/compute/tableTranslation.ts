@@ -6,6 +6,7 @@ import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
 import type { BlockMapping } from '@shared/types'
 import type { AlignedMarkdownBlock } from '@shared/markdownBlocks'
+import { splitMarkdownMath } from '@shared/mathDelimiters'
 import {
   TABLE_TRANSLATION_PROTOCOL,
   validateTableTranslationResponse,
@@ -283,7 +284,7 @@ function bindTextNode(
   segmentOffset: number,
   bindings: SegmentBinding[]
 ): TableTextSegment[] {
-  const parts = splitMath(node.value)
+  const parts = splitMarkdownMath(node.value)
   const state = parts.map((part) => ({
     source: part.value,
     translated: undefined as string | undefined,
@@ -368,21 +369,6 @@ function isTranslatableTableText(value: string): boolean {
   const letters = value.match(/[A-Za-z]/g)?.length ?? 0
   const han = value.match(/[\p{Script=Han}]/gu)?.length ?? 0
   return letters > 0 || han === 0
-}
-
-function splitMath(value: string): Array<{ kind: 'text' | 'math'; value: string }> {
-  const parts: Array<{ kind: 'text' | 'math'; value: string }> = []
-  const pattern = /(\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\.|[^$\n])*?\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g
-  let cursor = 0
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(value)) !== null) {
-    if (match.index > cursor) parts.push({ kind: 'text', value: value.slice(cursor, match.index) })
-    parts.push({ kind: 'math', value: match[0] })
-    cursor = match.index + match[0].length
-  }
-  if (cursor < value.length) parts.push({ kind: 'text', value: value.slice(cursor) })
-  if (parts.length === 0) parts.push({ kind: 'text', value })
-  return parts
 }
 
 function normalizeTableText(source: string, translated: string): string {

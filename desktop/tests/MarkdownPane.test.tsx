@@ -170,7 +170,7 @@ describe('MarkdownPane', () => {
   it('renders academic HTML and KaTeX while removing unsafe markup', async () => {
     const markdown = [
       'H<sub>2</sub>O and citation<sup>12</sup> keep literal <12>.',
-      '<table><tbody><tr><th rowspan="2">Header</th><td colspan="2" onclick="alert(1)">Cell</td></tr><tr><td>Second</td><td>Third</td></tr></tbody></table>',
+      '<table><tbody><tr><th rowspan="2">Header</th><td colspan="2" onclick="alert(1)">Inline $x + y$</td></tr><tr><td>Paren \\(a / b\\)</td><td>Display $$E=mc^2$$</td></tr><tr><td colspan="2">Bracket \\[z^2\\]</td><td><code>$raw$</code></td></tr><tr><td>Price $100</td><td>unfinished $q</td><td>Third</td></tr></tbody></table>',
       '$E=mc^2$',
       '<a href="javascript:alert(1)">unsafe</a><script>alert(2)</script>'
     ].join('\n\n')
@@ -179,11 +179,21 @@ describe('MarkdownPane', () => {
 
     expect(view.container.querySelector('sub')?.textContent).toBe('2')
     expect(view.container.querySelector('sup')?.textContent).toBe('12')
-    expect(view.container.querySelector('td')?.textContent).toBe('Cell')
+    expect(view.container.querySelector('.markdown-table-scroll > table')).toBeTruthy()
+    expect(view.container.querySelector('td')?.textContent).toContain('Inline')
     expect(view.container.querySelector('td')?.hasAttribute('onclick')).toBe(false)
     expect(view.container.querySelector('th')?.getAttribute('rowspan')).toBe('2')
     expect(view.container.querySelector('td')?.getAttribute('colspan')).toBe('2')
-    expect(view.container.querySelector('.katex')).toBeTruthy()
+    expect(view.container.querySelectorAll('.katex')).toHaveLength(5)
+    const table = view.container.querySelector('table')!
+    expect(table.querySelectorAll('.katex')).toHaveLength(4)
+    expect(table.textContent).not.toContain('$x + y$')
+    expect(table.textContent).not.toContain('\\(a / b\\)')
+    expect(table.textContent).not.toContain('$$E=mc^2$$')
+    expect(table.textContent).not.toContain('\\[z^2\\]')
+    expect(table.querySelector('code')?.textContent).toBe('$raw$')
+    expect(table.textContent).toContain('Price $100')
+    expect(table.textContent).toContain('unfinished $q')
     expect(view.container.querySelector('script')).toBeNull()
     expect(view.getByText('unsafe').hasAttribute('href')).toBe(false)
     expect(view.container.textContent).toContain('<12>')

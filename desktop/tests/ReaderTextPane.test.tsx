@@ -40,6 +40,18 @@ describe('ReaderTextPane', () => {
     })
     const translatedScroller = view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')
     const jsonView = view.container.querySelector('[data-reader-tab-panel="json"] .json-view')
+    const originalArticle = originalPanel.querySelector('article')
+    const translatedArticle = view.container.querySelector('[data-reader-tab-panel="translated"] article')
+    const originalCanvas = originalPanel.querySelector('.markdown-minimap-canvas')
+    const translatedCanvas = view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-minimap-canvas')
+    const originalFormulaLayer = originalPanel.querySelector('.markdown-minimap-formulas')
+    const translatedFormulaLayer = view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-minimap-formulas')
+
+    expect(originalArticle).not.toBe(translatedArticle)
+    expect(originalArticle?.textContent).toContain('Source paragraph')
+    expect(translatedArticle?.textContent).toContain('中文段落')
+    expect(originalCanvas).not.toBe(translatedCanvas)
+    expect(originalFormulaLayer).not.toBe(translatedFormulaLayer)
 
     fireEvent.click(view.getByText('Markdown（中文）'))
     expect(view.container.querySelector('[data-reader-tab-panel="translated"]')?.classList.contains('active')).toBe(true)

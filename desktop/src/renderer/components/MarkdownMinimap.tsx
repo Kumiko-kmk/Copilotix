@@ -4,6 +4,8 @@ const MINIMAP_FRAME_MIN_HEIGHT = 24
 const MINIMAP_HEADING_INDENTS = [4, 10, 16, 22, 28, 34] as const
 const MINIMAP_KEYBOARD_STEP = 48
 const MINIMAP_HORIZONTAL_PADDING = 4
+const MINIMAP_IMAGE_MIN_HEIGHT = 3
+const MINIMAP_FORMULA_MIN_HEIGHT = 2
 
 export interface MarkdownMinimapTextRun {
   id: string
@@ -34,12 +36,30 @@ export interface MarkdownMinimapImage {
   top: number
   width: number
   height: number
+  element: HTMLImageElement
+  sourceWidth: number
+  sourceHeight: number
+}
+
+export interface MarkdownMinimapFormula {
+  id: string
+  left: number
+  top: number
+  width: number
+  height: number
+  element: HTMLElement
+  sourceWidth: number
+  sourceHeight: number
+  color: string
+  fontFamily: string
+  fontSize: string
 }
 
 export interface MarkdownMinimapContent {
   textRuns: MarkdownMinimapTextRun[]
   headings: MarkdownMinimapHeading[]
   images: MarkdownMinimapImage[]
+  formulas: MarkdownMinimapFormula[]
 }
 
 export default function MarkdownMinimap(props: {
@@ -52,6 +72,7 @@ export default function MarkdownMinimap(props: {
 }): React.JSX.Element {
   const railRef = React.useRef<HTMLDivElement>(null)
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
+  const formulaLayerRef = React.useRef<HTMLDivElement>(null)
   const frameRef = React.useRef<HTMLDivElement>(null)
   const frameRequestRef = React.useRef<number | null>(null)
   const draggingRef = React.useRef(false)
@@ -103,6 +124,12 @@ export default function MarkdownMinimap(props: {
     paintMarkdownMinimap(canvas, content, rail.clientWidth, rail.clientHeight, window.devicePixelRatio || 1)
     updateFrame()
   }, [content, updateFrame])
+
+  React.useLayoutEffect(() => {
+    const layer = formulaLayerRef.current
+    if (!layer) return
+    renderFormulaLayer(layer, content.formulas)
+  }, [content])
 
   React.useEffect(() => {
     if (!props.active || !props.ready) return
@@ -220,6 +247,7 @@ export default function MarkdownMinimap(props: {
       onKeyDown={onKeyDown}
     >
       <canvas ref={canvasRef} className="markdown-minimap-canvas" aria-hidden="true" />
+      <div ref={formulaLayerRef} className="markdown-minimap-formulas" aria-hidden="true" />
       {content.headings.map((heading) => (
         <button
           key={heading.id}
@@ -257,7 +285,7 @@ export function measureMarkdownMinimapContent(
   while (node) {
     const textNode = node as Text
     const parent = textNode.parentElement
-    if (parent && isVisibleMinimapContent(parent) && textNode.data.trim()) {
+    if (parent && !parent.closest('.katex') && isVisibleMinimapContent(parent) && textNode.data.trim()) {
       const style = window.getComputedStyle(parent)
       const heading = parent.closest<HTMLElement>('h1, h2, h3, h4, h5, h6')
       const headingLevel = heading ? headingLevelOf(heading) : null
@@ -298,10 +326,41 @@ export function measureMarkdownMinimapContent(
       left: clamp(MINIMAP_HORIZONTAL_PADDING + (bounds.left - articleBounds.left) * horizontalScale, 0, railWidth),
       top: clamp(documentTop * verticalScale, 0, railHeight),
       width: clamp(bounds.width * horizontalScale, 1, railWidth),
-      height: clamp(bounds.height * verticalScale, 1, Math.max(1, railHeight - documentTop * verticalScale))
+      height: clamp(
+        Math.max(MINIMAP_IMAGE_MIN_HEIGHT, bounds.height * verticalScale),
+        1,
+        Math.max(1, railHeight - documentTop * verticalScale)
+      ),
+      element: image,
+      sourceWidth: image.naturalWidth || bounds.width,
+      sourceHeight: image.naturalHeight || bounds.height
     }]
   })
-  return { textRuns, headings, images }
+  const formulas = Array.from(article.querySelectorAll<HTMLElement>('.katex')).flatMap((formula, index) => {
+    if (formula.parentElement?.closest('.katex') || !isVisibleMinimapContent(formula)) return []
+    const bounds = formula.getBoundingClientRect()
+    if (bounds.width <= 0 || bounds.height <= 0) return []
+    const style = window.getComputedStyle(formula)
+    const documentTop = bounds.top - scrollerBounds.top + scroller.scrollTop
+    return [{
+      id: `minimap-formula-${index}`,
+      left: clamp(MINIMAP_HORIZONTAL_PADDING + (bounds.left - articleBounds.left) * horizontalScale, 0, railWidth),
+      top: clamp(documentTop * verticalScale, 0, railHeight),
+      width: clamp(bounds.width * horizontalScale, 1, railWidth),
+      height: clamp(
+        Math.max(MINIMAP_FORMULA_MIN_HEIGHT, bounds.height * verticalScale),
+        1,
+        Math.max(1, railHeight - documentTop * verticalScale)
+      ),
+      element: formula,
+      sourceWidth: bounds.width,
+      sourceHeight: bounds.height,
+      color: style.color,
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize
+    }]
+  })
+  return { textRuns, headings, images, formulas }
 }
 
 export function paintMarkdownMinimap(
@@ -324,9 +383,20 @@ export function paintMarkdownMinimap(
   const mutedColor = railStyle.getPropertyValue('--muted').trim() || '#756e65'
 
   context.strokeStyle = mutedColor
-  context.globalAlpha = 0.28
   context.lineWidth = 0.75
-  for (const image of content.images) context.strokeRect(image.left, image.top, image.width, image.height)
+  for (const image of content.images) {
+    const target = containRect(image.sourceWidth, image.sourceHeight, image)
+    try {
+      if (!image.element.complete || image.element.naturalWidth <= 0 || image.element.naturalHeight <= 0) {
+        throw new Error('minimap image is unavailable')
+      }
+      context.globalAlpha = 0.82
+      context.drawImage(image.element, target.left, target.top, target.width, target.height)
+    } catch {
+      context.globalAlpha = 0.32
+      context.strokeRect(target.left, target.top, target.width, target.height)
+    }
+  }
 
   context.textBaseline = 'alphabetic'
   for (const run of content.textRuns) {
@@ -337,6 +407,51 @@ export function paintMarkdownMinimap(
     context.fillText(run.text, run.left, run.baseline, run.width)
   }
   context.globalAlpha = 1
+}
+
+export function containRect(
+  sourceWidth: number,
+  sourceHeight: number,
+  target: Pick<MarkdownMinimapImage, 'left' | 'top' | 'width' | 'height'>
+): { left: number; top: number; width: number; height: number } {
+  if (sourceWidth <= 0 || sourceHeight <= 0 || target.width <= 0 || target.height <= 0) {
+    return { left: target.left, top: target.top, width: 0, height: 0 }
+  }
+  const scale = Math.min(target.width / sourceWidth, target.height / sourceHeight)
+  const width = sourceWidth * scale
+  const height = sourceHeight * scale
+  return {
+    left: target.left + (target.width - width) / 2,
+    top: target.top + (target.height - height) / 2,
+    width,
+    height
+  }
+}
+
+export function renderFormulaLayer(layer: HTMLElement, formulas: MarkdownMinimapFormula[]): void {
+  const fragment = document.createDocumentFragment()
+  for (const formula of formulas) {
+    const target = containRect(formula.sourceWidth, formula.sourceHeight, formula)
+    if (target.width <= 0 || target.height <= 0) continue
+    const holder = document.createElement('span')
+    holder.className = 'markdown-minimap-formula'
+    holder.setAttribute('aria-hidden', 'true')
+    holder.inert = true
+    holder.style.left = `${target.left}px`
+    holder.style.top = `${target.top}px`
+    holder.style.width = `${formula.sourceWidth}px`
+    holder.style.height = `${formula.sourceHeight}px`
+    holder.style.color = formula.color
+    holder.style.fontFamily = formula.fontFamily
+    holder.style.fontSize = formula.fontSize
+    holder.style.transform = `scale(${target.width / formula.sourceWidth})`
+    const clone = formula.element.cloneNode(true) as HTMLElement
+    clone.removeAttribute('id')
+    for (const descendant of clone.querySelectorAll<HTMLElement>('[id]')) descendant.removeAttribute('id')
+    holder.append(clone)
+    fragment.append(holder)
+  }
+  layer.replaceChildren(fragment)
 }
 
 export function minimapFrameMetrics(
@@ -453,4 +568,4 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
 }
 
-const emptyMinimapContent: MarkdownMinimapContent = { textRuns: [], headings: [], images: [] }
+const emptyMinimapContent: MarkdownMinimapContent = { textRuns: [], headings: [], images: [], formulas: [] }

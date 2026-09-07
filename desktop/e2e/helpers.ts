@@ -58,6 +58,7 @@ export async function seedReaderTask(
     missingPdf?: boolean
     sourcePdf?: string
     sourceTaskDir?: string
+    sourceMarkdown?: string
     translatedMarkdown?: string
     supplementalBlocks?: boolean
     alignmentRegression?: boolean
@@ -95,7 +96,7 @@ export async function seedReaderTask(
       // Layout-only fixtures do not contain a translation manifest.
     }
   } else {
-    const fixtureMarkdown = options?.alignmentRegression ? ALIGNMENT_REGRESSION_MARKDOWN : FIXTURE_MARKDOWN
+    const fixtureMarkdown = options?.sourceMarkdown ?? (options?.alignmentRegression ? ALIGNMENT_REGRESSION_MARKDOWN : FIXTURE_MARKDOWN)
     const layout = options?.alignmentRegression
       ? createAlignmentRegressionLayoutFixture()
       : createLayoutFixture(options?.supplementalBlocks)

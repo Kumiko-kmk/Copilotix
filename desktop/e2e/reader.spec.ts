@@ -14,6 +14,27 @@ const FIXTURE_TRANSLATED_MARKDOWN = [
   '![测试图片](images/fixture.png)'
 ].join('\n\n')
 
+const COMPACT_TABLE_SOURCE = '<table><tbody><tr><td>Academic cell</td><td>123,456,789</td><td>223,456,789</td><td>323,456,789</td><td>423,456,789</td><td>523,456,789</td><td>623,456,789</td><td>723,456,789</td><td>823,456,789</td><td>923,456,789</td><td>1,023,456,789</td><td>1,123,456,789</td></tr><tr><td>$x$</td><td>$$y$$</td><td>\\(z\\)</td><td>\\[w\\]</td><td colspan="8">Symbols ± ≤ ≥</td></tr></tbody></table>'
+const COMPACT_TABLE_TRANSLATED = COMPACT_TABLE_SOURCE.replace('Academic cell', '学术单元格')
+const COMPACT_MARKDOWN_SOURCE = [
+  '# Compact table fixture',
+  'Ada Lovelace and Alan Turing',
+  'A separately mapped summary.',
+  'First page continues in second column.',
+  'Paragraph formula $E=mc^2$.',
+  COMPACT_TABLE_SOURCE,
+  '![Fixture image](images/fixture.png)'
+].join('\n\n')
+const COMPACT_MARKDOWN_TRANSLATED = [
+  '# 紧凑表格测试',
+  '艾达·洛夫莱斯和艾伦·图灵',
+  '独立映射的摘要。',
+  '第一页在第二栏继续。',
+  '段落公式 $E=mc^2$。',
+  COMPACT_TABLE_TRANSLATED,
+  '![测试图片](images/fixture.png)'
+].join('\n\n')
+
 async function isCentered(locator: Locator, containerSelector: string): Promise<boolean> {
   if (await locator.count() === 0) return false
   return locator.first().evaluate((element, selector) => {
@@ -55,6 +76,64 @@ async function selectText(locator: Locator, startOffset: number, endOffset: numb
     selection.addRange(range)
     document.dispatchEvent(new Event('selectionchange'))
   }, { startOffset, endOffset })
+}
+
+test('renders compact scrollable tables and independent real formula minimaps', async () => {
+  const workspace = await createE2EWorkspace()
+  const taskId = await seedReaderTask(workspace, {
+    sourceMarkdown: COMPACT_MARKDOWN_SOURCE,
+    translatedMarkdown: COMPACT_MARKDOWN_TRANSLATED
+  })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await openPaper(window, taskId)
+    const activeTextPanel = window.locator('.reader-tab-panel.active')
+    await assertCompactMarkdownLayout(activeTextPanel)
+
+    await window.evaluate(() => {
+      Object.defineProperty(window, '__mineruCompactOriginalArticle', {
+        value: document.querySelector('.reader-tab-panel.active article'),
+        configurable: true
+      })
+    })
+    await window.getByText('Markdown（中文）').click()
+    await assertCompactMarkdownLayout(activeTextPanel)
+    await expect(activeTextPanel.locator('article')).not.toHaveText(/Academic cell/u)
+    expect(await window.evaluate(() =>
+      document.querySelector('.reader-tab-panel.active article') !==
+      Reflect.get(window, '__mineruCompactOriginalArticle')
+    )).toBe(true)
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
+async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<void> {
+  await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
+  await expect(activeTextPanel.locator('.markdown-body td .katex')).toHaveCount(4)
+  await expect(activeTextPanel.locator('.markdown-minimap-formula .katex')).toHaveCount(5)
+  await expect(activeTextPanel.locator('.markdown-body table')).not.toContainText('$x$')
+  const minimapWidth = await activeTextPanel.locator('.markdown-minimap').evaluate((element) => element.getBoundingClientRect().width)
+  expect(minimapWidth).toBeCloseTo(60, 0)
+  const tableMetrics = await activeTextPanel.locator('.markdown-table-scroll').evaluate((element) => {
+    const cell = element.querySelector('td')!
+    const bounds = cell.getBoundingClientRect()
+    const style = getComputedStyle(cell)
+    return {
+      cellHeight: bounds.height,
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      fontSize: style.fontSize,
+      lineHeight: style.lineHeight,
+      paddingBlock: `${style.paddingTop} ${style.paddingBottom}`
+    }
+  })
+  expect(tableMetrics.cellHeight).toBeGreaterThanOrEqual(23)
+  expect(tableMetrics.cellHeight).toBeLessThanOrEqual(29)
+  expect(tableMetrics.scrollWidth).toBeGreaterThan(tableMetrics.clientWidth)
+  expect(tableMetrics).toMatchObject({ fontSize: '13px', paddingBlock: '3px 3px' })
 }
 
 test('renders a local PDF with range requests before parsing succeeds', async () => {

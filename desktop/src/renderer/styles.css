@@ -155,16 +155,18 @@ button, input, select { font: inherit; }
 .reader-tab-panel.active { display: grid; }
 .reader-tab-panel.inactive { display: none; }
 .reader-tab-panel > .markdown-pane, .reader-tab-panel > .json-view, .reader-tab-panel > .translation-empty { min-width: 0; min-height: 0; }
-.markdown-pane { display: grid; grid-template-columns: minmax(0, 1fr) 84px; min-width: 0; min-height: 0; overflow: hidden; }
+.markdown-pane { display: grid; grid-template-columns: minmax(0, 1fr) 60px; min-width: 0; min-height: 0; overflow: hidden; }
 .markdown-scroll { position: relative; min-width: 0; min-height: 0; overflow: auto; scrollbar-width: none; -ms-overflow-style: none; }
 .markdown-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .markdown-scroll:not(.markdown-render-ready) { overflow: hidden; }
 .markdown-minimap { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--border); outline: 0; background: var(--surface); cursor: pointer; touch-action: none; user-select: none; }
 .markdown-minimap:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 64%, transparent); }
-.markdown-minimap-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
-.markdown-minimap-heading { position: absolute; z-index: 1; display: block; padding: 0; overflow: hidden; border: 0; outline: 0; color: transparent; background: transparent; cursor: pointer; }
+.markdown-minimap-canvas { position: absolute; z-index: 0; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
+.markdown-minimap-formulas { position: absolute; z-index: 1; inset: 0; overflow: hidden; pointer-events: none; }
+.markdown-minimap-formula { position: absolute; display: block; overflow: visible; color: var(--text); line-height: 1; white-space: nowrap; transform-origin: 0 0; }
+.markdown-minimap-heading { position: absolute; z-index: 2; display: block; padding: 0; overflow: hidden; border: 0; outline: 0; color: transparent; background: transparent; cursor: pointer; }
 .markdown-minimap-heading:hover, .markdown-minimap-heading:focus-visible { background: color-mix(in srgb, var(--primary) 12%, transparent); box-shadow: inset 2px 0 0 var(--primary); }
-.markdown-minimap-frame { --markdown-minimap-frame-top: 0px; --markdown-minimap-frame-height: 100%; position: absolute; z-index: 2; top: var(--markdown-minimap-frame-top); right: 2px; left: 2px; height: var(--markdown-minimap-frame-height); border: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); border-radius: 3px; background: color-mix(in srgb, var(--primary) 9%, transparent); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); pointer-events: none; transition: top .08s linear, height .12s ease, background-color .12s ease; }
+.markdown-minimap-frame { --markdown-minimap-frame-top: 0px; --markdown-minimap-frame-height: 100%; position: absolute; z-index: 3; top: var(--markdown-minimap-frame-top); right: 2px; left: 2px; height: var(--markdown-minimap-frame-height); border: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); border-radius: 3px; background: color-mix(in srgb, var(--primary) 7%, transparent); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); pointer-events: none; transition: top .08s linear, height .12s ease, background-color .12s ease; }
 .markdown-minimap-frame[data-preview="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 15%, transparent); }
 .markdown-render-status { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px; color: var(--muted); background: var(--surface); }
 .markdown-render-status .ant-alert { width: min(560px, 90%); }
@@ -205,8 +207,9 @@ button, input, select { font: inherit; }
 .markdown-body sup { top: -.5em; }
 .markdown-body sub { bottom: -.2em; }
 .markdown-body .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding-block: 4px; }
-.markdown-body table { display: block; width: 100%; overflow: auto; border-collapse: collapse; }
-.markdown-body th, .markdown-body td { padding: 8px 10px; border: 1px solid var(--border); }
+.markdown-table-scroll { width: 100%; margin-block: 10px; overflow-x: auto; overflow-y: hidden; }
+.markdown-body table { display: table; width: max-content; min-width: 100%; margin: 0; border-collapse: collapse; table-layout: auto; font-size: 13px; line-height: 1.35; }
+.markdown-body th, .markdown-body td { max-width: 320px; padding: 3px 6px; border: 1px solid var(--border); vertical-align: middle; overflow-wrap: break-word; word-break: normal; }
 .markdown-body code { padding: .15em .35em; border-radius: 4px; background: var(--muted-surface); }
 .markdown-body pre { padding: 14px; overflow: auto; border-radius: 8px; background: var(--muted-surface); }
 .translation-empty { align-self: center; }
