@@ -8,17 +8,19 @@ import type { AppSettings, MinerUTask } from '@shared/types'
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 const settings: AppSettings = {
-  hasParserToken: true,
   outputRoot: 'C:\\output',
   formulaEnabled: true,
   tableEnabled: false,
   translationProvider: 'qwen',
   qwenBaseUrl: 'https://example.test/v1',
   qwenModel: 'qwen-mt-plus',
-  qwenHasApiKey: false,
   deepseekBaseUrl: 'https://example.test/v1',
   deepseekModel: 'deepseek-chat',
-  deepseekHasApiKey: false
+  credentials: {
+    parser: { state: 'valid' },
+    qwen: { state: 'missing' },
+    deepseek: { state: 'missing' }
+  }
 }
 
 const task: MinerUTask = {

@@ -13,17 +13,19 @@ export const FALLBACK_PROVIDER_ORDER: TranslationProviderId[] = [
 ]
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  hasParserToken: false,
   outputRoot: '',
   formulaEnabled: true,
   tableEnabled: true,
   translationProvider: 'qwen',
   qwenBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   qwenModel: 'qwen-mt-plus',
-  qwenHasApiKey: false,
   deepseekBaseUrl: 'https://api.deepseek.com',
   deepseekModel: 'deepseek-v4-flash',
-  deepseekHasApiKey: false
+  credentials: {
+    parser: { state: 'missing' },
+    qwen: { state: 'missing' },
+    deepseek: { state: 'missing' }
+  }
 }
 
 export const PROVIDER_LABELS: Record<TranslationProviderId, string> = {

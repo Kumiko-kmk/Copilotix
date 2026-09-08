@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { createTranslationProviders } from '@main/translation/providers'
+import { createTranslationProviders, probeOpenAiCompatibleCredential } from '@main/translation/providers'
 import { buildTableTranslationPlan } from '../src/utility/core/compute/tableTranslation'
 import {
   flattenSegments,
@@ -23,6 +23,33 @@ function tableRequest(): TableTranslationRequest {
 }
 
 describe('table provider transports', () => {
+  it('validates a candidate key without writing it to the vault', async () => {
+    const calls: Array<{ headers?: HeadersInit; body?: string }> = []
+    const fetcher = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ headers: init?.headers, body: String(init?.body) })
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { status: 200 })
+    }
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      credentials: {
+        parser: { state: 'missing' as const },
+        qwen: { state: 'missing' as const },
+        deepseek: { state: 'missing' as const }
+      }
+    }
+    const result = await probeOpenAiCompatibleCredential('qwen', settings, 'candidate-key', fetcher)
+
+    expect(result).toMatchObject({ ok: true })
+    expect(calls[0]?.headers).toMatchObject({ Authorization: 'Bearer candidate-key' })
+    expect(calls[0]?.body).toContain('"max_tokens":1')
+  })
+
+  it('maps Qwen/DeepSeek authentication responses to a non-retryable validation error', async () => {
+    const fetcher = async (): Promise<Response> => new Response('', { status: 401 })
+    const result = await probeOpenAiCompatibleCredential('deepseek', DEFAULT_SETTINGS, 'wrong-key', fetcher)
+    expect(result).toEqual({ ok: false, code: 'AUTH_INVALID', message: 'deepseek API Key 验证失败（HTTP 401）' })
+  })
+
   it('sends the complete v2 JSON request to OpenAI-compatible providers', async () => {
     const requestBodies: any[] = []
     const keyVault: CredentialVault = {

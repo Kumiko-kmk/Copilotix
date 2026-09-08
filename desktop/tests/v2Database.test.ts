@@ -40,7 +40,7 @@ describe('v2 migration ledger and strict persistence schema', () => {
     const database = new V2Database(path)
     const tables = (database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as Array<{ name: string }>).map((row) => row.name)
     expect(tables).toEqual([
-      'annotation_sets', 'artifacts', 'documents', 'job_events', 'jobs', 'reader_annotations',
+      'annotation_sets', 'app_migrations', 'artifacts', 'documents', 'job_events', 'jobs', 'reader_annotations',
       'schema_migrations', 'settings', 'translation_blocks', 'translation_cache'
     ])
     expect(tables).not.toContain('tasks')
@@ -203,7 +203,7 @@ describe('v2 migration ledger and strict persistence schema', () => {
     const first = new V2Database(path)
     first.close()
     const second = new V2Database(path)
-    expect(second.migrationRows()).toHaveLength(2)
+    expect(second.migrationRows()).toHaveLength(3)
     second.close()
     const drifted: V2Migration = { version: 1, name: 'create-v2-document-persistence', sql: 'SELECT 1;' }
     expect(() => new V2Database(path, [drifted])).toThrow(/checksum mismatch/)

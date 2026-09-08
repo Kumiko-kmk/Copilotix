@@ -13,6 +13,35 @@ import type {
 
 export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart'
 
+export type CredentialName = 'parser' | 'qwen' | 'deepseek'
+
+export type CredentialValidation = 'missing' | 'unknown' | 'valid' | 'invalid'
+
+export type CredentialMutation =
+  | { action: 'set'; value: string }
+  | { action: 'clear' }
+
+export interface CredentialValidationResult {
+  state: CredentialValidation
+  errorCode?: string
+  message?: string
+}
+
+export interface CredentialStatus extends CredentialValidationResult {
+  maskedValue?: string
+}
+
+export interface CredentialStatuses {
+  parser: CredentialStatus
+  qwen: CredentialStatus
+  deepseek: CredentialStatus
+}
+
+export interface CredentialFieldError {
+  code: string
+  message: string
+}
+
 export type TaskStatus =
   | 'uploading'
   | 'parsing'
@@ -22,27 +51,25 @@ export type TaskStatus =
   | 'failed'
 
 export interface AppSettings {
-  hasParserToken: boolean
   outputRoot: string
   formulaEnabled: boolean
   tableEnabled: boolean
   translationProvider: TranslationProviderId
   qwenBaseUrl: string
   qwenModel: string
-  qwenHasApiKey: boolean
   deepseekBaseUrl: string
   deepseekModel: string
-  deepseekHasApiKey: boolean
+  credentials: CredentialStatuses
 }
 
 export interface SettingsUpdate
-  extends Omit<AppSettings, 'hasParserToken' | 'qwenHasApiKey' | 'deepseekHasApiKey'> {
-  parserToken?: string
-  clearParserToken?: boolean
-  qwenApiKey?: string
-  clearQwenApiKey?: boolean
-  deepseekApiKey?: string
-  clearDeepseekApiKey?: boolean
+  extends Omit<AppSettings, 'credentials'> {
+  credentialMutations?: Partial<Record<CredentialName, CredentialMutation>>
+}
+
+export interface SettingsSaveResult {
+  settings: AppSettings
+  fieldErrors: Partial<Record<CredentialName, CredentialFieldError>>
 }
 
 export interface MinerUTask {
@@ -211,9 +238,8 @@ export interface WindowState {
 
 export interface MinerUDesktopApi {
   getSettings(): Promise<AppSettings>
-  saveSettings(update: SettingsUpdate): Promise<AppSettings>
-  testParserConnection(parserToken?: string): Promise<HealthResult>
-  testTranslationProvider(provider: TranslationProviderId): Promise<HealthResult>
+  saveSettings(update: SettingsUpdate): Promise<SettingsSaveResult>
+  validateCredential(name: CredentialName, value?: string): Promise<CredentialValidationResult>
   chooseOutputDirectory(): Promise<string | null>
   importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[]): Promise<DocumentSummary[]>
   listDocuments(): Promise<DocumentSummary[]>

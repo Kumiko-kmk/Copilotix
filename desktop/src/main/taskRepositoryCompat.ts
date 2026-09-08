@@ -22,6 +22,8 @@ export interface TaskRepositoryCompat {
   close(): void | Promise<void>
   getSettings(outputRoot: string): AppSettings | Promise<AppSettings>
   saveSettings(settings: AppSettings): void | Promise<void>
+  getMigrationMarker?(id: string): boolean | Promise<boolean>
+  markMigration?(id: string): void | Promise<void>
   listTasks(): MinerUTask[] | Promise<MinerUTask[]>
   getTask(id: string): MinerUTask | null | Promise<MinerUTask | null>
   findByHash(hash: string): MinerUTask | null | Promise<MinerUTask | null>

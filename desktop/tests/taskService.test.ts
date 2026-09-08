@@ -77,7 +77,12 @@ describe('durable TaskService cutover', () => {
       now
     })
     const vault = new MemoryVault({ 'parser-token': 'parser-token', 'qwen-api-key': 'qwen-key' })
-    const settings = new SettingsService(repository, vault, join(root, 'output'))
+    const settings = new SettingsService(repository, vault, join(root, 'output'), {
+      parser: async () => ({ ok: true, message: 'Token 验证成功' }),
+      provider: async () => ({ ok: true, message: 'API Key 验证成功' })
+    })
+    await settings.validateCredential('parser')
+    await settings.validateCredential('qwen')
     const client = new ResumeClient(await resultZip())
     const normalizedJobIds: string[] = []
     const planManager = new MarkdownTranslationPlanManager(repository)

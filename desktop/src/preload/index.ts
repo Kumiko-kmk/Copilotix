@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { z } from 'zod'
 import {
   appSettingsSchema,
+  credentialValidationRequestSchema,
+  credentialValidationResultSchema,
   outputDirectorySchema,
   deleteDocumentRequestSchema,
   documentChangeEventSchema,
@@ -14,16 +16,14 @@ import {
   type ListReaderAnnotationsRequest,
   type MutateReaderAnnotationsRequest,
   type SaveDocumentAsRequest,
-  healthResultSchema,
   importDocumentsIpcRequestSchema,
   listReaderAnnotationsRequestSchema,
   mutateReaderAnnotationsRequestSchema,
   noRequestSchema,
-  parserTokenSchema,
-  providerIdRequestSchema,
   readerAnnotationSnapshotSchema,
   saveDocumentAsRequestSchema,
   saveDocumentAsResultSchema,
+  settingsSaveResultSchema,
   settingsUpdateSchema,
   voidResponseSchema,
   windowActionSchema,
@@ -32,8 +32,8 @@ import {
 import { decodeIpcEvent, decodeIpcResponse } from './ipcClient'
 import type {
   MinerUDesktopApi,
+  CredentialName,
   SettingsUpdate,
-  TranslationProviderId,
   WindowAction
 } from '@shared/types'
 
@@ -50,11 +50,9 @@ async function invokeValidated<Request, Response>(
 
 const api: MinerUDesktopApi = {
   getSettings: () => invokeValidated('settings:get', noRequestSchema, appSettingsSchema, undefined),
-  saveSettings: (update: SettingsUpdate) => invokeValidated('settings:save', settingsUpdateSchema, appSettingsSchema, update),
-  testParserConnection: (parserToken) =>
-    invokeValidated('settings:test-parser', parserTokenSchema, healthResultSchema, parserToken),
-  testTranslationProvider: (provider: TranslationProviderId) =>
-    invokeValidated('settings:test-translation', providerIdRequestSchema, healthResultSchema, provider),
+  saveSettings: (update: SettingsUpdate) => invokeValidated('settings:save', settingsUpdateSchema, settingsSaveResultSchema, update),
+  validateCredential: (name: CredentialName, value?: string) =>
+    invokeValidated('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, { name, value }),
   chooseOutputDirectory: () =>
     invokeValidated('dialog:output-directory', noRequestSchema, outputDirectorySchema, undefined),
   importDocuments: (request: ImportDocumentsRequest, droppedFiles?: File[]) => {

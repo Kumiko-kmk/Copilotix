@@ -89,13 +89,22 @@ export default function NewParsePage(props: {
           />
         </div>
 
-        {!props.settings.hasParserToken ? (
+        {props.settings.credentials.parser.state === 'missing' ? (
           <Alert
             className="token-required"
             type="warning"
             showIcon
             message="需要先配置解析 API Token"
             description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置</Button>}
+          />
+        ) : null}
+        {props.settings.credentials.parser.state === 'invalid' ? (
+          <Alert
+            className="token-required"
+            type="error"
+            showIcon
+            message="MinerU API Token 验证失败"
+            description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置重新验证</Button>}
           />
         ) : null}
       </div>
@@ -107,7 +116,7 @@ export default function NewParsePage(props: {
         okText="开始解析"
         cancelText="重新选择"
         confirmLoading={submitting}
-        okButtonProps={{ disabled: !props.settings.hasParserToken || oversizedFiles.length > 0 }}
+        okButtonProps={{ disabled: props.settings.credentials.parser.state === 'missing' || props.settings.credentials.parser.state === 'invalid' || oversizedFiles.length > 0 }}
         onOk={() => void start()}
         onCancel={() => setFiles([])}
       >

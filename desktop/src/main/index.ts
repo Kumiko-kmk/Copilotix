@@ -21,15 +21,15 @@ import { ElectronFileUploader } from './fileUploader'
 import { createAssetResponse } from './assetProtocol'
 import { TaskService } from './taskService'
 import { JsonLineLogger } from './logger'
-import { createTranslationProviders } from './translation/providers'
+import { probeOpenAiCompatibleCredential } from './translation/providers'
 import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike } from './ipc'
 import {
   appSettingsSchema,
-  healthResultSchema,
+  credentialValidationRequestSchema,
+  credentialValidationResultSchema,
   noRequestSchema,
   outputDirectorySchema,
-  parserTokenSchema,
-  providerIdRequestSchema,
+  settingsSaveResultSchema,
   settingsUpdateSchema,
   voidResponseSchema,
   windowActionSchema,
@@ -95,10 +95,14 @@ async function bootstrap(): Promise<void> {
   await mkdir(userData, { recursive: true })
   repository = new RpcTaskRepository(utilitySupervisor)
   const vault = new WindowsCredentialVault()
-  const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'MinerU'))
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
     net.fetch(input instanceof URL ? input.toString() : input, init)
   const parserClient = new OfficialMinerUClient(fetcher, new ElectronFileUploader())
+  const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'MinerU'), {
+    parser: (value) => parserClient.verifyToken(value),
+    provider: (name, value, current) => probeOpenAiCompatibleCredential(name, current, value, fetcher)
+  })
+  await settings.initialize()
   const logger = new JsonLineLogger(join(userData, 'mineru-desktop.log'))
   const compute = new RpcTaskCompute(utilitySupervisor)
   const pathPolicy = new PathPolicy()
@@ -114,7 +118,7 @@ async function bootstrap(): Promise<void> {
 
   protocol.handle('mineru-asset', (request) => createAssetResponse(request, (taskId, path) => tasks.resolveAsset(taskId, path)))
 
-  registerIpc(tasks, settings, vault, parserClient, fetcher)
+  registerIpc(tasks, settings)
   createMainWindow()
   createTray()
 
@@ -259,10 +263,7 @@ function requestWindow(event: IpcInvokeEventLike): BrowserWindow {
 
 function registerIpc(
   tasks: TaskService,
-  settings: SettingsService,
-  vault: WindowsCredentialVault,
-  parserClient: OfficialMinerUClient,
-  fetcher: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+  settings: SettingsService
 ): void {
   const validationOptions = {
     getMainWindow: () => mainWindow,
@@ -283,22 +284,8 @@ function registerIpc(
     return currentWindowState(window)
   }, validationOptions)
   registerValidatedHandler('settings:get', noRequestSchema, appSettingsSchema, () => settings.get(), validationOptions)
-  registerValidatedHandler('settings:save', settingsUpdateSchema, appSettingsSchema, (_event, update) => settings.save(update), validationOptions)
-  registerValidatedHandler('settings:test-parser', parserTokenSchema, healthResultSchema, async (_event, inputToken) => {
-    const token = inputToken?.trim() || (await vault.get('parser-token'))
-    return parserClient.verifyToken(token)
-  }, validationOptions)
-  registerValidatedHandler('settings:test-translation', providerIdRequestSchema, healthResultSchema, async (_event, providerId) => {
-    try {
-      const current = await settings.get()
-      const provider = createTranslationProviders(current, vault, fetcher).get(providerId)
-      if (!provider || !(await provider.isAvailable())) return { ok: false, message: '缺少 API Key 或翻译源不可用' }
-      const translated = await provider.translate('Academic paper')
-      return { ok: Boolean(translated), message: translated ? `连接成功：${translated}` : '翻译源返回空结果' }
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : String(error) }
-    }
-  }, validationOptions)
+  registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, (_event, update) => settings.save(update), validationOptions)
+  registerValidatedHandler('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, (_event, request) => settings.validateCredential(request.name, request.value), validationOptions)
   registerValidatedHandler('dialog:output-directory', noRequestSchema, outputDirectorySchema, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] })
     return result.canceled ? null : (result.filePaths[0] ?? null)

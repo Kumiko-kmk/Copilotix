@@ -161,20 +161,28 @@ export class V2TaskRepositoryCompat {
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
       deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
-      hasParserToken: false,
-      qwenHasApiKey: false,
-      deepseekHasApiKey: false
+      credentials: DEFAULT_SETTINGS.credentials
     }
   }
 
   saveSettings(settings: AppSettings): void {
-    const hidden = new Set(['hasParserToken', 'qwenHasApiKey', 'deepseekHasApiKey'])
+    const hidden = new Set(['credentials'])
     this.database.transaction(() => {
       const statement = this.database.connection.prepare(
         'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
       )
       for (const [key, value] of Object.entries(settings)) if (!hidden.has(key)) statement.run(key, JSON.stringify(value))
     })
+  }
+
+  getMigrationMarker(id: string): boolean {
+    return Boolean(this.database.connection.prepare('SELECT 1 FROM app_migrations WHERE id=?').get(id))
+  }
+
+  markMigration(id: string): void {
+    this.database.connection
+      .prepare('INSERT OR IGNORE INTO app_migrations(id, applied_at) VALUES(?, ?)')
+      .run(id, new Date().toISOString())
   }
 
   listTasks(): MinerUTask[] {

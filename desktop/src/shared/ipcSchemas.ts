@@ -12,13 +12,27 @@ import type {
   ReplaceReaderAnnotationsRequest,
   SaveAsRequest,
   SelectedPdf,
+  CredentialFieldError,
+  CredentialMutation,
+  CredentialName,
+  CredentialStatus,
+  CredentialStatuses,
+  CredentialValidationResult,
   SettingsUpdate,
+  SettingsSaveResult,
   TranslatedMarkdownBlock,
   WindowState
 } from './types'
 import type { IpcError } from './ipc'
 
 const noNul = (value: string): boolean => !value.includes('\0')
+const hasControlCharacters = (value: string): boolean => {
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true
+  }
+  return false
+}
 const boundedId = z.string().min(1).max(512).refine(noNul, '值不能包含 NUL 字符')
 const boundedPath = z.string().min(1).max(32_768).refine(noNul, '路径不能包含 NUL 字符')
 const safeName = z.string().min(1).max(32_768).refine(noNul, '名称不能包含 NUL 字符')
@@ -27,18 +41,58 @@ const timestamp = z.string().min(1).max(128)
 export const translationProviderIdSchema = z.enum(['qwen', 'deepseek', 'bing', 'transmart'])
 export const taskStatusSchema = z.enum(['uploading', 'parsing', 'translating', 'partial', 'completed', 'failed'])
 
+export const credentialNameSchema: z.ZodType<CredentialName> = z.enum(['parser', 'qwen', 'deepseek'])
+const credentialValueSchema = z.string()
+  .trim()
+  .min(1, '凭据不能为空')
+  .max(16_384, '凭据过长')
+  .refine(noNul, '凭据不能包含 NUL 字符')
+  .refine((value) => !hasControlCharacters(value), '凭据不能包含控制字符')
+const credentialMutationSchema: z.ZodType<CredentialMutation> = z.union([
+  z.object({ action: z.literal('set'), value: credentialValueSchema }).strict(),
+  z.object({ action: z.literal('clear') }).strict()
+])
+export const credentialStatusesSchema: z.ZodType<CredentialStatuses> = z.object({
+  parser: credentialStatusSchemaPlaceholder(),
+  qwen: credentialStatusSchemaPlaceholder(),
+  deepseek: credentialStatusSchemaPlaceholder()
+}).strict()
+
+function credentialStatusSchemaPlaceholder(): z.ZodType<CredentialStatus> {
+  return z.object({
+    state: z.enum(['missing', 'unknown', 'valid', 'invalid']),
+    maskedValue: z.string().max(256).refine(noNul).optional(),
+    errorCode: z.string().max(128).refine(noNul).optional(),
+    message: z.string().max(1_024).refine(noNul).optional()
+  }).strict()
+}
+
+const credentialFieldErrorSchema: z.ZodType<CredentialFieldError> = z.object({
+  code: z.string().min(1).max(128).refine(noNul),
+  message: z.string().min(1).max(1_024).refine(noNul)
+}).strict()
+
+export const credentialValidationResultSchema: z.ZodType<CredentialValidationResult> = z.object({
+  state: z.enum(['missing', 'unknown', 'valid', 'invalid']),
+  errorCode: z.string().max(128).refine(noNul).optional(),
+  message: z.string().max(1_024).refine(noNul).optional()
+}).strict()
+
+export const credentialValidationRequestSchema = z.object({
+  name: credentialNameSchema,
+  value: credentialValueSchema.optional()
+}).strict()
+
 export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
-  hasParserToken: z.boolean(),
   outputRoot: boundedPath,
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
   translationProvider: translationProviderIdSchema,
   qwenBaseUrl: z.string().min(1).max(2_048),
   qwenModel: z.string().min(1).max(512),
-  qwenHasApiKey: z.boolean(),
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
-  deepseekHasApiKey: z.boolean()
+  credentials: credentialStatusesSchema
 }).strict()
 
 export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
@@ -50,12 +104,20 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
   qwenModel: z.string().min(1).max(512),
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
-  parserToken: z.string().max(16_384).optional(),
-  clearParserToken: z.boolean().optional(),
-  qwenApiKey: z.string().max(16_384).optional(),
-  clearQwenApiKey: z.boolean().optional(),
-  deepseekApiKey: z.string().max(16_384).optional(),
-  clearDeepseekApiKey: z.boolean().optional()
+  credentialMutations: z.object({
+    parser: credentialMutationSchema.optional(),
+    qwen: credentialMutationSchema.optional(),
+    deepseek: credentialMutationSchema.optional()
+  }).strict().optional()
+}).strict()
+
+export const settingsSaveResultSchema: z.ZodType<SettingsSaveResult> = z.object({
+  settings: appSettingsSchema,
+  fieldErrors: z.object({
+    parser: credentialFieldErrorSchema.optional(),
+    qwen: credentialFieldErrorSchema.optional(),
+    deepseek: credentialFieldErrorSchema.optional()
+  }).strict()
 }).strict()
 
 export const healthResultSchema: z.ZodType<HealthResult> = z.object({
@@ -167,8 +229,6 @@ export const saveAsRequestSchema: z.ZodType<SaveAsRequest> = z.object({
 export const windowActionSchema = z.enum(['minimize', 'toggle-maximize', 'close'])
 export const windowStateSchema: z.ZodType<WindowState> = z.object({ maximized: z.boolean() }).strict()
 
-export const parserTokenSchema = z.string().max(16_384).optional()
-export const providerIdRequestSchema = translationProviderIdSchema
 export const taskIdRequestSchema = boundedId
 export const inspectPdfsRequestSchema = z.array(boundedPath).max(100)
 export const noRequestSchema = z.undefined()

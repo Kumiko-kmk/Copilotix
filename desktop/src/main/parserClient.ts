@@ -129,12 +129,21 @@ export class OfficialMinerUClient implements MinerUClient {
   }
 
   async verifyToken(token?: string | null): Promise<HealthResult> {
-    if (!token?.trim()) return { ok: false, message: '请先输入 MinerU API Token' }
+    if (!token?.trim()) return { ok: false, code: 'PARSER_TOKEN_MISSING', message: '请先输入 MinerU API Token' }
     try {
       const response = await this.fetcher(
         `${MINERU_API_ORIGIN}/api/v4/extract-results/batch/${TOKEN_PROBE_BATCH_ID}`,
         { headers: authHeaders(token), signal: AbortSignal.timeout(15_000) }
       )
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'MinerU API Token 无效' }
+        }
+        if (response.status === 408 || response.status === 429 || response.status >= 500) {
+          return { ok: false, code: `HTTP_${response.status}`, message: 'MinerU 验证服务暂不可用' }
+        }
+        return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'MinerU API Token 验证失败' }
+      }
       const payload = await readEnvelope<RawBatchResultData>(response)
       const code = String(payload.code)
       if (code === 'A0202') return resultFromEnvelope(false, payload, 'Token 错误')
@@ -143,8 +152,8 @@ export class OfficialMinerUClient implements MinerUClient {
         return resultFromEnvelope(true, payload, 'Token 验证成功')
       }
       return resultFromEnvelope(false, payload, payload.msg || 'Token 验证失败')
-    } catch (error) {
-      return { ok: false, message: readableError(error) }
+    } catch (_error) {
+      return { ok: false, code: 'VALIDATION_UNAVAILABLE', message: '暂时无法连接 MinerU 验证服务，请检查网络后重试' }
     }
   }
 
@@ -335,9 +344,14 @@ async function requireSuccess<T>(response: Response, prefix: string): Promise<Ap
   const payload = await readEnvelope<T>(response)
   if (!response.ok || payload.code !== 0) {
     const trace = payload.trace_id ? `，trace_id=${payload.trace_id}` : ''
+    const code = !response.ok ? `HTTP_${response.status}` : payload.code
+    // Keep remote response text out of the Error.  The service can echo
+    // request data in `msg`; callers persist/log this error and must never
+    // accidentally expose the bearer token.
+    const reason = !response.ok ? `HTTP ${response.status}` : 'MinerU API 返回业务错误'
     throw new MinerUApiError(
-      `${prefix}：${payload.msg || `HTTP ${response.status}`}（code=${String(payload.code)}${trace}）`,
-      payload.code,
+      `${prefix}：${reason}（code=${String(code)}${trace}）`,
+      code,
       payload.trace_id
     )
   }
@@ -349,7 +363,7 @@ async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
   try {
     payload = await response.json()
   } catch {
-    throw new Error(`MinerU API 返回非 JSON 响应（HTTP ${response.status}）`)
+    throw new MinerUApiError(`MinerU API 返回非 JSON 响应（HTTP ${response.status}）`, `HTTP_${response.status}`)
   }
   if (!payload || typeof payload !== 'object' || !('code' in payload)) {
     throw new Error('MinerU API 返回了无效响应')
@@ -358,8 +372,8 @@ async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
   return { ...envelope, msg: typeof envelope.msg === 'string' ? envelope.msg : '' }
 }
 
-function resultFromEnvelope(ok: boolean, payload: ApiEnvelope<unknown>, message: string): HealthResult {
-  return { ok, message, code: payload.code, traceId: payload.trace_id }
+function resultFromEnvelope(ok: boolean, payload: ApiEnvelope<unknown>, message: string, validationCode?: string): HealthResult {
+  return { ok, message, code: validationCode ?? payload.code, traceId: payload.trace_id }
 }
 
 function normalizeState(value: unknown): OfficialTaskState {
@@ -378,9 +392,6 @@ function requireHttpsUrl(value: string, label: string): string {
   return url.toString()
 }
 
-function readableError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) return Promise.reject(new Error('请求已取消'))

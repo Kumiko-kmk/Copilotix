@@ -31,8 +31,17 @@ export class WindowsCredentialVault implements CredentialVault {
   async delete(account: CredentialAccount): Promise<void> {
     try {
       new Entry(CREDENTIAL_SERVICE, account).deletePassword()
-    } catch {
-      // Removing a missing credential is intentionally idempotent.
+    } catch (error) {
+      // The native binding reports a missing item as NoEntry. That case is
+      // intentionally idempotent; other failures (for example an unavailable
+      // Windows credential manager) must reach SettingsService so a migration
+      // or per-field save is not falsely reported as complete.
+      const message = error instanceof Error ? error.message : String(error)
+      const code = error && typeof error === 'object' && 'code' in error
+        ? String((error as { code?: unknown }).code ?? '')
+        : ''
+      if (code === 'ENOENT' || code === 'NotFound' || code === 'NO_ENTRY' || /(?:no.?entry|not found|no such credential|does not exist)/iu.test(message)) return
+      throw error
     }
   }
 

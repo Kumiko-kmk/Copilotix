@@ -1,5 +1,5 @@
 import PQueue from 'p-queue'
-import type { AppSettings, TranslationProviderId } from '@shared/types'
+import type { AppSettings, CredentialName, HealthResult, TranslationProviderId } from '@shared/types'
 import type { CredentialVault } from '../credentialVault'
 import {
   flattenSegments,
@@ -15,6 +15,7 @@ type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Re
 export interface TranslationProvider {
   readonly id: TranslationProviderId
   readonly model: string
+  readonly credentialName?: CredentialName
   isAvailable(): Promise<boolean>
   translate(text: string, signal?: AbortSignal): Promise<string>
   translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse>
@@ -27,6 +28,17 @@ export class TranslationHttpError extends Error {
     readonly retryAfterMs?: number
   ) {
     super(message)
+  }
+}
+
+export class TranslationCredentialError extends Error {
+  constructor(
+    message: string,
+    readonly credentialName: CredentialName,
+    readonly code = 'CREDENTIAL_REQUIRED'
+  ) {
+    super(message)
+    this.name = 'TranslationCredentialError'
   }
 }
 
@@ -56,18 +68,23 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     private readonly baseUrl: string,
     private readonly credentialAccount: 'qwen-api-key' | 'deepseek-api-key',
     private readonly vault: CredentialVault,
-    private readonly fetcher: Fetcher
+    private readonly fetcher: Fetcher,
+    private readonly credentialState: AppSettings['credentials']['qwen']['state']
   ) {
     super()
   }
 
+  get credentialName(): 'qwen' | 'deepseek' {
+    return this.id
+  }
+
   async isAvailable(): Promise<boolean> {
-    return this.vault.has(this.credentialAccount)
+    return this.credentialState === 'valid' && Boolean(await this.vault.get(this.credentialAccount))
   }
 
   protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
     const apiKey = await this.vault.get(this.credentialAccount)
-    if (!apiKey) throw new Error(`${this.id} 尚未配置 API Key`)
+    if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
     const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -95,7 +112,7 @@ class OpenAiCompatibleProvider extends QueuedProvider {
 
   protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
     const apiKey = await this.vault.get(this.credentialAccount)
-    if (!apiKey) throw new Error(`${this.id} 尚未配置 API Key`)
+    if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
     const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -306,7 +323,7 @@ export function createTranslationProviders(
   fetcher: Fetcher
 ): Map<TranslationProviderId, TranslationProvider> {
   return new Map<TranslationProviderId, TranslationProvider>([
-    ['qwen', new OpenAiCompatibleProvider('qwen', settings.qwenModel, settings.qwenBaseUrl, 'qwen-api-key', vault, fetcher)],
+    ['qwen', new OpenAiCompatibleProvider('qwen', settings.qwenModel, settings.qwenBaseUrl, 'qwen-api-key', vault, fetcher, settings.credentials.qwen.state)],
     [
       'deepseek',
       new OpenAiCompatibleProvider(
@@ -315,7 +332,8 @@ export function createTranslationProviders(
         settings.deepseekBaseUrl,
         'deepseek-api-key',
         vault,
-        fetcher
+        fetcher,
+        settings.credentials.deepseek.state
       )
     ],
     ['bing', new BingProvider(fetcher)],
@@ -323,12 +341,55 @@ export function createTranslationProviders(
   ])
 }
 
+/** Validate a candidate OpenAI-compatible credential without touching the vault. */
+export async function probeOpenAiCompatibleCredential(
+  providerId: 'qwen' | 'deepseek',
+  settings: AppSettings,
+  apiKey: string,
+  fetcher: Fetcher
+): Promise<HealthResult> {
+  const baseUrl = providerId === 'qwen' ? settings.qwenBaseUrl : settings.deepseekBaseUrl
+  const model = providerId === 'qwen' ? settings.qwenModel : settings.deepseekModel
+  const response = await fetcher(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey.trim()}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      max_tokens: 1,
+      messages: [
+        { role: 'system', content: '只输出 OK。' },
+        { role: 'user', content: 'OK' }
+      ]
+    }),
+    signal: AbortSignal.timeout(15_000)
+  })
+  if (!response.ok) {
+    const code = response.status === 401 || response.status === 403
+      ? 'AUTH_INVALID'
+      : `HTTP_${response.status}`
+    return { ok: false, code, message: `${providerId} API Key 验证失败（HTTP ${response.status}）` }
+  }
+  try {
+    const payload: unknown = await response.json()
+    openAiResponseContent(payload, providerId)
+    return { ok: true, message: `${providerId} API Key 验证成功` }
+  } catch {
+    return { ok: false, code: 'INVALID_RESPONSE', message: `${providerId} 接口返回了无法识别的响应` }
+  }
+}
+
 async function toHttpError(response: Response, prefix: string): Promise<TranslationHttpError> {
   const retryAfter = response.headers.get('retry-after')
   const retryAfterMs = retryAfter ? Number(retryAfter) * 1000 : undefined
-  const body = await response.text()
+  // Do not copy a provider response body into an Error.  Some gateways echo
+  // request data (including an API key) in error payloads; keeping the body out
+  // of the error prevents it from reaching task state or logs.
   return new TranslationHttpError(
-    `${prefix}（HTTP ${response.status}）${body ? `：${body.slice(0, 300)}` : ''}`,
+    `${prefix}（HTTP ${response.status}）`,
     response.status,
     Number.isFinite(retryAfterMs) ? retryAfterMs : undefined
   )

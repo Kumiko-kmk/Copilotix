@@ -35,6 +35,15 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     await this.supervisor.request('settings:save', { settings })
   }
 
+  async getMigrationMarker(id: string): Promise<boolean> {
+    const result = await this.supervisor.request('settings:migration-get', { id })
+    return result.applied
+  }
+
+  async markMigration(id: string): Promise<void> {
+    await this.supervisor.request('settings:migration-mark', { id })
+  }
+
   async listTasks(): Promise<MinerUTask[]> {
     return this.supervisor.request('tasks:list', {})
   }

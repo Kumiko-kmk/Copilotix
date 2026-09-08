@@ -37,7 +37,16 @@ export class TranslationJobRunner implements JobRunner {
     const task = await this.options.repository.getTask(input.job.documentId)
     if (!task) throw new JobRunnerError('文档不存在', 'DOCUMENT_NOT_FOUND', false)
     const settings = await this.options.settingsService.get()
+    if (settings.credentials.parser.state !== 'valid') {
+      const stateMessage = settings.credentials.parser.state === 'missing'
+        ? '未配置 MinerU API Token'
+        : 'MinerU API Token 尚未验证或已经失效'
+      throw new JobRunnerError(`${stateMessage}，请在设置中验证后重试`, 'TRANSLATION_CREDENTIALS_REQUIRED', false)
+    }
     const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher)
+    // Provider selection is resolved at execution time so a manual retry can
+    // use the corrected setting instead of an old task snapshot.
+    const effectiveTask = { ...task, translationProvider: settings.translationProvider }
     const checkpointBase = {
       ...input.job.checkpoint,
       stage: 'translating',
@@ -49,15 +58,18 @@ export class TranslationJobRunner implements JobRunner {
       onEmit: () => undefined
     })
 
-    this.logger.info('translation.start', { taskId: task.id, jobId: input.job.id, preferredProvider: task.translationProvider })
+    this.logger.info('translation.start', { taskId: task.id, jobId: input.job.id, preferredProvider: effectiveTask.translationProvider })
     const result = await runTranslationPlan({
-      task,
+      task: effectiveTask,
       jobId: input.job.id,
       providers,
       compute: this.options.compute,
       artifacts: this.artifacts,
       pathPolicy: this.options.pathPolicy,
       signal: input.signal,
+      onCredentialFailure: async (name) => {
+        await this.options.settingsService.invalidateCredential(name).catch(() => undefined)
+      },
       onProgress: async ({ counts, failedBlockIds }) => {
         if (input.signal.aborted) throw abortError()
         const { completed, total, failed } = counts

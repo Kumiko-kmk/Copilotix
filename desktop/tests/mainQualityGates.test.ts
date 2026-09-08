@@ -82,17 +82,19 @@ const baseTask: MinerUTask = {
 }
 
 const baseSettings = {
-  hasParserToken: false,
   outputRoot: 'C:\\output',
   formulaEnabled: true,
   tableEnabled: true,
   translationProvider: 'qwen' as const,
   qwenBaseUrl: 'https://qwen.example.test',
   qwenModel: 'qwen-model',
-  qwenHasApiKey: false,
   deepseekBaseUrl: 'https://deepseek.example.test',
   deepseekModel: 'deepseek-model',
-  deepseekHasApiKey: false
+  credentials: {
+    parser: { state: 'missing' as const },
+    qwen: { state: 'missing' as const },
+    deepseek: { state: 'missing' as const }
+  }
 }
 
 const roots: string[] = []
@@ -309,10 +311,10 @@ describe('main quality boundaries', () => {
     expect(new JobRunnerError('failed', 'TEST', true)).toMatchObject({ code: 'TEST', retryable: true })
   })
 
-  it('normalizes settings credentials, batches, and optional account operations', async () => {
+  it('validates credentials independently, masks stored values, and supports explicit clear', async () => {
     const saved: unknown[] = []
     const repository = {
-      getSettings: async () => ({ ...baseSettings }),
+      getSettings: async () => ({ ...baseSettings, credentials: { ...baseSettings.credentials } }),
       saveSettings: async (value: unknown) => { saved.push(value) }
     } as unknown as TaskRepositoryCompat
     const values = new Map<CredentialAccount, string>([['parser-token', 'parser']])
@@ -322,12 +324,17 @@ describe('main quality boundaries', () => {
       delete: async (account) => { values.delete(account) },
       has: async (account) => values.has(account)
     }
-    const service = new SettingsService(repository, vault, 'C:\\default-output')
-    await expect(service.get()).resolves.toMatchObject({ hasParserToken: true, qwenHasApiKey: false })
-    await service.save({
-      parserToken: ' parser-next ',
-      clearQwenApiKey: true,
-      deepseekApiKey: 'deepseek',
+    const service = new SettingsService(repository, vault, 'C:\\default-output', {
+      parser: async (value) => ({ ok: value === 'parser-next', message: 'Token 验证成功' }),
+      provider: async (name, value) => ({ ok: value === name, message: `${name} 验证成功` })
+    })
+    await expect(service.get()).resolves.toMatchObject({ credentials: { parser: { state: 'unknown', maskedValue: 'pa****er' }, qwen: { state: 'missing' } } })
+    const result = await service.save({
+      credentialMutations: {
+        parser: { action: 'set', value: ' parser-next ' },
+        qwen: { action: 'clear' },
+        deepseek: { action: 'set', value: 'deepseek' }
+      },
       outputRoot: 'C:\\new-output',
       formulaEnabled: true,
       tableEnabled: false,
@@ -337,8 +344,11 @@ describe('main quality boundaries', () => {
       deepseekBaseUrl: 'https://deepseek.example.test',
       deepseekModel: 'deepseek'
     })
-    expect(values.get('parser-token')).toBe(' parser-next ')
+    expect(values.get('parser-token')).toBe('parser-next')
     expect(values.get('deepseek-api-key')).toBe('deepseek')
+    expect(result.fieldErrors).toEqual({})
+    expect(result.settings.credentials.parser).toMatchObject({ state: 'valid', maskedValue: 'pars****next' })
+    expect(result.settings.credentials.deepseek).toMatchObject({ state: 'valid', maskedValue: 'de****ek' })
     expect(saved).toHaveLength(1)
     expect(splitIntoMinerUBatches([1, 2, 3], 2)).toEqual([[1, 2], [3]])
     expect(() => splitIntoMinerUBatches([], 0)).toThrow('Batch size')
@@ -354,7 +364,15 @@ describe('main quality boundaries', () => {
     await writeFile(duplicateSource, '%PDF-1.4 duplicate')
     await writeFile(textFile, 'not a PDF')
 
-    const settings = { ...baseSettings, hasParserToken: true, outputRoot: join(root, 'output') }
+    const settings = {
+      ...baseSettings,
+      outputRoot: join(root, 'output'),
+      credentials: {
+        parser: { state: 'valid' as const },
+        qwen: { state: 'missing' as const },
+        deepseek: { state: 'missing' as const }
+      }
+    }
     const tasks = new Map<string, MinerUTask>()
     const enqueued: unknown[] = []
     const job = {
@@ -416,7 +434,7 @@ describe('main quality boundaries', () => {
 
     const noTokenService = new DocumentCommandService(
       repository,
-      { get: async () => ({ ...settings, hasParserToken: false }) } as never,
+      { get: async () => ({ ...settings, credentials: { ...settings.credentials, parser: { state: 'missing' as const } } }) } as never,
       compute,
       new PathPolicy(),
       logger

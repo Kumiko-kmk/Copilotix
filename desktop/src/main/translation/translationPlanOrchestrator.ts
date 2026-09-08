@@ -16,11 +16,11 @@ import {
   validateTableTranslationResponse
 } from '@shared/translationPlanProtocol'
 import { FALLBACK_PROVIDER_ORDER } from '@shared/constants'
-import type { MinerUTask, TranslationProviderId } from '@shared/types'
+import type { CredentialName, MinerUTask, TranslationProviderId } from '@shared/types'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { ArtifactService } from '../artifactService'
 import type { TranslationProvider } from './providers'
-import { TranslationHttpError } from './providers'
+import { TranslationCredentialError, TranslationHttpError } from './providers'
 import { PathPolicy } from '../pathPolicy'
 
 const MAX_TRANSLATION_SEGMENT_LENGTH = 4_000
@@ -49,6 +49,7 @@ export interface TranslationPlanOrchestratorOptions {
   pathPolicy?: PathPolicyPort
   signal: AbortSignal
   onProgress(progress: TranslationPlanProgress): void | Promise<void>
+  onCredentialFailure?(name: CredentialName): void | Promise<void>
 }
 
 /**
@@ -61,6 +62,13 @@ export class TranslationPlanOrchestrator {
   private readonly fileWriter: TranslationPlanFileWriter | undefined
   private progressTail = Promise.resolve()
   private readonly failedBlockIds = new Set<string>()
+  /**
+   * Authentication failures disable that credential for the remainder of the
+   * current translation run.  Without this guard, every pending unit could
+   * independently retry the same known-bad key before the settings cache is
+   * refreshed.
+   */
+  private readonly disabledCredentials = new Set<CredentialName>()
 
   constructor(private readonly options: TranslationPlanOrchestratorOptions) {
     this.pathPolicy = options.pathPolicy ?? new PathPolicy()
@@ -120,6 +128,7 @@ export class TranslationPlanOrchestrator {
       throwIfAborted(signal)
       const provider = providers.get(providerId)
       if (!provider) continue
+      if (provider.credentialName && this.disabledCredentials.has(provider.credentialName)) continue
 
       let available = false
       try {
@@ -179,6 +188,11 @@ export class TranslationPlanOrchestrator {
         throw new Error(`utility 未完成翻译单元（状态：${applied.status}）`)
       } catch (error) {
         if (isAbortError(error, signal)) throw abortError()
+        const credentialName = credentialFailureFor(provider, error)
+        if (credentialName) {
+          this.disabledCredentials.add(credentialName)
+          await this.options.onCredentialFailure?.(credentialName)
+        }
         errors.push(`${providerId}: ${readableError(error)}`)
       }
     }
@@ -352,12 +366,30 @@ export async function withRetry<T>(operation: () => Promise<T>, signal: AbortSig
     } catch (error) {
       if (isAbortError(error, signal)) throw abortError()
       lastError = error
+      if (!isRetryableTranslationError(error)) throw error
       if (attempt === MAX_RETRY_ATTEMPTS - 1) break
       const retryAfter = error instanceof TranslationHttpError ? error.retryAfterMs : undefined
       await delay(retryAfter ?? 1_000 * 2 ** attempt, signal)
     }
   }
   throw lastError
+}
+
+function credentialFailureFor(provider: TranslationProvider, error: unknown): CredentialName | undefined {
+  if (!provider.credentialName) return undefined
+  if (error instanceof TranslationCredentialError) return error.credentialName
+  if (error instanceof TranslationHttpError && (error.status === 401 || error.status === 403)) return provider.credentialName
+  return undefined
+}
+
+function isRetryableTranslationError(error: unknown): boolean {
+  if (error instanceof TranslationCredentialError) return false
+  if (error instanceof TranslationHttpError) return error.status === 408 || error.status === 429 || error.status >= 500
+  if (!error || typeof error !== 'object') return false
+  const status = (error as { status?: unknown }).status
+  if (typeof status === 'number') return status === 408 || status === 429 || status >= 500
+  const message = error instanceof Error ? error.message : ''
+  return /(?:timeout|timed out|timedout|network|fetch failed|failed to fetch|econn|socket|temporar|不可达|超时)/iu.test(message)
 }
 
 function lazyRequest(loader: () => Promise<TranslationPlanRequest>): () => Promise<TranslationPlanRequest> {

@@ -15,7 +15,7 @@ import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { AppSettings, MinerUTask } from '@shared/types'
 import type { CredentialVault } from './credentialVault'
 import type { TaskLogger } from './logger'
-import type { MinerUClient, BatchResult, BatchSubmission } from './parserClient'
+import { MinerUApiError, type MinerUClient, type BatchResult, type BatchSubmission } from './parserClient'
 import type { SettingsService } from './settingsService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { JobRepositoryPort } from '@core/jobs'
@@ -104,7 +104,8 @@ export class ParseJobRunner implements BatchJobRunner {
     try {
       submission = await this.options.parserClient.createUploadBatch(loaded.map(({ task }) => task), settings, token, input.signal)
     } catch (error) {
-      return loaded.map(({ job }) => failure(job, toRunnerError(error, 'PARSER_SUBMIT_FAILED')))
+      await this.invalidateParserCredential(error)
+      return loaded.map(({ job }) => failure(job, toRunnerError(error, 'PARSER_SUBMIT_FAILED', [token])))
     }
 
     const byTaskId = new Map(loaded.map((item) => [item.task.id, item]))
@@ -158,7 +159,7 @@ export class ParseJobRunner implements BatchJobRunner {
         }), true)
         this.logger.info('upload.completed', { taskId: task.id, jobId: job.id, batchId: submission!.batchId })
       } catch (error) {
-        uploadErrors.set(task.id, toRunnerError(error, 'PARSER_UPLOAD_FAILED'))
+        uploadErrors.set(task.id, toRunnerError(error, 'PARSER_UPLOAD_FAILED', [token]))
       }
     })))
 
@@ -177,7 +178,8 @@ export class ParseJobRunner implements BatchJobRunner {
       )
       await Promise.all([...progressTails.values()])
     } catch (error) {
-      const runnerError = toRunnerError(error, 'PARSER_POLL_FAILED')
+      await this.invalidateParserCredential(error)
+      const runnerError = toRunnerError(error, 'PARSER_POLL_FAILED', [token])
       return loaded.map(({ job, task }) => uploaded.has(task.id) ? failure(job, runnerError) : failure(job, uploadErrors.get(task.id) ?? runnerError))
     }
 
@@ -187,13 +189,13 @@ export class ParseJobRunner implements BatchJobRunner {
       if (!uploaded.has(task.id)) return failure(job, new RunnerError('PDF 上传失败', 'PARSER_UPLOAD_FAILED', false))
       const entry = entries.get(task.id)
       if (!entry) return failure(job, new RunnerError('MinerU 批次结果缺少对应 data_id', 'PARSER_PROTOCOL_ERROR', false))
-      if (entry.state === 'failed') return failure(job, new RunnerError(entry.error || 'MinerU 解析失败', 'PARSER_REMOTE_FAILED', false))
+      if (entry.state === 'failed') return failure(job, new RunnerError(redactSecrets(entry.error || 'MinerU 解析失败', [token]), 'PARSER_REMOTE_FAILED', false))
       if (entry.state !== 'done' || !entry.fullZipUrl) return failure(job, new RunnerError(`MinerU 返回未完成状态：${entry.state}`, 'PARSER_PROTOCOL_ERROR', false))
       try {
         const result = await this.processParsedArtifact(job, task, entry.fullZipUrl, settings, input, submission.batchId, entry.dataId ?? undefined)
         return { jobId: job.id, result }
       } catch (error) {
-        return failure(job, toRunnerError(error, 'PARSER_RESULT_FAILED'))
+        return failure(job, toRunnerError(error, 'PARSER_RESULT_FAILED', [token]))
       }
     }))
   }
@@ -233,12 +235,24 @@ export class ParseJobRunner implements BatchJobRunner {
       await Promise.all(tails.values())
       const finalEntry = finalResult.entries.find((item) => item.dataId === remoteDataId)
       if (!finalEntry || finalEntry.state !== 'done' || !finalEntry.fullZipUrl) {
-        return failure(job, new RunnerError(finalEntry?.error || 'MinerU 解析结果无效', 'PARSER_REMOTE_FAILED', false))
+        return failure(job, new RunnerError(redactSecrets(finalEntry?.error || 'MinerU 解析结果无效', [token]), 'PARSER_REMOTE_FAILED', false))
       }
       return { jobId: job.id, result: await this.processParsedArtifact(job, task, finalEntry.fullZipUrl, settings, input, remoteBatchId, remoteDataId) }
     } catch (error) {
-      return failure(job, toRunnerError(error, 'PARSER_RESUME_FAILED'))
+      await this.invalidateParserCredential(error)
+      return failure(job, toRunnerError(error, 'PARSER_RESUME_FAILED', [token]))
     }
+  }
+
+  private async invalidateParserCredential(error: unknown): Promise<void> {
+    if (!(error instanceof MinerUApiError)) return
+    const code = String(error.code)
+    if (code !== 'A0202' && code !== 'A0211' && code !== 'HTTP_401' && code !== 'HTTP_403') return
+    await this.options.settingsService.invalidateCredential(
+      'parser',
+      code === 'A0211' ? 'PARSER_TOKEN_EXPIRED' : 'PARSER_TOKEN_INVALID',
+      code === 'A0211' ? 'MinerU API Token 已过期，请重新验证' : 'MinerU API Token 无效，请重新验证'
+    ).catch(() => undefined)
   }
 
   private async processParsedArtifact(
@@ -343,11 +357,22 @@ function failure(job: Job, error: unknown): JobBatchResult {
   return { jobId: job.id, error }
 }
 
-function toRunnerError(error: unknown, fallbackCode: string): JobRunnerError {
-  if (error instanceof RunnerError) return error
+function toRunnerError(error: unknown, fallbackCode: string, secrets: readonly string[] = []): JobRunnerError {
+  if (error instanceof RunnerError) {
+    const message = redactSecrets(error.message, secrets)
+    return message === error.message ? error : new RunnerError(message, error.code, error.retryable)
+  }
+  const apiCode = error instanceof MinerUApiError ? String(error.code) : ''
   const status = error && typeof error === 'object' && typeof (error as { status?: unknown }).status === 'number'
     ? (error as { status: number }).status
     : undefined
-  const retryable = status === 408 || status === 429 || (status !== undefined && status >= 500) || /(?:timeout|network|econn|socket|temporar)/iu.test(error instanceof Error ? error.message : '')
-  return new RunnerError(error instanceof Error ? error.message : '解析作业失败', fallbackCode, retryable)
+  const retryable = /^HTTP_(?:408|429|5\d{2})$/u.test(apiCode) || status === 408 || status === 429 || (status !== undefined && status >= 500) || /(?:timeout|timed out|timedout|network|fetch failed|failed to fetch|econn|socket|temporar|HTTP\s*(?:408|429|5\d{2}))/iu.test(error instanceof Error ? error.message : '')
+  const message = error instanceof MinerUApiError
+    ? `MinerU API 请求失败（code=${apiCode || 'unknown'}${error.traceId ? `，trace_id=${error.traceId}` : ''}）`
+    : redactSecrets(error instanceof Error ? error.message : '解析作业失败', secrets)
+  return new RunnerError(message, fallbackCode, retryable)
+}
+
+function redactSecrets(message: string, secrets: readonly string[]): string {
+  return secrets.filter((secret) => secret.length > 0).reduce((current, secret) => current.split(secret).join('[REDACTED]'), message)
 }

@@ -162,6 +162,16 @@ export const V2_MIGRATIONS: readonly V2Migration[] = Object.freeze([
 DELETE FROM settings WHERE key IN ('parserModel', 'forceOcr', 'ocrLanguage');
 ALTER TABLE documents DROP COLUMN parser_model;
 `
+  },
+  {
+    version: 3,
+    name: 'add-application-migration-markers',
+    sql: `
+CREATE TABLE app_migrations (
+  id TEXT PRIMARY KEY CHECK (length(id) > 0 AND instr(id, char(0)) = 0),
+  applied_at TEXT NOT NULL
+) STRICT;
+`
   }
 ])
 

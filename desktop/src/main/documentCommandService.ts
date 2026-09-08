@@ -51,7 +51,7 @@ export class DocumentCommandService {
 
   async create(request: CreateTasksRequest): Promise<MinerUTask[]> {
     const settings = await this.settingsService.get()
-    if (!settings.hasParserToken) throw new Error('请先在系统设置中配置 MinerU API Token')
+    assertParserCredentialUsable(settings)
     for (const file of request.files) {
       if (extname(file.path).toLowerCase() !== '.pdf') continue
       const info = await stat(file.path)
@@ -103,7 +103,7 @@ export class DocumentCommandService {
   async importPaths(paths: readonly string[], options: Omit<CreateTasksRequest, 'files'>): Promise<MinerUTask[]> {
     if (!this.compute.importPdf) throw new Error('核心导入服务尚未初始化')
     const settings = await this.settingsService.get()
-    if (!settings.hasParserToken) throw new Error('请先在系统设置中配置 MinerU API Token')
+    assertParserCredentialUsable(settings)
     await mkdir(settings.outputRoot, { recursive: true })
     const documentsRoot = join(settings.outputRoot, 'documents-v2')
     await mkdir(documentsRoot, { recursive: true })
@@ -212,6 +212,11 @@ export class DocumentCommandService {
       })
     }
   }
+}
+
+function assertParserCredentialUsable(settings: Awaited<ReturnType<SettingsService['get']>>): void {
+  if (settings.credentials.parser.state === 'missing') throw new Error('请先在系统设置中配置 MinerU API Token')
+  if (settings.credentials.parser.state === 'invalid') throw new Error('MinerU API Token 已失效，请在系统设置中重新验证')
 }
 
 function compareJobs(left: Job, right: Job): number {

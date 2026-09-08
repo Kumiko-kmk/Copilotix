@@ -37,17 +37,19 @@ describe('IPC contracts', () => {
 
   it('keeps settings response fields explicit at runtime', () => {
     const settings = {
-      hasParserToken: false,
       outputRoot: 'C:/papers',
       formulaEnabled: true,
       tableEnabled: true,
       translationProvider: 'qwen' as const,
       qwenBaseUrl: 'https://example.com',
       qwenModel: 'qwen',
-      qwenHasApiKey: false,
       deepseekBaseUrl: 'https://example.com',
       deepseekModel: 'deepseek',
-      deepseekHasApiKey: false
+      credentials: {
+        parser: { state: 'missing' as const },
+        qwen: { state: 'unknown' as const, maskedValue: 'sk-****-key' },
+        deepseek: { state: 'valid' as const, maskedValue: 'deep****seek' }
+      }
     }
     expect(appSettingsSchema.parse(settings)).toEqual(settings)
   })

@@ -195,7 +195,7 @@ const coreReaderAnnotationsSchema = z.array(coreReaderAnnotationSchema).max(10_0
 const coreOperationNames = [
   'ping', 'cancel', 'drain', 'shutdown',
   'database:init', 'database:flush', 'database:close',
-  'settings:get', 'settings:save',
+  'settings:get', 'settings:save', 'settings:migration-get', 'settings:migration-mark',
   'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
   'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
   'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
@@ -230,6 +230,9 @@ export const coreSettingsGetPayloadSchema = z.object({ outputRoot: corePathSchem
 export const coreSettingsGetResultSchema = appSettingsSchema
 export const coreSettingsSavePayloadSchema = z.object({ settings: appSettingsSchema }).strict()
 export const coreSettingsSaveResultSchema = appSettingsSchema
+export const coreSettingsMigrationPayloadSchema = z.object({ id: coreIdSchema }).strict()
+export const coreSettingsMigrationGetResultSchema = z.object({ applied: z.boolean() }).strict()
+export const coreSettingsMigrationMarkResultSchema = z.object({ applied: z.literal(true) }).strict()
 export const coreTasksListPayloadSchema = emptyPayloadSchema
 export const coreTasksListResultSchema = z.array(minerUTaskSchema).max(10_000)
 export const coreTaskIdPayloadSchema = z.object({ id: coreIdSchema }).strict()
@@ -479,6 +482,8 @@ export const coreOperationRegistry = {
   'database:close': { payload: coreDatabaseClosePayloadSchema, result: coreDatabaseCloseResultSchema },
   'settings:get': { payload: coreSettingsGetPayloadSchema, result: coreSettingsGetResultSchema },
   'settings:save': { payload: coreSettingsSavePayloadSchema, result: coreSettingsSaveResultSchema },
+  'settings:migration-get': { payload: coreSettingsMigrationPayloadSchema, result: coreSettingsMigrationGetResultSchema },
+  'settings:migration-mark': { payload: coreSettingsMigrationPayloadSchema, result: coreSettingsMigrationMarkResultSchema },
   'tasks:list': { payload: coreTasksListPayloadSchema, result: coreTasksListResultSchema },
   'tasks:get': { payload: coreTaskIdPayloadSchema, result: coreTaskResultSchema },
   'tasks:find-by-hash': { payload: coreFindTaskByHashPayloadSchema, result: coreTaskResultSchema },

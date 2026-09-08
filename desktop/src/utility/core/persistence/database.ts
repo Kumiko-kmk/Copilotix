@@ -156,14 +156,12 @@ export class TaskRepository {
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
       deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
-      hasParserToken: false,
-      qwenHasApiKey: false,
-      deepseekHasApiKey: false
+      credentials: DEFAULT_SETTINGS.credentials
     }
   }
 
   saveSettings(settings: AppSettings): void {
-    const hiddenKeys = new Set(['hasParserToken', 'qwenHasApiKey', 'deepseekHasApiKey'])
+    const hiddenKeys = new Set(['credentials'])
     const upsert = this.db.prepare(
       'INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
     )

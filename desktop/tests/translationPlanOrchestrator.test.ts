@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { TaskComputePort } from '../src/core/ports'
 import { PathPolicy } from '../src/main/pathPolicy'
-import { TranslationHttpError, type TranslationProvider } from '../src/main/translation/providers'
+import { TranslationCredentialError, TranslationHttpError, type TranslationProvider } from '../src/main/translation/providers'
 import { TranslationPlanOrchestrator } from '../src/main/translation/translationPlanOrchestrator'
 import type {
   PlainTranslationRequest,
@@ -232,6 +232,29 @@ describe('translation plan orchestrator', () => {
     expect(calls).toHaveLength(6)
     expect(calls.slice(0, 3).every((entry) => entry.startsWith('qwen:'))).toBe(true)
     expect(calls.slice(3).every((entry) => entry.startsWith('deepseek:'))).toBe(true)
+  })
+
+  it('does not retry a provider after an authentication failure', async () => {
+    const fixture = await makeFixture('Bad credentials')
+    let calls = 0
+    const provider: TranslationProvider = {
+      id: 'qwen',
+      model: 'qwen-fixture-model',
+      credentialName: 'qwen',
+      isAvailable: async () => true,
+      translate: async () => {
+        calls += 1
+        throw new TranslationHttpError('invalid key', 401)
+      },
+      translateTable: async () => {
+        throw new TranslationCredentialError('invalid key', 'qwen')
+      }
+    }
+
+    const result = await run(fixture, new Map([['qwen', provider]]))
+    expect(result.status).toBe('partial')
+    expect(calls).toBe(1)
+    expect(fixture.compute.failCalls).toEqual([fixture.descriptor.unitId])
   })
 
   it('stops without failing the unit when the signal is aborted', async () => {

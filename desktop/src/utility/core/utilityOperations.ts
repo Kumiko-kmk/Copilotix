@@ -20,6 +20,7 @@ import {
   coreJobManualRetryPayloadSchema,
   coreJobRecoverExpiredPayloadSchema,
   coreJobEventsPayloadSchema,
+  coreSettingsMigrationPayloadSchema,
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
   coreTranslationBatchCommitPayloadSchema,
@@ -140,6 +141,15 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       state.outputRoot = settings.outputRoot
       state.translationPlanManager = undefined
       return settings
+    },
+    'settings:migration-get': (request) => {
+      const payload = coreSettingsMigrationPayloadSchema.parse(request.payload)
+      return { applied: requireRepository().getMigrationMarker?.(payload.id) ?? false }
+    },
+    'settings:migration-mark': (request) => {
+      const payload = coreSettingsMigrationPayloadSchema.parse(request.payload)
+      requireRepository().markMigration?.(payload.id)
+      return { applied: true }
     },
     'tasks:list': () => requireRepository().listTasks(),
     'tasks:get': (request) => requireRepository().getTask((request.payload as { id: string }).id),
@@ -267,7 +277,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
 
   const persistenceOperations: readonly CoreOperation[] = [
     'database:init', 'database:flush', 'database:close',
-    'settings:get', 'settings:save',
+    'settings:get', 'settings:save', 'settings:migration-get', 'settings:migration-mark',
     'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
     'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
     'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
