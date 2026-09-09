@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { AppSettings, MinerUTask } from '@shared/types'
+import type { AppSettings, CopilotixTask } from '@shared/types'
 import type { Job } from '../src/core/jobs'
 import { ParseJobRunner } from '../src/main/parseJobRunner'
 import { PathPolicy } from '../src/main/pathPolicy'
-import { MinerUApiError } from '../src/main/parserClient'
+import { ParserApiError } from '../src/main/parserClient'
 import { TranslationJobRunner } from '../src/main/translationJobRunner'
 
-const task: MinerUTask = {
+const task: CopilotixTask = {
   id: '11111111-1111-4111-8111-111111111111',
   originalName: 'paper.pdf',
   title: null,
@@ -35,7 +35,7 @@ const job = {
 } as unknown as Job
 
 describe('translation credential gate', () => {
-  it.each(['missing', 'unknown', 'invalid'] as const)('blocks translation when MinerU is %s', async (state) => {
+  it.each(['missing', 'unknown', 'invalid'] as const)('blocks translation when Copilotix is %s', async (state) => {
     const fetcher = vi.fn()
     const settings = appSettings({ state })
     const runner = new TranslationJobRunner({
@@ -55,10 +55,10 @@ describe('translation credential gate', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
-  it('marks the stored MinerU token invalid after a definitive parser authentication error', async () => {
+  it('marks the stored Copilotix token invalid after a definitive parser authentication error', async () => {
     const invalidateCredential = vi.fn(async () => undefined)
     const parserClient = {
-      createUploadBatch: async () => { throw new MinerUApiError('token invalid', 'A0202') }
+      createUploadBatch: async () => { throw new ParserApiError('token invalid', 'A0202') }
     }
     const settingsService = {
       get: async () => appSettings({ state: 'valid' }),
@@ -80,7 +80,7 @@ describe('translation credential gate', () => {
       updateProgress: async () => job
     })
     expect(results[0]?.error).toMatchObject({ code: 'PARSER_SUBMIT_FAILED', retryable: false })
-    expect(invalidateCredential).toHaveBeenCalledWith('parser', 'PARSER_TOKEN_INVALID', 'MinerU API Token 无效，请重新验证')
+    expect(invalidateCredential).toHaveBeenCalledWith('parser', 'PARSER_TOKEN_INVALID', 'Parser API Token 无效，请重新验证')
   })
 })
 

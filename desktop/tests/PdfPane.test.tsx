@@ -85,7 +85,7 @@ describe('PdfPane mapping navigation', () => {
       }
     ]
     const view = render(
-      <PdfPane url="mineru-asset://document/original.pdf" mappings={mappings} selection={null} onSelect={onSelect} />
+      <PdfPane url="copilotix-asset://document/original.pdf" mappings={mappings} selection={null} onSelect={onSelect} />
     )
 
     await waitFor(() => expect(view.container.querySelectorAll('[data-block-id]').length).toBe(3))
@@ -99,7 +99,7 @@ describe('PdfPane mapping navigation', () => {
 
     const selection: BlockSelection = { mappingId: 'text-block', blockPosition: '1-0', origin: 'markdown' }
     view.rerender(
-      <PdfPane url="mineru-asset://document/original.pdf" mappings={mappings} selection={selection} onSelect={onSelect} />
+      <PdfPane url="copilotix-asset://document/original.pdf" mappings={mappings} selection={selection} onSelect={onSelect} />
     )
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
     expect(continuation.classList.contains('active')).toBe(true)
@@ -107,7 +107,7 @@ describe('PdfPane mapping navigation', () => {
 
   it('reveals only the overflowing scrollbar nearest the pointer edge', () => {
     const view = render(
-      <PdfPane url="mineru-asset://document/original.pdf" mappings={[]} selection={null} onSelect={vi.fn()} />
+      <PdfPane url="copilotix-asset://document/original.pdf" mappings={[]} selection={null} onSelect={vi.fn()} />
     )
     const scroller = view.container.querySelector<HTMLElement>('.pdf-scroll')!
     setScrollerMetrics(scroller, { clientWidth: 400, clientHeight: 300, scrollWidth: 800, scrollHeight: 900 })
@@ -134,7 +134,7 @@ describe('PdfPane mapping navigation', () => {
     vi.useFakeTimers()
     try {
       const view = render(
-        <PdfPane url="mineru-asset://document/original.pdf" mappings={[]} selection={null} onSelect={vi.fn()} />
+        <PdfPane url="copilotix-asset://document/original.pdf" mappings={[]} selection={null} onSelect={vi.fn()} />
       )
       const scroller = view.container.querySelector<HTMLElement>('.pdf-scroll')!
       setScrollerMetrics(scroller, { clientWidth: 400, clientHeight: 300, scrollWidth: 800, scrollHeight: 900 })

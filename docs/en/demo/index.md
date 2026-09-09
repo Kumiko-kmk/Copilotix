@@ -3,6 +3,6 @@ hide:
   - toc
 ---
 
-<div class="mineru-demo-page">
-<iframe class="mineru-demo-iframe" src="https://opendatalab-mineru.ms.show" title="MinerU online demo"></iframe>
+<div class="copilotix-demo-page">
+<iframe class="copilotix-demo-iframe" src="https://opendatalab-copilotix.ms.show" title="Copilotix online demo"></iframe>
 </div>

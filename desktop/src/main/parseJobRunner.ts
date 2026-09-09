@@ -12,10 +12,10 @@ import type {
 } from '@core/jobs'
 import { JobRunnerError as RunnerError } from '@core/jobs'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
-import type { AppSettings, MinerUTask } from '@shared/types'
+import type { AppSettings, CopilotixTask } from '@shared/types'
 import type { CredentialVault } from './credentialVault'
 import type { TaskLogger } from './logger'
-import { MinerUApiError, type MinerUClient, type BatchResult, type BatchSubmission } from './parserClient'
+import { ParserApiError, type ParserClient, type BatchResult, type BatchSubmission } from './parserClient'
 import type { SettingsService } from './settingsService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { JobRepositoryPort } from '@core/jobs'
@@ -28,7 +28,7 @@ export interface ParseJobRunnerOptions {
   jobRepository: JobRepositoryPort
   settingsService: SettingsService
   vault: CredentialVault
-  parserClient: MinerUClient
+  parserClient: ParserClient
   compute: TaskComputePort
   pathPolicy: PathPolicyPort
   logger?: TaskLogger
@@ -36,7 +36,7 @@ export interface ParseJobRunnerOptions {
 
 interface LoadedJob {
   job: Job
-  task: MinerUTask
+  task: CopilotixTask
 }
 
 /** Scheduler-owned parse runner with remote IDs/checkpoints as the resume source of truth. */
@@ -81,7 +81,7 @@ export class ParseJobRunner implements BatchJobRunner {
     const settings = await this.options.settingsService.get()
     const token = await this.options.vault.get('parser-token')
     if (!token) {
-      return results.concat(valid.map(({ job }) => failure(job, new RunnerError('未配置 MinerU API Token', 'PARSER_AUTH_REQUIRED', false))))
+      return results.concat(valid.map(({ job }) => failure(job, new RunnerError('未配置 Parser API Token', 'PARSER_AUTH_REQUIRED', false))))
     }
 
     const resumable = valid.filter(({ job }) => hasRemoteCheckpoint(job))
@@ -119,7 +119,7 @@ export class ParseJobRunner implements BatchJobRunner {
     for (const { job, task } of loaded) {
       const upload = uploadTargets.get(task.id)
       if (!upload) {
-        uploadErrors.set(task.id, new RunnerError('MinerU 返回的上传链接缺少文档', 'PARSER_PROTOCOL_ERROR', false))
+        uploadErrors.set(task.id, new RunnerError('Copilotix 返回的上传链接缺少文档', 'PARSER_PROTOCOL_ERROR', false))
         continue
       }
       await reporters.get(job.id)!.report(1, checkpointFor(job, 'uploading', {
@@ -188,9 +188,9 @@ export class ParseJobRunner implements BatchJobRunner {
       if (uploadErrors.has(task.id)) return failure(job, uploadErrors.get(task.id)!)
       if (!uploaded.has(task.id)) return failure(job, new RunnerError('PDF 上传失败', 'PARSER_UPLOAD_FAILED', false))
       const entry = entries.get(task.id)
-      if (!entry) return failure(job, new RunnerError('MinerU 批次结果缺少对应 data_id', 'PARSER_PROTOCOL_ERROR', false))
-      if (entry.state === 'failed') return failure(job, new RunnerError(redactSecrets(entry.error || 'MinerU 解析失败', [token]), 'PARSER_REMOTE_FAILED', false))
-      if (entry.state !== 'done' || !entry.fullZipUrl) return failure(job, new RunnerError(`MinerU 返回未完成状态：${entry.state}`, 'PARSER_PROTOCOL_ERROR', false))
+      if (!entry) return failure(job, new RunnerError('Copilotix 批次结果缺少对应 data_id', 'PARSER_PROTOCOL_ERROR', false))
+      if (entry.state === 'failed') return failure(job, new RunnerError(redactSecrets(entry.error || 'Copilotix 解析失败', [token]), 'PARSER_REMOTE_FAILED', false))
+      if (entry.state !== 'done' || !entry.fullZipUrl) return failure(job, new RunnerError(`Copilotix 返回未完成状态：${entry.state}`, 'PARSER_PROTOCOL_ERROR', false))
       try {
         const result = await this.processParsedArtifact(job, task, entry.fullZipUrl, settings, input, submission.batchId, entry.dataId ?? undefined)
         return { jobId: job.id, result }
@@ -235,7 +235,7 @@ export class ParseJobRunner implements BatchJobRunner {
       await Promise.all(tails.values())
       const finalEntry = finalResult.entries.find((item) => item.dataId === remoteDataId)
       if (!finalEntry || finalEntry.state !== 'done' || !finalEntry.fullZipUrl) {
-        return failure(job, new RunnerError(redactSecrets(finalEntry?.error || 'MinerU 解析结果无效', [token]), 'PARSER_REMOTE_FAILED', false))
+        return failure(job, new RunnerError(redactSecrets(finalEntry?.error || 'Copilotix 解析结果无效', [token]), 'PARSER_REMOTE_FAILED', false))
       }
       return { jobId: job.id, result: await this.processParsedArtifact(job, task, finalEntry.fullZipUrl, settings, input, remoteBatchId, remoteDataId) }
     } catch (error) {
@@ -245,19 +245,19 @@ export class ParseJobRunner implements BatchJobRunner {
   }
 
   private async invalidateParserCredential(error: unknown): Promise<void> {
-    if (!(error instanceof MinerUApiError)) return
+    if (!(error instanceof ParserApiError)) return
     const code = String(error.code)
     if (code !== 'A0202' && code !== 'A0211' && code !== 'HTTP_401' && code !== 'HTTP_403') return
     await this.options.settingsService.invalidateCredential(
       'parser',
       code === 'A0211' ? 'PARSER_TOKEN_EXPIRED' : 'PARSER_TOKEN_INVALID',
-      code === 'A0211' ? 'MinerU API Token 已过期，请重新验证' : 'MinerU API Token 无效，请重新验证'
+      code === 'A0211' ? 'Parser API Token 已过期，请重新验证' : 'Parser API Token 无效，请重新验证'
     ).catch(() => undefined)
   }
 
   private async processParsedArtifact(
     job: Job,
-    originalTask: MinerUTask,
+    originalTask: CopilotixTask,
     resultUrl: string,
     settings: AppSettings,
     input: { signal: AbortSignal; updateProgress: (jobId: string, progress: number, checkpoint: JobCheckpoint) => Promise<Job> },
@@ -270,7 +270,7 @@ export class ParseJobRunner implements BatchJobRunner {
       remoteResultUrl: resultUrl
     })
     await input.updateProgress(job.id, 42, checkpoint)
-    const zipPath = join(originalTask.outputDir, '.mineru-result.zip')
+    const zipPath = join(originalTask.outputDir, '.copilotix-result.zip')
     const partialZipPath = `${zipPath}.partial-${job.id}`
     const extractedDir = join(originalTask.outputDir, `.parsed.partial-${job.id}`)
     try {
@@ -303,7 +303,7 @@ export class ParseJobRunner implements BatchJobRunner {
     return { status: 'succeeded', progress: 100, checkpoint: finalCheckpoint, detail: { translateJobId: translate.id } }
   }
 
-  private async ensureTranslateJob(parseJob: Job, task: MinerUTask, _settings: AppSettings): Promise<Job> {
+  private async ensureTranslateJob(parseJob: Job, task: CopilotixTask, _settings: AppSettings): Promise<Job> {
     const jobs = await this.options.jobRepository.list({ documentId: task.id, kind: 'translate' })
     const existing = jobs.find((job) => job.dependsOnJobId === parseJob.id)
     if (existing) return existing
@@ -362,13 +362,13 @@ function toRunnerError(error: unknown, fallbackCode: string, secrets: readonly s
     const message = redactSecrets(error.message, secrets)
     return message === error.message ? error : new RunnerError(message, error.code, error.retryable)
   }
-  const apiCode = error instanceof MinerUApiError ? String(error.code) : ''
+  const apiCode = error instanceof ParserApiError ? String(error.code) : ''
   const status = error && typeof error === 'object' && typeof (error as { status?: unknown }).status === 'number'
     ? (error as { status: number }).status
     : undefined
   const retryable = /^HTTP_(?:408|429|5\d{2})$/u.test(apiCode) || status === 408 || status === 429 || (status !== undefined && status >= 500) || /(?:timeout|timed out|timedout|network|fetch failed|failed to fetch|econn|socket|temporar|HTTP\s*(?:408|429|5\d{2}))/iu.test(error instanceof Error ? error.message : '')
-  const message = error instanceof MinerUApiError
-    ? `MinerU API 请求失败（code=${apiCode || 'unknown'}${error.traceId ? `，trace_id=${error.traceId}` : ''}）`
+  const message = error instanceof ParserApiError
+    ? `Parser API 请求失败（code=${apiCode || 'unknown'}${error.traceId ? `，trace_id=${error.traceId}` : ''}）`
     : redactSecrets(error instanceof Error ? error.message : '解析作业失败', secrets)
   return new RunnerError(message, fallbackCode, retryable)
 }

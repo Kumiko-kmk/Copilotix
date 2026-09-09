@@ -14,8 +14,8 @@ import { SettingsService } from '../src/main/settingsService'
 import { TaskService } from '../src/main/taskService'
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
 import type { CredentialAccount, CredentialVault } from '../src/main/credentialVault'
-import type { BatchResult, BatchSubmission, MinerUClient } from '../src/main/parserClient'
-import type { HealthResult, MinerUTask } from '@shared/types'
+import type { BatchResult, BatchSubmission, ParserClient } from '../src/main/parserClient'
+import type { HealthResult, CopilotixTask } from '@shared/types'
 import type { TaskComputePort } from '../src/core/ports'
 import { fixtureTaskCompute } from './taskComputeFixture'
 
@@ -29,11 +29,11 @@ afterEach(async () => {
 
 describe('durable TaskService cutover', () => {
   it('creates exactly one queued parse job without a legacy execution queue', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-durable-create-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-durable-create-'))
     roots.push(root)
     const source = join(root, 'paper.pdf')
     await writeFile(source, '%PDF-1.4 fixture')
-    const database = new V2Database(join(root, 'mineru.sqlite3'))
+    const database = new V2Database(join(root, 'copilotix.sqlite3'))
     const repository = new V2TaskRepositoryCompat(database)
     const jobs = new SqliteJobRepository(database)
     const vault = new MemoryVault({ 'parser-token': 'parser-token' })
@@ -57,13 +57,13 @@ describe('durable TaskService cutover', () => {
   })
 
   it('resumes a remote checkpoint without resubmitting and runs one dependent translation', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-durable-resume-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-durable-resume-'))
     roots.push(root)
     const outputDir = join(root, 'document')
     const sourcePath = join(outputDir, 'original.pdf')
     await mkdir(outputDir, { recursive: true })
     await writeFile(sourcePath, '%PDF-1.4 fixture')
-    const database = new V2Database(join(root, 'mineru.sqlite3'))
+    const database = new V2Database(join(root, 'copilotix.sqlite3'))
     const repository = new V2TaskRepositoryCompat(database)
     const jobs = new SqliteJobRepository(database)
     const task = makeTask(outputDir, sourcePath)
@@ -176,7 +176,7 @@ class MemoryVault implements CredentialVault {
   async has(account: CredentialAccount): Promise<boolean> { return Boolean(this.values[account]) }
 }
 
-class NeverCalledClient implements MinerUClient {
+class NeverCalledClient implements ParserClient {
   createCalls = 0
   async verifyToken(): Promise<HealthResult> { return { ok: true, message: 'unused' } }
   async createUploadBatch(): Promise<BatchSubmission> { this.createCalls += 1; throw new Error('legacy queue must not call parser') }
@@ -205,7 +205,7 @@ class ResumeClient extends NeverCalledClient {
   override async downloadResult(_resultUrl: string, destinationPath: string): Promise<void> { await writeFile(destinationPath, this.zip) }
 }
 
-function makeTask(outputDir: string, sourcePath: string): MinerUTask {
+function makeTask(outputDir: string, sourcePath: string): CopilotixTask {
   return {
     id: '00000000-0000-4000-8000-000000000001',
     originalName: 'paper.pdf',

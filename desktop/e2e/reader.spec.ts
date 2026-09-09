@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { join } from 'node:path'
 import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
 import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
-import type { MinerUDesktopApi } from '../src/shared/types'
+import type { CopilotixDesktopApi } from '../src/shared/types'
 
 const FIXTURE_TRANSLATED_MARKDOWN = [
   '# 测试文档',
@@ -92,7 +92,7 @@ test('renders compact scrollable tables and independent real formula minimaps', 
     await assertCompactMarkdownLayout(activeTextPanel)
 
     await window.evaluate(() => {
-      Object.defineProperty(window, '__mineruCompactOriginalArticle', {
+      Object.defineProperty(window, '__copilotixCompactOriginalArticle', {
         value: document.querySelector('.reader-tab-panel.active article'),
         configurable: true
       })
@@ -102,7 +102,7 @@ test('renders compact scrollable tables and independent real formula minimaps', 
     await expect(activeTextPanel.locator('article')).not.toHaveText(/Academic cell/u)
     expect(await window.evaluate(() =>
       document.querySelector('.reader-tab-panel.active article') !==
-      Reflect.get(window, '__mineruCompactOriginalArticle')
+      Reflect.get(window, '__copilotixCompactOriginalArticle')
     )).toBe(true)
   } finally {
     await app.close()
@@ -193,7 +193,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await expect.poll(() => isCentered(markdownImageBlock, '.markdown-scroll')).toBe(true)
 
     await window.evaluate(() => {
-      Object.defineProperty(window, '__mineruOriginalMarkdownScroller', {
+      Object.defineProperty(window, '__copilotixOriginalMarkdownScroller', {
         value: document.querySelector('[data-reader-tab-panel="original"] .markdown-scroll'),
         configurable: true
       })
@@ -203,7 +203,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(originalBlockCount)
     expect(await window.evaluate(() =>
       document.querySelector('[data-reader-tab-panel="original"] .markdown-scroll') ===
-      Reflect.get(window, '__mineruOriginalMarkdownScroller')
+      Reflect.get(window, '__copilotixOriginalMarkdownScroller')
     )).toBe(true)
     await expect(activeTextPanel.locator('.markdown-body sup')).toHaveText('12')
     await expect(activeTextPanel.locator('.markdown-body sub', { hasText: /^2$/ })).toHaveText('2')
@@ -249,7 +249,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
         contentRange: response.headers.get('content-range'),
         bytes: [...new Uint8Array(await response.arrayBuffer())]
       }
-    }, `mineru-asset://${taskId}/original.pdf`)
+    }, `copilotix-asset://${taskId}/original.pdf`)
     expect(rangeResult).toEqual({ status: 206, contentRange: expect.stringMatching(/^bytes 0-3\//), bytes: [0x25, 0x50, 0x44, 0x46] })
 
     const originalWidth = await window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)
@@ -284,7 +284,7 @@ test('persists original and translated Markdown annotations with color and under
     await expect(window.getByRole('toolbar', { name: '文本标注' })).toBeVisible()
     await window.getByRole('button', { name: '荧光笔高亮' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
-      const values = await (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'original' })
+      const values = await (window as unknown as { copilotix: CopilotixDesktopApi }).copilotix.listReaderAnnotations({ documentId: id, view: 'original' })
       return values.annotations.map((value) => [value.view, value.kind, value.color, value.quote])
     }, taskId)).toEqual([['original', 'highlight', 'blue', 'Second']])
 
@@ -293,7 +293,7 @@ test('persists original and translated Markdown annotations with color and under
     activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect.poll(() => window.evaluate(() =>
-      (CSS as typeof CSS & { highlights?: { get(name: string): { size: number } | undefined } }).highlights?.get('mineru-highlight-blue')?.size ?? 0
+      (CSS as typeof CSS & { highlights?: { get(name: string): { size: number } | undefined } }).highlights?.get('copilotix-highlight-blue')?.size ?? 0
     )).toBeGreaterThan(0)
 
     await window.getByText('Markdown（中文）').click()
@@ -304,8 +304,8 @@ test('persists original and translated Markdown annotations with color and under
     await window.getByRole('button', { name: '添加下划线' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
       const values = await Promise.all([
-        (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'original' }),
-        (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'translated' })
+        (window as unknown as { copilotix: CopilotixDesktopApi }).copilotix.listReaderAnnotations({ documentId: id, view: 'original' }),
+        (window as unknown as { copilotix: CopilotixDesktopApi }).copilotix.listReaderAnnotations({ documentId: id, view: 'translated' })
       ])
       return values.flatMap((snapshot: ReaderAnnotationSnapshot) => snapshot.annotations.map((value) => [value.view, value.kind, value.quote]))
     }, taskId)).toEqual([
@@ -321,8 +321,8 @@ test('persists original and translated Markdown annotations with color and under
     await window.getByRole('button', { name: '荧光笔高亮' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
       const values = await Promise.all([
-        (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'original' }),
-        (window as unknown as { mineru: MinerUDesktopApi }).mineru.listReaderAnnotations({ documentId: id, view: 'translated' })
+        (window as unknown as { copilotix: CopilotixDesktopApi }).copilotix.listReaderAnnotations({ documentId: id, view: 'original' }),
+        (window as unknown as { copilotix: CopilotixDesktopApi }).copilotix.listReaderAnnotations({ documentId: id, view: 'translated' })
       ])
       return values.flatMap((snapshot: ReaderAnnotationSnapshot) => snapshot.annotations.map((value) => value.view))
     }, taskId)).toEqual(['translated'])
@@ -471,9 +471,9 @@ test('shows the parsed English title in recent tasks and the Reader header', asy
   }
 })
 
-test('renders an optional real MinerU PDF fixture', async () => {
-  const sourcePdf = process.env.MINERU_E2E_REAL_PDF
-  test.skip(!sourcePdf, 'Set MINERU_E2E_REAL_PDF for the local non-CI acceptance check')
+test('renders an optional real Copilotix PDF fixture', async () => {
+  const sourcePdf = process.env.COPILOTIX_E2E_REAL_PDF
+  test.skip(!sourcePdf, 'Set COPILOTIX_E2E_REAL_PDF for the local non-CI acceptance check')
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, { sourcePdf: sourcePdf! })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
@@ -488,9 +488,9 @@ test('renders an optional real MinerU PDF fixture', async () => {
   }
 })
 
-test('renders and safely links an optional real MinerU task', async () => {
-  const sourceTaskDir = process.env.MINERU_E2E_REAL_TASK_DIR
-  test.skip(!sourceTaskDir, 'Set MINERU_E2E_REAL_TASK_DIR for the local layout acceptance check')
+test('renders and safely links an optional real Copilotix task', async () => {
+  const sourceTaskDir = process.env.COPILOTIX_E2E_REAL_TASK_DIR
+  test.skip(!sourceTaskDir, 'Set COPILOTIX_E2E_REAL_TASK_DIR for the local layout acceptance check')
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, { sourceTaskDir: sourceTaskDir! })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
@@ -530,7 +530,7 @@ test('renders and safely links an optional real MinerU task', async () => {
     expect(translatedMappingId).toBeTruthy()
     await translatedMappedBlock.click()
     await expect(window.locator(`[data-block-id="${translatedMappingId}"]`).first()).toHaveClass(/active/)
-    const screenshotPath = process.env.MINERU_E2E_SCREENSHOT
+    const screenshotPath = process.env.COPILOTIX_E2E_SCREENSHOT
     if (screenshotPath) {
       const mergedBlock = window.locator('.pdf-block.merged').first()
       if (await mergedBlock.count()) await mergedBlock.scrollIntoViewIfNeeded()

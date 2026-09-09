@@ -14,13 +14,13 @@ import { RpcJobRepository } from '@main/rpcJobRepository'
 import { RpcTaskCompute } from '@main/rpcTaskCompute'
 import { RpcTaskRepository } from '@main/rpcTaskRepository'
 import { SettingsService } from '@main/settingsService'
-import { splitIntoMinerUBatches } from '@main/taskService'
+import { splitIntoParserBatches } from '@main/taskService'
 import { canTransition, JobRunnerError } from '@core/jobs'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { TaskComputePort } from '@core/ports'
 import type { Job } from '@core/types'
 import type { JobRepositoryPort } from '@core/jobs'
-import type { DocumentPayload, MinerUTask } from '@shared/types'
+import type { DocumentPayload, CopilotixTask } from '@shared/types'
 import { z } from 'zod'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
@@ -62,7 +62,7 @@ vi.mock('@napi-rs/keyring', () => ({
 }))
 
 const now = '2026-01-01T00:00:00.000Z'
-const baseTask: MinerUTask = {
+const baseTask: CopilotixTask = {
   id: '00000000-0000-4000-8000-000000000099',
   originalName: 'paper.pdf',
   title: null,
@@ -107,7 +107,7 @@ afterEach(async () => {
 
 describe('main quality boundaries', () => {
   it('sanitizes JSON line logs and keeps append failures non-fatal', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-quality-logger-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-quality-logger-'))
     roots.push(root)
     const path = join(root, 'events.jsonl')
     const logger = new JsonLineLogger(path)
@@ -136,7 +136,7 @@ describe('main quality boundaries', () => {
     await expect(vault.has('parser-token')).resolves.toBe(true)
     await vault.set('parser-token', '   ')
     await expect(vault.has('parser-token')).resolves.toBe(false)
-    keyring.failures.add('MinerU Desktop:deepseek-api-key')
+    keyring.failures.add('Copilotix Desktop:deepseek-api-key')
     await expect(vault.get('deepseek-api-key')).resolves.toBeNull()
     await expect(vault.delete('deepseek-api-key')).resolves.toBeUndefined()
   })
@@ -223,7 +223,7 @@ describe('main quality boundaries', () => {
   })
 
   it('loads and atomically writes bounded artifact projections', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-quality-artifacts-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-quality-artifacts-'))
     roots.push(root)
     const task = { ...baseTask, outputDir: root }
     const blockPath = join(root, 'block_list.json')
@@ -299,8 +299,8 @@ describe('main quality boundaries', () => {
       translatedBlocks: [],
       layoutJson: '{}',
       mappings: [],
-      pdfUrl: 'mineru-asset://task/original.pdf',
-      assetBaseUrl: 'mineru-asset://task/'
+      pdfUrl: 'copilotix-asset://task/original.pdf',
+      assetBaseUrl: 'copilotix-asset://task/'
     }
     expect(projectDocumentDetails(payload).summary.id).toBe(baseTask.id)
     expect(canTransition(null, 'queued')).toBe(true)
@@ -350,12 +350,12 @@ describe('main quality boundaries', () => {
     expect(result.settings.credentials.parser).toMatchObject({ state: 'valid', maskedValue: 'pars****next' })
     expect(result.settings.credentials.deepseek).toMatchObject({ state: 'valid', maskedValue: 'de****ek' })
     expect(saved).toHaveLength(1)
-    expect(splitIntoMinerUBatches([1, 2, 3], 2)).toEqual([[1, 2], [3]])
-    expect(() => splitIntoMinerUBatches([], 0)).toThrow('Batch size')
+    expect(splitIntoParserBatches([1, 2, 3], 2)).toEqual([[1, 2], [3]])
+    expect(() => splitIntoParserBatches([], 0)).toThrow('Batch size')
   })
 
   it('exercises document commands across duplicate, retry, import, and deletion paths', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-quality-commands-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-quality-commands-'))
     roots.push(root)
     const source = join(root, 'paper.pdf')
     const duplicateSource = join(root, 'duplicate.pdf')
@@ -373,7 +373,7 @@ describe('main quality boundaries', () => {
         deepseek: { state: 'missing' as const }
       }
     }
-    const tasks = new Map<string, MinerUTask>()
+    const tasks = new Map<string, CopilotixTask>()
     const enqueued: unknown[] = []
     const job = {
       id: 'job-retry',
@@ -385,9 +385,9 @@ describe('main quality boundaries', () => {
     const repository = {
       listTasks: async () => [...tasks.values()],
       findByHash: async (hash: string) => hash === 'existing-hash' ? baseTask : null,
-      insertTasks: async (created: MinerUTask[]) => { for (const task of created) tasks.set(task.id, task) },
+      insertTasks: async (created: CopilotixTask[]) => { for (const task of created) tasks.set(task.id, task) },
       getTask: async (id: string) => id === baseTask.id ? { ...baseTask, outputDir: join(root, 'output', 'documents-v2', baseTask.id) } : tasks.get(id) ?? null,
-      updateTask: async (id: string, patch: Partial<MinerUTask>) => ({ ...baseTask, id, ...patch }),
+      updateTask: async (id: string, patch: Partial<CopilotixTask>) => ({ ...baseTask, id, ...patch }),
       deleteTask: async (id: string) => { tasks.delete(id) }
     } as unknown as TaskRepositoryCompat
     const compute = {

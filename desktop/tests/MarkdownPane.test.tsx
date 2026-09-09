@@ -75,7 +75,7 @@ describe('MarkdownPane', () => {
       <MarkdownPane
         active
         blocks={blocks}
-        assetBaseUrl="mineru-asset://task/"
+        assetBaseUrl="copilotix-asset://task/"
         taskId="task"
         view="original"
         annotations={[]}
@@ -107,7 +107,7 @@ describe('MarkdownPane', () => {
       <MarkdownPane
         active
         blocks={blocks.map((item) => ({ ...item, mappingIds: [...item.mappingIds] }))}
-        assetBaseUrl="mineru-asset://task/"
+        assetBaseUrl="copilotix-asset://task/"
         taskId="task"
         view="original"
         annotations={[]}
@@ -130,7 +130,7 @@ describe('MarkdownPane', () => {
       <MarkdownPane
         active
         blocks={blocks}
-        assetBaseUrl="mineru-asset://task/"
+        assetBaseUrl="copilotix-asset://task/"
         taskId="task"
         view="original"
         annotations={[]}
@@ -230,8 +230,8 @@ describe('MarkdownPane', () => {
       <MarkdownPane
         active
         blocks={blocks}
-        assetBaseUrl="mineru-asset://task/"
-        pdfUrl="mineru-asset://task/original.pdf"
+        assetBaseUrl="copilotix-asset://task/"
+        pdfUrl="copilotix-asset://task/original.pdf"
         figureGroups={[group]}
         taskId="task"
         view="translated"
@@ -344,7 +344,7 @@ describe('MarkdownPane', () => {
         <MarkdownPane
           active
           blocks={annotationBlocks}
-          assetBaseUrl="mineru-asset://task/"
+          assetBaseUrl="copilotix-asset://task/"
           taskId="task"
           view="original"
           annotations={[]}
@@ -412,7 +412,7 @@ function renderPane(
     <MarkdownPane
       active
       blocks={blocks}
-      assetBaseUrl="mineru-asset://task/"
+      assetBaseUrl="copilotix-asset://task/"
       taskId="task"
       view="original"
       annotations={[]}

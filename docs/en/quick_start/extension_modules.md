@@ -1,12 +1,12 @@
-# MinerU Extension Modules Installation Guide
-MinerU supports installing extension modules on demand based on different needs to enhance functionality or support specific model backends.
+# Copilotix Extension Modules Installation Guide
+Copilotix supports installing extension modules on demand based on different needs to enhance functionality or support specific model backends.
 
 ## Common Scenarios
 
 ### Core Functionality Installation
-The `core` module is the core dependency of MinerU, containing common parsing features but not optional modules such as `vllm`/`lmdeploy`/`s3`. Installing this module ensures the basic functionality of MinerU works properly.
+The `core` module is the core dependency of Copilotix, containing common parsing features but not optional modules such as `vllm`/`lmdeploy`/`s3`. Installing this module ensures the basic functionality of Copilotix works properly.
 ```bash
-uv pip install "mineru[core]"
+uv pip install "copilotix[core]"
 ```
 
 ---
@@ -14,7 +14,7 @@ uv pip install "mineru[core]"
 ### Using S3 Input and Output
 If you need to read from or write to S3, install the `s3` extension module.
 ```bash
-uv pip install "mineru[s3]"
+uv pip install "copilotix[s3]"
 ```
 
 ---
@@ -26,7 +26,7 @@ uv pip install "mineru[s3]"
 The `vllm` module provides acceleration support for VLM model inference, suitable for graphics cards with Volta architecture and later (8GB+ VRAM). Installing this module can significantly improve model inference speed.
 
 ```bash
-uv pip install "mineru[core,vllm]"
+uv pip install "copilotix[core,vllm]"
 ```
 > [!TIP]
 > - Because the `vllm` extra now allows the 0.21 series, the default installation usually resolves to the newer `vllm` version allowed by the current range. Make sure the host GPU driver supports the CUDA runtime required by the installed `vllm` package; the default path requires a CUDA 13.0-compatible driver.
@@ -42,7 +42,7 @@ uv pip install "mineru[core,vllm]"
 The `lmdeploy` module provides acceleration support for VLM model inference, suitable for graphics cards with Volta architecture and later (8GB+ VRAM). Installing this module can significantly improve model inference speed.
 
 ```bash
-uv pip install "mineru[core,lmdeploy]"
+uv pip install "copilotix[core,lmdeploy]"
 ```
 > [!TIP]
 > If exceptions occur during installation of the extra package including lmdeploy, please refer to the [lmdeploy official documentation](https://lmdeploy.readthedocs.io/en/latest/get_started/installation.html) to try to resolve the issue.
@@ -50,17 +50,17 @@ uv pip install "mineru[core,lmdeploy]"
 ---
 
 ### Installing Lightweight Client to Connect to OpenAI-compatible servers (for vlm-http-client mode)
-If you need to install a lightweight client on edge devices to connect to an OpenAI-compatible server for using VLM mode, you can install the basic mineru package, which is very lightweight and suitable for devices with only CPU and network connectivity.
+If you need to install a lightweight client on edge devices to connect to an OpenAI-compatible server for using VLM mode, you can install the basic copilotix package, which is very lightweight and suitable for devices with only CPU and network connectivity.
 ```bash
-uv pip install mineru
-mineru -p <input_path> -o <output_path> -b vlm-http-client -u http://127.0.0.1:30000
+uv pip install copilotix
+copilotix -p <input_path> -o <output_path> -b vlm-http-client -u http://127.0.0.1:30000
 ```
 
 ---
 
 ### Installing Lightweight Client to Connect to OpenAI-compatible servers (for hybrid-http-client mode)
-If you need to install a lightweight client on edge devices to connect to an OpenAI-compatible server for using hybrid mode, you can install the mineru pipeline extension package, which is relatively lightweight and can be used on devices with only CPU and network connectivity, while running faster on devices that support GPU acceleration.
+If you need to install a lightweight client on edge devices to connect to an OpenAI-compatible server for using hybrid mode, you can install the copilotix pipeline extension package, which is relatively lightweight and can be used on devices with only CPU and network connectivity, while running faster on devices that support GPU acceleration.
 ```bash
-uv pip install "mineru[pipeline]"
-mineru -p <input_path> -o <output_path> -b hybrid-http-client -u http://127.0.0.1:30000
+uv pip install "copilotix[pipeline]"
+copilotix -p <input_path> -o <output_path> -b hybrid-http-client -u http://127.0.0.1:30000
 ```

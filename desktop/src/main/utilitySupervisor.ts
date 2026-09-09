@@ -199,7 +199,7 @@ export class UtilitySupervisor {
     try {
       // No process.argv, token, path, or renderer data crosses this boundary.
       child = this.fork(this.entryPath, [], {
-        serviceName: 'MinerU Core Utility',
+        serviceName: 'Copilotix Core Utility',
         stdio: utilityDiagnosticsEnabled() ? 'pipe' : 'ignore'
       })
     } catch {
@@ -445,7 +445,7 @@ function positiveTimeout(value: number, fallback: number): number {
 }
 
 export function utilityDiagnosticsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.NODE_ENV === 'test' || env.MINERU_UTILITY_DIAGNOSTICS === 'true'
+  return env.NODE_ENV === 'test' || env.COPILOTIX_UTILITY_DIAGNOSTICS === 'true'
 }
 
 /** Return a bounded category only; never echo utility stderr or local paths. */

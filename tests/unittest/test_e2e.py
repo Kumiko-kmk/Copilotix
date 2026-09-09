@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from mineru.cli import common
-from mineru.cli.api_request import parse_request_form
-from mineru.cli.backend_options import DEFAULT_BACKEND, PUBLIC_BACKEND_CHOICES, normalize_backend
-from mineru.cli.client import main as cli_main
-from mineru.cli.fast_api import main as api_main
-from mineru.cli.gradio_app import main as gradio_main
-from mineru.cli.router import main as router_main
+from copilotix.cli import common
+from copilotix.cli.api_request import parse_request_form
+from copilotix.cli.backend_options import DEFAULT_BACKEND, PUBLIC_BACKEND_CHOICES, normalize_backend
+from copilotix.cli.client import main as cli_main
+from copilotix.cli.fast_api import main as api_main
+from copilotix.cli.gradio_app import main as gradio_main
+from copilotix.cli.router import main as router_main
 
 
 def test_public_backend_contract_is_vlm_only():

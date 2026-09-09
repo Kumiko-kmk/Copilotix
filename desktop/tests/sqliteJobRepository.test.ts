@@ -18,7 +18,7 @@ afterEach(async () => {
 })
 
 async function fixture(documentIds = ['document-1']): Promise<{ database: V2Database; repository: SqliteJobRepository }> {
-  const directory = await mkdtemp(join(tmpdir(), 'mineru-jobs-'))
+  const directory = await mkdtemp(join(tmpdir(), 'copilotix-jobs-'))
   directories.push(directory)
   const database = new V2Database(join(directory, 'jobs.sqlite3'))
   const insert = database.connection.prepare(`

@@ -38,7 +38,7 @@ describe('table translation protocol', () => {
   it('extracts cells, empty cells, headers and row/column spans while preserving the HTML tree', () => {
     const plan = buildTableTranslationPlan([
       block(1, [
-        '<table data-source="mineru"><thead><tr><th rowspan="2">Group</th><th colspan="2">Value</th></tr></thead>',
+        '<table data-source="copilotix"><thead><tr><th rowspan="2">Group</th><th colspan="2">Value</th></tr></thead>',
         '<tbody><tr><td><strong>Alpha</strong> $x$</td><td></td></tr></tbody></table>'
       ].join(''))
     ], 0)
@@ -57,7 +57,7 @@ describe('table translation protocol', () => {
 
     applyTableTranslation(plan!, responseFor(request))
     const rendered = plan!.blocks[0]!.render()
-    expect(rendered).toContain('data-source="mineru"')
+    expect(rendered).toContain('data-source="copilotix"')
     expect(rendered).toContain('<strong>译:Alpha</strong>')
     expect(rendered).toContain('$x$')
     expect(rendered).toContain('rowspan="2"')
@@ -125,7 +125,7 @@ describe('table translation protocol', () => {
     const plan = buildTableTranslationPlan([
       block(0, 'Table 1: Benchmarks on Navier Stokes (fixing resolution $64 \\times 64$ for both training and testing)'),
       block(1, [
-        '<table data-source="mineru"><tr><td>Config</td><td>Parameters</td><td>Time per epoch</td>',
+        '<table data-source="copilotix"><tr><td>Config</td><td>Parameters</td><td>Time per epoch</td>',
         '<td>$\\nu = 1\\mathrm{e}-3$ T=50 N=1000</td></tr>',
         '<tr><td colspan="4">With unsupervised pre-training</td></tr>',
         '<tr><td>FNO-2D</td><td>414,517</td><td>127.80s</td><td>0.0128</td></tr></table>'
@@ -152,6 +152,6 @@ describe('table translation protocol', () => {
     expect(table).toContain('<td colspan="4">使用无监督预训练</td>')
     expect(table).toContain('$\\nu = 1\\mathrm{e}-3$')
     expect(table).toContain('<td>414,517</td><td>127.80s</td><td>0.0128</td>')
-    expect(table).toContain('data-source="mineru"')
+    expect(table).toContain('data-source="copilotix"')
   })
 })

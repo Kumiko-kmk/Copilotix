@@ -125,8 +125,8 @@ describe('block mapping', () => {
     expect(mappings.every((mapping) => mapping.boxes.every((box) => box.pageIndex === 0))).toBe(true)
   })
 
-  const oracleRoot = process.env.MINERU_LAYOUT_ORACLE_DIR
-  it.skipIf(!oracleRoot)('reproduces the official merge connections for a local MinerU result', async () => {
+  const oracleRoot = process.env.COPILOTIX_LAYOUT_ORACLE_DIR
+  it.skipIf(!oracleRoot)('reproduces the official merge connections for a local Copilotix result', async () => {
     const layout = JSON.parse(await readFile(join(oracleRoot!, 'layout.json'), 'utf8'))
     const official = JSON.parse(await readFile(join(oracleRoot!, 'block_list.json'), 'utf8')) as {
       mergeConnections: Array<{ blocks: string[] }>

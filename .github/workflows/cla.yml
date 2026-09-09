@@ -1,4 +1,4 @@
-name: "MinerU CLA Assistant"
+name: "Copilotix CLA Assistant"
 on:
   issue_comment:
     types: [created]
@@ -26,7 +26,7 @@ jobs:
           PERSONAL_ACCESS_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         with:
           path-to-signatures: 'signatures/version1/cla.json'
-          path-to-document: 'https://github.com/opendatalab/MinerU/blob/master/MinerU_CLA.md' # e.g. a CLA or a DCO document
+          path-to-document: 'https://github.com/Kumiko-kmk/Copilotix/blob/master/Copilotix_CLA.md' # e.g. a CLA or a DCO document
           # branch should not be protected
           branch: 'cla'
           allowlist: myhloli,dt-yy,Focusshang,renpengli01,icecraft,drunkpig,wangbinDL,qiangqiang199,GDDGCZ518,papayalove,conghui,quyuan,LollipopsAndWine,Sidney233

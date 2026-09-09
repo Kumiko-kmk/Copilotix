@@ -1,14 +1,14 @@
 services:
-  mineru-openai-server:
-    image: mineru:latest
-    container_name: mineru-openai-server
+  copilotix-openai-server:
+    image: copilotix:latest
+    container_name: copilotix-openai-server
     restart: always
     profiles: ["openai-server"]
     ports:
       - 30000:30000
     environment:
-      MINERU_MODEL_SOURCE: local
-    entrypoint: mineru-openai-server
+      COPILOTIX_MODEL_SOURCE: local
+    entrypoint: copilotix-openai-server
     command:
       --host 0.0.0.0
       --port 30000
@@ -27,16 +27,16 @@ services:
               device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
               capabilities: [gpu]
 
-  mineru-api:
-    image: mineru:latest
-    container_name: mineru-api
+  copilotix-api:
+    image: copilotix:latest
+    container_name: copilotix-api
     restart: always
     profiles: ["api"]
     ports:
       - 8000:8000
     environment:
-      MINERU_MODEL_SOURCE: local
-    entrypoint: mineru-api
+      COPILOTIX_MODEL_SOURCE: local
+    entrypoint: copilotix-api
     command:
       --host 0.0.0.0
       --port 8000
@@ -57,25 +57,25 @@ services:
               device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
               capabilities: [gpu]
 
-  mineru-router:
-    image: mineru:latest
-    container_name: mineru-router
+  copilotix-router:
+    image: copilotix:latest
+    container_name: copilotix-router
     restart: always
     profiles: ["router"]
     ports:
       - 8002:8002
     environment:
-      MINERU_MODEL_SOURCE: local
-    entrypoint: mineru-router
+      COPILOTIX_MODEL_SOURCE: local
+    entrypoint: copilotix-router
     command:
       --host 0.0.0.0
       --port 8002
       --local-gpus auto
       # --allow-public-http-client  # Disabled by default; when binding to 0.0.0.0 or ::, this re-enables *-http-client backends and server_url. Enable only if you accept the SSRF risk.
-      # To aggregate existing mineru-api services instead of starting local workers:
+      # To aggregate existing copilotix-api services instead of starting local workers:
       # --local-gpus none
-      # --upstream-url http://mineru-api:8000
-      # --upstream-url http://mineru-api-2:8000
+      # --upstream-url http://copilotix-api:8000
+      # --upstream-url http://copilotix-api-2:8000
       # parameters for vllm-engine
       # --gpu-memory-utilization 0.5  # If encountering VRAM shortage, reduce the KV cache size by this parameter; if VRAM issues persist, try lowering it further to `0.4` or below.
     ulimits:
@@ -92,16 +92,16 @@ services:
               device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
               capabilities: [gpu]
 
-  mineru-gradio:
-    image: mineru:latest
-    container_name: mineru-gradio
+  copilotix-gradio:
+    image: copilotix:latest
+    container_name: copilotix-gradio
     restart: always
     profiles: ["gradio"]
     ports:
       - 7860:7860
     environment:
-      MINERU_MODEL_SOURCE: local
-    entrypoint: mineru-gradio
+      COPILOTIX_MODEL_SOURCE: local
+    entrypoint: copilotix-gradio
     command:
       --server-name 0.0.0.0
       --server-port 7860

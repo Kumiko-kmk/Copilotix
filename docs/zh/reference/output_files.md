@@ -1,8 +1,8 @@
-# MinerU 输出文件说明
+# Copilotix 输出文件说明
 
 ## 概览
 
-`mineru` 命令执行后，除了输出主要的 markdown 文件外，还会生成多个辅助文件用于调试、质检和进一步处理。这些文件包括：
+`copilotix` 命令执行后，除了输出主要的 markdown 文件外，还会生成多个辅助文件用于调试、质检和进一步处理。这些文件包括：
 
 具体会生成哪些文件，取决于后端类型和输入文档类型。
 
@@ -116,7 +116,7 @@
 |--------|------|------|
 | `pdf_info` | `list[dict]` | 每一页的解析结果数组 |
 | `_backend` | `string` | 解析模式：`pipeline`、`vlm` 或 `office` |
-| `_version_name` | `string` | MinerU 版本号 |
+| `_version_name` | `string` | Copilotix 版本号 |
 
 ##### 页面信息结构 (pdf_info)
 
@@ -335,7 +335,7 @@
         {
         "type": "text",
         "text": "The response of flow duration curves to afforestation ",
-        "text_level": 1, 
+        "text_level": 1,
         "bbox": [
             62,
             480,
@@ -387,7 +387,7 @@
             480,
             946,
             904
-        ],  
+        ],
         "page_idx": 5
     }
 ]
@@ -495,7 +495,7 @@
 ```json
 {
     "text": "文本",
-    "title": "标题", 
+    "title": "标题",
     "equation": "行间公式",
     "image": "图片",
     "image_caption": "图片描述",
@@ -512,7 +512,7 @@
     "header": "页眉",
     "footer": "页脚",
     "page_number": "页码",
-    "aside_text": "装订线旁注", 
+    "aside_text": "装订线旁注",
     "page_footnote": "页面脚注"
 }
 ```
@@ -569,7 +569,7 @@
 **文件命名格式**：`{原文件名}_middle.json`
 
 ##### 文件格式说明
-vlm 后端的 middle.json 文件结构与 pipeline 后端类似，但存在以下差异： 
+vlm 后端的 middle.json 文件结构与 pipeline 后端类似，但存在以下差异：
 
 - list变成二级block，增加`sub_type`字段区分list类型:
     * `text`（文本类型）
@@ -760,15 +760,15 @@ vlm 后端的 middle.json 文件结构与 pipeline 后端类似，但存在以�
 **文件命名格式**：`{原文件名}_content_list.json`
 
 ##### 文件格式说明
-vlm 后端的 content_list.json 文件结构与 pipeline 后端类似，伴随本次middle.json的变化，做了以下调整： 
+vlm 后端的 content_list.json 文件结构与 pipeline 后端类似，伴随本次middle.json的变化，做了以下调整：
 
 - 新增`code`类型，code类型包含两种"sub_type":
     * 分别是`code`和`algorithm`
     * 至少有`code_body`, 可选`code_caption`
-  
+
 - 新增`list`类型，list类型包含两种"sub_type":
     * `text`
-    * `ref_text` 
+    * `ref_text`
 
 - `image` / `chart` 类型可能带有可选 `sub_type` 字段，用于透传视觉子类型
 - `chart` 类型除 `img_path` 外，还可包含 `content`、`chart_caption`、`chart_footnote`，其中 `content` 保持原始 Markdown 表格文本
@@ -849,19 +849,19 @@ vlm 后端的 content_list.json 文件结构与 pipeline 后端类似，伴随�
 
 ## 总结
 
-以上文件为 MinerU 的完整输出结果，用户可根据需要选择合适的文件进行后续处理：
+以上文件为 Copilotix 的完整输出结果，用户可根据需要选择合适的文件进行后续处理：
 
 - **模型输出**(使用原始输出):
     * model.json
-  
+
 - **调试和验证**(使用可视化文件):
     * layout.pdf
-    * span.pdf 
-  
+    * span.pdf
+
 - **内容提取**(使用简化文件):
     * *.md
     * content_list.json
     * content_list_v2.json
-  
+
 - **二次开发**(使用结构化文件):
     * middle.json

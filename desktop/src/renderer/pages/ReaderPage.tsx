@@ -25,7 +25,7 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
 
   const documentQuery = useQuery<DocumentDetails>({
     queryKey: ['document', props.documentId],
-    queryFn: () => window.mineru.getDocument(props.documentId)
+    queryFn: () => window.copilotix.getDocument(props.documentId)
   })
   const originalAnnotations = useAnnotationQuery(props.documentId, 'original')
   const translatedAnnotations = useAnnotationQuery(props.documentId, 'translated')
@@ -109,7 +109,7 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
       <header className="reader-header">
         <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
         <Space>
-          <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.mineru.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
+          <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
           <Button type="text" icon={<CopyOutlined />} onClick={() => void copyCurrent(document, tab, messageApi)} aria-label="复制当前内容" />
           <Dropdown menu={{ items: [{ key: 'current', label: '另存当前 Markdown' }, { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, tab, messageApi) }}>
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
@@ -149,7 +149,7 @@ function useAnnotationQuery(documentId: string, view: ReaderAnnotationView) {
   const request: ListReaderAnnotationsRequest = { documentId, view }
   return useQuery<ReaderAnnotationSnapshot>({
     queryKey: ['annotations', documentId, view],
-    queryFn: () => window.mineru.listReaderAnnotations(request),
+    queryFn: () => window.copilotix.listReaderAnnotations(request),
     retry: false
   })
 }
@@ -158,7 +158,7 @@ async function mutateAnnotations(
   snapshot: ReaderAnnotationSnapshot,
   diff: ReturnType<typeof buildAnnotationDiff>
 ): Promise<ReaderAnnotationSnapshot> {
-  return window.mineru.mutateReaderAnnotations({
+  return window.copilotix.mutateReaderAnnotations({
     documentId: snapshot.documentId,
     artifactId: snapshot.artifactId,
     view: snapshot.view,
@@ -175,7 +175,7 @@ async function reloadAnnotationSnapshot(
 ): Promise<ReaderAnnotationSnapshot> {
   return queryClient.fetchQuery({
     queryKey: ['annotations', documentId, view],
-    queryFn: () => window.mineru.listReaderAnnotations({ documentId, view }),
+    queryFn: () => window.copilotix.listReaderAnnotations({ documentId, view }),
     retry: false
   })
 }
@@ -233,7 +233,7 @@ async function saveDocument(
   tab: ReaderTab,
   messageApi: ReturnType<typeof message.useMessage>[0]
 ): Promise<void> {
-  const result = await window.mineru.saveDocumentAs({
+  const result = await window.copilotix.saveDocumentAs({
     documentId,
     kind: key === 'zip' ? 'result-zip' : tab === 'translated' ? 'translated-markdown' : 'original-markdown'
   })

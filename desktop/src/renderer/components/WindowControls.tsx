@@ -6,10 +6,10 @@ export default function WindowControls(): React.JSX.Element {
 
   React.useEffect(() => {
     let active = true
-    void window.mineru.getWindowState()
+    void window.copilotix.getWindowState()
       .then((state) => { if (active) setMaximized(state.maximized) })
       .catch((error: unknown) => console.error('无法读取窗口状态', error))
-    const stop = window.mineru.onWindowStateChanged((state) => setMaximized(state.maximized))
+    const stop = window.copilotix.onWindowStateChanged((state) => setMaximized(state.maximized))
     return () => {
       active = false
       stop()
@@ -17,7 +17,7 @@ export default function WindowControls(): React.JSX.Element {
   }, [])
 
   const perform = React.useCallback((action: WindowAction) => {
-    void window.mineru.performWindowAction(action)
+    void window.copilotix.performWindowAction(action)
       .then((state) => setMaximized(state.maximized))
       .catch((error: unknown) => console.error('窗口操作失败', error))
   }, [])

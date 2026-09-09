@@ -3,7 +3,7 @@ import type { TranslationProviderId } from './types'
 
 /** Versions are part of the on-disk plan identity. Do not change casually. */
 export const TRANSLATION_PIPELINE_VERSION = 'markdown-logical-block-v4-table-json-v2-references' as const
-export const TABLE_TRANSLATION_PROTOCOL = 'mineru-table-translation-v2' as const
+export const TABLE_TRANSLATION_PROTOCOL = 'copilotix-table-translation-v2' as const
 export const TABLE_TRANSLATION_CACHE_VERSION = 2 as const
 export const MARKDOWN_MAPPING_ALGORITHM_VERSION = 1 as const
 
@@ -54,7 +54,7 @@ export interface TableTranslationResponse {
 }
 
 export interface PlainTranslationRequest {
-  protocol: 'mineru-translation-plain-v1'
+  protocol: 'copilotix-translation-plain-v1'
   targetLanguage: 'zh-CN'
   unitId: string
   sourceHash: string
@@ -62,7 +62,7 @@ export interface PlainTranslationRequest {
 }
 
 export interface PlainTranslationResponse {
-  protocol: 'mineru-translation-plain-v1'
+  protocol: 'copilotix-translation-plain-v1'
   unitId: string
   sourceHash: string
   translations: TableTranslatedSegment[]
@@ -72,7 +72,7 @@ export type TranslationPlanRequest = PlainTranslationRequest | TableTranslationR
 export type TranslationPlanResponse = PlainTranslationResponse | TableTranslationResponse
 
 export interface TranslationPlanResponseEnvelope {
-  protocol: 'mineru-translation-response-v1'
+  protocol: 'copilotix-translation-response-v1'
   unitId: string
   kind: TranslationPlanUnitKind
   sourceHash: string
@@ -165,7 +165,7 @@ export const tableTranslationResponseSchema = z.object({
 }).strict()
 
 export const plainTranslationRequestSchema = z.object({
-  protocol: z.literal('mineru-translation-plain-v1'),
+  protocol: z.literal('copilotix-translation-plain-v1'),
   targetLanguage: z.literal('zh-CN'),
   unitId: id,
   sourceHash: hash,
@@ -173,7 +173,7 @@ export const plainTranslationRequestSchema = z.object({
 }).strict()
 
 export const plainTranslationResponseSchema = z.object({
-  protocol: z.literal('mineru-translation-plain-v1'),
+  protocol: z.literal('copilotix-translation-plain-v1'),
   unitId: id,
   sourceHash: hash,
   translations: z.array(segmentSchema).max(256)
@@ -181,14 +181,14 @@ export const plainTranslationResponseSchema = z.object({
 
 export const translationPlanResponseEnvelopeSchema = z.discriminatedUnion('kind', [
   z.object({
-    protocol: z.literal('mineru-translation-response-v1'),
+    protocol: z.literal('copilotix-translation-response-v1'),
     unitId: id,
     kind: z.literal('plain'),
     sourceHash: hash,
     response: plainTranslationResponseSchema
   }).strict(),
   z.object({
-    protocol: z.literal('mineru-translation-response-v1'),
+    protocol: z.literal('copilotix-translation-response-v1'),
     unitId: id,
     kind: z.literal('table'),
     sourceHash: hash,

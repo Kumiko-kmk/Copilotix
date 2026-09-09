@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createAssetResponse, parseRange } from '@main/assetProtocol'
 
-describe('mineru-asset protocol response', () => {
+describe('copilotix-asset protocol response', () => {
   let root = ''
   let pdfPath = ''
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'mineru-asset-test-'))
+    root = await mkdtemp(join(tmpdir(), 'copilotix-asset-test-'))
     pdfPath = join(root, 'original.pdf')
     await writeFile(pdfPath, new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]))
   })
@@ -19,7 +19,7 @@ describe('mineru-asset protocol response', () => {
   })
 
   it('returns a complete PDF with CORS and range headers', async () => {
-    const response = await createAssetResponse(new Request('mineru-asset://task/original.pdf'), () => pdfPath)
+    const response = await createAssetResponse(new Request('copilotix-asset://task/original.pdf'), () => pdfPath)
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('application/pdf')
     expect(response.headers.get('accept-ranges')).toBe('bytes')
@@ -28,13 +28,13 @@ describe('mineru-asset protocol response', () => {
   })
 
   it('supports HEAD and a single byte range', async () => {
-    const head = await createAssetResponse(new Request('mineru-asset://task/original.pdf', { method: 'HEAD' }), () => pdfPath)
+    const head = await createAssetResponse(new Request('copilotix-asset://task/original.pdf', { method: 'HEAD' }), () => pdfPath)
     expect(head.status).toBe(200)
     expect(head.headers.get('content-length')).toBe('8')
     expect(await head.text()).toBe('')
 
     const partial = await createAssetResponse(
-      new Request('mineru-asset://task/original.pdf', { headers: { Range: 'bytes=1-3' } }),
+      new Request('copilotix-asset://task/original.pdf', { headers: { Range: 'bytes=1-3' } }),
       () => pdfPath
     )
     expect(partial.status).toBe(206)
@@ -44,14 +44,14 @@ describe('mineru-asset protocol response', () => {
 
   it('returns 416 for an invalid range and 404 for an invalid path', async () => {
     const invalidRange = await createAssetResponse(
-      new Request('mineru-asset://task/original.pdf', { headers: { Range: 'bytes=99-100' } }),
+      new Request('copilotix-asset://task/original.pdf', { headers: { Range: 'bytes=99-100' } }),
       () => pdfPath
     )
     expect(invalidRange.status).toBe(416)
     expect(invalidRange.headers.get('content-range')).toBe('bytes */8')
 
     const missing = await createAssetResponse(
-      new Request('mineru-asset://task/../secret.pdf'),
+      new Request('copilotix-asset://task/../secret.pdf'),
       () => { throw new Error('非法资源路径') }
     )
     expect(missing.status).toBe(404)

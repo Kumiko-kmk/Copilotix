@@ -2,14 +2,14 @@
 
 Cherry Studio 是一款功能强大的多模型 AI 客户端软件，支持 Windows、macOS 和 Linux 等多平台运行，集成了 OpenAI、DeepSeek、Gemini、Anthropic 等主流 AI 云服务，同时支持本地模型运行，用户可以灵活切换不同的AI模型。
 
-目前，MinerU 强大的文档解析能力已深度集成到 Cherry Studio 的知识库与对话交互中，为用户带来更便捷的文档处理与信息获取体验。
+目前，Copilotix 强大的文档解析能力已深度集成到 Cherry Studio 的知识库与对话交互中，为用户带来更便捷的文档处理与信息获取体验。
 
 ![img](../../../assets/images/Cherry_Studio_1.png)
 
 - Cherry Studio 官网地址：https://www.cherry-ai.com/
 
 
-# MinerU 在 Cherry Studio 中的使用方法
+# Copilotix 在 Cherry Studio 中的使用方法
 
 ## 进入 Cherry Studio 设置
 
@@ -21,11 +21,11 @@ c. 在左侧菜单中，选择"MCP 服务器"
 
 在右侧的 MCP 服务器配置界面中，您可以看到已有的 MCP 服务器列表。点击右上角的"添加服务器"按钮来创建新的 MCP 服务，或者点击现有服务来编辑配置。
 
-## 添加 MinerU-MCP 配置
+## 添加 Copilotix-MCP 配置
 
 点击"添加服务器"后，您将看到一个配置表单。请按以下步骤填写：
 
-**a. 名称**：输入"MinerU-MCP"或您喜欢的其他名称
+**a. 名称**：输入"Copilotix-MCP"或您喜欢的其他名称
 
 **b. 描述**：可选，如"文档转换为Markdown工具"
 
@@ -33,38 +33,38 @@ c. 在左侧菜单中，选择"MCP 服务器"
 
 **d. 命令**：输入 uvx
 
-**e. 参数**：输入 mineru-mcp
+**e. 参数**：输入 copilotix-mcp
 
 **f. 环境变量**：添加以下环境变量
 
 ```Plain
-MINERU_API_BASE=https://mineru.net
-MINERU_API_KEY=您的API密钥
+COPILOTIX_API_BASE=https://mineru.net
+COPILOTIX_API_KEY=您的API密钥
 OUTPUT_DIR=./downloads
 USE_LOCAL_API=false
-LOCAL_MINERU_API_BASE=http://localhost:8888
+LOCAL_COPILOTIX_API_BASE=http://localhost:8888
 ```
 
-使用 *`uvx`* 命令可以自动处理 mineru-mcp 的安装和运行，**无需预先手动安装 mineru-mcp 包**。这是最简单的配置方式。
+使用 *`uvx`* 命令可以自动处理 copilotix-mcp 的安装和运行，**无需预先手动安装 copilotix-mcp 包**。这是最简单的配置方式。
 
 ## 保存配置
 
-确认无误后，点击界面右上角的"保存"按钮完成配置。保存后，MCP 服务器列表中会显示您刚刚添加的 MinerU-MCP 服务。
+确认无误后，点击界面右上角的"保存"按钮完成配置。保存后，MCP 服务器列表中会显示您刚刚添加的 Copilotix-MCP 服务。
 
 ![img](../../../assets/images/Cherry_Studio_2.png)
 
 ![img](../../../assets/images/Cherry_Studio_3.png)
 
-## 使用 Cherry Studio 中的 MinerU MCP
+## 使用 Cherry Studio 中的 Copilotix MCP
 
-一旦配置完成，您可以在 Cherry Studio 中的对话中使用 MinerU MCP 工具。在 Cherry Studio 中，您可以使用如下提示让模型调用 MinerU MCP 工具。模型会自动识别任务并调用相应的工具。
+一旦配置完成，您可以在 Cherry Studio 中的对话中使用 Copilotix MCP 工具。在 Cherry Studio 中，您可以使用如下提示让模型调用 Copilotix MCP 工具。模型会自动识别任务并调用相应的工具。
 
 ## 示例 1: 使用 URL 转换文档
 
 **用户输入:**
 
 ```Plain
-请使用 MinerU MCP 将以下 URL 的 PDF 文档转换为 Markdown 格式：https://example.com/sample.pdf
+请使用 Copilotix MCP 将以下 URL 的 PDF 文档转换为 Markdown 格式：https://example.com/sample.pdf
 ```
 
 **模型将执行的步骤：**
@@ -84,7 +84,7 @@ LOCAL_MINERU_API_BASE=http://localhost:8888
 **用户输入:**
 
 ```Plain
-请使用 MinerU-MCP 将本地的 D://sample.pdf 文件转换为 Markdown 格式
+请使用 Copilotix-MCP 将本地的 D://sample.pdf 文件转换为 Markdown 格式
 ```
 
 **模型将执行的步骤：**
@@ -102,11 +102,11 @@ LOCAL_MINERU_API_BASE=http://localhost:8888
 **用户输入:**
 
 ```Plain
-请使用 MinerU-MCP 将以下 URL 的扫描版 PDF 文档转换为 Markdown 格式，并启用 OCR 功能：
+请使用 Copilotix-MCP 将以下 URL 的扫描版 PDF 文档转换为 Markdown 格式，并启用 OCR 功能：
 https://example.com/scanned.pdf
 ```
 
-**模型将执行的步骤：** 
+**模型将执行的步骤：**
 
 模型识别这是需要 OCR 处理的文档转换任务，调用 `parse_documents` 工具，并启用 OCR 参数:
 
@@ -129,7 +129,7 @@ https://example.com/scanned.pdf
 **模型:**
 
 ```Plain
-我可以帮您将这份学术论文转换为 Markdown 格式。我将使用 MinerU-MCP 工具来处理这个任务。
+我可以帮您将这份学术论文转换为 Markdown 格式。我将使用 Copilotix-MCP 工具来处理这个任务。
 [模型调用 parse_documents 工具，处理过程中...]
 论文已成功转换为 Markdown 格式。转换结果如下：
 # The Capacity of Diffusion Models to Memorize and Generate Training Data
@@ -159,7 +159,7 @@ Recent diffusion models can generate high-quality images that are nearly indisti
 **用户输入:**
 
 ```Plain
-请使用 MinerU MCP 将以下 URL 的文档转换为 Markdown 格式，只处理第 5-10 页，并指定语言为中文：https://example.com/document.pdf
+请使用 Copilotix MCP 将以下 URL 的文档转换为 Markdown 格式，只处理第 5-10 页，并指定语言为中文：https://example.com/document.pdf
 ```
 
 模型会使用 *`parse_documents`* 工具，并设置 *`language`* 参数为 "ch"，*`page_ranges`* 参数为 "5-10"。
@@ -169,7 +169,7 @@ Recent diffusion models can generate high-quality images that are nearly indisti
 **用户输入:**
 
 ```Plain
-请使用 MinerU-MCP 将以下多个 URL 的文档转换为 Markdown 格式：
+请使用 Copilotix-MCP 将以下多个 URL 的文档转换为 Markdown 格式：
 https://example.com/doc1.pdf
 https://example.com/doc2.pdf
 https://example.com/doc3.pdf
@@ -181,7 +181,7 @@ https://example.com/doc3.pdf
 
 ● 当设置 *`USE_LOCAL_API=true`* 时，使用本地配置的API进行解析
 
-● 当设置 *`USE_LOCAL_API=false`* 时，会使用 MinerU 官网的API进行解析
+● 当设置 *`USE_LOCAL_API=false`* 时，会使用 Copilotix 官网的API进行解析
 
 ● 处理大型文档可能需要较长时间，请耐心等待
 
@@ -191,7 +191,7 @@ https://example.com/doc3.pdf
 
 ### 无法启动 MCP 服务
 
-**问题**：运行 *`uv run -m mineru.cli`*` `时报错。
+**问题**：运行 *`uv run -m copilotix.cli`*` `时报错。
 
 **解决方案**：
 
@@ -199,7 +199,7 @@ https://example.com/doc3.pdf
 
 ● 检查是否已安装所有依赖
 
-● 尝试使用 *`python -m mineru.cli`*` `命令替代
+● 尝试使用 *`python -m copilotix.cli`*` `命令替代
 
 ### 文件转换失败
 

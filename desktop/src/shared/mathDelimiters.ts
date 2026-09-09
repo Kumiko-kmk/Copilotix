@@ -13,7 +13,7 @@ export interface MarkdownMathSegment {
 export type MarkdownSegment = MarkdownTextSegment | MarkdownMathSegment
 
 /**
- * Split the math delimiter forms emitted by MinerU without guessing at bare
+ * Split the math delimiter forms emitted by Copilotix without guessing at bare
  * LaTeX commands. Keeping the delimiters in `value` lets translation callers
  * preserve source text byte-for-byte while renderers use `content`.
  */

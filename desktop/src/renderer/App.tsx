@@ -25,17 +25,17 @@ export default function App(): React.JSX.Element {
   const [view, setView] = React.useState<View>({ name: 'new' })
   const settingsQuery = useQuery<AppSettings>({
     queryKey: ['settings'],
-    queryFn: () => window.mineru.getSettings()
+    queryFn: () => window.copilotix.getSettings()
   })
   const documentsQuery = useQuery<DocumentListCache>({
     queryKey: ['documents'],
-    queryFn: async () => ({ revision: 0, documents: await window.mineru.listDocuments() })
+    queryFn: async () => ({ revision: 0, documents: await window.copilotix.listDocuments() })
   })
   const settings = settingsQuery.data
   const documents = documentsQuery.data?.documents ?? []
 
   React.useEffect(() => {
-    const stop = window.mineru.onDocumentsChanged((change) => {
+    const stop = window.copilotix.onDocumentsChanged((change) => {
       const current = queryClient.getQueryData<DocumentListCache>(['documents'])
       const previousSummaries = new Map(current?.documents.map((document) => [document.id, document] as const))
       if (!current) {
@@ -61,7 +61,7 @@ export default function App(): React.JSX.Element {
         queryClient.removeQueries({ queryKey: ['annotations', documentId] })
       }
     })
-    const stopOpen = window.mineru.onOpenDocument((documentId) => setView({ name: 'reader', documentId }))
+    const stopOpen = window.copilotix.onOpenDocument((documentId) => setView({ name: 'reader', documentId }))
     return () => {
       stop()
       stopOpen()
@@ -80,7 +80,7 @@ export default function App(): React.JSX.Element {
           <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => setView({ name: 'new' })} />
           <NavigationButton active={view.name === 'tasks'} icon={<FileTextOutlined />} label="任务管理" onClick={() => setView({ name: 'tasks' })} />
           <NavigationButton active={view.name === 'settings'} icon={<SettingOutlined />} label="设置" onClick={() => setView({ name: 'settings' })} />
-          <a className="top-navigation-item" href="https://github.com/Kumiko-kmk/MinerU" target="_blank" rel="noreferrer" aria-label="打开 GitHub">
+          <a className="top-navigation-item" href="https://github.com/Kumiko-kmk/Copilotix" target="_blank" rel="noreferrer" aria-label="打开 GitHub">
             <GithubOutlined /><span>GitHub</span>
           </a>
         </nav>

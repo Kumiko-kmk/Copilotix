@@ -12,7 +12,7 @@ import type {
   TranslationPlanMutationResult,
   TranslationPlanWorkDescriptor
 } from '@shared/translationPlanProtocol'
-import type { MinerUTask, TranslationProviderId } from '@shared/types'
+import type { CopilotixTask, TranslationProviderId } from '@shared/types'
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111'
 const JOB_ID = '22222222-2222-4222-8222-222222222222'
@@ -26,7 +26,7 @@ afterEach(async () => {
 
 interface Fixture {
   root: string
-  task: MinerUTask
+  task: CopilotixTask
   descriptor: TranslationPlanWorkDescriptor
   request: PlainTranslationRequest
   compute: FakeCompute
@@ -103,7 +103,7 @@ class FakeCompute {
 }
 
 async function makeFixture(sourceText = 'Hello', cacheHits: TranslationProviderId[] = []): Promise<Fixture> {
-  const root = await mkdtemp(join(tmpdir(), 'mineru-plan-orchestrator-'))
+  const root = await mkdtemp(join(tmpdir(), 'copilotix-plan-orchestrator-'))
   roots.push(root)
   const unitId = '44444444-4444-4444-8444-444444444444'
   const descriptor: TranslationPlanWorkDescriptor = {
@@ -117,7 +117,7 @@ async function makeFixture(sourceText = 'Hello', cacheHits: TranslationProviderI
     status: 'pending'
   }
   const request: PlainTranslationRequest = {
-    protocol: 'mineru-translation-plain-v1',
+    protocol: 'copilotix-translation-plain-v1',
     targetLanguage: 'zh-CN',
     unitId,
     sourceHash: SOURCE_HASH,
@@ -125,7 +125,7 @@ async function makeFixture(sourceText = 'Hello', cacheHits: TranslationProviderI
   }
   await mkdir(join(root, '.translation', JOB_ID, 'requests'), { recursive: true })
   await writeFile(join(root, ...descriptor.requestPath.split('/')), `${JSON.stringify(request)}\n`, 'utf8')
-  const task: MinerUTask = {
+  const task: CopilotixTask = {
     id: TASK_ID,
     originalName: 'paper.pdf',
     title: null,
@@ -160,7 +160,7 @@ function provider(
       counters.push(`${id}:${text.length}`)
       return translate(text, signal)
     },
-    translateTable: async () => ({ protocol: 'mineru-table-translation-v2', translations: [] })
+    translateTable: async () => ({ protocol: 'copilotix-table-translation-v2', translations: [] })
   }
 }
 

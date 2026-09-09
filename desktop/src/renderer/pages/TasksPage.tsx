@@ -23,7 +23,7 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
   const remove = React.useCallback(async () => {
     if (!deleting) return
     try {
-      await window.mineru.deleteDocument({ documentId: deleting.id, deleteFiles })
+      await window.copilotix.deleteDocument({ documentId: deleting.id, deleteFiles })
       setDeleting(null)
       setDeleteFiles(false)
       messageApi.success('任务已删除')
@@ -64,8 +64,8 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
             title: '操作', width: 170,
             render: (_: unknown, document: DocumentSummary) => (
               <Space>
-                <Button type="text" aria-label="打开输出目录" icon={<FolderOpenOutlined />} onClick={() => void window.mineru.openDocumentOutput(document.id)} />
-                {document.workflow.status === 'failed' || document.workflow.status === 'partial' ? <Button type="text" aria-label="重试" icon={<RedoOutlined />} onClick={() => void window.mineru.retryDocument(document.id)} /> : null}
+                <Button type="text" aria-label="打开输出目录" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.id)} />
+                {document.workflow.status === 'failed' || document.workflow.status === 'partial' ? <Button type="text" aria-label="重试" icon={<RedoOutlined />} onClick={() => void window.copilotix.retryDocument(document.id)} /> : null}
                 <Button danger type="text" aria-label="删除" icon={<DeleteOutlined />} onClick={() => setDeleting(document)} />
               </Space>
             )

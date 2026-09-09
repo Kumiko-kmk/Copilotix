@@ -11,8 +11,8 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
 })
 
-async function databasePath(name = 'mineru-v2.sqlite3'): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'mineru-v2-'))
+async function databasePath(name = 'copilotix-v2.sqlite3'): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'copilotix-v2-'))
   directories.push(directory)
   return join(directory, name)
 }
@@ -224,13 +224,13 @@ describe('v2 migration ledger and strict persistence schema', () => {
   })
 
   it('does not inspect or mutate a separate v1 database', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mineru-v1-v2-'))
+    const directory = await mkdtemp(join(tmpdir(), 'copilotix-v1-v2-'))
     directories.push(directory)
-    const v1Path = join(directory, 'mineru-desktop.sqlite3')
+    const v1Path = join(directory, 'copilotix-desktop.sqlite3')
     const v1 = new DatabaseSync(v1Path)
     v1.exec("CREATE TABLE tasks(id TEXT PRIMARY KEY, marker TEXT); INSERT INTO tasks VALUES ('legacy', 'untouched');")
     v1.close()
-    const v2 = new V2Database(join(directory, 'mineru-desktop-v2.sqlite3'))
+    const v2 = new V2Database(join(directory, 'copilotix-desktop-v2.sqlite3'))
     v2.close()
     const reopened = new DatabaseSync(v1Path)
     expect(reopened.prepare('SELECT marker FROM tasks WHERE id = ?').get('legacy')).toEqual({ marker: 'untouched' })

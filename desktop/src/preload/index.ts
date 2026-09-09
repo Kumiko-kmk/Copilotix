@@ -31,7 +31,7 @@ import {
 } from '@shared/ipcSchemas'
 import { decodeIpcEvent, decodeIpcResponse } from './ipcClient'
 import type {
-  MinerUDesktopApi,
+  CopilotixDesktopApi,
   CredentialName,
   SettingsUpdate,
   WindowAction
@@ -48,7 +48,7 @@ async function invokeValidated<Request, Response>(
   return decodeIpcResponse(response, responseSchema)
 }
 
-const api: MinerUDesktopApi = {
+const api: CopilotixDesktopApi = {
   getSettings: () => invokeValidated('settings:get', noRequestSchema, appSettingsSchema, undefined),
   saveSettings: (update: SettingsUpdate) => invokeValidated('settings:save', settingsUpdateSchema, settingsSaveResultSchema, update),
   validateCredential: (name: CredentialName, value?: string) =>
@@ -110,4 +110,4 @@ const api: MinerUDesktopApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('mineru', api)
+contextBridge.exposeInMainWorld('copilotix', api)

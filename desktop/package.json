@@ -1,7 +1,7 @@
 {
-  "name": "mineru-desktop",
+  "name": "copilotix-desktop",
   "version": "0.1.0",
-  "description": "Unofficial MinerU desktop reader with Markdown translation",
+  "description": "Unofficial Copilotix desktop reader with Markdown translation",
   "main": "./out/main/index.js",
   "author": "Kumiko-kmk",
   "license": "AGPL-3.0-only",
@@ -71,9 +71,9 @@
     "vitest": "^3.2.0"
   },
   "build": {
-    "appId": "com.kumiko.mineru.translation",
-    "productName": "MinerU",
-    "executableName": "MinerU",
+    "appId": "com.kumiko.copilotix.translation",
+    "productName": "Copilotix",
+    "executableName": "Copilotix",
     "asar": true,
     "electronLanguages": [
       "zh-CN"

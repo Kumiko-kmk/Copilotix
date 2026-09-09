@@ -75,7 +75,7 @@ describe('table provider transports', () => {
     const response = await provider.translateTable(request)
 
     expect(requestBodies).toHaveLength(1)
-    expect(requestBodies[0].messages[1].content).toContain('mineru-table-translation-v2')
+    expect(requestBodies[0].messages[1].content).toContain('copilotix-table-translation-v2')
     expect(requestBodies[0].messages[1].content).toContain('Table 1. Results')
     expect(response.translations).toHaveLength(flattenSegments(request).length)
   })
@@ -149,7 +149,7 @@ describe('table provider transports', () => {
 
     expect(sessionRequests).toBe(1)
     expect(translatedTexts).toEqual(flattenSegments(request).map((segment) => segment.text))
-    expect(translatedTexts.every((text) => !text.includes('MINERU_SEGMENT'))).toBe(true)
+    expect(translatedTexts.every((text) => !text.includes('COPILOTIX_SEGMENT'))).toBe(true)
     expect(response.translations).toHaveLength(flattenSegments(request).length)
   })
 })

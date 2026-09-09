@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { MAX_RESULT_ZIP_BYTES, OfficialMinerUClient, type FileUploader } from '@main/parserClient'
-import type { AppSettings, MinerUTask } from '@shared/types'
+import { MAX_RESULT_ZIP_BYTES, OfficialParserClient, type FileUploader } from '@main/parserClient'
+import type { AppSettings, CopilotixTask } from '@shared/types'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
@@ -23,7 +23,7 @@ const settings: AppSettings = {
   }
 }
 
-const task: MinerUTask = {
+const task: CopilotixTask = {
   id: 'task-1',
   originalName: 'paper.pdf',
   title: null,
@@ -46,7 +46,7 @@ function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-describe('OfficialMinerUClient', () => {
+describe('OfficialParserClient', () => {
   it('requests official upload URLs with documented JSON fields', async () => {
     const fetcher = vi.fn<Fetcher>(async () => jsonResponse({
       code: 0,
@@ -54,7 +54,7 @@ describe('OfficialMinerUClient', () => {
       data: { batch_id: 'batch-1', file_urls: ['https://upload.example.test/signed?secret=value'] }
     }))
     const uploader: FileUploader = { upload: vi.fn(async () => undefined) }
-    const client = new OfficialMinerUClient(fetcher, uploader)
+    const client = new OfficialParserClient(fetcher, uploader)
 
     const submission = await client.createUploadBatch([task], settings, 'token-value')
 
@@ -77,13 +77,13 @@ describe('OfficialMinerUClient', () => {
 
   it('delegates the raw upload without exposing credentials to the uploader', async () => {
     const upload = vi.fn(async () => undefined)
-    const client = new OfficialMinerUClient(vi.fn(), { upload })
+    const client = new OfficialParserClient(vi.fn(), { upload })
     await client.uploadFile('C:\\paper.pdf', 'https://upload.example.test/signed')
     expect(upload).toHaveBeenCalledWith('C:\\paper.pdf', 'https://upload.example.test/signed', undefined)
   })
 
   it('maps documented batch states and progress', async () => {
-    const client = new OfficialMinerUClient(
+    const client = new OfficialParserClient(
       vi.fn(async () => jsonResponse({
         code: 0,
         msg: 'ok',
@@ -114,7 +114,7 @@ describe('OfficialMinerUClient', () => {
   })
 
   it('treats task-not-found as a successful non-mutating token probe', async () => {
-    const client = new OfficialMinerUClient(
+    const client = new OfficialParserClient(
       vi.fn(async () => jsonResponse({ code: -60012, msg: '找不到任务', trace_id: 'trace-1' })),
       { upload: vi.fn() }
     )
@@ -130,7 +130,7 @@ describe('OfficialMinerUClient', () => {
     ['A0202', 'Token 错误'],
     ['A0211', 'Token 已过期']
   ])('reports official token error %s', async (code, message) => {
-    const client = new OfficialMinerUClient(
+    const client = new OfficialParserClient(
       vi.fn(async () => jsonResponse({ code, msg: message, trace_id: 'token-trace' })),
       { upload: vi.fn() }
     )
@@ -143,7 +143,7 @@ describe('OfficialMinerUClient', () => {
   })
 
   it('rejects non-zero API codes even when HTTP is 200', async () => {
-    const client = new OfficialMinerUClient(
+    const client = new OfficialParserClient(
       vi.fn(async () => jsonResponse({ code: -60005, msg: '文件大小超出限制', trace_id: 'trace-2' })),
       { upload: vi.fn() }
     )
@@ -152,8 +152,8 @@ describe('OfficialMinerUClient', () => {
 
   it('accepts a ZIP response from the result CDN without Authorization', async () => {
     const fetcher = vi.fn<Fetcher>(async () => new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04])))
-    const client = new OfficialMinerUClient(fetcher, { upload: vi.fn() })
-    const root = await mkdtemp(join(tmpdir(), 'mineru-result-'))
+    const client = new OfficialParserClient(fetcher, { upload: vi.fn() })
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-result-'))
     try {
       const destination = join(root, 'result.zip.partial-job-1')
       await expect(client.downloadResult('https://cdn.example.test/result.zip', destination)).resolves.toBeUndefined()
@@ -168,8 +168,8 @@ describe('OfficialMinerUClient', () => {
     const fetcher = vi.fn<Fetcher>(async () => new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
       headers: { 'Content-Length': String(MAX_RESULT_ZIP_BYTES + 1) }
     }))
-    const client = new OfficialMinerUClient(fetcher, { upload: vi.fn() })
-    const root = await mkdtemp(join(tmpdir(), 'mineru-result-limit-'))
+    const client = new OfficialParserClient(fetcher, { upload: vi.fn() })
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-result-limit-'))
     try {
       const destination = join(root, 'result.zip.partial-job-1')
       await expect(client.downloadResult('https://cdn.example.test/result.zip', destination)).rejects.toThrow('大小限制')
@@ -181,8 +181,8 @@ describe('OfficialMinerUClient', () => {
 
   it('cleans a partial ZIP when the download is aborted', async () => {
     const fetcher = vi.fn<Fetcher>(async () => new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04])))
-    const client = new OfficialMinerUClient(fetcher, { upload: vi.fn() })
-    const root = await mkdtemp(join(tmpdir(), 'mineru-result-abort-'))
+    const client = new OfficialParserClient(fetcher, { upload: vi.fn() })
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-result-abort-'))
     const controller = new AbortController()
     controller.abort()
     try {
@@ -203,7 +203,7 @@ describe('OfficialMinerUClient', () => {
         extract_result: [{ data_id: 'task-1', file_name: 'paper.pdf', state: 'waiting-file' }]
       }
     }))
-    const client = new OfficialMinerUClient(fetcher, { upload: vi.fn() }, {
+    const client = new OfficialParserClient(fetcher, { upload: vi.fn() }, {
       waitingFileTimeoutMs: 0,
       pollIntervalMs: 1,
       maxWaitMs: 100
@@ -217,8 +217,8 @@ describe('OfficialMinerUClient', () => {
     expect(result.entries[0]).toMatchObject({
       dataId: 'task-1',
       state: 'failed',
-      error: 'MinerU 未检测到已上传文件，请重试任务。'
+      error: 'Copilotix 未检测到已上传文件，请重试任务。'
     })
-    expect(updates).toEqual([{ state: 'failed', error: 'MinerU 未检测到已上传文件，请重试任务。' }])
+    expect(updates).toEqual([{ state: 'failed', error: 'Copilotix 未检测到已上传文件，请重试任务。' }])
   })
 })

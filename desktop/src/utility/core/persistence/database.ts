@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import type {
   AppSettings,
-  MinerUTask,
+  CopilotixTask,
   ReaderAnnotation,
   ReaderAnnotationView,
   ReplaceReaderAnnotationsRequest,
@@ -177,24 +177,24 @@ export class TaskRepository {
     }
   }
 
-  listTasks(): MinerUTask[] {
+  listTasks(): CopilotixTask[] {
     const rows = this.db.prepare('SELECT * FROM tasks ORDER BY created_at DESC').all() as unknown as TaskRow[]
     return rows.map(toTask)
   }
 
-  getTask(id: string): MinerUTask | null {
+  getTask(id: string): CopilotixTask | null {
     const row = this.db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined
     return row ? toTask(row) : null
   }
 
-  findByHash(hash: string): MinerUTask | null {
+  findByHash(hash: string): CopilotixTask | null {
     const row = this.db
       .prepare('SELECT * FROM tasks WHERE source_hash = ? ORDER BY created_at DESC LIMIT 1')
       .get(hash) as TaskRow | undefined
     return row ? toTask(row) : null
   }
 
-  insertTask(task: MinerUTask): void {
+  insertTask(task: CopilotixTask): void {
     this.db
       .prepare(`
         INSERT INTO tasks(
@@ -214,7 +214,7 @@ export class TaskRepository {
       })
   }
 
-  insertTasks(tasks: MinerUTask[]): void {
+  insertTasks(tasks: CopilotixTask[]): void {
     this.db.exec('BEGIN IMMEDIATE')
     try {
       for (const task of tasks) this.insertTask(task)
@@ -225,10 +225,10 @@ export class TaskRepository {
     }
   }
 
-  updateTask(id: string, patch: Partial<MinerUTask>): MinerUTask {
+  updateTask(id: string, patch: Partial<CopilotixTask>): CopilotixTask {
     const current = this.getTask(id)
     if (!current) throw new Error(`Task not found: ${id}`)
-    const next: MinerUTask = { ...current, ...patch, id, updatedAt: new Date().toISOString() }
+    const next: CopilotixTask = { ...current, ...patch, id, updatedAt: new Date().toISOString() }
     this.db
       .prepare(`
         UPDATE tasks SET
@@ -406,7 +406,7 @@ function validateReaderAnnotationsRequest(request: ReplaceReaderAnnotationsReque
   }
 }
 
-function toTask(row: TaskRow): MinerUTask {
+function toTask(row: TaskRow): CopilotixTask {
   return {
     id: row.id,
     originalName: row.original_name || row.name,

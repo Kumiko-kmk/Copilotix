@@ -1,9 +1,9 @@
 import { EventEmitter } from 'node:events'
 import type { JobRepositoryPort } from '@core/jobs'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
-import type { CreateTasksRequest, MinerUTask, SelectedPdf } from '@shared/types'
+import type { CreateTasksRequest, CopilotixTask, SelectedPdf } from '@shared/types'
 import type { CredentialVault } from './credentialVault'
-import type { MinerUClient } from './parserClient'
+import type { ParserClient } from './parserClient'
 import type { SettingsService } from './settingsService'
 import type { TaskLogger } from './logger'
 import { PathPolicy } from './pathPolicy'
@@ -30,7 +30,7 @@ export class TaskService extends EventEmitter {
     repository: TaskRepositoryCompat,
     settingsService: SettingsService,
     _vault: CredentialVault,
-    _parserClient: MinerUClient,
+    _parserClient: ParserClient,
     _fetcher: Fetcher,
     loggerOrCompute: TaskLogger | TaskComputePort = silentLogger,
     computeOrPathPolicy?: TaskComputePort | PathPolicyPort,
@@ -56,7 +56,7 @@ export class TaskService extends EventEmitter {
     })
   }
 
-  async list(): Promise<MinerUTask[]> {
+  async list(): Promise<CopilotixTask[]> {
     return this.commands.list()
   }
 
@@ -64,13 +64,13 @@ export class TaskService extends EventEmitter {
     return this.commands.inspectPdfs(paths)
   }
 
-  async create(request: CreateTasksRequest): Promise<MinerUTask[]> {
+  async create(request: CreateTasksRequest): Promise<CopilotixTask[]> {
     const created = await this.commands.create(request)
     await this.emitTasks()
     return created
   }
 
-  async importPaths(paths: readonly string[], options: Omit<CreateTasksRequest, 'files'>): Promise<MinerUTask[]> {
+  async importPaths(paths: readonly string[], options: Omit<CreateTasksRequest, 'files'>): Promise<CopilotixTask[]> {
     const created = await this.commands.importPaths(paths, options)
     await this.emitTasks()
     return created
@@ -103,7 +103,7 @@ export class TaskService extends EventEmitter {
   }
 }
 
-export function splitIntoMinerUBatches<T>(values: T[], size: number): T[][] {
+export function splitIntoParserBatches<T>(values: T[], size: number): T[][] {
   if (!Number.isInteger(size) || size < 1) throw new Error('Batch size must be positive')
   const groups: T[][] = []
   for (let index = 0; index < values.length; index += size) groups.push(values.slice(index, index + size))

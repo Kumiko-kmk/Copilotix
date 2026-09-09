@@ -184,7 +184,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
 })
 
 async function capture(window: import('@playwright/test').Page, filename: string): Promise<void> {
-  const directory = process.env.MINERU_E2E_UI_SCREENSHOTS
+  const directory = process.env.COPILOTIX_E2E_UI_SCREENSHOTS
   if (!directory) return
   mkdirSync(directory, { recursive: true })
   await window.screenshot({ path: join(directory, filename) })

@@ -4,9 +4,9 @@ import { findForbiddenUtilityRuntime, isExpectedUtilityBundleFailure } from '../
 
 describe('E2E GPU launch policy', () => {
   it('requires the test environment and an explicit opt-in', () => {
-    expect(shouldDisableGpuSandbox({ NODE_ENV: 'test', MINERU_E2E_DISABLE_GPU_SANDBOX: 'true' })).toBe(true)
-    expect(shouldDisableGpuSandbox({ NODE_ENV: 'production', MINERU_E2E_DISABLE_GPU_SANDBOX: 'true' })).toBe(false)
-    expect(shouldDisableGpuSandbox({ NODE_ENV: 'test', MINERU_E2E_DISABLE_GPU_SANDBOX: '1' })).toBe(false)
+    expect(shouldDisableGpuSandbox({ NODE_ENV: 'test', COPILOTIX_E2E_DISABLE_GPU_SANDBOX: 'true' })).toBe(true)
+    expect(shouldDisableGpuSandbox({ NODE_ENV: 'production', COPILOTIX_E2E_DISABLE_GPU_SANDBOX: 'true' })).toBe(false)
+    expect(shouldDisableGpuSandbox({ NODE_ENV: 'test', COPILOTIX_E2E_DISABLE_GPU_SANDBOX: '1' })).toBe(false)
   })
 
   it('rejects browser-only utility bundles while accepting the expected node smoke failure', () => {

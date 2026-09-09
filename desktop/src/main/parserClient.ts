@@ -2,8 +2,8 @@ import { createWriteStream } from 'node:fs'
 import { open, rm } from 'node:fs/promises'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { AppSettings, HealthResult, MinerUTask } from '@shared/types'
-import { MINERU_API_ORIGIN } from '@shared/constants'
+import type { AppSettings, HealthResult, CopilotixTask } from '@shared/types'
+import { PARSER_API_ORIGIN } from '@shared/constants'
 
 export type OfficialTaskState = 'waiting-file' | 'pending' | 'running' | 'converting' | 'done' | 'failed'
 
@@ -41,9 +41,9 @@ export interface FileUploader {
   upload(filePath: string, uploadUrl: string, onProgress?: (sent: number, total: number) => void, signal?: AbortSignal): Promise<void>
 }
 
-export interface MinerUClient {
+export interface ParserClient {
   verifyToken(token?: string | null): Promise<HealthResult>
-  createUploadBatch(tasks: MinerUTask[], settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission>
+  createUploadBatch(tasks: CopilotixTask[], settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission>
   uploadFile(filePath: string, uploadUrl: string, onProgress?: (sent: number, total: number) => void, signal?: AbortSignal): Promise<void>
   getBatchResult(batchId: string, token?: string | null, signal?: AbortSignal): Promise<BatchResult>
   waitForBatch(
@@ -85,7 +85,7 @@ interface RawBatchResultData {
   }>
 }
 
-interface OfficialMinerUClientOptions {
+interface OfficialParserClientOptions {
   waitingFileTimeoutMs?: number
   pollIntervalMs?: number
   maxWaitMs?: number
@@ -102,18 +102,18 @@ const KNOWN_STATES = new Set<OfficialTaskState>([
   'failed'
 ])
 
-export class MinerUApiError extends Error {
+export class ParserApiError extends Error {
   constructor(
     message: string,
     readonly code: number | string,
     readonly traceId?: string
   ) {
     super(message)
-    this.name = 'MinerUApiError'
+    this.name = 'ParserApiError'
   }
 }
 
-export class OfficialMinerUClient implements MinerUClient {
+export class OfficialParserClient implements ParserClient {
   private readonly waitingFileTimeoutMs: number
   private readonly pollIntervalMs: number
   private readonly maxWaitMs: number
@@ -121,7 +121,7 @@ export class OfficialMinerUClient implements MinerUClient {
   constructor(
     private readonly fetcher: Fetcher,
     private readonly uploader: FileUploader,
-    options: OfficialMinerUClientOptions = {}
+    options: OfficialParserClientOptions = {}
   ) {
     this.waitingFileTimeoutMs = options.waitingFileTimeoutMs ?? 2 * 60 * 1000
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000
@@ -129,20 +129,20 @@ export class OfficialMinerUClient implements MinerUClient {
   }
 
   async verifyToken(token?: string | null): Promise<HealthResult> {
-    if (!token?.trim()) return { ok: false, code: 'PARSER_TOKEN_MISSING', message: '请先输入 MinerU API Token' }
+    if (!token?.trim()) return { ok: false, code: 'PARSER_TOKEN_MISSING', message: '请先输入 Parser API Token' }
     try {
       const response = await this.fetcher(
-        `${MINERU_API_ORIGIN}/api/v4/extract-results/batch/${TOKEN_PROBE_BATCH_ID}`,
+        `${PARSER_API_ORIGIN}/api/v4/extract-results/batch/${TOKEN_PROBE_BATCH_ID}`,
         { headers: authHeaders(token), signal: AbortSignal.timeout(15_000) }
       )
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'MinerU API Token 无效' }
+          return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'Parser API Token 无效' }
         }
         if (response.status === 408 || response.status === 429 || response.status >= 500) {
-          return { ok: false, code: `HTTP_${response.status}`, message: 'MinerU 验证服务暂不可用' }
+          return { ok: false, code: `HTTP_${response.status}`, message: 'Copilotix 验证服务暂不可用' }
         }
-        return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'MinerU API Token 验证失败' }
+        return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'Parser API Token 验证失败' }
       }
       const payload = await readEnvelope<RawBatchResultData>(response)
       const code = String(payload.code)
@@ -153,14 +153,14 @@ export class OfficialMinerUClient implements MinerUClient {
       }
       return resultFromEnvelope(false, payload, payload.msg || 'Token 验证失败')
     } catch (_error) {
-      return { ok: false, code: 'VALIDATION_UNAVAILABLE', message: '暂时无法连接 MinerU 验证服务，请检查网络后重试' }
+      return { ok: false, code: 'VALIDATION_UNAVAILABLE', message: '暂时无法连接 Copilotix 验证服务，请检查网络后重试' }
     }
   }
 
-  async createUploadBatch(tasks: MinerUTask[], settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission> {
-    if (!token?.trim()) throw new Error('未配置 MinerU API Token')
+  async createUploadBatch(tasks: CopilotixTask[], settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission> {
+    if (!token?.trim()) throw new Error('未配置 Parser API Token')
     if (tasks.length === 0) throw new Error('没有可提交的 PDF')
-    const response = await this.fetcher(`${MINERU_API_ORIGIN}/api/v4/file-urls/batch`, {
+    const response = await this.fetcher(`${PARSER_API_ORIGIN}/api/v4/file-urls/batch`, {
       method: 'POST',
       headers: { ...authHeaders(token), 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
@@ -173,9 +173,9 @@ export class OfficialMinerUClient implements MinerUClient {
     })
     const payload = await requireSuccess<UploadBatchData>(response, '申请文件上传链接失败')
     if (!payload.data || typeof payload.data.batch_id !== 'string' || !Array.isArray(payload.data.file_urls)) {
-      throw new Error('MinerU API 返回了无效的批次信息')
+      throw new Error('Parser API 返回了无效的批次信息')
     }
-    if (payload.data.file_urls.length !== tasks.length) throw new Error('MinerU 返回的上传链接数量与文件数量不一致')
+    if (payload.data.file_urls.length !== tasks.length) throw new Error('Copilotix 返回的上传链接数量与文件数量不一致')
 
     return {
       batchId: payload.data.batch_id,
@@ -200,13 +200,13 @@ export class OfficialMinerUClient implements MinerUClient {
   }
 
   async getBatchResult(batchId: string, token?: string | null, signal?: AbortSignal): Promise<BatchResult> {
-    if (!token?.trim()) throw new Error('未配置 MinerU API Token')
+    if (!token?.trim()) throw new Error('未配置 Parser API Token')
     const response = await this.fetcher(
-      `${MINERU_API_ORIGIN}/api/v4/extract-results/batch/${encodeURIComponent(batchId)}`,
+      `${PARSER_API_ORIGIN}/api/v4/extract-results/batch/${encodeURIComponent(batchId)}`,
       { headers: authHeaders(token), signal: signal ?? AbortSignal.timeout(30_000) }
     )
-    const payload = await requireSuccess<RawBatchResultData>(response, '查询 MinerU 批次结果失败')
-    if (!payload.data || !Array.isArray(payload.data.extract_result)) throw new Error('MinerU API 返回了无效的批次结果')
+    const payload = await requireSuccess<RawBatchResultData>(response, '查询 Copilotix 批次结果失败')
+    if (!payload.data || !Array.isArray(payload.data.extract_result)) throw new Error('Parser API 返回了无效的批次结果')
     return {
       batchId: payload.data.batch_id || batchId,
       entries: payload.data.extract_result.map((entry) => {
@@ -221,7 +221,7 @@ export class OfficialMinerUClient implements MinerUClient {
             state === 'done' && typeof entry.full_zip_url === 'string'
               ? requireHttpsUrl(entry.full_zip_url, '结果下载链接')
               : null,
-          error: state === 'failed' ? entry.err_msg || 'MinerU 解析失败' : null,
+          error: state === 'failed' ? entry.err_msg || 'Copilotix 解析失败' : null,
           progress:
             typeof extractedPages === 'number' && typeof totalPages === 'number' && totalPages > 0
               ? { extractedPages, totalPages }
@@ -259,7 +259,7 @@ export class OfficialMinerUClient implements MinerUClient {
       await delay(delayMs, signal)
       delayMs = Math.min(10_000, Math.max(this.pollIntervalMs, Math.round(delayMs * 1.15)))
     }
-    throw new Error('等待 MinerU 解析结果超时')
+    throw new Error('等待 Copilotix 解析结果超时')
   }
 
   async downloadResult(resultUrl: string, destinationPath: string, signal?: AbortSignal): Promise<void> {
@@ -273,10 +273,10 @@ export class OfficialMinerUClient implements MinerUClient {
       if (contentLengthHeader !== null) {
         const contentLength = Number(contentLengthHeader)
         if (!Number.isSafeInteger(contentLength) || contentLength < 4 || contentLength > MAX_RESULT_ZIP_BYTES) {
-          throw new Error('MinerU 解析结果超过支持的 ZIP 大小限制')
+          throw new Error('Copilotix 解析结果超过支持的 ZIP 大小限制')
         }
       }
-      if (!response.body) throw new Error('MinerU 解析结果缺少响应内容')
+      if (!response.body) throw new Error('Copilotix 解析结果缺少响应内容')
 
       let size = 0
       let header = Buffer.alloc(0)
@@ -285,7 +285,7 @@ export class OfficialMinerUClient implements MinerUClient {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
           size += buffer.length
           if (size > MAX_RESULT_ZIP_BYTES) {
-            callback(new Error('MinerU 解析结果超过支持的 ZIP 大小限制'))
+            callback(new Error('Copilotix 解析结果超过支持的 ZIP 大小限制'))
             return
           }
           if (header.length < 4) header = Buffer.concat([header, buffer]).subarray(0, 4)
@@ -298,7 +298,7 @@ export class OfficialMinerUClient implements MinerUClient {
         createWriteStream(destinationPath, { flags: 'wx' }),
         { signal }
       )
-      if (header.length < 4 || header[0] !== 0x50 || header[1] !== 0x4b) throw new Error('MinerU 解析结果不是有效的 ZIP 文件')
+      if (header.length < 4 || header[0] !== 0x50 || header[1] !== 0x4b) throw new Error('Copilotix 解析结果不是有效的 ZIP 文件')
       const handle = await open(destinationPath, 'r+')
       try {
         await handle.sync()
@@ -318,7 +318,7 @@ function expireUnregisteredUploads(result: BatchResult, expectedDataIds: Set<str
   if (!expired) return result
   const entries = result.entries.map((entry) =>
     entry.dataId && expectedDataIds.has(entry.dataId) && entry.state === 'waiting-file'
-      ? { ...entry, state: 'failed' as const, error: 'MinerU 未检测到已上传文件，请重试任务。' }
+      ? { ...entry, state: 'failed' as const, error: 'Copilotix 未检测到已上传文件，请重试任务。' }
       : entry
   )
   const present = new Set(entries.map((entry) => entry.dataId).filter((dataId): dataId is string => Boolean(dataId)))
@@ -329,7 +329,7 @@ function expireUnregisteredUploads(result: BatchResult, expectedDataIds: Set<str
       fileName: '',
       state: 'failed',
       fullZipUrl: null,
-      error: 'MinerU 批次结果未返回对应 data_id，请重试任务。',
+      error: 'Copilotix 批次结果未返回对应 data_id，请重试任务。',
       progress: null
     })
   }
@@ -348,8 +348,8 @@ async function requireSuccess<T>(response: Response, prefix: string): Promise<Ap
     // Keep remote response text out of the Error.  The service can echo
     // request data in `msg`; callers persist/log this error and must never
     // accidentally expose the bearer token.
-    const reason = !response.ok ? `HTTP ${response.status}` : 'MinerU API 返回业务错误'
-    throw new MinerUApiError(
+    const reason = !response.ok ? `HTTP ${response.status}` : 'Parser API 返回业务错误'
+    throw new ParserApiError(
       `${prefix}：${reason}（code=${String(code)}${trace}）`,
       code,
       payload.trace_id
@@ -363,10 +363,10 @@ async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
   try {
     payload = await response.json()
   } catch {
-    throw new MinerUApiError(`MinerU API 返回非 JSON 响应（HTTP ${response.status}）`, `HTTP_${response.status}`)
+    throw new ParserApiError(`Parser API 返回非 JSON 响应（HTTP ${response.status}）`, `HTTP_${response.status}`)
   }
   if (!payload || typeof payload !== 'object' || !('code' in payload)) {
-    throw new Error('MinerU API 返回了无效响应')
+    throw new Error('Parser API 返回了无效响应')
   }
   const envelope = payload as ApiEnvelope<T>
   return { ...envelope, msg: typeof envelope.msg === 'string' ? envelope.msg : '' }
@@ -378,7 +378,7 @@ function resultFromEnvelope(ok: boolean, payload: ApiEnvelope<unknown>, message:
 
 function normalizeState(value: unknown): OfficialTaskState {
   if (typeof value === 'string' && KNOWN_STATES.has(value as OfficialTaskState)) return value as OfficialTaskState
-  throw new Error(`MinerU 返回未知任务状态：${String(value)}`)
+  throw new Error(`Copilotix 返回未知任务状态：${String(value)}`)
 }
 
 function requireHttpsUrl(value: string, label: string): string {

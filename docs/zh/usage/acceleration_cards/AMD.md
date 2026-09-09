@@ -1,28 +1,28 @@
 ## 基于Triton的ROCm 不同后端实现优化，基本实现vllm后端正常推理，以及pipeline后端中第一步layout用的DocLayout-YOLO
 
-**已有完整python vllm和mineru环境直接跳转第五步！！！**
+**已有完整python vllm和copilotix环境直接跳转第五步！！！**
 **其他GPU执行问题可以参考，先prof查看定位找到哪个算子问题，然后triton后端实现即可**
-测试了一下，基本和MinerU官网效果差不多，用AMD的人也不是很多，就在评论区分享给大家了
+测试了一下，基本和Copilotix官网效果差不多，用AMD的人也不是很多，就在评论区分享给大家了
 
 ### 1.结果介绍
 **补充一个200页的PDF python编程书测试一下速度，可以到1.99it/s：**
 Two Step Extraction: 100%|████████████████████████████████████████| 200/200 [01:40<00:00,  1.99it/s]
 
 **下面为之前14学术论文测试结果：**
-7900xtx mineru-gradio --server-name 0.0.0.0 --server-port 7860 --enable-vllm-engine true 速度大概为**1.6-1.8s/it**，没有仔细测试，简单试了两个文档。第二种矩阵乘法代替原来的dots点乘可以进一步提速到1.3s/it，优化后的主要算子耗时在hipblast(这个没法提升了)和vllm triton后端，各占25%耗时吧，vllm tirion后端这个这个只能等官方优化了。。。。
+7900xtx copilotix-gradio --server-name 0.0.0.0 --server-port 7860 --enable-vllm-engine true 速度大概为**1.6-1.8s/it**，没有仔细测试，简单试了两个文档。第二种矩阵乘法代替原来的dots点乘可以进一步提速到1.3s/it，优化后的主要算子耗时在hipblast(这个没法提升了)和vllm triton后端，各占25%耗时吧，vllm tirion后端这个这个只能等官方优化了。。。。
 doclayout-yolo的layout速度从原来的1.6it/s提高到15it/s，注意需要缓存一下输入的pdf尺寸后，triton必须要缓存尺寸没办法。主要是为了保留模型输入输出接口，最小代码改动。
 采用-b vlm-vllm-engine模式举个例子
 
 ---
 **测试结果为优化为5d矩阵乘代替原来的点积结果：**
-2025-10-05 15:45:12.985 | INFO     | mineru.backend.vlm.vlm_analyze:get_model:128 - get vllm-engine predictor cost: 18.45s
+2025-10-05 15:45:12.985 | INFO     | copilotix.backend.vlm.vlm_analyze:get_model:128 - get vllm-engine predictor cost: 18.45s
 Adding requests: 100%|████████████████████████████████████████████████████████████████████████████████| 14/14 [00:01<00:00, 12.20it/s]
 Processed prompts: 100%|█████████████████████| 14/14 [00:08<00:00,  1.56it/s, est. speed input: 2174.18 toks/s, output: 791.87 toks/s]
 Adding requests: 100%|█████████████████████████████████████████████████████████████████████████████| 278/278 [00:00<00:00, 323.03it/s]
 Processed prompts: 100%|██████████████████| 278/278 [00:07<00:00, 37.63it/s, est. speed input: 5264.66 toks/s, output: 2733.31 toks/s]
 
-mineru-gradio --server-name 0.0.0.0 --server-port 7860 --enable-vllm-engine true测试：
-2025-10-05 15:46:55.953 | WARNING  | mineru.cli.common:convert_pdf_bytes_to_bytes_by_pypdfium2:54 - end_page_id is out of range, use pdf_docs length
+copilotix-gradio --server-name 0.0.0.0 --server-port 7860 --enable-vllm-engine true测试：
+2025-10-05 15:46:55.953 | WARNING  | copilotix.cli.common:convert_pdf_bytes_to_bytes_by_pypdfium2:54 - end_page_id is out of range, use pdf_docs length
 Two Step Extraction: 100%|████████████████████████████████████████████████████████████████████████████| 14/14 [00:18<00:00,  1.30s/it]
 
 ---
@@ -38,7 +38,7 @@ DocLayout-YOLO的**g2l_crm.py**空洞卷积也是这个问题，专业的CDNA MI
 System: Ubuntu 24.04.3        Kernel: Linux 6.14.0-33-generic      ROCm version: 7.0.1
 python环境：
 python 3.12
-pytorch-triton-rocm   3.5.0+gitbbb06c03 
+pytorch-triton-rocm   3.5.0+gitbbb06c03
 torch                            2.10.0.dev20251001+rocm7.0
 torchvision                  0.25.0.dev20251003+rocm7.0
 vllm                              0.11.0rc2.dev198+g736fbf4c8.rocm701
@@ -53,7 +53,7 @@ source .venv/bin/activate
 uv pip install --pre torch torchvision   -i https://pypi.tuna.tsinghua.edu.cn/simple/   --extra-index-url https://download.pytorch.org/whl/nightly/rocm7.0
 uv pip install pip
 # 避免覆盖我们本地的pytorch，改用pip而没有继续使用uv pip
-pip install -U "mineru[core]" -i https://pypi.mirrors.ustc.edu.cn/simple/
+pip install -U "copilotix[core]" -i https://pypi.mirrors.ustc.edu.cn/simple/
 ```
 vllm 安装参考官方手册[Vllm](https://docs.vllm.com.cn/en/latest/getting_started/installation/gpu.html#amd-rocm)
 ```
@@ -127,10 +127,10 @@ class Qwen2VisionPatchEmbed(nn.Module):
         L, C = x.shape
         x_reshaped = x.view(L, -1, self.temporal_patch_size, self.patch_size,
                             self.patch_size)
-        
+
         # Call your custom Triton kernel instead of self.proj
         x_out = triton_conv3d_patchify(x_reshaped, self.proj.weight)
-        
+
         # The output of our kernel is already the correct shape [L, embed_dim]
         return x_out
 ```
@@ -335,7 +335,7 @@ def triton_conv3d_patchify(x_5d: torch.Tensor, weight_5d: torch.Tensor) -> torch
     return C
 ```
 ---
-**4.关闭终端后再次使用mineru-gradio会报一个Lora错误，修改代码跳过它**
+**4.关闭终端后再次使用copilotix-gradio会报一个Lora错误，修改代码跳过它**
 ```
 pip show mineru_vl_utils
 ```
@@ -351,7 +351,7 @@ pip show mineru_vl_utils
 
 **最后整两个环境变量后愉快玩耍即可**
 ```
-export MINERU_MODEL_SOURCE=modelscope
+export COPILOTIX_MODEL_SOURCE=modelscope
 export TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1
 ```
 ---

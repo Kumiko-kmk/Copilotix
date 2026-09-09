@@ -1,7 +1,7 @@
 import { documentSummarySchema, type DocumentSummary } from '@shared/ipcSchemas'
-import type { MinerUTask } from '@shared/types'
+import type { CopilotixTask } from '@shared/types'
 
-export function projectDocumentSummary(task: MinerUTask): DocumentSummary {
+export function projectDocumentSummary(task: CopilotixTask): DocumentSummary {
   return documentSummarySchema.parse({
     id: task.id,
     originalName: task.originalName,

@@ -11,7 +11,7 @@ This section provides comprehensive usage instructions for the project. We will 
 
 ## Getting Started
 
-Starting with 3.0, `mineru` runs as an orchestration client on top of `mineru-api`; advanced `mineru-router` usage for multi-service and multi-GPU deployments is also covered in this section.
+Starting with 3.0, `copilotix` runs as an orchestration client on top of `copilotix-api`; advanced `copilotix-router` usage for multi-service and multi-GPU deployments is also covered in this section.
 
 We recommend reading the documentation in the order listed above, which will help you better understand and use the project features.
 

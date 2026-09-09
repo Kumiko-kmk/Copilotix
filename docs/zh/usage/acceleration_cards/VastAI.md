@@ -39,14 +39,14 @@
         harbor.vastaitech.com/ai_deliver/vllm_vacc:VVI-25.12.SP2 bash
     ```
 
-- 安装MinerU
+- 安装Copilotix
 
-   - 参考官方文档安装：[README_zh-CN.md#安装-mineru](https://github.com/opendatalab/MinerU/blob/master/README_zh-CN.md#安装-mineru)
+   - 参考官方文档安装：[README_zh-CN.md#安装-copilotix](https://github.com/Kumiko-kmk/Copilotix/blob/master/README_zh-CN.md#安装-copilotix)
 
         ```bash
         # 启动容器
         # sudo docker exec -it vllm_service bash
-        
+
         # 可选pypi源
         # https://mirrors.163.com/pypi/simple/
         # https://mirrors.aliyun.com/pypi/simple/
@@ -54,22 +54,22 @@
         # https://pypi.tuna.tsinghua.edu.cn/simple/
         # https://mirror.baidu.com/pypi/simple
 
-        # 通过源码安装MinerU
-        git clone https://github.com/opendatalab/MinerU.git
+        # 通过源码安装Copilotix
+        git clone https://github.com/Kumiko-kmk/Copilotix.git
         git checkout 8c4b3ef3a20b11ddac9903f25124d24ea82639b5
         pip install -e .[core] -i https://mirrors.aliyun.com/pypi/simple
 
-        # 或使用pip安装MinerU
-        pip install -U "mineru[core]==2.7.0" -i https://mirrors.aliyun.com/pypi/simple
+        # 或使用pip安装Copilotix
+        pip install -U "copilotix[core]==2.7.0" -i https://mirrors.aliyun.com/pypi/simple
         ```
 
 > [!NOTE]
 > - `vllm_vacc`基础镜像内已包含`torch/vllm`等相关依赖
-> - 截至`2025/12/31`，`VastAI`已支持`MinerU`至最新版本`2.7.0`，`master分支8c4b3ef3`
+> - 截至`2025/12/31`，`VastAI`已支持`Copilotix`至最新版本`2.7.0`，`master分支8c4b3ef3`
 > - 和`NVIDIA`硬件下`CUDA_VISIBLE_DEVICES`类似；在`VastAI`硬件中可以使用`VACC_VISIBLE_DEVICES`指定`可见计算卡ID`，如`-e VACC_VISIBLE_DEVICES=0,1,2,3`
 > - 需指定适当的`--shm-size`虚拟内存
 
-## 4. MinerU功能
+## 4. Copilotix功能
 
 > [!NOTE]
 > - `VastAI`加速卡仅支持使用`vlm-engine`和`vlm-http-client`形式进行`VLM`模型推理加速
@@ -79,17 +79,17 @@
     sudo docker exec -it vllm_service bash
     ```
 
-- 使用MinerU
+- 使用Copilotix
 
-    - 模型准备，参考官方介绍：[model_source.md](https://github.com/opendatalab/MinerU/blob/master/docs/zh/usage/model_source.md)
+    - 模型准备，参考官方介绍：[model_source.md](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/zh/usage/model_source.md)
 
     - 方式一：`vlm-engine`
 
         ```bash
-        export MINERU_MODEL_SOURCE=modelscope
+        export COPILOTIX_MODEL_SOURCE=modelscope
 
-        # step1, 以`vlm-engine`方式启动MinerU解析任务
-        mineru -p image.png \
+        # step1, 以`vlm-engine`方式启动Copilotix解析任务
+        copilotix -p image.png \
         -o ./output \
         -b vlm-engine \
         --http-timeout 1200 \
@@ -103,16 +103,16 @@
 
         ```bash
         # step1, 启动vLLM API server
-        vllm serve /root/.cache/modelscope/hub/models/OpenDataLab/MinerU2.5-2509-1.2B \
+        vllm serve /root/.cache/modelscope/hub/models/OpenDataLab/Copilotix2.5-2509-1.2B \
         --tensor-parallel-size 2 \
         --trust-remote-code \
         --enforce_eager \
         --port 8090 \
         --max-model-len 16384 \
-        --served-model-name MinerU2.5-2509-1.2B
+        --served-model-name Copilotix2.5-2509-1.2B
 
-        # step2，以`vlm-http-client`方式启动MinerU解析任务
-        mineru -p demo/pdfs/demo1.pdf \
+        # step2，以`vlm-http-client`方式启动Copilotix解析任务
+        copilotix -p demo/pdfs/demo1.pdf \
         -o ./output \
         -b vlm-http-client \
         -u http://127.0.0.1:8090 \
@@ -126,7 +126,7 @@
 
 ## 5. 注意事项
 
-`VastAI`加速卡对`MinerU`的支持情况如下表所示：
+`VastAI`加速卡对`Copilotix`的支持情况如下表所示：
 
 
 <table border="1">
@@ -138,7 +138,7 @@
   </thead>
   <tbody>
     <tr>
-      <td rowspan="5">命令行工具(mineru)</td>
+      <td rowspan="5">命令行工具(copilotix)</td>
       <td>pipeline</td>
       <td>🔴</td>
     </tr>
@@ -159,7 +159,7 @@
       <td>🟢</td>
     </tr>
     <tr>
-      <td rowspan="5">fastapi服务(mineru-api)</td>
+      <td rowspan="5">fastapi服务(copilotix-api)</td>
       <td>pipeline</td>
       <td>🔴</td>
     </tr>
@@ -180,7 +180,7 @@
       <td>🟢</td>
     </tr>
     <tr>
-      <td rowspan="5">gradio界面(mineru-gradio)</td>
+      <td rowspan="5">gradio界面(copilotix-gradio)</td>
       <td>pipeline</td>
       <td>🔴</td>
     </tr>
@@ -201,7 +201,7 @@
       <td>🟢</td>
     </tr>
     <tr>
-      <td colspan="2">openai-server服务（mineru-openai-server）</td>
+      <td colspan="2">openai-server服务（copilotix-openai-server）</td>
       <td>🟢</td>
     </tr>
   </tbody>
@@ -209,7 +209,7 @@
 
 
 > [!NOTE]
-> - 🟢: 支持，运行较稳定，精度与NVIDIA GPU基本一致  
-> - 🟡: 支持但较不稳定，在某些场景下可能出现异常，或精度存在一定差异  
+> - 🟢: 支持，运行较稳定，精度与NVIDIA GPU基本一致
+> - 🟡: 支持但较不稳定，在某些场景下可能出现异常，或精度存在一定差异
 > - 🔴: 不支持，无法运行，或精度存在较大差异
 > - `vlm-engine`：VastAI仅支持vLLM后端

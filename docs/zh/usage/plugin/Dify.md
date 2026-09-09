@@ -2,18 +2,18 @@
 
 **Dify** 是一个开源的大语言模型（LLM）应用开发平台，旨在简化和加速生成式 AI 应用的创建和部署。它结合了后端即服务（BaaS）和 LLMOps 的理念，为开发者提供了用户友好的界面和强大的工具，有效降低了 AI 应用开发的门槛。
 
-目前 MinerU 与 Dify 联合研发的 MinerU 插件已在 Dify 市场上架，帮助用户搭建工作流，提供文档解析的工作。
+目前 Copilotix 与 Dify 联合研发的 Copilotix 插件已在 Dify 市场上架，帮助用户搭建工作流，提供文档解析的工作。
 
 ![img](../../../assets/images/Dify_2.png)
 
 - Dify 官网地址：https://dify.ai/zh
-- MinerU Dify 插件下载地址：https://marketplace.dify.ai/plugins/langgenius/mineru
+- Copilotix Dify 插件下载地址：https://marketplace.dify.ai/plugins/langgenius/copilotix
 
-# MinerU 在 Dify 中的使用方法
+# Copilotix 在 Dify 中的使用方法
 
-## 一、**新版MinerU Dify插件亮点 (v0.4.0)**
+## 一、**新版Copilotix Dify插件亮点 (v0.4.0)**
 
-- **完美适配MinerU2**：全面兼容MinerU2的最新功能，释放顶尖的文档解析能力。
+- **完美适配Copilotix2**：全面兼容Copilotix2的最新功能，释放顶尖的文档解析能力。
 - **超高灵活性**：同时支持官方在线API和本地化部署的API（并向下兼容 1.x 版本）。
 - **赋能工作流**：让Dify的Agent拥有强大的文档“读写”能力，轻松处理复杂任务。
 
@@ -24,7 +24,7 @@
 
 ### 准备
 
-1. 在Dify插件页面安装MinerU插件（私有化部署的Dify同理）
+1. 在Dify插件页面安装Copilotix插件（私有化部署的Dify同理）
 
 
 2. 填写API URL等信息
@@ -51,11 +51,11 @@
 
 ![img](../../../assets/images/Dify_6.png)
 
-#### 第三步：添加工具节点——MinerU插件来解析上一步开始节点上传的文件
+#### 第三步：添加工具节点——Copilotix插件来解析上一步开始节点上传的文件
 
 ![img](../../../assets/images/Dify_7.png)
 
-#### 第四步：设置MinerU的输入变量，选择上一步开始节点添加的 `input_file`
+#### 第四步：设置Copilotix的输入变量，选择上一步开始节点添加的 `input_file`
 
 ![img](../../../assets/images/Dify_8.png)
 
@@ -63,7 +63,7 @@
 
 选择“LLM”节点后，如果没有模型可用，需要单独在插件市场安装（这里使用 Deepseek作为示例）
 
-“上下文”选择MinerU的输出变量 `text`（MinerU解析文档后的markdown格式）
+“上下文”选择Copilotix的输出变量 `text`（Copilotix解析文档后的markdown格式）
 
 ![img](../../../assets/images/Dify_9.png)
 
@@ -89,7 +89,7 @@
 
 ### **案例二：自动化批量处理文档，并上传至云端S3**
 
-需要处理大量文档并归档？MinerU 插件同样能胜任
+需要处理大量文档并归档？Copilotix 插件同样能胜任
 
 #### 第一步：安装 botos3 插件
 
@@ -107,21 +107,21 @@
 
 #### 第四步：添加“迭代”
 
-在“开始”节点后添加“迭代”，并配置迭代内的MinerU节点,设置迭代的输入为上一步开始节点的`upload_files`，输出节点暂时不填写，再整个迭代配置完成后选择MinerU节点Parse File的`full_zip_url`
+在“开始”节点后添加“迭代”，并配置迭代内的Copilotix节点,设置迭代的输入为上一步开始节点的`upload_files`，输出节点暂时不填写，再整个迭代配置完成后选择Copilotix节点Parse File的`full_zip_url`
 
 ![img](../../../assets/images/Dify_17.png)
 
-将MinerU的输入参数file选择为迭代器的 `item`
+将Copilotix的输入参数file选择为迭代器的 `item`
 
 ![img](../../../assets/images/Dify_18.png)
 
 ![img](../../../assets/images/Dify_19.png)
 
-#### 第五步：增加中间节点“代码执行”来转换MinerU的解析结果
+#### 第五步：增加中间节点“代码执行”来转换Copilotix的解析结果
 
 **输入变量(变量名称需与代码定义一致)**
 
-- **text：**选择MinerU Parse File的输出变量`text`
+- **text：**选择Copilotix Parse File的输出变量`text`
 - **uploadFiles：**选择“开始”节点的文件列表`upload_files`，用来根据迭代的index索引下标找到对应的原始文件名
 - **index：**迭代的下标索引，选择迭代器的`index`
 
@@ -146,11 +146,11 @@
 
 ![img](../../../assets/images/Dify_21.png)
 
-文件base64选择代码执行（图中为**转换MINERU MD文本**）输出的base64字段
+文件base64选择代码执行（图中为**转换COPILOTIX MD文本**）输出的base64字段
 
 ![img](../../../assets/images/Dify_22.png)
 
-S3对象key，S3 对象key填写文件存储的路径，在 botos3 插件配置界面已经填写了 bucket 名称，这里只需要填写在bucket下存储的目录即可。选择代码执行**（图中为转换MINERU MD文本）**的`fileName`
+S3对象key，S3 对象key填写文件存储的路径，在 botos3 插件配置界面已经填写了 bucket 名称，这里只需要填写在bucket下存储的目录即可。选择代码执行**（图中为转换COPILOTIX MD文本）**的`fileName`
 
 ![img](../../../assets/images/Dify_23.png)
 

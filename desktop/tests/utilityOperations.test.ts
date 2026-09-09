@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
-import type { MinerUTask } from '@shared/types'
+import type { CopilotixTask } from '@shared/types'
 import { DEFAULT_SETTINGS } from '../src/shared/constants'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
@@ -28,7 +28,7 @@ describe('utility persistence lifecycle', () => {
   })
 
   it('imports a PDF with one utility-side read and leaves no partial file', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-import-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-import-'))
     try {
       const sourcePath = join(root, 'paper.pdf')
       const bytes = Buffer.from('%PDF-1.4\nfixture')
@@ -51,7 +51,7 @@ describe('utility persistence lifecycle', () => {
   })
 
   it('publishes normalized artifacts only after validation and is idempotent', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-normalize-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-normalize-'))
     try {
       const outputDir = join(root, 'document')
       const extractedDir = join(outputDir, '.parsed.partial-job-1')
@@ -106,7 +106,7 @@ describe('utility persistence lifecycle', () => {
   })
 
   it('atomically upgrades a legacy mapping projection and preserves it when rebuild input is invalid', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-rebuild-mapping-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-rebuild-mapping-'))
     try {
       const outputDir = join(root, 'document')
       const taskId = '11111111-1111-4111-8111-111111111111'
@@ -160,11 +160,11 @@ describe('utility persistence lifecycle', () => {
   })
 
   it('clears and rebuilds the translation manager when outputRoot changes', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-manager-lifecycle-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-manager-lifecycle-'))
     try {
       const outputRoot = join(root, 'output-a')
       const nextOutputRoot = join(root, 'output-b')
-      const databasePath = join(root, 'state', 'mineru.sqlite3')
+      const databasePath = join(root, 'state', 'copilotix.sqlite3')
       const taskId = '11111111-1111-4111-8111-111111111111'
       const documentRoot = join(outputRoot, 'documents-v2', taskId)
       await mkdir(documentRoot, { recursive: true })
@@ -179,7 +179,7 @@ describe('utility persistence lifecycle', () => {
       const persistence = createUtilityOperationHandlers(state as never)
       const signal = new AbortController().signal
       await persistence.handlers['database:init']!({ payload: { databasePath, outputRoot } } as never, signal)
-      const task: MinerUTask = {
+      const task: CopilotixTask = {
         id: taskId,
         originalName: 'lifecycle.pdf',
         title: null,

@@ -2,7 +2,7 @@ import type { ArtifactKind } from '@core/types'
 import type { TranslationBatchCommit } from '@core/types'
 import type {
   AppSettings,
-  MinerUTask,
+  CopilotixTask,
   ReaderAnnotation,
   ReplaceReaderAnnotationsRequest,
   TranslationBlockRecord
@@ -44,15 +44,15 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     await this.supervisor.request('settings:migration-mark', { id })
   }
 
-  async listTasks(): Promise<MinerUTask[]> {
+  async listTasks(): Promise<CopilotixTask[]> {
     return this.supervisor.request('tasks:list', {})
   }
 
-  async getTask(id: string): Promise<MinerUTask | null> {
+  async getTask(id: string): Promise<CopilotixTask | null> {
     return this.supervisor.request('tasks:get', { id })
   }
 
-  async findByHash(hash: string): Promise<MinerUTask | null> {
+  async findByHash(hash: string): Promise<CopilotixTask | null> {
     return this.supervisor.request('tasks:find-by-hash', { hash })
   }
 
@@ -76,11 +76,11 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     return this.supervisor.request('annotations:mutate', { request })
   }
 
-  async insertTask(task: MinerUTask): Promise<void> {
+  async insertTask(task: CopilotixTask): Promise<void> {
     await this.supervisor.request('tasks:insert', { task })
   }
 
-  async insertTasks(tasks: MinerUTask[]): Promise<void> {
+  async insertTasks(tasks: CopilotixTask[]): Promise<void> {
     await this.supervisor.request('tasks:insert-many', { tasks })
   }
 
@@ -88,7 +88,7 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     await this.supervisor.request('documents:update-metadata', { id, patch })
   }
 
-  async updateTask(id: string, patch: Partial<MinerUTask>): Promise<MinerUTask> {
+  async updateTask(id: string, patch: Partial<CopilotixTask>): Promise<CopilotixTask> {
     return this.supervisor.request('tasks:update', { id, patch })
   }
 

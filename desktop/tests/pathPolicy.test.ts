@@ -16,20 +16,20 @@ describe('PathPolicy', () => {
       .toBe('/workspace/documents-v2/document-1')
     expect(() => resolveLexicalWithinRoot('/workspace', '/workspace/../outside', 'posix')).toThrow(/\.\./)
 
-    const winRoot = String.raw`C:\MinerU`
-    expect(resolveLexicalWithinRoot(winRoot, String.raw`C:\MinerU\documents-v2\document-1`, 'win32'))
-      .toBe(String.raw`C:\MinerU\documents-v2\document-1`)
+    const winRoot = String.raw`C:\Copilotix`
+    expect(resolveLexicalWithinRoot(winRoot, String.raw`C:\Copilotix\documents-v2\document-1`, 'win32'))
+      .toBe(String.raw`C:\Copilotix\documents-v2\document-1`)
     expect(() => resolveLexicalWithinRoot(winRoot, String.raw`D:\outside\document`, 'win32')).toThrow()
 
-    const uncRoot = String.raw`\\server\share\MinerU`
-    expect(resolveLexicalWithinRoot(uncRoot, String.raw`\\server\share\MinerU\documents-v2\document-1`, 'win32'))
-      .toBe(String.raw`\\server\share\MinerU\documents-v2\document-1`)
+    const uncRoot = String.raw`\\server\share\Copilotix`
+    expect(resolveLexicalWithinRoot(uncRoot, String.raw`\\server\share\Copilotix\documents-v2\document-1`, 'win32'))
+      .toBe(String.raw`\\server\share\Copilotix\documents-v2\document-1`)
     expect(() => resolveLexicalWithinRoot(uncRoot, String.raw`\\server\share\outside`, 'win32')).toThrow()
     expect(() => resolveLexicalWithinRoot('/workspace', 'C:\\outside', 'posix')).toThrow()
   })
 
   it('allows a real child on POSIX/Windows paths and rejects root, parent, NUL, and other volumes', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mineru-path-'))
+    const directory = await mkdtemp(join(tmpdir(), 'copilotix-path-'))
     directories.push(directory)
     const root = join(directory, 'root')
     await mkdir(root)
@@ -44,7 +44,7 @@ describe('PathPolicy', () => {
   })
 
   it('rejects symlink/junction escape but permits a link that resolves inside root', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mineru-symlink-'))
+    const directory = await mkdtemp(join(tmpdir(), 'copilotix-symlink-'))
     directories.push(directory)
     const root = join(directory, 'root')
     const outside = join(directory, 'outside')

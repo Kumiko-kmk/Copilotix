@@ -8,7 +8,7 @@ latest
 
 Please do not report security vulnerabilities through public GitHub issues.
 
-Instead, please report them at https://github.com/opendatalab/MinerU/security.
+Instead, please report them at https://github.com/Kumiko-kmk/Copilotix/security.
 
 Please include the requested information listed below (as much as you can provide) to help us better understand the nature and scope of the possible issue:
 

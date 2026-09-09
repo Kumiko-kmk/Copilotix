@@ -72,8 +72,8 @@ describe('renderer document cache patching', () => {
       translatedBlocks: null,
       layoutJson: '{}',
       mappings: [],
-      pdfUrl: 'mineru-asset://first/original.pdf',
-      assetBaseUrl: 'mineru-asset://first/'
+      pdfUrl: 'copilotix-asset://first/original.pdf',
+      assetBaseUrl: 'copilotix-asset://first/'
     }
     expect(patchDocumentDetails(detail, change)).toBeUndefined()
   })

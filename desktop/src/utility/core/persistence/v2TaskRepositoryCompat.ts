@@ -5,7 +5,7 @@ import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from
 import type { PathPolicyPort } from './pathPolicy'
 import type {
   AppSettings,
-  MinerUTask,
+  CopilotixTask,
   ReaderAnnotation,
   ReplaceReaderAnnotationsRequest,
   TaskStatus,
@@ -185,12 +185,12 @@ export class V2TaskRepositoryCompat {
       .run(id, new Date().toISOString())
   }
 
-  listTasks(): MinerUTask[] {
+  listTasks(): CopilotixTask[] {
     const ids = this.database.connection.prepare('SELECT id FROM documents ORDER BY created_at DESC').all() as Array<{ id: string }>
-    return ids.map(({ id }) => this.getTask(id)).filter((task): task is MinerUTask => task !== null)
+    return ids.map(({ id }) => this.getTask(id)).filter((task): task is CopilotixTask => task !== null)
   }
 
-  getTask(id: string): MinerUTask | null {
+  getTask(id: string): CopilotixTask | null {
     return this.readProjection(id)
   }
 
@@ -356,18 +356,18 @@ export class V2TaskRepositoryCompat {
     })
   }
 
-  findByHash(hash: string): MinerUTask | null {
+  findByHash(hash: string): CopilotixTask | null {
     const row = this.database.connection.prepare(
       'SELECT id FROM documents WHERE source_checksum = ? ORDER BY created_at DESC LIMIT 1'
     ).get(hash) as { id: string } | undefined
     return row ? this.readProjection(row.id) : null
   }
 
-  insertTask(task: MinerUTask): void {
+  insertTask(task: CopilotixTask): void {
     this.database.transaction(() => this.insertTaskUnsafe(task))
   }
 
-  insertTasks(tasks: MinerUTask[]): void {
+  insertTasks(tasks: CopilotixTask[]): void {
     this.database.transaction(() => {
       for (const task of tasks) this.insertTaskUnsafe(task)
     })
@@ -382,11 +382,11 @@ export class V2TaskRepositoryCompat {
       .run(title, new Date().toISOString(), id)
   }
 
-  updateTask(id: string, patch: Partial<MinerUTask>): MinerUTask {
+  updateTask(id: string, patch: Partial<CopilotixTask>): CopilotixTask {
     this.database.transaction(() => {
       const current = this.readProjection(id)
       if (!current) throw new Error(`Task not found: ${id}`)
-      const next: MinerUTask = { ...current, ...patch, id, updatedAt: new Date().toISOString() }
+      const next: CopilotixTask = { ...current, ...patch, id, updatedAt: new Date().toISOString() }
       this.database.connection.prepare(`
         UPDATE documents SET display_title=?, translation_provider=?, updated_at=? WHERE id=?
       `).run(next.title, next.translationProvider, next.updatedAt, id)
@@ -646,7 +646,7 @@ export class V2TaskRepositoryCompat {
       block.provider, block.model, block.status, block.error)
   }
 
-  private insertTaskUnsafe(task: MinerUTask): void {
+  private insertTaskUnsafe(task: CopilotixTask): void {
     this.database.connection.prepare(`
       INSERT INTO documents(
         id,original_filename,display_title,storage_path,source_checksum,
@@ -664,7 +664,7 @@ export class V2TaskRepositoryCompat {
     this.insertArtifactUnsafe(task.id, parseJobId, 'source_pdf', this.toRelativeArtifactPath(task.outputDir, task.sourcePath), task.sourceHash, task.createdAt)
   }
 
-  private syncJobsUnsafe(task: MinerUTask): void {
+  private syncJobsUnsafe(task: CopilotixTask): void {
     const parse = this.latestJob(task.id, 'parse')
     const translate = this.latestJob(task.id, 'translate')
     const now = task.updatedAt
@@ -794,7 +794,7 @@ export class V2TaskRepositoryCompat {
     return row ?? null
   }
 
-  private readProjection(id: string): MinerUTask | null {
+  private readProjection(id: string): CopilotixTask | null {
     const document = this.readDocument(id)
     if (!document) return null
     const jobs = this.database.connection.prepare(`
@@ -831,7 +831,7 @@ function assertTranslationField(value: unknown, label: string): void {
   }
 }
 
-export function projectCompatTask(document: CompatDocumentRow, jobs: readonly CompatJobRow[]): MinerUTask {
+export function projectCompatTask(document: CompatDocumentRow, jobs: readonly CompatJobRow[]): CopilotixTask {
   const parse = latestJobOfKind(jobs, 'parse')
   const translate = latestJobOfKind(jobs, 'translate')
   const latest = selectProjectionJob(parse, translate)
@@ -888,7 +888,7 @@ export function projectTaskStatus(job: CompatJobRow): TaskStatus {
   return parseObject(job.checkpoint_json).phase === 'uploading' ? 'uploading' : 'parsing'
 }
 
-function checkpointForTask(task: MinerUTask): Record<string, unknown> {
+function checkpointForTask(task: CopilotixTask): Record<string, unknown> {
   return {
     phase: task.status,
     remoteBatchId: task.remoteBatchId,

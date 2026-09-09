@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Job, JobRepositoryPort } from '@core/jobs'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { MAX_PDF_BYTES } from '@shared/constants'
-import type { CreateTasksRequest, MinerUTask, SelectedPdf } from '@shared/types'
+import type { CreateTasksRequest, CopilotixTask, SelectedPdf } from '@shared/types'
 import type { SettingsService } from './settingsService'
 import type { TaskLogger } from './logger'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
@@ -32,7 +32,7 @@ export class DocumentCommandService {
     this.scheduler = options.scheduler
   }
 
-  async list(): Promise<MinerUTask[]> {
+  async list(): Promise<CopilotixTask[]> {
     return this.repository.listTasks()
   }
 
@@ -49,19 +49,19 @@ export class DocumentCommandService {
     }))
   }
 
-  async create(request: CreateTasksRequest): Promise<MinerUTask[]> {
+  async create(request: CreateTasksRequest): Promise<CopilotixTask[]> {
     const settings = await this.settingsService.get()
     assertParserCredentialUsable(settings)
     for (const file of request.files) {
       if (extname(file.path).toLowerCase() !== '.pdf') continue
       const info = await stat(file.path)
-      if (info.size > MAX_PDF_BYTES) throw new Error(`${file.name} 超过 MinerU 官方 API 的 200MB 限制`)
+      if (info.size > MAX_PDF_BYTES) throw new Error(`${file.name} 超过 Parser API 的 200MB 限制`)
     }
 
     await mkdir(settings.outputRoot, { recursive: true })
     const documentsRoot = join(settings.outputRoot, 'documents-v2')
     await mkdir(documentsRoot, { recursive: true })
-    const created: MinerUTask[] = []
+    const created: CopilotixTask[] = []
     for (const file of request.files) {
       if (extname(file.path).toLowerCase() !== '.pdf') continue
       const sourceHash = await this.compute.hashFile(file.path)
@@ -100,7 +100,7 @@ export class DocumentCommandService {
   }
 
   /** Production import path: utility reads each source once, hashes it, and publishes original.pdf atomically. */
-  async importPaths(paths: readonly string[], options: Omit<CreateTasksRequest, 'files'>): Promise<MinerUTask[]> {
+  async importPaths(paths: readonly string[], options: Omit<CreateTasksRequest, 'files'>): Promise<CopilotixTask[]> {
     if (!this.compute.importPdf) throw new Error('核心导入服务尚未初始化')
     const settings = await this.settingsService.get()
     assertParserCredentialUsable(settings)
@@ -108,7 +108,7 @@ export class DocumentCommandService {
     const documentsRoot = join(settings.outputRoot, 'documents-v2')
     await mkdir(documentsRoot, { recursive: true })
 
-    const created: MinerUTask[] = []
+    const created: CopilotixTask[] = []
     const seenHashes = new Set<string>()
     const unpersistedOutputDirs = new Set<string>()
     try {
@@ -199,7 +199,7 @@ export class DocumentCommandService {
     this.logger.info('documents.deleted', { taskId })
   }
 
-  private async ensureParseJobs(tasks: readonly MinerUTask[]): Promise<void> {
+  private async ensureParseJobs(tasks: readonly CopilotixTask[]): Promise<void> {
     if (!this.jobRepository) return
     for (const task of tasks) {
       const existing = await this.jobRepository.list({ documentId: task.id, kind: 'parse' })
@@ -215,8 +215,8 @@ export class DocumentCommandService {
 }
 
 function assertParserCredentialUsable(settings: Awaited<ReturnType<SettingsService['get']>>): void {
-  if (settings.credentials.parser.state === 'missing') throw new Error('请先在系统设置中配置 MinerU API Token')
-  if (settings.credentials.parser.state === 'invalid') throw new Error('MinerU API Token 已失效，请在系统设置中重新验证')
+  if (settings.credentials.parser.state === 'missing') throw new Error('请先在系统设置中配置 Parser API Token')
+  if (settings.credentials.parser.state === 'invalid') throw new Error('Parser API Token 已失效，请在系统设置中重新验证')
 }
 
 function compareJobs(left: Job, right: Job): number {

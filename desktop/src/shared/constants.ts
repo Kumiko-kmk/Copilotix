@@ -1,9 +1,9 @@
 import type { AppSettings, TranslationProviderId } from './types'
 
-export const MINERU_API_ORIGIN = 'https://mineru.net'
-export const MINERU_BATCH_SIZE = 50
+export const PARSER_API_ORIGIN = 'https://mineru.net'
+export const PARSER_BATCH_SIZE = 50
 export const MAX_PDF_BYTES = 200 * 1024 * 1024
-export const CREDENTIAL_SERVICE = 'MinerU-Translation'
+export const CREDENTIAL_SERVICE = 'Copilotix-Translation'
 
 export const FALLBACK_PROVIDER_ORDER: TranslationProviderId[] = [
   'qwen',

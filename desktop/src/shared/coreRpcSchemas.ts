@@ -4,7 +4,7 @@ import {
   documentAnnotationViewSchema,
   documentAnnotationKindSchema,
   documentSummarySchema,
-  minerUTaskSchema,
+  copilotixTaskSchema,
   mutateReaderAnnotationsRequestSchema,
   readerAnnotationSnapshotSchema,
   replaceReaderAnnotationsRequestSchema,
@@ -234,12 +234,12 @@ export const coreSettingsMigrationPayloadSchema = z.object({ id: coreIdSchema })
 export const coreSettingsMigrationGetResultSchema = z.object({ applied: z.boolean() }).strict()
 export const coreSettingsMigrationMarkResultSchema = z.object({ applied: z.literal(true) }).strict()
 export const coreTasksListPayloadSchema = emptyPayloadSchema
-export const coreTasksListResultSchema = z.array(minerUTaskSchema).max(10_000)
+export const coreTasksListResultSchema = z.array(copilotixTaskSchema).max(10_000)
 export const coreTaskIdPayloadSchema = z.object({ id: coreIdSchema }).strict()
-export const coreTaskResultSchema = minerUTaskSchema.nullable()
+export const coreTaskResultSchema = copilotixTaskSchema.nullable()
 export const coreFindTaskByHashPayloadSchema = z.object({ hash: coreHashSchema }).strict()
-export const coreInsertTaskPayloadSchema = z.object({ task: minerUTaskSchema }).strict()
-export const coreInsertTasksPayloadSchema = z.object({ tasks: z.array(minerUTaskSchema).max(100) }).strict()
+export const coreInsertTaskPayloadSchema = z.object({ task: copilotixTaskSchema }).strict()
+export const coreInsertTasksPayloadSchema = z.object({ tasks: z.array(copilotixTaskSchema).max(100) }).strict()
 export const coreMutationResultSchema = z.object({ changed: z.literal(true) }).strict()
 export const coreUpdateTaskPayloadSchema = z.object({ id: coreIdSchema, patch: coreTaskPatchSchema }).strict()
 export const coreDocumentMetadataPatchSchema = z.object({
@@ -411,7 +411,7 @@ export const coreHashFilePayloadSchema = z.object({ path: corePathSchema }).stri
 export const coreHashFileResultSchema = z.object({ sha256: coreHashSchema }).strict()
 export const coreImportPdfPayloadSchema = z.object({ sourcePath: corePathSchema, documentId: coreIdSchema }).strict()
 export const coreImportPdfResultSchema = z.object({ sha256: coreHashSchema, size: z.number().int().min(0).max(200 * 1024 * 1024) }).strict()
-export const coreNormalizeParserPayloadSchema = z.object({ task: minerUTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()
+export const coreNormalizeParserPayloadSchema = z.object({ task: copilotixTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()
 export const coreNormalizeParserResultSchema = z.object({
   normalized: z.literal(true),
   displayTitle: z.string().max(32_768).refine(noNul).nullable()
@@ -489,7 +489,7 @@ export const coreOperationRegistry = {
   'tasks:find-by-hash': { payload: coreFindTaskByHashPayloadSchema, result: coreTaskResultSchema },
   'tasks:insert': { payload: coreInsertTaskPayloadSchema, result: coreMutationResultSchema },
   'tasks:insert-many': { payload: coreInsertTasksPayloadSchema, result: coreMutationResultSchema },
-  'tasks:update': { payload: coreUpdateTaskPayloadSchema, result: minerUTaskSchema },
+  'tasks:update': { payload: coreUpdateTaskPayloadSchema, result: copilotixTaskSchema },
   'tasks:delete': { payload: coreTaskIdPayloadSchema, result: coreMutationResultSchema },
   'jobs:enqueue': { payload: coreJobEnqueuePayloadSchema, result: coreJobSchema },
   'jobs:get': { payload: coreJobIdPayloadSchema, result: coreJobResultSchema },

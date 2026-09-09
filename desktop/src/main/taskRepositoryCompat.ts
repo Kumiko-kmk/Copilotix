@@ -2,7 +2,7 @@ import type { ArtifactKind } from '@core/types'
 import type { TranslationBatchCommit } from '@core/types'
 import type {
   AppSettings,
-  MinerUTask,
+  CopilotixTask,
   ReaderAnnotation,
   ReplaceReaderAnnotationsRequest,
   TranslationBlockRecord
@@ -24,20 +24,20 @@ export interface TaskRepositoryCompat {
   saveSettings(settings: AppSettings): void | Promise<void>
   getMigrationMarker?(id: string): boolean | Promise<boolean>
   markMigration?(id: string): void | Promise<void>
-  listTasks(): MinerUTask[] | Promise<MinerUTask[]>
-  getTask(id: string): MinerUTask | null | Promise<MinerUTask | null>
-  findByHash(hash: string): MinerUTask | null | Promise<MinerUTask | null>
+  listTasks(): CopilotixTask[] | Promise<CopilotixTask[]>
+  getTask(id: string): CopilotixTask | null | Promise<CopilotixTask | null>
+  findByHash(hash: string): CopilotixTask | null | Promise<CopilotixTask | null>
   /** New document API projections; optional for the legacy database adapter. */
   listDocumentSummaries?(): DocumentSummary[] | Promise<DocumentSummary[]>
   getDocumentSummary?(id: string): DocumentSummary | null | Promise<DocumentSummary | null>
   getLatestArtifactReference?(id: string, kind: ArtifactKind): ArtifactReference | null | Promise<ArtifactReference | null>
   listDocumentAnnotations?(request: { documentId: string; view: 'original' | 'translated' }): ReaderAnnotationSnapshot | Promise<ReaderAnnotationSnapshot>
   mutateDocumentAnnotations?(request: MutateReaderAnnotationsRequest): ReaderAnnotationSnapshot | Promise<ReaderAnnotationSnapshot>
-  insertTask(task: MinerUTask): void | Promise<void>
-  insertTasks(tasks: MinerUTask[]): void | Promise<void>
+  insertTask(task: CopilotixTask): void | Promise<void>
+  insertTasks(tasks: CopilotixTask[]): void | Promise<void>
   /** Narrow metadata-only update; it must not derive or mutate job state. */
   updateDocumentMetadata?(id: string, patch: DocumentMetadataPatch): void | Promise<void>
-  updateTask(id: string, patch: Partial<MinerUTask>): MinerUTask | Promise<MinerUTask>
+  updateTask(id: string, patch: Partial<CopilotixTask>): CopilotixTask | Promise<CopilotixTask>
   deleteTask(id: string): void | Promise<void>
   upsertTranslationBlock(block: TranslationBlockRecord): void | Promise<void>
   listTranslationBlocks(taskId: string, jobId?: string): TranslationBlockRecord[] | Promise<TranslationBlockRecord[]>

@@ -39,8 +39,8 @@ export class TranslationJobRunner implements JobRunner {
     const settings = await this.options.settingsService.get()
     if (settings.credentials.parser.state !== 'valid') {
       const stateMessage = settings.credentials.parser.state === 'missing'
-        ? '未配置 MinerU API Token'
-        : 'MinerU API Token 尚未验证或已经失效'
+        ? '未配置 Parser API Token'
+        : 'Parser API Token 尚未验证或已经失效'
       throw new JobRunnerError(`${stateMessage}，请在设置中验证后重试`, 'TRANSLATION_CREDENTIALS_REQUIRED', false)
     }
     const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher)

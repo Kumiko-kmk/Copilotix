@@ -1,4 +1,4 @@
-# MinerU Desktop P0/P1 架构基线与二次开发指南
+# Copilotix Desktop P0/P1 架构基线与二次开发指南
 
 > 本文是 Desktop 当前 P0/P1 架构的权威边界。它描述已经在源码和测试中存在的契约，也明确哪些能力尚未实现。若本文与代码冲突，以当前代码、运行时 schema 和测试为准；修复冲突时先记录证据，再由负责公共边界的 Agent 更新文档。
 
@@ -12,19 +12,19 @@
 | Node.js | `24.19.0`（`.node-version` 与 CI 一致） |
 | pnpm | `11.19.0` |
 | 支持目标 | Windows x64 目录版；其他平台只复用纯 TypeScript 契约，未接入发布验收 |
-| 本地应用数据目录 | `%APPDATA%\MinerU-Translation-v2`（Electron `userData`） |
-| 数据库文件 | `mineru-desktop-v2.sqlite3`，位于上述 `userData` 目录 |
+| 本地应用数据目录 | `%APPDATA%\Copilotix-Translation-v2`（Electron `userData`） |
+| 数据库文件 | `copilotix-desktop-v2.sqlite3`，位于上述 `userData` 目录 |
 | 结果目录 | `<outputRoot>\documents-v2\{documentId}`；`documentId` 为 UUID |
-| 当前产品能力 | 官方 MinerU API 解析、Markdown/表格翻译、PDF 与 Markdown 阅读、映射和阅读标注、可恢复作业与验证发布 |
+| 当前产品能力 | Parser API 解析、Markdown/表格翻译、PDF 与 Markdown 阅读、映射和阅读标注、可恢复作业与验证发布 |
 | RAG | 尚未实现；见第 10 节和 `RAG_DEVELOPMENT_PLAN_ZH.md` |
 
-本文只讨论 `desktop/` 运行时。仓库中的 Python `mineru/`、`docker/`、`docs/` 和 Python CLI 不是 Desktop EXE 的运行时依赖；Desktop 当前连接 MinerU 官方 v4 API，不在本机启动 `mineru-api` 或本地解析模型。
+本文只讨论 `desktop/` 运行时。仓库中的 Python `copilotix/`、`docker/`、`docs/` 和 Python CLI 不是 Desktop EXE 的运行时依赖；Desktop 当前连接 Copilotix 官方 v4 API，不在本机启动 `copilotix-api` 或本地解析模型。
 
 ## 2. 权威架构图
 
 ```text
 Renderer（React；sandbox、无 Node）
-        │ 仅调用 window.mineru
+        │ 仅调用 window.copilotix
         ▼
 Preload（contextBridge；每个请求/响应用 Zod 验证的领域 API）
         │ Electron IPC，sender/主 frame/来源校验
@@ -51,7 +51,7 @@ Utility Process（受监督；SQLite 与 compute 的唯一拥有者）
 
 | 路径 | 权威职责 | 边界 |
 |---|---|---|
-| `desktop/src/renderer` | React 页面、阅读器、视图状态和选区 | 只能使用 `window.mineru` |
+| `desktop/src/renderer` | React 页面、阅读器、视图状态和选区 | 只能使用 `window.copilotix` |
 | `desktop/src/preload` | `contextBridge` API、IPC 编解码 | 只能暴露显式领域方法 |
 | `desktop/src/main/index.ts` | Electron 生命周期、窗口、组装、IPC 注册、托盘 | 不直接持有数据库连接 |
 | `desktop/src/main/ipc.ts` | sender/frame/URL 校验、IPC envelope 和 schema 驱动 handler | 所有新增 IPC 必须经过此层 |
@@ -84,7 +84,7 @@ IPC handler 会同时验证来源窗口是当前主窗口、请求来自主 fram
 
 ### 4.2 Preload API
 
-当前公开 API 是 `window.mineru` 的显式方法集合：设置与连接测试、文档导入/列表/重试/删除/详情、输出打开/另存、阅读标注、窗口状态和事件订阅。每个方法在 `desktop/src/preload/index.ts` 中绑定固定 channel、请求 schema 和响应 schema。
+当前公开 API 是 `window.copilotix` 的显式方法集合：设置与连接测试、文档导入/列表/重试/删除/详情、输出打开/另存、阅读标注、窗口状态和事件订阅。每个方法在 `desktop/src/preload/index.ts` 中绑定固定 channel、请求 schema 和响应 schema。
 
 新增方法必须同时更新：
 
@@ -98,7 +98,7 @@ IPC handler 会同时验证来源窗口是当前主窗口、请求来自主 fram
 
 ### 4.3 凭证和日志
 
-MinerU Token、Qwen/DeepSeek API Key 由 Main 的 Credential Vault 管理（Windows 使用 `@napi-rs/keyring`/Credential Manager）；SQLite 只保存公开设置及 `hasKey`/`hasToken` 布尔状态。Renderer 只得到布尔状态，不得到密钥。
+Copilotix Token、Qwen/DeepSeek API Key 由 Main 的 Credential Vault 管理（Windows 使用 `@napi-rs/keyring`/Credential Manager）；SQLite 只保存公开设置及 `hasKey`/`hasToken` 布尔状态。Renderer 只得到布尔状态，不得到密钥。
 
 日志要使用分类字段和脱敏值，不记录 Token、API Key、Authorization、完整预签名 URL、论文正文、查询全文、embedding 或本地敏感路径。错误向 Renderer 暴露稳定 code/message/traceId，不回传堆栈和凭证。
 
@@ -142,13 +142,13 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 ### 6.1 目录布局
 
-应用启动时将 Electron `userData` 设置到 `MinerU-Translation-v2`。Utility bootstrap 收到绝对 `databasePath` 和 `outputRoot`，并在 Utility 内创建：
+应用启动时将 Electron `userData` 设置到 `Copilotix-Translation-v2`。Utility bootstrap 收到绝对 `databasePath` 和 `outputRoot`，并在 Utility 内创建：
 
 ```text
-%APPDATA%\MinerU-Translation-v2\
-  mineru-desktop-v2.sqlite3
-  mineru-desktop-v2.sqlite3-wal
-  mineru-desktop-v2.sqlite3-shm
+%APPDATA%\Copilotix-Translation-v2\
+  copilotix-desktop-v2.sqlite3
+  copilotix-desktop-v2.sqlite3-wal
+  copilotix-desktop-v2.sqlite3-shm
 
 <outputRoot>\
   documents-v2\
@@ -188,7 +188,7 @@ Main 和 Utility 各有对应 `PathPolicy` port/实现。任何相对 artifact�
 4. 只接受允许的 artifact 相对路径和当前 document root；
 5. 对 Windows 与 POSIX 路径都运行纯函数边界测试。
 
-`mineru-asset://{documentId}/...` 由 Main 解析并通过 PathPolicy 解析到该 document 的已允许子路径；sandbox Renderer 不获得文件系统权限。
+`copilotix-asset://{documentId}/...` 由 Main 解析并通过 PathPolicy 解析到该 document 的已允许子路径；sandbox Renderer 不获得文件系统权限。
 
 ## 7. Durable jobs 与工作流
 
@@ -238,7 +238,7 @@ Utility-owned `MarkdownTranslationPlanManager` 读取受限的计划 descriptor�
 - provider fallback 不得跨 document/job 混写状态，最终结果必须记录 provider/model；
 - Renderer 不能直接请求任一 provider 或任意 URL。
 
-解析结果的 `layout.json` 是保留的权威原始产物：设置中的视觉模型 `vlm` 当前对应 MinerU `hybrid` 后端，标准模型对应 `pipeline` 后端。两者可能产生不同的段落切分、复合 image/chart/table block、`lines_deleted` 跨栏/跨页延续和 discarded block 数量，但都必须通过同一个 Core block-mapping 正规化器投影为版本化的 `block_list.json`；Main 与 Utility 不得各自维护不同算法。页面编号以 `layout.json` 的零基 `page_idx` 为准，Renderer 只把它显示为一基物理页码。
+解析结果的 `layout.json` 是保留的权威原始产物：设置中的视觉模型 `vlm` 当前对应 Copilotix `hybrid` 后端，标准模型对应 `pipeline` 后端。两者可能产生不同的段落切分、复合 image/chart/table block、`lines_deleted` 跨栏/跨页延续和 discarded block 数量，但都必须通过同一个 Core block-mapping 正规化器投影为版本化的 `block_list.json`；Main 与 Utility 不得各自维护不同算法。页面编号以 `layout.json` 的零基 `page_idx` 为准，Renderer 只把它显示为一基物理页码。
 
 结果数据流是：
 
@@ -259,12 +259,12 @@ P0/P1 **没有实现 RAG**。当前代码中没有 chunk 生成、chunk 持久�
 
 ## 11. 公开 API 打包与 verified atomic release
 
-Renderer 的公开 API 是 preload 暴露的 `window.mineru`；它与四个 bundle 一起进入打包输入。`desktop/scripts/package-directory.mjs` 负责 Windows x64 目录版，发布顺序必须保持：
+Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 bundle 一起进入打包输入。`desktop/scripts/package-directory.mjs` 负责 Windows x64 目录版，发布顺序必须保持：
 
 1. 只在仓库根目录精确的 `.release-next-{buildId}` staging 中构建；不得把 `desktop/out/` 当正式发布目录。
 2. 校验 `main/preload/renderer/utility` bundle、`app.asar` 必需 entry、`@napi-rs/keyring` unpack 路径、Electron locale、fuses、运行时文件以及体积上限（当前 `app.asar < 40 MiB`、运行目录 `< 360 MiB`、ZIP `< 155 MiB`）。
 3. 生成 Windows x64 目录、ZIP、`release-manifest.json` 和 `SHA256SUMS.txt`，并重新解压 ZIP 校验入口/ASAR/资源/哈希。
-4. 启动已打包的 `MinerU.exe --mineru-packaged-smoke`，只接受精确 `MINERU_PACKAGED_SMOKE_OK app=0.1.0 electron=44.1.1` marker 和空 stderr；该 smoke 是 CLI 启动检查，不创建 Renderer 窗口。
+4. 启动已打包的 `Copilotix.exe --copilotix-packaged-smoke`，只接受精确 `COPILOTIX_PACKAGED_SMOKE_OK app=0.1.0 electron=44.1.1` marker 和空 stderr；该 smoke 是 CLI 启动检查，不创建 Renderer 窗口。
 5. 所有审计、哈希和 smoke 成功后，才把现有 `release/` 原子换到 `.release-previous-{buildId}`，再把 next rename 为 `release/`；失败时恢复旧 release，并保留 staging 供诊断。
 
 发布包是完整目录，不支持只复制 exe，也不宣称 setup/portable。更新时关闭程序后整体替换目录；`userData` 和 Credential Manager 不属于发布目录。

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { TaskRepository } from '../src/utility/core/persistence/database'
-import type { MinerUTask, ReaderAnnotation } from '@shared/types'
+import type { CopilotixTask, ReaderAnnotation } from '@shared/types'
 
 const directories: string[] = []
 
@@ -13,7 +13,7 @@ afterEach(async () => {
 
 describe('reader annotation database', () => {
   it('persists view-isolated annotations and removes them with their task', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mineru-annotations-'))
+    const directory = await mkdtemp(join(tmpdir(), 'copilotix-annotations-'))
     directories.push(directory)
     const repository = new TaskRepository(join(directory, 'database.sqlite3'))
     repository.insertTask(task())
@@ -31,7 +31,7 @@ describe('reader annotation database', () => {
   })
 
   it('rejects invalid colors, offsets and cross-view records', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mineru-annotations-'))
+    const directory = await mkdtemp(join(tmpdir(), 'copilotix-annotations-'))
     directories.push(directory)
     const repository = new TaskRepository(join(directory, 'database.sqlite3'))
     repository.insertTask(task())
@@ -50,7 +50,7 @@ function annotation(view: 'original' | 'translated', id: string): ReaderAnnotati
   }
 }
 
-function task(): MinerUTask {
+function task(): CopilotixTask {
   return {
     id: 'task', originalName: 'Paper.pdf', title: null, name: 'Paper', sourcePath: 'paper.pdf', sourceHash: 'hash', outputDir: 'output',
     status: 'completed', progress: 100, translationProvider: 'qwen',

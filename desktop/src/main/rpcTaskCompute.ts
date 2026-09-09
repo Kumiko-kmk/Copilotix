@@ -1,4 +1,4 @@
-import type { MinerUTask } from '@shared/types'
+import type { CopilotixTask } from '@shared/types'
 import type { UtilitySupervisor } from './utilitySupervisor'
 import type { NormalizeParserOutputResult, TaskComputePort } from '@core/ports'
 import type {
@@ -22,7 +22,7 @@ export class RpcTaskCompute implements TaskComputePort {
     return this.supervisor.request('compute:import-pdf', { sourcePath, documentId })
   }
 
-  async normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult> {
+  async normalizeParserOutput(task: CopilotixTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult> {
     return this.supervisor.request('compute:normalize-parser', {
       task,
       extractedDir,

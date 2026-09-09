@@ -16,7 +16,7 @@ import { RpcTaskRepository } from './rpcTaskRepository'
 import { RpcTaskCompute } from './rpcTaskCompute'
 import { WindowsCredentialVault } from './credentialVault'
 import { SettingsService } from './settingsService'
-import { OfficialMinerUClient } from './parserClient'
+import { OfficialParserClient } from './parserClient'
 import { ElectronFileUploader } from './fileUploader'
 import { createAssetResponse } from './assetProtocol'
 import { TaskService } from './taskService'
@@ -84,8 +84,8 @@ async function bootstrap(): Promise<void> {
     entryPath: join(__dirname, '../utility/index.js'),
     fork: forkUtilityProcess,
     bootstrap: {
-      databasePath: join(app.getPath('userData'), 'mineru-desktop-v2.sqlite3'),
-      outputRoot: join(app.getPath('documents'), 'MinerU')
+      databasePath: join(app.getPath('userData'), 'copilotix-desktop-v2.sqlite3'),
+      outputRoot: join(app.getPath('documents'), 'Copilotix')
     }
   })
   await utilitySupervisor.start()
@@ -97,13 +97,13 @@ async function bootstrap(): Promise<void> {
   const vault = new WindowsCredentialVault()
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
     net.fetch(input instanceof URL ? input.toString() : input, init)
-  const parserClient = new OfficialMinerUClient(fetcher, new ElectronFileUploader())
-  const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'MinerU'), {
+  const parserClient = new OfficialParserClient(fetcher, new ElectronFileUploader())
+  const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'Copilotix'), {
     parser: (value) => parserClient.verifyToken(value),
     provider: (name, value, current) => probeOpenAiCompatibleCredential(name, current, value, fetcher)
   })
   await settings.initialize()
-  const logger = new JsonLineLogger(join(userData, 'mineru-desktop.log'))
+  const logger = new JsonLineLogger(join(userData, 'copilotix-desktop.log'))
   const compute = new RpcTaskCompute(utilitySupervisor)
   const pathPolicy = new PathPolicy()
   const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger, compute, pathPolicy, {
@@ -116,7 +116,7 @@ async function bootstrap(): Promise<void> {
   }))
   documentRevision = 0
 
-  protocol.handle('mineru-asset', (request) => createAssetResponse(request, (taskId, path) => tasks.resolveAsset(taskId, path)))
+  protocol.handle('copilotix-asset', (request) => createAssetResponse(request, (taskId, path) => tasks.resolveAsset(taskId, path)))
 
   registerIpc(tasks, settings)
   createMainWindow()
@@ -140,7 +140,7 @@ async function bootstrap(): Promise<void> {
     const task = await repository?.getTask(taskId)
     if (!task || !Notification.isSupported()) return
     const notification = new Notification({
-      title: status === 'failed' ? 'MinerU 任务失败' : status === 'partial' ? 'MinerU 部分翻译完成' : 'MinerU 任务完成',
+      title: status === 'failed' ? 'Copilotix 任务失败' : status === 'partial' ? 'Copilotix 部分翻译完成' : 'Copilotix 任务完成',
       body: task.name
     })
     notification.on('click', () => {
@@ -199,7 +199,7 @@ function createMainWindow(): void {
   })
   mainWindow.webContents.on('page-title-updated', (event) => event.preventDefault())
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url === 'https://github.com/Kumiko-kmk/MinerU') void shell.openExternal(url)
+    if (url === 'https://github.com/Kumiko-kmk/Copilotix') void shell.openExternal(url)
     return { action: 'deny' }
   })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
@@ -220,10 +220,10 @@ function createMainWindow(): void {
 
 function createTray(): void {
   tray = new Tray(getRuntimeIconPath())
-  tray.setToolTip('MinerU')
+  tray.setToolTip('Copilotix')
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '打开 MinerU', click: showMainWindow },
+      { label: '打开 Copilotix', click: showMainWindow },
       {
         label: '退出',
         click: () => {
@@ -369,14 +369,14 @@ function startupErrorCode(error: unknown): 'CORE_TIMEOUT' | 'CORE_UNAVAILABLE' |
 function startNormalApp(): void {
   protocol.registerSchemesAsPrivileged([
     {
-      scheme: 'mineru-asset',
+      scheme: 'copilotix-asset',
       privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true, stream: true }
     }
   ])
 
-  app.setName('MinerU')
-  const isolatedUserData = process.env.NODE_ENV === 'test' ? process.env.MINERU_E2E_USER_DATA : undefined
-  app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'MinerU-Translation-v2'))
+  app.setName('Copilotix')
+  const isolatedUserData = process.env.NODE_ENV === 'test' ? process.env.COPILOTIX_E2E_USER_DATA : undefined
+  app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'Copilotix-Translation-v2'))
 
   app.on('before-quit', (event) => {
     isQuitting = true
@@ -394,9 +394,9 @@ function startNormalApp(): void {
   void bootstrap().catch((error: unknown) => {
     // Keep startup diagnostics free of stack traces, local paths and credentials.
     const code = startupErrorCode(error)
-    console.error(`MinerU startup failed [${code}]`)
+    console.error(`Copilotix startup failed [${code}]`)
     // Playwright and other headless checks must not wait on a native modal.
-    if (process.env.NODE_ENV !== 'test') dialog.showErrorBox('MinerU 启动失败', '核心服务无法启动，请重试。')
+    if (process.env.NODE_ENV !== 'test') dialog.showErrorBox('Copilotix 启动失败', '核心服务无法启动，请重试。')
     app.quit()
   })
 }

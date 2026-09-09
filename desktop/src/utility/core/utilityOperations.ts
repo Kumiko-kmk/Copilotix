@@ -31,7 +31,7 @@ import {
   coreTranslationPlanFailPayloadSchema,
   coreTranslationPlanFinalizePayloadSchema
 } from '@shared/coreRpcSchemas'
-import type { MinerUTask } from '@shared/types'
+import type { CopilotixTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
 import { MAX_PDF_BYTES } from '@shared/constants'
 import { extractPaperTitle, sanitizeTitleStem } from '@shared/titleNaming'
@@ -155,15 +155,15 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'tasks:get': (request) => requireRepository().getTask((request.payload as { id: string }).id),
     'tasks:find-by-hash': (request) => requireRepository().findByHash((request.payload as { hash: string }).hash),
     'tasks:insert': (request) => {
-      requireRepository().insertTask((request.payload as { task: MinerUTask }).task)
+      requireRepository().insertTask((request.payload as { task: CopilotixTask }).task)
       return { changed: true }
     },
     'tasks:insert-many': (request) => {
-      requireRepository().insertTasks((request.payload as { tasks: MinerUTask[] }).tasks)
+      requireRepository().insertTasks((request.payload as { tasks: CopilotixTask[] }).tasks)
       return { changed: true }
     },
     'tasks:update': (request) => {
-      const payload = request.payload as { id: string; patch: Partial<MinerUTask> }
+      const payload = request.payload as { id: string; patch: Partial<CopilotixTask> }
       return requireRepository().updateTask(payload.id, coreTaskPatchSchema.parse(payload.patch))
     },
     'tasks:delete': (request) => {
@@ -234,7 +234,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       return importPdf(payload.sourcePath, payload.documentId, state, signal)
     },
     'compute:normalize-parser': async (request) => {
-      const payload = request.payload as { task: MinerUTask; extractedDir: string; jobId?: string }
+      const payload = request.payload as { task: CopilotixTask; extractedDir: string; jobId?: string }
       return normalizeParserOutput(payload.task, payload.extractedDir, requireRepository(), payload.jobId)
     },
     'compute:rebuild-mappings': async (request) => {
@@ -435,7 +435,7 @@ function isNotFound(error: unknown): boolean {
 }
 
 async function normalizeParserOutput(
-  task: MinerUTask,
+  task: CopilotixTask,
   extractedDir: string,
   repository: V2TaskRepositoryCompat,
   jobId?: string
@@ -449,7 +449,7 @@ async function normalizeParserOutput(
   const markdown = files.find((path) => extname(path).toLowerCase() === '.md')
   const layout = files.find((path) => /(?:layout|middle)\.json$/iu.test(path))
   const contentList = files.find((path) => /content_list(?:_v2)?\.json$/iu.test(path))
-  if (!markdown || !layout) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'MinerU result is incomplete', false)
+  if (!markdown || !layout) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Copilotix result is incomplete', false)
 
   const suffix = jobId && /^[A-Za-z0-9._-]+$/u.test(jobId) ? jobId : 'legacy'
   const stagingRoot = pathPolicy.resolveChild(task.outputDir, `.normalize.partial-${suffix}`)

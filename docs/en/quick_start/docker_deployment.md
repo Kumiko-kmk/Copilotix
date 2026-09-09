@@ -1,25 +1,25 @@
-# Deploying MinerU with Docker
+# Deploying Copilotix with Docker
 
-MinerU provides a convenient Docker deployment method, which helps quickly set up the environment and solve some tricky environment compatibility issues.
+Copilotix provides a convenient Docker deployment method, which helps quickly set up the environment and solve some tricky environment compatibility issues.
 
 > [!WARNING]
 > - Docker deployment is only supported on Linux and Windows environments with WSL2.
-> - Do not use Docker to deploy MinerU on macOS. Docker on macOS cannot access MPS or MLX acceleration, so Apple Silicon devices will not get the expected acceleration from this workflow.
+> - Do not use Docker to deploy Copilotix on macOS. Docker on macOS cannot access MPS or MLX acceleration, so Apple Silicon devices will not get the expected acceleration from this workflow.
 
 ## Build Docker Image using Dockerfile
 
 ```bash
-wget https://gcore.jsdelivr.net/gh/opendatalab/MinerU@master/docker/global/Dockerfile
-docker build -t mineru:latest -f Dockerfile .
+wget https://gcore.jsdelivr.net/gh/opendatalab/Copilotix@master/docker/global/Dockerfile
+docker build -t copilotix:latest -f Dockerfile .
 ```
 
 ## Docker Description
 
-MinerU's Docker uses `vllm/vllm-openai` as the base image, so it includes the `vllm` inference acceleration framework and necessary dependencies by default. The current Dockerfile uses `vllm/vllm-openai:v0.21.0` by default for CUDA 13.0-compatible environments. If your environment requires a CUDA 12.9-compatible image, comment out the default `FROM` line at the top of the Dockerfile and enable the commented `vllm/vllm-openai:v0.21.0-cu129` base image instead. Therefore, on compatible devices, you can directly use `vllm` to accelerate VLM model inference.
+Copilotix's Docker uses `vllm/vllm-openai` as the base image, so it includes the `vllm` inference acceleration framework and necessary dependencies by default. The current Dockerfile uses `vllm/vllm-openai:v0.21.0` by default for CUDA 13.0-compatible environments. If your environment requires a CUDA 12.9-compatible image, comment out the default `FROM` line at the top of the Dockerfile and enable the commented `vllm/vllm-openai:v0.21.0-cu129` base image instead. Therefore, on compatible devices, you can directly use `vllm` to accelerate VLM model inference.
 
 > [!NOTE]
 > Requirements for using `vllm` to accelerate VLM model inference:
-> 
+>
 > - Device must have Volta architecture or later graphics cards with 8GB+ available VRAM.
 > - The host machine's graphics driver must support the CUDA runtime used by the selected base image: the default `v0.21.0` image requires a CUDA 13.0-compatible driver, and `v0.21.0-cu129` requires a CUDA 12.9-compatible driver. You can check the driver version using the `nvidia-smi` command.
 > - Docker container must have access to the host machine's graphics devices.
@@ -31,25 +31,25 @@ docker run --gpus all \
   --shm-size 32g \
   -p 30000:30000 -p 7860:7860 -p 8000:8000 -p 8002:8002 \
   --ipc=host \
-  -it mineru:latest \
+  -it copilotix:latest \
   /bin/bash
 ```
 
-After executing this command, you will enter the Docker container's interactive terminal with some ports mapped for potential services. You can directly run MinerU-related commands within the container to use MinerU's features.
-You can also directly start MinerU services by replacing `/bin/bash` with service startup commands. For detailed instructions, please refer to the [Start the service via command](https://opendatalab.github.io/MinerU/usage/quick_usage/#advanced-usage-via-api-webui-http-clientserver).
+After executing this command, you will enter the Docker container's interactive terminal with some ports mapped for potential services. You can directly run Copilotix-related commands within the container to use Copilotix's features.
+You can also directly start Copilotix services by replacing `/bin/bash` with service startup commands. For detailed instructions, please refer to the [Start the service via command](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/usage/quick_usage/#advanced-usage-via-api-webui-http-clientserver).
 
 ## Start Services Directly with Docker Compose
 
-We provide a [compose.yaml](https://github.com/opendatalab/MinerU/blob/master/docker/compose.yaml) file that you can use to quickly start MinerU services.
+We provide a [compose.yaml](https://github.com/Kumiko-kmk/Copilotix/blob/master/docker/compose.yaml) file that you can use to quickly start Copilotix services.
 
 ```bash
 # Download compose.yaml file
-wget https://gcore.jsdelivr.net/gh/opendatalab/MinerU@master/docker/compose.yaml
+wget https://gcore.jsdelivr.net/gh/opendatalab/Copilotix@master/docker/compose.yaml
 ```
 
 >[!NOTE]
 >
->- The `compose.yaml` file contains configurations for multiple services of MinerU, you can choose to start specific services as needed.
+>- The `compose.yaml` file contains configurations for multiple services of Copilotix, you can choose to start specific services as needed.
 >- Different services might have additional parameter configurations, which you can view and edit in the `compose.yaml` file.
 >- Due to the pre-allocation of GPU memory by the `vllm` inference acceleration framework, you may not be able to run multiple `vllm` services simultaneously on the same machine. Therefore, ensure that other services that might use GPU memory have been stopped before starting the `vlm-openai-server` service or using the `vlm-vllm-engine` backend.
 
@@ -63,7 +63,7 @@ connect to `openai-server` via `vlm-http-client` backend
   >[!TIP]
   >In another terminal, connect to openai server via http client (only requires CPU and network, no vllm environment needed)
   > ```bash
-  > mineru -p <input_path> -o <output_path> -b vlm-http-client -u http://<server_ip>:30000
+  > copilotix -p <input_path> -o <output_path> -b vlm-http-client -u http://<server_ip>:30000
   > ```
 
 ---
@@ -77,14 +77,14 @@ connect to `openai-server` via `vlm-http-client` backend
 
 ---
 
-### Start MinerU Router service
+### Start Copilotix Router service
   ```bash
   docker compose -f compose.yaml --profile router up -d
   ```
   >[!TIP]
   >
   >- The default configuration runs in `--local-gpus auto` mode, automatically starting local workers in the container and exposing the unified entry at `http://<server_ip>:8002/docs`.
-  >- If you want to aggregate existing `mineru-api` services instead of starting local workers, refer to the commented example under the `mineru-router` service in `compose.yaml` and switch to `--upstream-url`.
+  >- If you want to aggregate existing `copilotix-api` services instead of starting local workers, refer to the commented example under the `copilotix-router` service in `compose.yaml` and switch to `--upstream-url`.
 
 ---
 

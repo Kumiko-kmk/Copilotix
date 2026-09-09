@@ -15,7 +15,7 @@ afterEach(async () => {
 
 describe('ElectronFileUploader', () => {
   it('uploads a file-backed Blob without authorization or content type headers', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-uploader-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-uploader-'))
     temporaryRoots.push(root)
     const filePath = join(root, 'fixture.pdf')
     await writeFile(filePath, '%PDF fixture')
@@ -38,7 +38,7 @@ describe('ElectronFileUploader', () => {
   })
 
   it('requires the documented HTTP 200 upload response', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-uploader-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-uploader-'))
     temporaryRoots.push(root)
     const filePath = join(root, 'fixture.pdf')
     await writeFile(filePath, '%PDF fixture')

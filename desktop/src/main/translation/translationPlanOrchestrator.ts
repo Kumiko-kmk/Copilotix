@@ -16,7 +16,7 @@ import {
   validateTableTranslationResponse
 } from '@shared/translationPlanProtocol'
 import { FALLBACK_PROVIDER_ORDER } from '@shared/constants'
-import type { CredentialName, MinerUTask, TranslationProviderId } from '@shared/types'
+import type { CredentialName, CopilotixTask, TranslationProviderId } from '@shared/types'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { ArtifactService } from '../artifactService'
 import type { TranslationProvider } from './providers'
@@ -38,7 +38,7 @@ export interface TranslationPlanProgress {
 }
 
 export interface TranslationPlanOrchestratorOptions {
-  task: MinerUTask
+  task: CopilotixTask
   jobId: string
   providers: Map<TranslationProviderId, TranslationProvider>
   compute: TaskComputePort
@@ -162,7 +162,7 @@ export class TranslationPlanOrchestrator {
         const response = await translateRequest(parsedRequest, provider, signal)
         throwIfAborted(signal)
         const envelope = translationPlanResponseEnvelopeSchema.parse({
-          protocol: 'mineru-translation-response-v1',
+          protocol: 'copilotix-translation-response-v1',
           unitId: descriptor.unitId,
           kind: descriptor.kind,
           sourceHash: descriptor.sourceHash,
@@ -306,7 +306,7 @@ async function translateRequest(
   signal: AbortSignal
 ): Promise<TranslationPlanResponse> {
   throwIfAborted(signal)
-  if (request.protocol === 'mineru-translation-plain-v1') {
+  if (request.protocol === 'copilotix-translation-plain-v1') {
     const translations: Array<{ id: string; text: string }> = []
     for (const segment of request.segments) {
       throwIfAborted(signal)
@@ -315,7 +315,7 @@ async function translateRequest(
       translations.push({ id: segment.id, text })
     }
     return plainTranslationResponseSchema.parse({
-      protocol: 'mineru-translation-plain-v1',
+      protocol: 'copilotix-translation-plain-v1',
       unitId: request.unitId,
       sourceHash: request.sourceHash,
       translations

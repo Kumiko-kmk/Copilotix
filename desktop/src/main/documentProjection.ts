@@ -8,14 +8,14 @@ import {
   documentDetailsSchema,
   documentSummarySchema
 } from '@shared/ipcSchemas'
-import type { DocumentPayload, MinerUTask } from '@shared/types'
+import type { DocumentPayload, CopilotixTask } from '@shared/types'
 
 /**
  * Convert the temporary task projection at the application boundary.  The
  * legacy task still contains local paths, but this DTO deliberately has no
  * filesystem identity that can cross into preload/renderer.
  */
-export function projectDocumentSummary(task: MinerUTask): DocumentSummary {
+export function projectDocumentSummary(task: CopilotixTask): DocumentSummary {
   return documentSummarySchema.parse({
     id: task.id,
     originalName: task.originalName,

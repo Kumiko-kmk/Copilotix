@@ -108,7 +108,7 @@ describe('SettingsService credential isolation', () => {
     expect(repository.saved).toHaveLength(1)
   })
 
-  it('clears only legacy translation credentials once and preserves MinerU', async () => {
+  it('clears only legacy translation credentials once and preserves Copilotix', async () => {
     const repository = new SettingsRepository()
     const vault = new MemoryVault({
       'parser-token': 'parser-secret',

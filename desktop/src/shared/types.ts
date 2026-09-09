@@ -72,7 +72,7 @@ export interface SettingsSaveResult {
   fieldErrors: Partial<Record<CredentialName, CredentialFieldError>>
 }
 
-export interface MinerUTask {
+export interface CopilotixTask {
   id: string
   /** Filename selected by the user; never changed after task creation. */
   originalName: string
@@ -97,7 +97,7 @@ export interface SelectedPdf {
   path: string
   name: string
   size: number
-  duplicateTask?: MinerUTask
+  duplicateTask?: CopilotixTask
 }
 
 export interface CreateTasksRequest {
@@ -187,7 +187,7 @@ export interface ReaderChatSelection {
 }
 
 export interface DocumentPayload {
-  task: MinerUTask
+  task: CopilotixTask
   markdown: string
   translatedMarkdown: string
   translatedBlocks: TranslatedMarkdownBlock[] | null
@@ -236,7 +236,7 @@ export interface WindowState {
   maximized: boolean
 }
 
-export interface MinerUDesktopApi {
+export interface CopilotixDesktopApi {
   getSettings(): Promise<AppSettings>
   saveSettings(update: SettingsUpdate): Promise<SettingsSaveResult>
   validateCredential(name: CredentialName, value?: string): Promise<CredentialValidationResult>
@@ -259,6 +259,6 @@ export interface MinerUDesktopApi {
 
 declare global {
   interface Window {
-    mineru: MinerUDesktopApi
+    copilotix: CopilotixDesktopApi
   }
 }

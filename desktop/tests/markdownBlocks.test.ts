@@ -85,8 +85,8 @@ describe('Markdown block alignment', () => {
     expect(blocks.map((block) => block.mappingIds)).toEqual([['anchor'], []])
   })
 
-  const acceptanceRoot = process.env.MINERU_LAYOUT_ACCEPTANCE_DIR
-  it.skipIf(!acceptanceRoot)('aligns the local MinerU Markdown to layout content with high coverage', async () => {
+  const acceptanceRoot = process.env.COPILOTIX_LAYOUT_ACCEPTANCE_DIR
+  it.skipIf(!acceptanceRoot)('aligns the local Copilotix Markdown to layout content with high coverage', async () => {
     const layout = JSON.parse(await readFile(join(acceptanceRoot!, 'layout.json'), 'utf8'))
     const markdown = await readFile(join(acceptanceRoot!, 'full.md'), 'utf8')
     const mappings = buildBlockMappings('acceptance-task', layout)
@@ -103,7 +103,7 @@ describe('Markdown block alignment', () => {
     expect(new Set(assignedIds).size).toBe(assignedIds.length)
   })
 
-  const regressionRoot = process.env.MINERU_READER_REGRESSION_DIR
+  const regressionRoot = process.env.COPILOTIX_READER_REGRESSION_DIR
   it.skipIf(!regressionRoot)('preserves the exact 97-page regression task alignment', async () => {
     const layout = JSON.parse(await readFile(join(regressionRoot!, 'layout.json'), 'utf8'))
     const markdown = await readFile(join(regressionRoot!, 'full.md'), 'utf8')

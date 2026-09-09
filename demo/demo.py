@@ -6,9 +6,9 @@ from pathlib import Path
 
 import httpx
 
-from mineru.cli import api_client as _api_client
-from mineru.cli.common import image_suffixes, office_suffixes, pdf_suffixes
-from mineru.utils.guess_suffix_or_lang import guess_suffix_by_path
+from copilotix.cli import api_client as _api_client
+from copilotix.cli.common import image_suffixes, office_suffixes, pdf_suffixes
+from copilotix.utils.guess_suffix_or_lang import guess_suffix_by_path
 
 SUPPORTED_INPUT_SUFFIXES = set(pdf_suffixes + image_suffixes + office_suffixes)
 
@@ -147,7 +147,7 @@ async def run_demo(
                 prepare_local_api_temp_dir()
                 local_server = _api_client.LocalAPIServer()
                 base_url = local_server.start()
-                print(f"Started local mineru-api: {base_url}")
+                print(f"Started local copilotix-api: {base_url}")
                 server_health = await _api_client.wait_for_local_api_ready(
                     http_client,
                     local_server,
@@ -210,9 +210,9 @@ def main() -> None:
     input_path = demo_dir / "pdfs"
     # Parsed outputs will be extracted into this directory.
     output_dir = demo_dir / "api_output"
-    # Set this to an existing MinerU FastAPI base URL, for example:
+    # Set this to an existing Copilotix FastAPI base URL, for example:
     # "http://127.0.0.1:8000"
-    # Leave it as None to start a temporary local mineru-api automatically.
+    # Leave it as None to start a temporary local copilotix-api automatically.
     api_url = None
 
     # Available examples:
@@ -225,7 +225,7 @@ def main() -> None:
     # Hybrid parsing effort. "medium" is faster; "high" keeps the high-effort hybrid behavior.
     effort = "medium"
     # Available options:
-    # "auto" -> let MinerU choose between text extraction and OCR
+    # "auto" -> let Copilotix choose between text extraction and OCR
     # "txt"  -> force text extraction
     # "ocr"  -> force OCR
     parse_method = "auto"
@@ -244,8 +244,8 @@ def main() -> None:
     start_page_id = 0
     end_page_id = None
 
-    """如果您由于网络问题无法下载模型，可以设置环境变量MINERU_MODEL_SOURCE为modelscope使用免代理仓库下载模型"""
-    # os.environ['MINERU_MODEL_SOURCE'] = "modelscope"
+    """如果您由于网络问题无法下载模型，可以设置环境变量COPILOTIX_MODEL_SOURCE为modelscope使用免代理仓库下载模型"""
+    # os.environ['COPILOTIX_MODEL_SOURCE'] = "modelscope"
 
     asyncio.run(
         run_demo(

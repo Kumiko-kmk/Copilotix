@@ -32,14 +32,14 @@ jobs:
 
       - name: Verify version.py
         run: |
-          ls -l mineru/version.py
-          cat mineru/version.py
+          ls -l copilotix/version.py
+          cat copilotix/version.py
 
       - name: Commit changes
         run: |
           git config --local user.email "moe@myhloli.com"
           git config --local user.name "myhloli"
-          git add mineru/version.py
+          git add copilotix/version.py
           if git diff-index --quiet HEAD; then
             echo "No changes to commit"
           else
@@ -71,15 +71,15 @@ jobs:
 
     - name: Verify version.py
       run: |
-        ls -l mineru/version.py
-        cat mineru/version.py
+        ls -l copilotix/version.py
+        cat copilotix/version.py
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install mineru
+    - name: Install copilotix
       run: |
         python -m pip install --upgrade pip
         pip install -e .[core]

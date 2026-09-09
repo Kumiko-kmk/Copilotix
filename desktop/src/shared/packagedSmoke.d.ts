@@ -1,5 +1,5 @@
-export const PACKAGED_SMOKE_ARG: '--mineru-packaged-smoke'
-export const PACKAGED_SMOKE_MARKER_PREFIX: 'MINERU_PACKAGED_SMOKE_OK'
+export const PACKAGED_SMOKE_ARG: '--copilotix-packaged-smoke'
+export const PACKAGED_SMOKE_MARKER_PREFIX: 'COPILOTIX_PACKAGED_SMOKE_OK'
 
 export interface PackagedSmokeVersions {
   appVersion: string

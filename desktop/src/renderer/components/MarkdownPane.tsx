@@ -60,7 +60,7 @@ const markdownSanitizeSchema = {
   },
   protocols: {
     ...defaultSchema.protocols,
-    src: [...(defaultSchema.protocols?.src ?? []), 'blob', 'data', 'mineru-asset']
+    src: [...(defaultSchema.protocols?.src ?? []), 'blob', 'data', 'copilotix-asset']
   }
 }
 
@@ -268,7 +268,7 @@ export default function MarkdownPane(props: {
   React.useLayoutEffect(() => {
     if (!ready || !articleRef.current) return
     const ranges = buildReaderHighlightRanges(articleRef.current, props.annotations)
-    setYellowHighlightRanges(ranges.get('mineru-highlight-yellow') ?? [])
+    setYellowHighlightRanges(ranges.get('copilotix-highlight-yellow') ?? [])
     return registerReaderHighlightRanges(annotationOwner, ranges)
   }, [annotationOwner, props.annotations, props.blocks, ready, renderAttempt])
 
@@ -874,6 +874,6 @@ function readableRenderError(error: unknown): string {
 }
 
 function resolveAsset(src: string | undefined, base: string): string | undefined {
-  if (!src || /^(https?:|data:|blob:|mineru-asset:)/i.test(src)) return src
+  if (!src || /^(https?:|data:|blob:|copilotix-asset:)/i.test(src)) return src
   return new URL(src.replace(/^\.\//, ''), base).toString()
 }

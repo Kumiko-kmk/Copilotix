@@ -1,6 +1,6 @@
-# MinerU Desktop 桌面翻译版
+# Copilotix Desktop 桌面翻译版
 
-这是基于 MinerU 开源项目的非官方个人 Electron 客户端。当前版本连接 MinerU 官方 v4 API，在本地保存解析产物并生成简体中文 Markdown；它不在运行时启动仓库内的 Python `mineru-api`，也不包含本地解析模型。
+这是基于 Copilotix 开源项目的非官方个人 Electron 客户端。当前版本连接 Copilotix 官方 v4 API，在本地保存解析产物并生成简体中文 Markdown；它不在运行时启动仓库内的 Python `copilotix-api`，也不包含本地解析模型。
 
 完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`../ARCHITECTURE_ZH.md`](../ARCHITECTURE_ZH.md)；RAG 未来计划见 [`../RAG_DEVELOPMENT_PLAN_ZH.md`](../RAG_DEVELOPMENT_PLAN_ZH.md)。
 
@@ -22,15 +22,15 @@ Main 不持有 SQLite 连接；Utility 使用 `node:sqlite`、WAL 和 STRICT mig
 - Node.js `24.19.0`
 - pnpm `11.19.0`
 - Windows x64 目录版是当前发布目标
-- Electron `userData`：`%APPDATA%\MinerU-Translation-v2`
-- 数据库：`%APPDATA%\MinerU-Translation-v2\mineru-desktop-v2.sqlite3`
+- Electron `userData`：`%APPDATA%\Copilotix-Translation-v2`
+- 数据库：`%APPDATA%\Copilotix-Translation-v2\copilotix-desktop-v2.sqlite3`
 - 结果：`<outputRoot>\documents-v2\{documentId}`
 
 每个文档目录以 UUID 命名，通常包含 `original.pdf`、`full.md`、`full.zh-CN.md`、`layout.json`、`block_list.json`、可选 `content_list.json` 和图片。所有 artifact 使用 PathPolicy、受控 staging、hash、fsync 和 atomic rename；内部 `.translation/` 不进入结果 ZIP。
 
 ## 开发
 
-需要 Windows x64、Node `24.19.0`、pnpm `11.19.0`，以及 MinerU 官方 API Token（[MinerU API 管理](https://mineru.net/apiManage)）。
+需要 Windows x64、Node `24.19.0`、pnpm `11.19.0`，以及 Parser API Token（[Parser API 管理](https://mineru.net/apiManage)）。
 
 ```powershell
 pnpm install
@@ -67,16 +67,16 @@ pnpm desktop:release:from-built
 正式发布由 `desktop/scripts/package-directory.mjs` 生成 Windows x64 完整目录和 ZIP。它在精确 `.release-next-{buildId}` staging 中校验四个 bundle、ASAR entry、locale、fuses、资源、体积（当前 app.asar < 40 MiB、运行目录 < 360 MiB、ZIP < 155 MiB），生成 `release-manifest.json`/`SHA256SUMS.txt`，解压复核并运行：
 
 ```text
-MinerU.exe --mineru-packaged-smoke
+Copilotix.exe --copilotix-packaged-smoke
 ```
 
-只有精确的 `MINERU_PACKAGED_SMOKE_OK app=0.1.0 electron=44.1.1` marker、空 stderr、哈希/manifest 审计全部成功后，才会把新目录原子发布到根目录 `release/`；失败时恢复旧目录并保留 staging。发布包是完整目录，不要只复制 `MinerU.exe`；`userData` 和 Credential Manager 不在发布包内。
+只有精确的 `COPILOTIX_PACKAGED_SMOKE_OK app=0.1.0 electron=44.1.1` marker、空 stderr、哈希/manifest 审计全部成功后，才会把新目录原子发布到根目录 `release/`；失败时恢复旧目录并保留 staging。发布包是完整目录，不要只复制 `Copilotix.exe`；`userData` 和 Credential Manager 不在发布包内。
 
 ## 功能与隐私
 
 当前提供 PDF 导入、官方解析、Markdown/表格翻译、原文/译文/布局阅读、PDF 与 block mapping 联动、荧光笔/下划线标注和另存结果。`ReaderChatSelection` 目前只是 Renderer 选区 payload；当前没有 chunk、index、embedding、vector、FTS、reranker、retrieval 或 chat backend，不要把“添加到对话”当作已实现聊天。
 
-PDF 会上传到 MinerU 官方预签名地址；待翻译文本会发送到所选翻译 Provider。Token 只发送到固定 `https://mineru.net` API；API Key 进入 Credential Manager，不写 SQLite、Renderer、日志或结果 ZIP。日志会遮蔽 Token、API Key、Authorization 和预签名 URL 查询参数，不记录论文正文。
+PDF 会上传到 Copilotix 官方预签名地址；待翻译文本会发送到所选翻译 Provider。Token 只发送到固定 `https://mineru.net` API；API Key 进入 Credential Manager，不写 SQLite、Renderer、日志或结果 ZIP。日志会遮蔽 Token、API Key、Authorization 和预签名 URL 查询参数，不记录论文正文。
 
 ## 协作与已知事项
 

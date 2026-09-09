@@ -16,12 +16,12 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install mineru latest
-RUN python3 -m pip install -U 'mineru[core]>=3.4.0' -i https://mirrors.aliyun.com/pypi/simple --break-system-packages && \
+# Install copilotix latest
+RUN python3 -m pip install -U 'copilotix[core]>=3.4.0' -i https://mirrors.aliyun.com/pypi/simple --break-system-packages && \
     python3 -m pip cache purge
 
 # Download models and update the configuration file
-RUN /bin/bash -c "mineru-models-download -s modelscope -m all"
+RUN /bin/bash -c "copilotix-models-download -s modelscope -m all"
 
 # Set the entry point to activate the virtual environment and run the command line tool
-ENTRYPOINT ["/bin/bash", "-c", "export MINERU_MODEL_SOURCE=local && exec \"$@\"", "--"]
+ENTRYPOINT ["/bin/bash", "-c", "export COPILOTIX_MODEL_SOURCE=local && exec \"$@\"", "--"]

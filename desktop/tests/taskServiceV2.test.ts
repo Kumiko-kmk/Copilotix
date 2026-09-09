@@ -7,8 +7,8 @@ import type { CredentialVault } from '@main/credentialVault'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import { SettingsService } from '@main/settingsService'
 import { TaskService } from '@main/taskService'
-import type { MinerUClient } from '@main/parserClient'
-import type { MinerUTask } from '@shared/types'
+import type { ParserClient } from '@main/parserClient'
+import type { CopilotixTask } from '@shared/types'
 import { fixtureTaskCompute } from './taskComputeFixture'
 
 const roots: string[] = []
@@ -19,7 +19,7 @@ afterEach(async () => {
 
 describe('TaskService v2 path integration', () => {
   it('resolves only assets below the document root and deletes a document through PathPolicy', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-task-service-v2-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-task-service-v2-'))
     roots.push(root)
     const outputRoot = join(root, 'output')
     const documentRoot = join(outputRoot, 'documents-v2')
@@ -27,7 +27,7 @@ describe('TaskService v2 path integration', () => {
     await mkdir(outputDir, { recursive: true })
     const sourcePath = join(outputDir, 'original.pdf')
     await writeFile(sourcePath, '%PDF-1.4 fixture')
-    const database = new V2Database(join(root, 'mineru-desktop-v2.sqlite3'))
+    const database = new V2Database(join(root, 'copilotix-desktop-v2.sqlite3'))
     const repository = new V2TaskRepositoryCompat(database)
     const vault = emptyVault()
     try {
@@ -49,14 +49,14 @@ describe('TaskService v2 path integration', () => {
   })
 
   it('refuses to delete a document directory outside outputRoot', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mineru-task-service-v2-escape-'))
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-task-service-v2-escape-'))
     roots.push(root)
     const outputRoot = join(root, 'output')
     const outsideDir = join(root, 'outside')
     await mkdir(outsideDir, { recursive: true })
     const sourcePath = join(outsideDir, 'original.pdf')
     await writeFile(sourcePath, '%PDF-1.4 fixture')
-    const database = new V2Database(join(root, 'mineru-desktop-v2.sqlite3'))
+    const database = new V2Database(join(root, 'copilotix-desktop-v2.sqlite3'))
     const repository = new V2TaskRepositoryCompat(database)
     const vault = emptyVault()
     try {
@@ -73,7 +73,7 @@ describe('TaskService v2 path integration', () => {
   })
 })
 
-function task(outputDir: string, sourcePath: string, id = 'document-1'): MinerUTask {
+function task(outputDir: string, sourcePath: string, id = 'document-1'): CopilotixTask {
   const now = '2026-01-01T00:00:00.000Z'
   return {
     id,
@@ -104,7 +104,7 @@ function emptyVault(): CredentialVault {
   }
 }
 
-function unusedClient(): MinerUClient {
+function unusedClient(): ParserClient {
   return {
     verifyToken: async () => ({ ok: true, message: 'unused' }),
     createUploadBatch: async () => { throw new Error('unused') },

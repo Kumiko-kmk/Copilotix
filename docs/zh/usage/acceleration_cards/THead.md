@@ -1,9 +1,9 @@
 ## 1. 测试平台
 以下为本指南测试使用的平台信息，供参考：
 ```
-os: Ubuntu 22.04   
+os: Ubuntu 22.04
 cpu: INTEL x86_64
-ppu: ZW810E  
+ppu: ZW810E
 driver: 1.4.0
 docker: 26.1.4
 ```
@@ -16,17 +16,17 @@ docker: 26.1.4
 ### 2.1 使用 Dockerfile 构建镜像 （vllm）
 
 ```bash
-wget https://gcore.jsdelivr.net/gh/opendatalab/MinerU@master/docker/china/ppu.Dockerfile
-docker build --network=host -t mineru:ppu-vllm-latest -f ppu.Dockerfile .
-``` 
+wget https://gcore.jsdelivr.net/gh/opendatalab/Copilotix@master/docker/china/ppu.Dockerfile
+docker build --network=host -t copilotix:ppu-vllm-latest -f ppu.Dockerfile .
+```
 
 ### 2.2 使用 Dockerfile 构建镜像 （lmdeploy）
 
 ```bash
-wget https://gcore.jsdelivr.net/gh/opendatalab/MinerU@master/docker/china/ppu.Dockerfile
+wget https://gcore.jsdelivr.net/gh/opendatalab/Copilotix@master/docker/china/ppu.Dockerfile
 # 将基础镜像从 vllm 切换为 lmdeploy
 sed -i '3s/^/# /' ppu.Dockerfile && sed -i '5,6s/^# //' ppu.Dockerfile
-docker build --network=host -t mineru:ppu-lmdeploy-latest -f ppu.Dockerfile .
+docker build --network=host -t copilotix:ppu-lmdeploy-latest -f ppu.Dockerfile .
 ```
 
 
@@ -34,7 +34,7 @@ docker build --network=host -t mineru:ppu-lmdeploy-latest -f ppu.Dockerfile .
 
 ```bash
 docker run --privileged=true \
-  --name mineru_docker \
+  --name copilotix_docker \
   --device=/dev/alixpu \
   --device=/dev/alixpu_ctl \
   --ipc=host \
@@ -45,20 +45,20 @@ docker run --privileged=true \
   -v /mnt:/mnt \
   -v /datapool:/datapool \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -e MINERU_MODEL_SOURCE=local \
-  -it mineru:ppu-vllm-latest \
+  -e COPILOTIX_MODEL_SOURCE=local \
+  -it copilotix:ppu-vllm-latest \
   /bin/bash
 ```
 
 >[!TIP]
-> 请根据实际情况选择使用`vllm`或`lmdeploy`版本的镜像，如需使用lmdeploy，替换上述命令中的`mineru:ppu-vllm-latest`为`mineru:ppu-lmdeploy-latest`即可。
+> 请根据实际情况选择使用`vllm`或`lmdeploy`版本的镜像，如需使用lmdeploy，替换上述命令中的`copilotix:ppu-vllm-latest`为`copilotix:ppu-lmdeploy-latest`即可。
 
-执行该命令后，您将进入到Docker容器的交互式终端，您可以直接在容器内运行MinerU相关命令来使用MinerU的功能。
-您也可以直接通过替换`/bin/bash`为服务启动命令来启动MinerU服务，详细说明请参考[通过命令启动服务](https://opendatalab.github.io/MinerU/zh/usage/quick_usage/#apiwebuihttp-clientserver)。
+执行该命令后，您将进入到Docker容器的交互式终端，您可以直接在容器内运行Copilotix相关命令来使用Copilotix的功能。
+您也可以直接通过替换`/bin/bash`为服务启动命令来启动Copilotix服务，详细说明请参考[通过命令启动服务](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/zh/usage/quick_usage/#apiwebuihttp-clientserver)。
 
 ## 4. 注意事项
 
-不同环境下，MinerU对ppu加速卡的支持情况如下表所示：
+不同环境下，Copilotix对ppu加速卡的支持情况如下表所示：
 
 <table border="1">
   <thead>
@@ -73,7 +73,7 @@ docker run --privileged=true \
   </thead>
   <tbody>
     <tr>
-      <td rowspan="3">命令行工具(mineru)</td>
+      <td rowspan="3">命令行工具(copilotix)</td>
       <td>pipeline</td>
       <td>🟢</td>
       <td>🟢</td>
@@ -89,7 +89,7 @@ docker run --privileged=true \
       <td>🟢</td>
     </tr>
     <tr>
-      <td rowspan="3">fastapi服务(mineru-api)</td>
+      <td rowspan="3">fastapi服务(copilotix-api)</td>
       <td>pipeline</td>
       <td>🟢</td>
       <td>🟢</td>
@@ -105,7 +105,7 @@ docker run --privileged=true \
       <td>🟢</td>
     </tr>
     <tr>
-      <td rowspan="3">gradio界面(mineru-gradio)</td>
+      <td rowspan="3">gradio界面(copilotix-gradio)</td>
       <td>pipeline</td>
       <td>🟢</td>
       <td>🟢</td>
@@ -121,18 +121,18 @@ docker run --privileged=true \
       <td>🟢</td>
     </tr>
     <tr>
-      <td colspan="2">openai-server服务（mineru-openai-server）</td>
+      <td colspan="2">openai-server服务（copilotix-openai-server）</td>
       <td>🟢</td>
       <td>🟢</td>
     </tr>
   </tbody>
 </table>
 
-注：  
-🟢: 支持，运行较稳定，精度与Nvidia GPU基本一致  
-🟡: 支持但较不稳定，在某些场景下可能出现异常，或精度存在一定差异  
-🔴: 不支持，无法运行，或精度存在较大差异  
+注：
+🟢: 支持，运行较稳定，精度与Nvidia GPU基本一致
+🟡: 支持但较不稳定，在某些场景下可能出现异常，或精度存在一定差异
+🔴: 不支持，无法运行，或精度存在较大差异
 
 >[!TIP]
-> - PPU加速卡指定可用加速卡的方式与NVIDIA GPU类似，请参考[使用指定GPU设备](https://opendatalab.github.io/MinerU/zh/usage/advanced_cli_parameters/#cuda_visible_devices)章节说明。
+> - PPU加速卡指定可用加速卡的方式与NVIDIA GPU类似，请参考[使用指定GPU设备](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/zh/usage/advanced_cli_parameters/#cuda_visible_devices)章节说明。
 > - 在T-Head平台可以通过`ppu-smi`命令查看加速卡的使用情况，并根据需要指定空闲的加速卡ID以避免资源冲突。

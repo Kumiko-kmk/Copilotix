@@ -38,7 +38,7 @@ export default function NewParsePage(props: {
   const start = React.useCallback(async () => {
     setSubmitting(true)
     try {
-      const created = await window.mineru.importDocuments(
+      const created = await window.copilotix.importDocuments(
         { translationProvider: provider, createDuplicates },
         files.map(({ file }) => file)
       )
@@ -103,7 +103,7 @@ export default function NewParsePage(props: {
             className="token-required"
             type="error"
             showIcon
-            message="MinerU API Token 验证失败"
+            message="Parser API Token 验证失败"
             description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置重新验证</Button>}
           />
         ) : null}

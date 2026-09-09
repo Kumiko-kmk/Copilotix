@@ -114,26 +114,26 @@ describe('core RPC schemas', () => {
     const unitId = '00000000-0000-4000-8000-000000000002'
     const sourceHash = 'a'.repeat(64)
     const plainResponse = {
-      protocol: 'mineru-translation-plain-v1' as const,
+      protocol: 'copilotix-translation-plain-v1' as const,
       unitId,
       sourceHash,
       translations: []
     }
     const tableResponse = {
-      protocol: 'mineru-table-translation-v2' as const,
+      protocol: 'copilotix-table-translation-v2' as const,
       translations: []
     }
     expect(translationPlanResponseEnvelopeSchema.safeParse({
-      protocol: 'mineru-translation-response-v1', unitId, kind: 'plain', sourceHash, response: plainResponse
+      protocol: 'copilotix-translation-response-v1', unitId, kind: 'plain', sourceHash, response: plainResponse
     }).success).toBe(true)
     expect(translationPlanResponseEnvelopeSchema.safeParse({
-      protocol: 'mineru-translation-response-v1', unitId, kind: 'plain', sourceHash, response: tableResponse
+      protocol: 'copilotix-translation-response-v1', unitId, kind: 'plain', sourceHash, response: tableResponse
     }).success).toBe(false)
     expect(translationPlanResponseEnvelopeSchema.safeParse({
-      protocol: 'mineru-translation-response-v1', unitId, kind: 'table', sourceHash, response: plainResponse
+      protocol: 'copilotix-translation-response-v1', unitId, kind: 'table', sourceHash, response: plainResponse
     }).success).toBe(false)
     expect(translationPlanResponseEnvelopeSchema.safeParse({
-      protocol: 'mineru-translation-response-v1',
+      protocol: 'copilotix-translation-response-v1',
       unitId,
       kind: 'plain',
       sourceHash,

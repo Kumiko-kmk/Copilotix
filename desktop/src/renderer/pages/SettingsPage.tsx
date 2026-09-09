@@ -24,7 +24,7 @@ type DraftCredentials = Record<CredentialName, DraftCredential>
 type CredentialErrors = Partial<Record<CredentialName, string>>
 
 const CREDENTIAL_LABELS: Record<CredentialName, string> = {
-  parser: 'MinerU 解析 Token',
+  parser: 'Copilotix 解析 Token',
   qwen: 'Qwen API Key',
   deepseek: 'DeepSeek API Key'
 }
@@ -72,7 +72,7 @@ export default function SettingsPage(props: {
   }, [])
 
   const chooseOutput = React.useCallback(async () => {
-    const path = await window.mineru.chooseOutputDirectory()
+    const path = await window.copilotix.chooseOutputDirectory()
     if (path) update('outputRoot', path)
   }, [update])
 
@@ -85,7 +85,7 @@ export default function SettingsPage(props: {
     }
     setTesting(name)
     try {
-      const result = await window.mineru.validateCredential(name, value)
+      const result = await window.copilotix.validateCredential(name, value)
       setDraft((current) => ({
         ...current,
         credentials: {
@@ -137,7 +137,7 @@ export default function SettingsPage(props: {
         ...publicSettings,
         ...(Object.keys(credentialMutations).length > 0 ? { credentialMutations } : {})
       }
-      const result = await window.mineru.saveSettings(payload)
+      const result = await window.copilotix.saveSettings(payload)
       props.onSaved(result.settings)
       setDraft(result.settings)
       const errors: CredentialErrors = {}

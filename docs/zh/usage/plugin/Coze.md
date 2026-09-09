@@ -2,14 +2,14 @@
 
 Coze（中文版名称：扣子） 是字节跳动推出的零代码 AI 应用开发平台。无论用户是否有编程经验，都可以通过该平台快速创建各种类型的聊天机器人、智能体、AI 应用和插件，并将其部署在社交平台和即时聊天应用程序中。
 
-目前，MinerU 插件已在 Coze 插件商店上线，通过其强大的文档解析能力，为用户搭建智能体与工作流提供文档解析能力，加快用户 AI 应用的开发。
+目前，Copilotix 插件已在 Coze 插件商店上线，通过其强大的文档解析能力，为用户搭建智能体与工作流提供文档解析能力，加快用户 AI 应用的开发。
 
 ![img](../../../assets/images/coze_0.png)
 
 - 扣子官网地址：https://www.coze.cn/
-- MinerU 扣子插件下载地址：https://www.coze.cn/store/plugin/7527957359730360354
+- Copilotix 扣子插件下载地址：https://www.coze.cn/store/plugin/7527957359730360354
 
-# MinerU 在 Coze 中的使用方法
+# Copilotix 在 Coze 中的使用方法
 
 ## **Coze：集成应用**
 
@@ -23,7 +23,7 @@ Coze（中文版名称：扣子） 是字节跳动推出的零代码 AI 应用�
 
 ![img](../../../assets/images/Coze_2.png)
 
-### 插件配置 -> 添加 `插件` -> 搜索 `MinerU`
+### 插件配置 -> 添加 `插件` -> 搜索 `Copilotix`
 
 ![img](../../../assets/images/Coze_3.png)
 
@@ -31,7 +31,7 @@ Coze（中文版名称：扣子） 是字节跳动推出的零代码 AI 应用�
 
 ![img](../../../assets/images/Coze_4.png)
 
-### 选择 `MinerU` 插件 -> 编辑参数 -> 填写 api key
+### 选择 `Copilotix` 插件 -> 编辑参数 -> 填写 api key
 
 ![img](../../../assets/images/Coze_5.png)
 
@@ -45,7 +45,7 @@ Coze（中文版名称：扣子） 是字节跳动推出的零代码 AI 应用�
 
 ## 工作流
 
-> 用工作流的方式使用 minerU
+> 用工作流的方式使用 copilotix
 
 ### 工作流 -> 创建工作流
 
@@ -53,23 +53,23 @@ Coze（中文版名称：扣子） 是字节跳动推出的零代码 AI 应用�
 
 ![img](../../../assets/images/Coze_9.png)
 
-### 工作流插件配置 -> 添加 `插件` -> 搜索 `MinerU` -> 添加
+### 工作流插件配置 -> 添加 `插件` -> 搜索 `Copilotix` -> 添加
 
 ![img](../../../assets/images/Coze_10.png)
 
 ![img](../../../assets/images/Coze_11.png)
 
-###  选择`MinerU` 插件 -> 编辑参数 -> 填写 api key
+###  选择`Copilotix` 插件 -> 编辑参数 -> 填写 api key
 
 ![img](../../../assets/images/Coze_12.png)
 
-###  选择开始节点 -> 配置 `input` 类型为文件类型 -> 连接到 `mineru` 节点
+###  选择开始节点 -> 配置 `input` 类型为文件类型 -> 连接到 `copilotix` 节点
 
 ![img](../../../assets/images/Coze_13.png)
 
 ![img](../../../assets/images/Coze_14.png)
 
-###  选择结束节点 -> 连接到 `mineru` 节点 -> 配置 `output` 输出为 `mineru` 节点的 `parse_file.text`
+###  选择结束节点 -> 连接到 `copilotix` 节点 -> 配置 `output` 输出为 `copilotix` 节点的 `parse_file.text`
 
 ![img](../../../assets/images/Coze_15.png)
 
@@ -87,6 +87,6 @@ Coze（中文版名称：扣子） 是字节跳动推出的零代码 AI 应用�
 
 ![img](../../../assets/images/Coze_20.png)
 
-### 移除 `mineru` 插件 -> 调试
+### 移除 `copilotix` 插件 -> 调试
 
 ![img](../../../assets/images/Coze_21.png)

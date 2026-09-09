@@ -126,7 +126,7 @@ class OpenAiCompatibleProvider extends QueuedProvider {
           {
             role: 'system',
             content:
-              '你是严谨的学术表格翻译器。翻译用户提供的完整表格 JSON 中所有 segment 的 text 为简体中文。必须保持 segment ID 完整、唯一，不得增删或修改表格结构、行列关系、HTML 属性和公式。只输出 JSON，格式为 {"protocol":"mineru-table-translation-v2","translations":[{"id":"segment-id","text":"译文"}]}。'
+              '你是严谨的学术表格翻译器。翻译用户提供的完整表格 JSON 中所有 segment 的 text 为简体中文。必须保持 segment ID 完整、唯一，不得增删或修改表格结构、行列关系、HTML 属性和公式。只输出 JSON，格式为 {"protocol":"copilotix-table-translation-v2","translations":[{"id":"segment-id","text":"译文"}]}。'
           },
           { role: 'user', content: JSON.stringify(request) }
         ]

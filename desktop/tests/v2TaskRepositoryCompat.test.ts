@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { CompatDocumentRow, CompatJobRow } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import { projectCompatTask, V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
-import type { MinerUTask, ReaderAnnotation } from '@shared/types'
+import type { CopilotixTask, ReaderAnnotation } from '@shared/types'
 
 const roots: string[] = []
 
@@ -13,15 +13,15 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-async function createFixture(): Promise<{ root: string; database: V2Database; repository: V2TaskRepositoryCompat; task: MinerUTask }> {
-  const root = await mkdtemp(join(tmpdir(), 'mineru-v2-compat-'))
+async function createFixture(): Promise<{ root: string; database: V2Database; repository: V2TaskRepositoryCompat; task: CopilotixTask }> {
+  const root = await mkdtemp(join(tmpdir(), 'copilotix-v2-compat-'))
   roots.push(root)
-  const database = new V2Database(join(root, 'mineru-desktop-v2.sqlite3'))
+  const database = new V2Database(join(root, 'copilotix-desktop-v2.sqlite3'))
   const repository = new V2TaskRepositoryCompat(database)
   const outputDir = join(root, 'documents-v2', 'document-1')
   await mkdir(outputDir, { recursive: true })
   const now = '2026-01-01T00:00:00.000Z'
-  const task: MinerUTask = {
+  const task: CopilotixTask = {
     id: 'document-1',
     originalName: 'paper.pdf',
     title: null,

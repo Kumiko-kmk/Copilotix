@@ -46,7 +46,7 @@ export async function publishRelease({ fromBuilt = false } = {}) {
   await assertLocalDependencyGraph(repositoryRoot, desktopDirectory)
   const packageJson = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
   const packagedSmokeVersions = assertPackagedSmokeVersions(packageJson)
-  const productName = packageJson.build?.productName ?? 'MinerU'
+  const productName = packageJson.build?.productName ?? 'Copilotix'
   const executableName = `${packageJson.build?.executableName ?? productName}.exe`
   const releaseName = `${productName}-${packageJson.version}-win-x64`
   const layout = createReleaseLayout({ repositoryRoot, buildId: createBuildId(), releaseName })
@@ -219,7 +219,7 @@ function listAsarEntries(archivePath) {
 async function writeReleaseMetadata(layout, packageJson, executableName, hashes) {
   const manifest = {
     schemaVersion: 1,
-    productName: packageJson.build?.productName ?? 'MinerU',
+    productName: packageJson.build?.productName ?? 'Copilotix',
     version: packageJson.version,
     platform: 'win32',
     architecture: 'x64',

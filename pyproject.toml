@@ -3,7 +3,7 @@ requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mineru"
+name = "copilotix"
 dynamic = ["version"]
 license = "LicenseRef-MinerU-Open-Source-License"
 license-files = ["LICENSE.md"]
@@ -11,7 +11,7 @@ description = "A VLM document parsing tool for converting PDF and images into Ma
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 keywords = [
-    "mineru",
+    "copilotix",
     "magic-pdf",
     "document-parsing",
     "document-understanding",
@@ -52,7 +52,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-    "mineru[core]",
+    "copilotix[core]",
     "pytest",
     "pytest-cov",
     "coverage",
@@ -67,46 +67,46 @@ gradio = [
     "gradio-pdf>=0.0.22",
 ]
 core = [
-    "mineru[gradio]",
+    "copilotix[gradio]",
 ]
 all = [
-    "mineru[core]",
-    "mineru[s3]",
+    "copilotix[core]",
+    "copilotix[s3]",
 ]
 
 [project.urls]
-homepage = "https://mineru.net/"
-documentation = "https://opendatalab.github.io/MinerU/"
-repository = "https://github.com/opendatalab/MinerU"
-issues = "https://github.com/opendatalab/MinerU/issues"
-License = "https://github.com/opendatalab/MinerU/blob/master/LICENSE.md"
+homepage = "https://github.com/Kumiko-kmk/Copilotix"
+documentation = "https://github.com/Kumiko-kmk/Copilotix/tree/master/docs"
+repository = "https://github.com/Kumiko-kmk/Copilotix"
+issues = "https://github.com/Kumiko-kmk/Copilotix/issues"
+License = "https://github.com/Kumiko-kmk/Copilotix/blob/master/LICENSE.md"
 
 [project.scripts]
-mineru = "mineru.cli.client:main"
-mineru-api = "mineru.cli.fast_api:main"
-mineru-router = "mineru.cli.router:main"
-mineru-gradio = "mineru.cli.gradio_app:main"
+copilotix = "copilotix.cli.client:main"
+copilotix-api = "copilotix.cli.fast_api:main"
+copilotix-router = "copilotix.cli.router:main"
+copilotix-gradio = "copilotix.cli.gradio_app:main"
 
 [tool.setuptools.dynamic]
-version = { attr = "mineru.version.__version__" }
+version = { attr = "copilotix.version.__version__" }
 
 [tool.setuptools.packages.find]
-include = ["mineru*"]
+include = ["copilotix*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-"mineru" = ["resources/**"]
+"copilotix" = ["resources/**"]
 
 [tool.setuptools]
 include-package-data = true
 zip-safe = false
 
 [tool.pytest.ini_options]
-addopts = "-s --cov=mineru --cov-report html"
+addopts = "-s --cov=copilotix --cov-report html"
 
 [tool.coverage.run]
 command_line = "-m pytest tests/unittest/test_e2e.py"
-source = ["mineru/"]
+source = ["copilotix/"]
 omit = [
     "*/gradio_app.py",
     "*/fast_api.py",

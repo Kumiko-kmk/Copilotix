@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { CompatDomainError, V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import type { MinerUTask } from '@shared/types'
+import type { CopilotixTask } from '@shared/types'
 
 const roots: string[] = []
 
@@ -16,16 +16,16 @@ async function fixture(): Promise<{
   root: string
   database: V2Database
   repository: V2TaskRepositoryCompat
-  task: MinerUTask
+  task: CopilotixTask
 }> {
-  const root = await mkdtemp(join(tmpdir(), 'mineru-v2-document-api-'))
+  const root = await mkdtemp(join(tmpdir(), 'copilotix-v2-document-api-'))
   roots.push(root)
   const outputDir = join(root, 'documents-v2', '11111111-1111-4111-8111-111111111111')
   await mkdir(outputDir, { recursive: true })
-  const database = new V2Database(join(root, 'mineru-desktop-v2.sqlite3'))
+  const database = new V2Database(join(root, 'copilotix-desktop-v2.sqlite3'))
   const repository = new V2TaskRepositoryCompat(database)
   const now = '2026-01-01T00:00:00.000Z'
-  const task: MinerUTask = {
+  const task: CopilotixTask = {
     id: '11111111-1111-4111-8111-111111111111',
     originalName: 'paper.pdf',
     title: null,

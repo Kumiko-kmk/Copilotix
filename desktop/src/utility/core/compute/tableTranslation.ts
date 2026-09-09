@@ -67,7 +67,7 @@ const markdownProcessor = unified()
 const PROTECTED_HTML_TAGS = new Set(['code', 'pre', 'math', 'inline-math', 'eq', 'script', 'style'])
 
 /**
- * Groups a table HTML block with its directly adjacent MinerU caption and footnote blocks.
+ * Groups a table HTML block with its directly adjacent Copilotix caption and footnote blocks.
  * Generic neighboring paragraphs are intentionally not included.
  */
 export function buildTableTranslationUnits(

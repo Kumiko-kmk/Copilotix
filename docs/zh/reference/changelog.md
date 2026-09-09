@@ -1,6 +1,6 @@
 # 更新日志
 
-本文档记录 MinerU 项目的版本更新历史、主要能力演进和重要兼容性变动。
+本文档记录 Copilotix 项目的版本更新历史、主要能力演进和重要兼容性变动。
 
 ---
 
@@ -10,7 +10,7 @@
 
 - 新增国产算力平台昆仑芯、太初元碁的适配支持。
 - 目前已由官方和厂商适配并支持的国产算力平台包括：昇腾、平头哥、沐曦、海光、燧原、摩尔线程、天数智芯、寒武纪、昆仑芯、太初元碁、壁仞。
-- MinerU 持续兼容国产硬件平台，支持主流芯片架构，助力科研、政企用户迈向文档数字化新高度。
+- Copilotix 持续兼容国产硬件平台，支持主流芯片架构，助力科研、政企用户迈向文档数字化新高度。
 
 ### 2.7.4 (2026/01/30)
 
@@ -29,7 +29,7 @@
 
 ### 2.7.0 (2025/12/30)
 
-- 简化安装流程，使用 `uv pip install mineru[all]` 即可安装所有可选后端依赖。
+- 简化安装流程，使用 `uv pip install copilotix[all]` 即可安装所有可选后端依赖。
 - 增加全新后端 `hybrid`，结合 `pipeline` 与 `vlm` 的优势：
   - 从文本 PDF 中直接抽取文本，在文本 PDF 场景原生支持多语言识别，并大幅减少解析幻觉；
   - 通过指定 OCR 语言，在扫描 PDF 场景支持 109 种语言的文本识别；
@@ -53,34 +53,34 @@
 - 优化命令行工具初始化流程，使Ascend适配方案中`vlm-vllm-engine`后端在命令行工具中可用。
 - 为Atlas 300I Duo(310p)设备更新适配文档。
 
-**`mineru-api`工具优化**
+**`copilotix-api`工具优化**
 
-- 为`mineru-api`接口参数增加描述性文本，优化接口文档可读性。
-- 可通过环境变量`MINERU_API_ENABLE_FASTAPI_DOCS`控制是否启用自动生成的接口文档页面，默认为启用。
-- 为`vlm-vllm-async-engine`、`vlm-lmdeploy-engine`、`vlm-http-client`后端增加并发数配置选项，用户可通过环境变量`MINERU_API_MAX_CONCURRENT_REQUESTS`控制api接口的最大并发请求数，默认为不限制数量。
+- 为`copilotix-api`接口参数增加描述性文本，优化接口文档可读性。
+- 可通过环境变量`COPILOTIX_API_ENABLE_FASTAPI_DOCS`控制是否启用自动生成的接口文档页面，默认为启用。
+- 为`vlm-vllm-async-engine`、`vlm-lmdeploy-engine`、`vlm-http-client`后端增加并发数配置选项，用户可通过环境变量`COPILOTIX_API_MAX_CONCURRENT_REQUESTS`控制api接口的最大并发请求数，默认为不限制数量。
 
 ### 2.6.5 (2025/11/26)
 
 - 增加新后端`vlm-lmdeploy-engine`支持，使用方式与`vlm-vllm-(async)engine`类似，但使用`lmdeploy`作为推理引擎，与`vllm`相比额外支持Windows平台原生推理加速。
-- 新增国产算力平台`昇腾/npu`、`平头哥/ppu`、`沐曦/maca`的适配支持，用户可在对应平台上使用`pipeline`与`vlm`模型，并使用`vllm`/`lmdeploy`引擎加速vlm模型推理，具体使用方式请参考[其他加速卡适配](https://opendatalab.github.io/MinerU/zh/usage/)。
+- 新增国产算力平台`昇腾/npu`、`平头哥/ppu`、`沐曦/maca`的适配支持，用户可在对应平台上使用`pipeline`与`vlm`模型，并使用`vllm`/`lmdeploy`引擎加速vlm模型推理，具体使用方式请参考[其他加速卡适配](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/zh/usage/)。
   - 国产平台适配不易，我们已尽量确保适配的完整性和稳定性，但仍可能存在一些稳定性/兼容问题与精度对齐问题，请大家根据适配文档页面内红绿灯情况自行选择合适的环境与场景进行使用。
-  - 如在使用国产化平台适配方案的过程中遇到任何文档未提及的问题，为便于其他用户查找解决方案，请在discussions的[指定帖子](https://github.com/opendatalab/MinerU/discussions/4064)中进行反馈。
+  - 如在使用国产化平台适配方案的过程中遇到任何文档未提及的问题，为便于其他用户查找解决方案，请在discussions的[指定帖子](https://github.com/Kumiko-kmk/Copilotix/discussions/4064)中进行反馈。
 
 ### 2.6.4 (2025/11/04)
 
-- 为pdf渲染图片增加超时配置，默认为300秒，可通过环境变量`MINERU_PDF_RENDER_TIMEOUT`进行配置，防止部分异常pdf文件导致渲染过程长时间阻塞。
-- 为onnx模型增加cpu线程数配置选项，默认为系统cpu核心数，可通过环境变量`MINERU_INTRA_OP_NUM_THREADS`和`MINERU_INTER_OP_NUM_THREADS`进行配置，以减少高并发场景下的对cpu资源的抢占冲突。
+- 为pdf渲染图片增加超时配置，默认为300秒，可通过环境变量`COPILOTIX_PDF_RENDER_TIMEOUT`进行配置，防止部分异常pdf文件导致渲染过程长时间阻塞。
+- 为onnx模型增加cpu线程数配置选项，默认为系统cpu核心数，可通过环境变量`COPILOTIX_INTRA_OP_NUM_THREADS`和`COPILOTIX_INTER_OP_NUM_THREADS`进行配置，以减少高并发场景下的对cpu资源的抢占冲突。
 
 ### 2.6.3 (2025/10/31)
 
-- 增加新后端`vlm-mlx-engine`支持，在Apple Silicon设备上支持使用`MLX`加速`MinerU2.5`模型推理，相比`vlm-transformers`后端，`vlm-mlx-engine`后端速度提升100%~200%。
+- 增加新后端`vlm-mlx-engine`支持，在Apple Silicon设备上支持使用`MLX`加速`Copilotix2.5`模型推理，相比`vlm-transformers`后端，`vlm-mlx-engine`后端速度提升100%~200%。
 - bug修复:  #3849  #3859
 
 ### 2.6.2 (2025/10/24)
 
 **`pipline`后端优化**
 
-- 增加对中文公式的实验性支持，可通过配置环境变量`export MINERU_FORMULA_CH_SUPPORT=1`开启。该功能可能会导致MFR速率略微下降、部分长公式识别失败等问题，建议仅在需要解析中文公式的场景下开启。如需关闭该功能，可将环境变量设置为`0`。
+- 增加对中文公式的实验性支持，可通过配置环境变量`export COPILOTIX_FORMULA_CH_SUPPORT=1`开启。该功能可能会导致MFR速率略微下降、部分长公式识别失败等问题，建议仅在需要解析中文公式的场景下开启。如需关闭该功能，可将环境变量设置为`0`。
 - `OCR`速度大幅提升200%~300%，感谢 [@cjsdurj](https://github.com/cjsdurj) 提供的优化方案
 - `OCR`模型优化拉丁文识别的准度和广度，并更新西里尔文(cyrillic)、阿拉伯文(arabic)、天城文(devanagari)、泰卢固语(te)、泰米尔语(ta)语系至`ppocr-v5`版本，精度相比上代模型提升40%以上
 
@@ -93,7 +93,7 @@
 **通用优化**
 
 - 跨页表格合并效果优化，新增跨页续表合并支持，提升在多列合并场景下的表格合并效果
-- 为表格合并功能增加环境变量配置选项`MINERU_TABLE_MERGE_ENABLE`，表格合并功能默认开启，可通过设置该变量为`0`来关闭表格合并功能
+- 为表格合并功能增加环境变量配置选项`COPILOTIX_TABLE_MERGE_ENABLE`，表格合并功能默认开启，可通过设置该变量为`0`来关闭表格合并功能
 
 ---
 
@@ -101,21 +101,21 @@
 
 ### 2.5.4 (2025/09/26)
 
-- 🎉🎉 MinerU2.5[技术报告](https://arxiv.org/abs/2509.22186)现已发布，欢迎阅读全面了解其模型架构、训练策略、数据工程和评测结果。
+- 🎉🎉 Copilotix2.5[技术报告](https://arxiv.org/abs/2509.22186)现已发布，欢迎阅读全面了解其模型架构、训练策略、数据工程和评测结果。
 - 修复部分`pdf`文件被识别成`ai`文件导致无法解析的问题
 
 ### 2.5.3 (2025/09/20)
 
-- 依赖版本范围调整，使得Turing及更早架构显卡可以使用vLLM加速推理MinerU2.5模型。
+- 依赖版本范围调整，使得Turing及更早架构显卡可以使用vLLM加速推理Copilotix2.5模型。
 - `pipeline`后端对torch 2.8.0的一些兼容性修复。
 - 降低vLLM异步后端默认的并发数，降低服务端压力以避免高压导致的链接关闭问题。
-- 更多兼容性相关内容详见[公告](https://github.com/opendatalab/MinerU/discussions/3547)
+- 更多兼容性相关内容详见[公告](https://github.com/Kumiko-kmk/Copilotix/discussions/3547)
 
 ### 2.5.2 (2025/09/19)
 
-我们正式发布 MinerU2.5，当前最强文档解析多模态大模型。仅凭 1.2B 参数，MinerU2.5 在 OmniDocBench 文档解析评测中，精度已全面超越 Gemini2.5-Pro、GPT-4o、Qwen2.5-VL-72B等顶级多模态大模型，并显著领先于主流文档解析专用模型（如 dots.ocr, MonkeyOCR, PP-StructureV3 等）。
+我们正式发布 Copilotix2.5，当前最强文档解析多模态大模型。仅凭 1.2B 参数，Copilotix2.5 在 OmniDocBench 文档解析评测中，精度已全面超越 Gemini2.5-Pro、GPT-4o、Qwen2.5-VL-72B等顶级多模态大模型，并显著领先于主流文档解析专用模型（如 dots.ocr, MonkeyOCR, PP-StructureV3 等）。
 
-模型已发布至[HuggingFace](https://huggingface.co/opendatalab/MinerU2.5-2509-1.2B)和[ModelScope](https://modelscope.cn/models/opendatalab/MinerU2.5-2509-1.2B)平台，欢迎大家下载使用！
+模型已发布至[HuggingFace](https://huggingface.co/opendatalab/Copilotix2.5-2509-1.2B)和[ModelScope](https://modelscope.cn/models/opendatalab/Copilotix2.5-2509-1.2B)平台，欢迎大家下载使用！
 
 **核心亮点**
 
@@ -132,10 +132,10 @@
 
 此外，伴随vlm 2.5的发布，我们对仓库做出一些调整：
 
-- vlm后端升级至2.5版本，支持MinerU2.5模型，不再兼容MinerU2.0-2505-0.9B模型，最后一个支持2.0模型的版本为mineru-2.2.2。
-- vlm推理相关代码已移至[mineru_vl_utils](https://github.com/opendatalab/mineru-vl-utils),降低与mineru主仓库的耦合度，便于后续独立迭代。
-- vlm加速推理框架从`sglang`切换至`vllm`,并实现对vllm生态的完全兼容，使得用户可以在任何支持vllm框架的平台上使用MinerU2.5模型并加速推理。
-- 由于vlm模型的重大升级，支持更多layout type，因此我们对解析的中间文件`middle.json`和结果文件`content_list.json`的结构做出一些调整，请参考[文档](https://opendatalab.github.io/MinerU/zh/reference/output_files/)了解详情。
+- vlm后端升级至2.5版本，支持Copilotix2.5模型，不再兼容Copilotix2.0-2505-0.9B模型，最后一个支持2.0模型的版本为copilotix-2.2.2。
+- vlm推理相关代码已移至[mineru_vl_utils](https://github.com/opendatalab/mineru-vl-utils),降低与copilotix主仓库的耦合度，便于后续独立迭代。
+- vlm加速推理框架从`sglang`切换至`vllm`,并实现对vllm生态的完全兼容，使得用户可以在任何支持vllm框架的平台上使用Copilotix2.5模型并加速推理。
+- 由于vlm模型的重大升级，支持更多layout type，因此我们对解析的中间文件`middle.json`和结果文件`content_list.json`的结构做出一些调整，请参考[文档](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/zh/reference/output_files/)了解详情。
 
 **其他仓库优化**
 
@@ -213,12 +213,12 @@
 
 **易用性更新**
 
-- 更新`compose.yaml`，便于用户直接启动`sglang-server`、`mineru-api`、`mineru-gradio`服务
-- 启用全新的[在线文档站点](https://opendatalab.github.io/MinerU/zh/)，简化readme，提供更好的文档体验
+- 更新`compose.yaml`，便于用户直接启动`sglang-server`、`copilotix-api`、`copilotix-gradio`服务
+- 启用全新的[在线文档站点](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/zh/)，简化readme，提供更好的文档体验
 
 ### 2.1.0 (2025/07/05)
 
-这是 MinerU 2 的第一个大版本更新，包含了大量新功能和改进，包含众多性能优化、体验优化和bug修复，具体更新内容如下：
+这是 Copilotix 2 的第一个大版本更新，包含了大量新功能和改进，包含众多性能优化、体验优化和bug修复，具体更新内容如下：
 
 **性能优化**
 
@@ -228,10 +228,10 @@
 
 **体验优化**
 
-- 内置开箱即用的`fastapi服务`和`gradio webui`，详细使用方法请参考[文档](https://opendatalab.github.io/MinerU/zh/usage/quick_usage/#apiwebuisglang-clientserver)
+- 内置开箱即用的`fastapi服务`和`gradio webui`，详细使用方法请参考[文档](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/zh/usage/quick_usage/#apiwebuisglang-clientserver)
 - `sglang`适配`0.4.8`版本，大幅降低`vlm-sglang`后端的显存要求，最低可在`8G显存`(Turing及以后架构)的显卡上运行
 - 对所有命令增加`sglang`的参数透传，使得`sglang-engine`后端可以与`sglang-server`一致，接收`sglang`的所有参数
-- 支持基于配置文件的功能扩展，包含`自定义公式标识符`、`开启标题分级功能`、`自定义本地模型目录`，详细使用方法请参考[文档](https://opendatalab.github.io/MinerU/zh/usage/quick_usage/#mineru_1)
+- 支持基于配置文件的功能扩展，包含`自定义公式标识符`、`开启标题分级功能`、`自定义本地模型目录`，详细使用方法请参考[文档](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/zh/usage/quick_usage/#copilotix_1)
 
 **新特性**
 
@@ -258,13 +258,13 @@
 - 修复了当下载模型类型设置为`all`时，配置文件出现键值更新错误的问题
 - 修复了命令行模式下公式和表格功能开关不生效导致功能无法关闭的问题
 - 修复了`sglang-engine`模式下，0.4.7版本sglang的兼容性问题
-- 更新了sglang环境下部署完整版MinerU的Dockerfile和相关安装文档
+- 更新了sglang环境下部署完整版Copilotix的Dockerfile和相关安装文档
 
 ### 2.0.0 (2025/06/13)
 
 **全新架构**
 
-MinerU 2.0 在代码结构和交互方式上进行了深度重构，显著提升了系统的易用性、可维护性与扩展能力。
+Copilotix 2.0 在代码结构和交互方式上进行了深度重构，显著提升了系统的易用性、可维护性与扩展能力。
 
 - **去除第三方依赖限制**：彻底移除对 `pymupdf` 的依赖，推动项目向更开放、合规的开源方向迈进。
 - **开箱即用，配置便捷**：无需手动编辑 JSON 配置文件，绝大多数参数已支持命令行或 API 直接设置。
@@ -275,19 +275,19 @@ MinerU 2.0 在代码结构和交互方式上进行了深度重构，显著提升
 
 **全新模型**
 
-MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档解析模型，实现端到端的高速、高精度文档理解。
+Copilotix 2.0 集成了我们最新研发的小参数量、高性能多模态文档解析模型，实现端到端的高速、高精度文档理解。
 
 - **小模型，大能力**：模型参数不足 1B，却在解析精度上超越传统 72B 级别的视觉语言模型（VLM）。
 - **多功能合一**：单模型覆盖多语言识别、手写识别、版面分析、表格解析、公式识别、阅读顺序排序等核心任务。
 - **极致推理速度**：在单卡 NVIDIA 4090 上通过 `sglang` 加速，达到峰值吞吐量超过 10,000 token/s，轻松应对大规模文档处理需求。
-- **在线体验**：您可以在[MinerU.net](https://mineru.net/OpenSourceTools/Extractor)、[Hugging Face](https://huggingface.co/spaces/opendatalab/MinerU), 以及[ModelScope](https://www.modelscope.cn/studios/OpenDataLab/MinerU)体验我们的全新VLM模型
+- **在线体验**：您可以在[Copilotix.net](https://github.com/Kumiko-kmk/Copilotix)、[Hugging Face](https://huggingface.co/spaces/opendatalab/Copilotix), 以及[ModelScope](https://www.modelscope.cn/studios/OpenDataLab/Copilotix)体验我们的全新VLM模型
 
 **不兼容变更说明**
 
 为提升整体架构合理性与长期可维护性，本版本包含部分不兼容的变更：
 
-- Python 包名从 `magic-pdf` 更改为 `mineru`，命令行工具也由 `magic-pdf` 改为 `mineru`，请同步更新脚本与调用命令。
-- 出于对系统模块化设计与生态一致性的考虑，MinerU 2.0 已不再内置 LibreOffice 文档转换模块。如需处理 Office 文档，建议通过独立部署的 LibreOffice 服务先行转换为 PDF 格式，再进行后续解析操作。
+- Python 包名从 `magic-pdf` 更改为 `copilotix`，命令行工具也由 `magic-pdf` 改为 `copilotix`，请同步更新脚本与调用命令。
+- 出于对系统模块化设计与生态一致性的考虑，Copilotix 2.0 已不再内置 LibreOffice 文档转换模块。如需处理 Office 文档，建议通过独立部署的 LibreOffice 服务先行转换为 PDF 格式，再进行后续解析操作。
 
 ---
 
@@ -353,7 +353,7 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 修复了一些兼容问题
 
 - 支持python 3.13
-- 为部分过时的linux系统（如centos7）做出最后适配，并不再保证后续版本的继续支持，[安装说明](https://github.com/opendatalab/MinerU/issues/1004)
+- 为部分过时的linux系统（如centos7）做出最后适配，并不再保证后续版本的继续支持，[安装说明](https://github.com/Kumiko-kmk/Copilotix/issues/1004)
 
 ### 1.3.0 (2025/04/03)
 
@@ -411,7 +411,7 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 
 在这个版本我们重点提升了解析的精度与效率：
 
-**模型能力升级**（需重新执行 [模型下载流程](https://github.com/opendatalab/MinerU/docs/how_to_download_models_zh_cn.md) 以获得模型文件的增量更新）
+**模型能力升级**（需重新执行 [模型下载流程](https://github.com/Kumiko-kmk/Copilotix/docs/how_to_download_models_zh_cn.md) 以获得模型文件的增量更新）
 
 - 布局识别模型升级到最新的 `doclayout_yolo(2501)` 模型，提升了layout识别精度
 - 公式解析模型升级到最新的 `unimernet(2501)` 模型，提升了公式识别精度
@@ -422,7 +422,7 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 
 **解析效果优化**
 
-- 在线demo（[mineru.net](https://mineru.net/OpenSourceTools/Extractor) / [huggingface](https://huggingface.co/spaces/opendatalab/MinerU) / [modelscope](https://www.modelscope.cn/studios/OpenDataLab/MinerU)）上新增标题分级功能（测试版本，默认开启），支持对标题进行分级，提升文档结构化程度
+- 在线demo（[copilotix.net](https://github.com/Kumiko-kmk/Copilotix) / [huggingface](https://huggingface.co/spaces/opendatalab/Copilotix) / [modelscope](https://www.modelscope.cn/studios/OpenDataLab/Copilotix)）上新增标题分级功能（测试版本，默认开启），支持对标题进行分级，提升文档结构化程度
 
 ### 1.0.1 (2025/01/10)
 
@@ -431,12 +431,12 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 **全新API接口**
 
 - 对于数据侧API，我们引入了Dataset类，旨在提供一个强大而灵活的数据处理框架。该框架当前支持包括图像（.jpg及.png）、PDF、Word（.doc及.docx）、以及PowerPoint（.ppt及.pptx）在内的多种文档格式，确保了从简单到复杂的数据处理任务都能得到有效的支持。
-- 针对用户侧API，我们将MinerU的处理流程精心设计为一系列可组合的Stage阶段。每个Stage代表了一个特定的处理步骤，用户可以根据自身需求自由地定义新的Stage，并通过创造性地组合这些阶段来定制专属的数据处理流程。
+- 针对用户侧API，我们将Copilotix的处理流程精心设计为一系列可组合的Stage阶段。每个Stage代表了一个特定的处理步骤，用户可以根据自身需求自由地定义新的Stage，并通过创造性地组合这些阶段来定制专属的数据处理流程。
 
 **更广泛的兼容性适配**
 
 - 通过优化依赖环境和配置项，确保在ARM架构的Linux系统上能够稳定高效运行。
-- 深度适配华为昇腾NPU加速，积极响应信创要求，提供自主可控的高性能计算能力，助力人工智能应用平台的国产化应用与发展。 [NPU加速教程](https://github.com/opendatalab/MinerU/docs/README_Ascend_NPU_Acceleration_zh_CN.md)
+- 深度适配华为昇腾NPU加速，积极响应信创要求，提供自主可控的高性能计算能力，助力人工智能应用平台的国产化应用与发展。 [NPU加速教程](https://github.com/Kumiko-kmk/Copilotix/docs/README_Ascend_NPU_Acceleration_zh_CN.md)
 
 **自动语言识别**
 
@@ -475,11 +475,11 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 - 集成 [PDF-Extract-Kit 1.0](https://github.com/opendatalab/PDF-Extract-Kit)
   - 加入自研的 `doclayout_yolo` 模型，在相近解析效果情况下比原方案提速10倍以上，可通过配置文件与 `layoutlmv3` 自由切换
   - 公式解析升级至 `unimernet 0.2.1`，在提升公式解析准确率的同时，大幅降低显存需求
-  - 因 `PDF-Extract-Kit 1.0` 更换仓库，需要重新下载模型，步骤详见 [如何下载模型](https://github.com/opendatalab/MinerU/docs/how_to_download_models_zh_cn.md)
+  - 因 `PDF-Extract-Kit 1.0` 更换仓库，需要重新下载模型，步骤详见 [如何下载模型](https://github.com/Kumiko-kmk/Copilotix/docs/how_to_download_models_zh_cn.md)
 
 ### 0.8.1 (2024/09/27)
 
-修复了一些bug，同时提供了[在线demo](https://opendatalab.com/OpenSourceTools/Extractor/PDF/)的[本地化部署版本](https://github.com/opendatalab/MinerU/projects/web_demo/README_zh-CN.md)和[前端界面](https://github.com/opendatalab/MinerU/projects/web/README_zh-CN.md)
+修复了一些bug，同时提供了[在线demo](https://opendatalab.com/OpenSourceTools/Extractor/PDF/)的[本地化部署版本](https://github.com/Kumiko-kmk/Copilotix/projects/web_demo/README_zh-CN.md)和[前端界面](https://github.com/Kumiko-kmk/Copilotix/projects/web/README_zh-CN.md)
 
 ### 0.8.0 (2024/09/09)
 
@@ -499,4 +499,4 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 
 ### 首次开源 (2024/07/05)
 
-MinerU项目首次开源发布
+Copilotix项目首次开源发布

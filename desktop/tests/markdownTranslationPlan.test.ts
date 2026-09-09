@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { TranslationBatchCommit } from '@core/types'
-import type { MinerUTask } from '@shared/types'
+import type { CopilotixTask } from '@shared/types'
 import { flattenSegments, TRANSLATION_PIPELINE_VERSION, type TableTranslationRequest } from '@shared/translationPlanProtocol'
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
@@ -20,7 +20,7 @@ interface Fixture {
   outputDir: string
   database: V2Database
   repository: V2TaskRepositoryCompat
-  task: MinerUTask
+  task: CopilotixTask
   jobId: string
 }
 
@@ -29,17 +29,17 @@ afterEach(async () => {
 })
 
 async function createFixture(markdown: string): Promise<Fixture> {
-  const root = await mkdtemp(join(tmpdir(), 'mineru-translation-plan-'))
+  const root = await mkdtemp(join(tmpdir(), 'copilotix-translation-plan-'))
   roots.push(root)
   const outputDir = join(root, 'document')
   await mkdir(outputDir, { recursive: true })
   await writeFile(join(outputDir, 'full.md'), markdown, 'utf8')
   await writeFile(join(outputDir, 'block_list.json'), JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: [] }), 'utf8')
 
-  const database = new V2Database(join(root, 'mineru-desktop-v2.sqlite3'))
+  const database = new V2Database(join(root, 'copilotix-desktop-v2.sqlite3'))
   const repository = new V2TaskRepositoryCompat(database)
   const now = '2026-01-01T00:00:00.000Z'
-  const task: MinerUTask = {
+  const task: CopilotixTask = {
     id: TASK_ID,
     originalName: 'paper.pdf',
     title: null,
@@ -115,7 +115,7 @@ describe('utility markdown translation plan manager', () => {
       const descriptor = firstWork.items[0]!
       const request = await readJson(absolutePath(fixture.outputDir, descriptor.requestPath))
       const response = {
-        protocol: 'mineru-translation-plain-v1',
+        protocol: 'copilotix-translation-plain-v1',
         unitId: request.unitId,
         sourceHash: request.sourceHash,
         translations: request.segments.map((segment: { id: string }) => ({ id: segment.id, text: '你好' }))
@@ -152,7 +152,7 @@ describe('utility markdown translation plan manager', () => {
         expect.objectContaining({ tag: 'td', row: 1, column: 1, segments: [] })
       ]))
       const response = {
-        protocol: 'mineru-table-translation-v2',
+        protocol: 'copilotix-table-translation-v2',
         translations: flattenSegments(request).map((segment) => ({ id: segment.id, text: `译:${segment.text}` }))
       }
       await writeFile(absolutePath(fixture.outputDir, descriptor.responsePath), `${JSON.stringify(response)}\n`, 'utf8')
@@ -207,7 +207,7 @@ describe('utility markdown translation plan manager', () => {
       const descriptor = (await manager.listWork(fixture.task.id, fixture.jobId)).items[0]!
       const request = await readJson(absolutePath(fixture.outputDir, descriptor.requestPath))
       await writeFile(absolutePath(fixture.outputDir, descriptor.responsePath), `${JSON.stringify({
-        protocol: 'mineru-translation-plain-v1',
+        protocol: 'copilotix-translation-plain-v1',
         unitId: request.unitId,
         sourceHash: request.sourceHash,
         translations: request.segments.map((segment: { id: string }) => ({ id: segment.id, text: '你好' }))

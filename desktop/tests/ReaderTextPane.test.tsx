@@ -104,7 +104,7 @@ function TranslationArrivalHarness(): React.JSX.Element {
         layoutJson='{"needle":true}'
         jsonQuery=""
         onJsonQueryChange={() => undefined}
-        assetBaseUrl="mineru-asset://task/"
+        assetBaseUrl="copilotix-asset://task/"
         taskId="task"
         annotations={[]}
         onReplaceAnnotations={async () => undefined}
@@ -128,7 +128,7 @@ function Harness(): React.JSX.Element {
       layoutJson='{"needle":true}'
       jsonQuery=""
       onJsonQueryChange={() => undefined}
-      assetBaseUrl="mineru-asset://task/"
+      assetBaseUrl="copilotix-asset://task/"
       taskId="task"
       annotations={[]}
       onReplaceAnnotations={async () => undefined}

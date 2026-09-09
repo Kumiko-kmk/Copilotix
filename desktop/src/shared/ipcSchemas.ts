@@ -7,7 +7,7 @@ import type {
   DeleteTaskRequest,
   DocumentPayload,
   HealthResult,
-  MinerUTask,
+  CopilotixTask,
   ReaderAnnotation,
   ReplaceReaderAnnotationsRequest,
   SaveAsRequest,
@@ -127,7 +127,7 @@ export const healthResultSchema: z.ZodType<HealthResult> = z.object({
   traceId: z.string().max(512).optional()
 }).strict()
 
-export const minerUTaskSchema: z.ZodType<MinerUTask> = z.object({
+export const copilotixTaskSchema: z.ZodType<CopilotixTask> = z.object({
   id: boundedId,
   originalName: safeName,
   title: z.string().max(32_768).refine(noNul, '标题不能包含 NUL 字符').nullable(),
@@ -190,7 +190,7 @@ export const selectedPdfSchema: z.ZodType<SelectedPdf> = z.object({
   path: boundedPath,
   name: safeName,
   size: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-  duplicateTask: minerUTaskSchema.optional()
+  duplicateTask: copilotixTaskSchema.optional()
 }).strict()
 
 export const createTasksRequestSchema: z.ZodType<CreateTasksRequest> = z.object({
@@ -211,7 +211,7 @@ export const replaceReaderAnnotationsRequestSchema: z.ZodType<ReplaceReaderAnnot
 }).strict()
 
 export const documentPayloadSchema: z.ZodType<DocumentPayload> = z.object({
-  task: minerUTaskSchema,
+  task: copilotixTaskSchema,
   markdown: z.string().max(100_000_000),
   translatedMarkdown: z.string().max(100_000_000),
   translatedBlocks: z.array(translatedMarkdownBlockSchema).max(100_000).nullable(),

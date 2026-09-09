@@ -3,7 +3,7 @@ import { createWriteStream } from 'node:fs'
 import { access, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import archiver from 'archiver'
-import type { BlockMapping, DocumentPayload, MinerUTask, TranslatedMarkdownBlock } from '@shared/types'
+import type { BlockMapping, DocumentPayload, CopilotixTask, TranslatedMarkdownBlock } from '@shared/types'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
 import type { ArtifactKind } from '@core/types'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
@@ -33,8 +33,8 @@ export class ArtifactService {
       translatedBlocks,
       layoutJson,
       mappings,
-      pdfUrl: `mineru-asset://${task.id}/original.pdf`,
-      assetBaseUrl: `mineru-asset://${task.id}/`
+      pdfUrl: `copilotix-asset://${task.id}/original.pdf`,
+      assetBaseUrl: `copilotix-asset://${task.id}/`
     }
   }
 
@@ -57,7 +57,7 @@ export class ArtifactService {
     })
   }
 
-  async recordArtifact(task: MinerUTask, kind: ArtifactKind, path: string, jobId?: string): Promise<void> {
+  async recordArtifact(task: CopilotixTask, kind: ArtifactKind, path: string, jobId?: string): Promise<void> {
     if (!this.repository.recordArtifactRevision) return
     await this.repository.recordArtifactRevision(task.id, kind, path, await this.compute.hashFile(path), {}, jobId)
   }
@@ -83,7 +83,7 @@ export class ArtifactService {
     await this.atomicWriteFile(path, JSON.stringify(value, null, 2))
   }
 
-  async loadMappings(task: MinerUTask): Promise<BlockMapping[]> {
+  async loadMappings(task: CopilotixTask): Promise<BlockMapping[]> {
     const blockPath = join(task.outputDir, 'block_list.json')
     try {
       const value = JSON.parse(await readFile(blockPath, 'utf8')) as { version?: number; mappings?: BlockMapping[] }
@@ -100,7 +100,7 @@ export class ArtifactService {
     }
   }
 
-  async loadTranslatedBlocks(task: MinerUTask): Promise<TranslatedMarkdownBlock[] | null> {
+  async loadTranslatedBlocks(task: CopilotixTask): Promise<TranslatedMarkdownBlock[] | null> {
     try {
       const manifest = JSON.parse(await readFile(join(task.outputDir, 'translation.manifest.json'), 'utf8')) as unknown
       if (!isRecord(manifest) || manifest.version !== 2 || manifest.taskId !== task.id ||
@@ -144,7 +144,7 @@ export class ArtifactService {
     }
   }
 
-  private async requireTask(taskId: string): Promise<MinerUTask> {
+  private async requireTask(taskId: string): Promise<CopilotixTask> {
     const task = await this.repository.getTask(taskId)
     if (!task) throw new Error('任务不存在')
     return task

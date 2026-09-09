@@ -1,5 +1,5 @@
 ---
-document_id: mineru-desktop-rag-development-plan
+document_id: copilotix-desktop-rag-development-plan
 document_version: 4
 status: proposed
 baseline_ref: refactor/p0-p1-architecture
@@ -7,7 +7,7 @@ baseline_verified_at: 2026-09-04
 scope: RAG future design on the P0/P1 Desktop boundary
 ---
 
-# MinerU Desktop 论文知识库与 RAG 开发计划
+# Copilotix Desktop 论文知识库与 RAG 开发计划
 
 > 本文是未来切块、索引、向量检索和论文问答的规划入口。它不宣布任何 RAG 功能已经存在。当前架构事实见 `ARCHITECTURE_ZH.md`；若规划与源码、schema 或测试冲突，以当前实现为准，并把差异记为后续事项。
 
@@ -35,7 +35,7 @@ P0/P1 当前**尚未实现 RAG**。仓库中没有：
 | Runtime | Electron `44.1.1`、Node `24.19.0` |
 | 进程 | Renderer → Zod 验证的 Preload 领域 API → Main 协调/net/credential → Utility SQLite/compute |
 | RPC | versioned request/response/event envelope、UUID requestId、JSON、payload/envelope 各 ≤ `1 MiB`、timeout/cancel/restart |
-| 持久化 | `%APPDATA%\MinerU-Translation-v2\mineru-desktop-v2.sqlite3`；Utility 独占 SQLite 连接；STRICT migration ledger |
+| 持久化 | `%APPDATA%\Copilotix-Translation-v2\copilotix-desktop-v2.sqlite3`；Utility 独占 SQLite 连接；STRICT migration ledger |
 | 文档产物 | `<outputRoot>\documents-v2\{documentId}`；artifact 有 revision、hash、job 归属和受 PathPolicy 保护的相对路径 |
 | 作业 | durable parse/translate jobs，lease、heartbeat、checkpoint、retry、过期恢复 |
 | 文件 | 流式输入、专属 staging、fsync/atomic rename、成功后登记 artifact；结果 ZIP 排除内部目录 |

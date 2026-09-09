@@ -519,7 +519,7 @@ export class MarkdownTranslationPlanManager {
     const responsePath = `${prefix}/responses/${unitId}.json`
     const resultPath = `${prefix}/results/${unitId}.md`
     const request: PlainTranslationRequest = {
-      protocol: 'mineru-translation-plain-v1',
+      protocol: 'copilotix-translation-plain-v1',
       targetLanguage: 'zh-CN',
       unitId,
       sourceHash,
@@ -665,7 +665,7 @@ export class MarkdownTranslationPlanManager {
     const persisted = new Set(records.map((record) => record.blockId))
     for (const unit of state.units) {
       const plainWithoutSegments = unit.descriptor.kind === 'plain' &&
-        unit.request.protocol === 'mineru-translation-plain-v1' && unit.request.segments.length === 0
+        unit.request.protocol === 'copilotix-translation-plain-v1' && unit.request.segments.length === 0
       if (unit.status !== 'completed' || !plainWithoutSegments) continue
       if (unit.blockIds.every((blockId) => persisted.has(blockId))) continue
       await this.commitUnit(state, unit)
@@ -690,7 +690,7 @@ export class MarkdownTranslationPlanManager {
     const source = unit.sourceMarkdowns[0] ?? ''
     const tree = processor.parse(source) as any
     const bindings = collectPlainSegments(tree, unit.descriptor.unitId)
-    const expected = unit.descriptor.kind === 'plain' && unit.request.protocol === 'mineru-translation-plain-v1' ? unit.request.segments : []
+    const expected = unit.descriptor.kind === 'plain' && unit.request.protocol === 'copilotix-translation-plain-v1' ? unit.request.segments : []
     if (bindings.length !== expected.length || response.translations.length !== expected.length) throw new Error('普通翻译响应数量不匹配')
     const translations = new Map<string, string>()
     for (const segment of response.translations) {

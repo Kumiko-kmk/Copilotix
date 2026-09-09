@@ -41,13 +41,13 @@ export interface E2EWorkspace {
 }
 
 export async function createE2EWorkspace(): Promise<E2EWorkspace> {
-  const root = await mkdtemp(join(tmpdir(), 'mineru-e2e-'))
+  const root = await mkdtemp(join(tmpdir(), 'copilotix-e2e-'))
   const userData = join(root, 'user-data')
   await mkdir(userData, { recursive: true })
   return {
     root,
     userData,
-    env: { ...process.env, NODE_ENV: 'test', MINERU_E2E_USER_DATA: userData },
+    env: { ...process.env, NODE_ENV: 'test', COPILOTIX_E2E_USER_DATA: userData },
     cleanup: () => rm(root, { recursive: true, force: true })
   }
 }
@@ -138,7 +138,7 @@ export async function seedReaderTask(
     await writeFile(join(outputDir, 'layout.json'), JSON.stringify(layout), 'utf8')
   }
 
-  const database = new V2Database(join(workspace.userData, 'mineru-desktop-v2.sqlite3'))
+  const database = new V2Database(join(workspace.userData, 'copilotix-desktop-v2.sqlite3'))
   const repository = new V2TaskRepositoryCompat(database)
   const now = new Date().toISOString()
   const taskStatus = options?.missingPdf ? 'failed' : 'completed'

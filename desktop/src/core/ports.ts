@@ -7,7 +7,7 @@ import type {
   JsonObject,
   TranslationBlock
 } from './types'
-import type { MinerUTask } from '@shared/types'
+import type { CopilotixTask } from '@shared/types'
 import type {
   TranslationPlanFinalizeResult,
   TranslationPlanListResult,
@@ -81,7 +81,7 @@ export interface NormalizeParserOutputResult {
 export interface TaskComputePort {
   hashFile(path: string): Promise<string>
   importPdf(sourcePath: string, documentId: string): Promise<{ sha256: string; size: number }>
-  normalizeParserOutput(task: MinerUTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult>
+  normalizeParserOutput(task: CopilotixTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult>
   rebuildMappings(taskId: string, outputDir: string): Promise<void>
   openTranslationPlan(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanOpenResult>
   listTranslationWork(taskId: string, jobId: string, cursor?: number, limit?: number, signal?: AbortSignal): Promise<TranslationPlanListResult>
@@ -89,7 +89,7 @@ export interface TaskComputePort {
     taskId: string,
     jobId: string,
     unitId: string,
-    provider: MinerUTask['translationProvider'],
+    provider: CopilotixTask['translationProvider'],
     model: string,
     signal?: AbortSignal
   ): Promise<TranslationPlanMutationResult>
@@ -98,7 +98,7 @@ export interface TaskComputePort {
     jobId: string,
     unitId: string,
     responsePath?: string,
-    provider?: MinerUTask['translationProvider'] | null,
+    provider?: CopilotixTask['translationProvider'] | null,
     model?: string | null,
     signal?: AbortSignal
   ): Promise<TranslationPlanMutationResult>

@@ -1,8 +1,8 @@
-# MinerU Output Files Documentation
+# Copilotix Output Files Documentation
 
 ## Overview
 
-After executing the `mineru` command, in addition to the main markdown file output, multiple auxiliary files are generated for debugging, quality inspection, and further processing. These files include:
+After executing the `copilotix` command, in addition to the main markdown file output, multiple auxiliary files are generated for debugging, quality inspection, and further processing. These files include:
 
 The exact set of generated files depends on the backend and the input document type.
 
@@ -116,7 +116,7 @@ The following sections provide detailed descriptions of each file's purpose and 
 |------------|------|-------------|
 | `pdf_info` | `list[dict]` | Array of parsing results for each page |
 | `_backend` | `string` | Parsing mode: `pipeline`, `vlm`, or `office` |
-| `_version_name` | `string` | MinerU version number |
+| `_version_name` | `string` | Copilotix version number |
 
 ##### Page Information Structure (pdf_info)
 
@@ -335,7 +335,7 @@ Text levels are distinguished through the `text_level` field:
         {
         "type": "text",
         "text": "The response of flow duration curves to afforestation ",
-        "text_level": 1, 
+        "text_level": 1,
         "bbox": [
             62,
             480,
@@ -387,7 +387,7 @@ Text levels are distinguished through the `text_level` field:
             480,
             946,
             904
-        ],  
+        ],
         "page_idx": 5
     }
 ]
@@ -551,7 +551,7 @@ Structure is broadly similar to the pipeline backend, but with these differences
 - New `code` block type with `sub_type`(a code block always has at least a `code_body`, it may optionally have a `code_caption`):
     * `code`
     * `algorithm`
-- `discarded_blocks` may contain additional types: 
+- `discarded_blocks` may contain additional types:
     * `header`
     * `footer`
     * `page_number`
@@ -724,19 +724,19 @@ Example: discarded blocks output
 
 ## Summary
 
-The above files constitute MinerU's complete output results. Users can choose appropriate files for subsequent processing based on their needs:
+The above files constitute Copilotix's complete output results. Users can choose appropriate files for subsequent processing based on their needs:
 
-- **Model outputs** (Use raw outputs):  
+- **Model outputs** (Use raw outputs):
     * model.json
-  
+
 - **Debugging and verification** (Use visualization files):
     * layout.pdf
-    * span.pdf 
-  
+    * span.pdf
+
 - **Content extraction**: (Use simplified files):
     * *.md
     * content_list.json
     * content_list_v2.json
-  
+
 - **Secondary development**: (Use structured files):
     * middle.json

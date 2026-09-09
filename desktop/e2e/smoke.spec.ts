@@ -7,7 +7,7 @@ const desktopPackage = JSON.parse(readFileSync(join(__dirname, '../package.json'
   version: string
   build?: { productName?: string }
 }
-const releaseName = `${desktopPackage.build?.productName ?? 'MinerU'}-${desktopPackage.version}-win-x64`
+const releaseName = `${desktopPackage.build?.productName ?? 'Copilotix'}-${desktopPackage.version}-win-x64`
 
 test('opens the minimal new parse page', async () => {
   const workspace = await createE2EWorkspace()
@@ -64,14 +64,14 @@ test('supports the custom traffic-light window controls', async () => {
 test('opens the packaged Windows executable', async () => {
   test.skip(process.platform !== 'win32', 'Windows package only')
   const workspace = await createE2EWorkspace()
-  const executablePath = process.env.MINERU_E2E_EXECUTABLE_PATH
-    ?? join(__dirname, `../../release/${releaseName}/MinerU.exe`)
+  const executablePath = process.env.COPILOTIX_E2E_EXECUTABLE_PATH
+    ?? join(__dirname, `../../release/${releaseName}/Copilotix.exe`)
   const app = await launchElectron({ executablePath, args: [], env: workspace.env })
   try {
     const window = await app.firstWindow()
     const settingsResult = await window.evaluate(async () => {
       try {
-        return { ok: true, value: await window.mineru.getSettings() }
+        return { ok: true, value: await window.copilotix.getSettings() }
       } catch (error) {
         return { ok: false, error: String(error) }
       }

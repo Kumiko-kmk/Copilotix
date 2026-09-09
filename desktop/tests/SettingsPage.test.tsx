@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { AppSettings, MinerUDesktopApi } from '@shared/types'
+import type { AppSettings, CopilotixDesktopApi } from '@shared/types'
 import SettingsPage from '../src/renderer/pages/SettingsPage'
 
 afterEach(() => {
@@ -14,7 +14,7 @@ afterEach(() => {
 describe('SettingsPage credential editor', () => {
   it('shows only masked values and sends a replacement or clear mutation explicitly', async () => {
     const settings = configuredSettings()
-    const saveSettings = vi.fn(async (update: Parameters<MinerUDesktopApi['saveSettings']>[0]) => ({
+    const saveSettings = vi.fn(async (update: Parameters<CopilotixDesktopApi['saveSettings']>[0]) => ({
       settings: update.credentialMutations?.qwen?.action === 'clear'
         ? { ...settings, credentials: { ...settings.credentials, qwen: { state: 'missing' as const } } }
         : { ...settings, credentials: { ...settings.credentials, qwen: { state: 'valid' as const, maskedValue: 'new-****-key' } } },
@@ -24,8 +24,8 @@ describe('SettingsPage credential editor', () => {
       saveSettings,
       validateCredential: vi.fn(async () => ({ state: 'valid' as const })),
       chooseOutputDirectory: vi.fn(async () => null)
-    } as unknown as MinerUDesktopApi
-    Object.defineProperty(window, 'mineru', { configurable: true, value: api })
+    } as unknown as CopilotixDesktopApi
+    Object.defineProperty(window, 'copilotix', { configurable: true, value: api })
     const onSaved = vi.fn()
 
     render(<SettingsPage settings={settings} onSaved={onSaved} />)

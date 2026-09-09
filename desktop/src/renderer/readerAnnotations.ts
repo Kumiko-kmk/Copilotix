@@ -11,7 +11,7 @@ export interface ReaderTextSelection {
   rect: { top: number; right: number; bottom: number; left: number; width: number; height: number }
 }
 
-export type HighlightBucket = `mineru-highlight-${HighlightColor}` | 'mineru-underline'
+export type HighlightBucket = `copilotix-highlight-${HighlightColor}` | 'copilotix-underline'
 export type HighlightRanges = Map<HighlightBucket, Range[]>
 
 const highlightOwners = new Map<string, HighlightRanges>()
@@ -81,8 +81,8 @@ export function buildReaderHighlightRanges(article: HTMLElement, annotations: Re
     const range = rangeFromOffsets(block, resolved.startOffset, resolved.endOffset)
     if (!range) continue
     const bucket: HighlightBucket = annotation.kind === 'underline'
-      ? 'mineru-underline'
-      : `mineru-highlight-${annotation.color ?? 'yellow'}`
+      ? 'copilotix-underline'
+      : `copilotix-highlight-${annotation.color ?? 'yellow'}`
     const ranges = result.get(bucket) ?? []
     ranges.push(range)
     result.set(bucket, ranges)
@@ -120,12 +120,12 @@ function rebuildHighlightRegistry(): void {
     }
   }
   const names: HighlightBucket[] = [
-    'mineru-highlight-yellow',
-    'mineru-highlight-green',
-    'mineru-highlight-blue',
-    'mineru-highlight-pink',
-    'mineru-highlight-purple',
-    'mineru-underline'
+    'copilotix-highlight-yellow',
+    'copilotix-highlight-green',
+    'copilotix-highlight-blue',
+    'copilotix-highlight-pink',
+    'copilotix-highlight-purple',
+    'copilotix-underline'
   ]
   for (const name of names) {
     const ranges = buckets.get(name) ?? []

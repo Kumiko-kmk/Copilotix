@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { TaskRepository } from '../src/utility/core/persistence/database'
-import type { MinerUTask } from '@shared/types'
+import type { CopilotixTask } from '@shared/types'
 
 const directories: string[] = []
 
@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe('task schema migration', () => {
   it('creates the new fields in an empty database', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mineru-database-empty-'))
+    const directory = await mkdtemp(join(tmpdir(), 'copilotix-database-empty-'))
     directories.push(directory)
     const repository = new TaskRepository(join(directory, 'database.sqlite3'))
     repository.insertTask(task({ originalName: 'picked.pdf', title: null, name: 'picked.pdf' }))
@@ -23,7 +23,7 @@ describe('task schema migration', () => {
   })
 
   it('backfills originalName and leaves legacy task names unchanged', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mineru-database-legacy-'))
+    const directory = await mkdtemp(join(tmpdir(), 'copilotix-database-legacy-'))
     directories.push(directory)
     const path = join(directory, 'database.sqlite3')
     const database = new DatabaseSync(path)
@@ -73,7 +73,7 @@ describe('task schema migration', () => {
   })
 
   it('rolls back a failed migration and can be retried after the cause is removed', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mineru-database-rollback-'))
+    const directory = await mkdtemp(join(tmpdir(), 'copilotix-database-rollback-'))
     directories.push(directory)
     const path = join(directory, 'database.sqlite3')
     const database = new DatabaseSync(path)
@@ -127,7 +127,7 @@ describe('task schema migration', () => {
   })
 })
 
-function task(overrides: Partial<MinerUTask> = {}): MinerUTask {
+function task(overrides: Partial<CopilotixTask> = {}): CopilotixTask {
   return {
     id: 'task-1',
     originalName: 'paper.pdf',
