@@ -29,6 +29,7 @@ describe('SettingsPage credential editor', () => {
     const onSaved = vi.fn()
 
     render(<SettingsPage settings={settings} onSaved={onSaved} />)
+    expect(screen.getByText('MinerU 解析 Token')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /参数设置/u }))
     expect(screen.getByDisplayValue('qwen****wxyz')).toBeTruthy()
     expect(screen.queryByDisplayValue('qwen-secret-wxyz')).toBeNull()

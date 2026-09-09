@@ -24,7 +24,7 @@ type DraftCredentials = Record<CredentialName, DraftCredential>
 type CredentialErrors = Partial<Record<CredentialName, string>>
 
 const CREDENTIAL_LABELS: Record<CredentialName, string> = {
-  parser: 'Copilotix 解析 Token',
+  parser: 'MinerU 解析 Token',
   qwen: 'Qwen API Key',
   deepseek: 'DeepSeek API Key'
 }
