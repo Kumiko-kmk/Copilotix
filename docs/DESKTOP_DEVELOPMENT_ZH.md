@@ -2,7 +2,7 @@
 
 这是基于 Copilotix 开源项目的非官方个人 Electron 客户端。当前版本连接 Copilotix 官方 v4 API，在本地保存解析产物并生成简体中文 Markdown；它不在运行时启动仓库内的 Python `copilotix-api`，也不包含本地解析模型。
 
-完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`../ARCHITECTURE_ZH.md`](../ARCHITECTURE_ZH.md)；RAG 未来计划见 [`../RAG_DEVELOPMENT_PLAN_ZH.md`](../RAG_DEVELOPMENT_PLAN_ZH.md)。
+完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`ARCHITECTURE_ZH.md`](ARCHITECTURE_ZH.md)；RAG 未来计划见 [`RAG_DEVELOPMENT_PLAN_ZH.md`](RAG_DEVELOPMENT_PLAN_ZH.md)。
 
 ## 当前架构基线
 
@@ -30,7 +30,7 @@ Main 不持有 SQLite 连接；Utility 使用 `node:sqlite`、WAL 和 STRICT mig
 
 ## 开发
 
-需要 Windows x64、Node `24.19.0`、pnpm `11.19.0`，以及 Parser API Token（[Parser API 管理](https://mineru.net/apiManage)）。
+需要 Windows x64、Node `24.19.0`、pnpm `11.19.0`，以及 Parser API Token。
 
 ```powershell
 pnpm install
@@ -76,7 +76,7 @@ Copilotix.exe --copilotix-packaged-smoke
 
 当前提供 PDF 导入、官方解析、Markdown/表格翻译、原文/译文/布局阅读、PDF 与 block mapping 联动、荧光笔/下划线标注和另存结果。`ReaderChatSelection` 目前只是 Renderer 选区 payload；当前没有 chunk、index、embedding、vector、FTS、reranker、retrieval 或 chat backend，不要把“添加到对话”当作已实现聊天。
 
-PDF 会上传到 Copilotix 官方预签名地址；待翻译文本会发送到所选翻译 Provider。Token 只发送到固定 `https://mineru.net` API；API Key 进入 Credential Manager，不写 SQLite、Renderer、日志或结果 ZIP。日志会遮蔽 Token、API Key、Authorization 和预签名 URL 查询参数，不记录论文正文。
+PDF 会上传到 Parser 服务返回的预签名地址；待翻译文本会发送到所选翻译 Provider。Token 只发送到代码中固定的 Parser API 来源；API Key 进入 Credential Manager，不写 SQLite、Renderer、日志或结果 ZIP。日志会遮蔽 Token、API Key、Authorization 和预签名 URL 查询参数，不记录论文正文。
 
 ## 协作与已知事项
 

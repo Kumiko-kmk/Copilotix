@@ -228,11 +228,11 @@ Utility-owned `MarkdownTranslationPlanManager` 读取受限的计划 descriptor�
 
 不得先登记数据库再发布文件，也不得在最终路径上原地拼接半成品。失败时保留可诊断的 staging（除非是临时导入回滚），旧的已发布 revision 仍可读。ArtifactService、translation plan writer、Utility normalize 和 result ZIP 都使用 PathPolicy；结果 ZIP 只包含允许的公开产物，不包含 `.translation`、Token、日志、数据库或内部 staging。
 
-## 9. 官方 API、Provider 与数据流
+## 9. Parser API、Provider 与数据流
 
 当前网络边界由 Main 持有：
 
-- 官方 Parser API 固定为 `https://mineru.net` 的 v4 路径；Token 只发送到固定 API 请求；预签名上传/下载不带 Token；
+- Parser API 使用 `desktop/src/shared/constants.ts` 中受控的固定来源与 v4 路径；Token 只发送到固定 API 请求；预签名上传/下载不带 Token；
 - Qwen/DeepSeek 使用显式 base URL/model 和 Credential Vault；Bing/TranSmart 是可变的网页 Provider，不能视作稳定官方协议；
 - provider 请求必须有 timeout、重试、状态/响应 schema、取消和安全日志；
 - provider fallback 不得跨 document/job 混写状态，最终结果必须记录 provider/model；

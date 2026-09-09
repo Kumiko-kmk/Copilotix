@@ -1,67 +1,44 @@
-*.tar
-*.tar.gz
-*.zip
+# Dependencies and environments
+node_modules/
 venv*/
 envs/
-slurm_logs/
+.venv/
 
-sync1.sh
-data_preprocess_pj1
-data-preparation1
-__pycache__
-*.log
-*.pyc
-.vscode
-debug/
-*.ipynb
-.idea
-
-# Python build artifacts
+# Python build and cache
+__pycache__/
+*.py[cod]
 *.egg-info/
+*.egg
 build/
 dist/
-*.egg
+.coverage
+.pytest_cache/
 
-# vscode history
-.history
-
-.DS_Store
-.env
-
-bad_words/
-bak/
-
-app/tests/*
-temp/
-tmp/
-tmp
-.vscode
-.vscode/
-ocr_demo
-.coveragerc
-/app/common/__init__.py
-/magic_pdf/config/__init__.py
-source.dev.env
-
-tmp
-
-projects/web/node_modules
-projects/web/dist
-
-projects/web_demo/web_demo/static/
-cli_debug/
-debug_utils/
-
-# sphinx docs
-_build/
-
-
-output/
-node_modules/
+# Desktop build, test, and release output
 desktop/out/
 desktop/dist/
 desktop/coverage/
 desktop/test-results/
 desktop/playwright-report/
-/release/
+release/
+.release-*/
+
+# Local output and temporary files
+output/
+temp/
+tmp/
+debug/
 *.log
+*.tar
+*.tar.gz
+*.zip
+
+# Editors and operating systems
+.idea/
+.vscode/
+.history/
+.DS_Store
+
+# Local configuration
+.env
+*.ipynb

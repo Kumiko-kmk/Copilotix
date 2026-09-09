@@ -6,13 +6,11 @@ on:
   push:
     branches:
       - "master"
-      - "dev"
     paths-ignore:
       - "cmds/**"
       - "**.md"
 jobs:
   cli-test:
-    if: github.repository == 'opendatalab/Copilotix'
     runs-on: ubuntu-latest
     timeout-minutes: 240
     strategy:
@@ -22,7 +20,7 @@ jobs:
       - name: PDF cli
         uses: actions/checkout@v6
         with:
-          ref: dev
+          ref: master
           fetch-depth: 2
 
       - name: install uv

@@ -33,9 +33,10 @@ Python 文档处理包名为 `copilotix`，命令入口包括 `copilotix`、`cop
 
 ## 文档入口
 
-- [桌面开发说明](desktop/README_zh-CN.md)
-- [架构基线](ARCHITECTURE_ZH.md)
-- [RAG 开发计划](RAG_DEVELOPMENT_PLAN_ZH.md)
+- [桌面开发说明](docs/DESKTOP_DEVELOPMENT_ZH.md)
+- [架构基线](docs/ARCHITECTURE_ZH.md)
+- [RAG 开发计划](docs/RAG_DEVELOPMENT_PLAN_ZH.md)
+- [安全策略](docs/SECURITY.md)
 - [English README](README.md)
 
 项目源码与问题跟踪：<https://github.com/Kumiko-kmk/Copilotix>

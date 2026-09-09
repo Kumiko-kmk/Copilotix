@@ -1,4 +1,3 @@
-# Copyright (c) Opendatalab. All rights reserved.
 import json
 import os
 from loguru import logger
@@ -23,7 +22,7 @@ def read_config():
 
 
 def get_s3_config(bucket_name: str):
-    """~/magic-pdf.json 读出来."""
+    """从用户目录中的 Copilotix 配置读取 S3 连接信息。"""
     config = read_config()
 
     bucket_info = config.get('bucket_info')

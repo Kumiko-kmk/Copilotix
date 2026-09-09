@@ -33,9 +33,10 @@ The Python document-processing package is exposed as `copilotix`, with the `copi
 
 ## Documentation
 
-- [Desktop development guide](desktop/README_zh-CN.md)
-- [Architecture baseline](ARCHITECTURE_ZH.md)
-- [RAG development plan](RAG_DEVELOPMENT_PLAN_ZH.md)
+- [Desktop development guide](docs/DESKTOP_DEVELOPMENT_ZH.md)
+- [Architecture baseline](docs/ARCHITECTURE_ZH.md)
+- [RAG development plan](docs/RAG_DEVELOPMENT_PLAN_ZH.md)
+- [Security policy](docs/SECURITY.md)
 - [Chinese README](README_zh-CN.md)
 
 Project source and issue tracking: <https://github.com/Kumiko-kmk/Copilotix>
