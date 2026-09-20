@@ -163,6 +163,15 @@ export class SqliteJobRepository implements JobRepositoryPort {
   }
 
   enqueue(input: JobEnqueueInput): Job {
+    return this.database.transaction(() => this.enqueueWithinTransaction(input))
+  }
+
+  /**
+   * Enqueue a job while the caller already owns the database transaction.
+   * This is intentionally public only for Utility domain services that must
+   * publish an artifact/revision and its durable job atomically.
+   */
+  enqueueWithinTransaction(input: JobEnqueueInput): Job {
     const id = validateIdentifier(input.id ?? randomUUID(), 'job id')
     const documentId = validateIdentifier(input.documentId, 'document id')
     const kind = validateKind(input.kind)
@@ -174,32 +183,91 @@ export class SqliteJobRepository implements JobRepositoryPort {
     const checkpoint = serializeJobJson(input.checkpoint ?? {}, 'checkpoint')
     const dependsOnJobId = input.dependsOnJobId == null ? null : validateIdentifier(input.dependsOnJobId, 'dependency job id')
 
-    return this.database.transaction(() => {
-      const existing = this.getUnsafe(id)
-      if (existing) {
-        if (existing.documentId !== documentId || existing.kind !== kind) {
-          throw new SqliteJobRepositoryError('JOB_ID_CONFLICT', 'Job ID is already used by another job')
-        }
-        return existing
+    const existing = this.getUnsafe(id)
+    if (existing) {
+      if (existing.documentId !== documentId || existing.kind !== kind) {
+        throw new SqliteJobRepositoryError('JOB_ID_CONFLICT', 'Job ID is already used by another job')
       }
-      try {
-        this.insertJob.run(
-          id, documentId, dependsOnJobId, kind, 'queued', 0, priority, 0, maxAttempts,
-          payload, checkpoint, availableAt, null, null, null, null, null, null, now, now
-        )
-      } catch (error) {
-        if (isConstraintError(error)) throw new SqliteJobRepositoryError('JOB_ACTIVE_EXISTS', 'An active job already exists for this document and kind')
-        throw new SqliteJobRepositoryError('JOB_ENQUEUE_FAILED', 'Job could not be queued', true)
-      }
-      this.appendEventUnsafe({
-        jobId: id,
-        fromState: null,
-        toState: 'queued',
-        detail: { kind },
-        createdAt: now
-      })
-      return this.getUnsafe(id)!
+      return existing
+    }
+    try {
+      this.insertJob.run(
+        id, documentId, dependsOnJobId, kind, 'queued', 0, priority, 0, maxAttempts,
+        payload, checkpoint, availableAt, null, null, null, null, null, null, now, now
+      )
+    } catch (error) {
+      if (isConstraintError(error)) throw new SqliteJobRepositoryError('JOB_ACTIVE_EXISTS', 'An active job already exists for this document and kind')
+      throw new SqliteJobRepositoryError('JOB_ENQUEUE_FAILED', 'Job could not be queued', true)
+    }
+    this.appendEventUnsafe({
+      jobId: id,
+      fromState: null,
+      toState: 'queued',
+      detail: { kind },
+      createdAt: now
     })
+    return this.getUnsafe(id)!
+  }
+
+  /**
+   * Supersede an active job as part of a higher-level Utility transaction.
+   * Queued and retry-wait jobs have no lease owner, so the normal runner
+   * cancellation contract cannot be used for them.  A running job is also
+   * invalidated: its next heartbeat/complete observes the terminal state and
+   * cannot claim success for an obsolete revision.
+   */
+  supersedeWithinTransaction(input: {
+    jobId: string
+    now: string
+    errorCode: string
+    errorMessage: string
+    detail?: JsonObject
+  }): Job {
+    const jobId = validateIdentifier(input.jobId, 'job id')
+    const now = validateTimestamp(input.now, 'supersession time')
+    const errorCode = sanitizeErrorCode(input.errorCode)
+    const errorMessage = sanitizeErrorMessage(input.errorMessage)
+    const current = this.requireJobUnsafe(jobId)
+    if (current.status === 'succeeded' || current.status === 'partial' || current.status === 'failed' || current.status === 'cancelled') return current
+    this.updateTransition.run(
+      'cancelled', current.progress, JSON.stringify(current.checkpoint), current.availableAt, null, null,
+      errorCode, errorMessage, current.startedAt ?? now, now, now, jobId
+    )
+    this.appendEventUnsafe({
+      jobId,
+      fromState: current.status,
+      toState: 'cancelled',
+      detail: sanitizeDetail(input.detail ?? {}, { errorCode, superseded: true }),
+      createdAt: now
+    })
+    return this.getUnsafe(jobId)!
+  }
+
+  /**
+   * Requeue a terminal job while the caller already owns the transaction.
+   * Deterministic lifecycle identities can therefore be retried in place
+   * without creating a second active row for the same document/kind.
+   */
+  requeueWithinTransaction(input: { jobId: string; now: string; detail?: JsonObject }): Job {
+    const jobId = validateIdentifier(input.jobId, 'job id')
+    const now = validateTimestamp(input.now, 'requeue time')
+    const current = this.requireJobUnsafe(jobId)
+    if (current.status !== 'succeeded' && current.status !== 'partial' && current.status !== 'failed' && current.status !== 'cancelled') {
+      return current
+    }
+    this.updateTransition.run(
+      'queued', current.progress, JSON.stringify(current.checkpoint), now, null, null,
+      null, null, null, null, now, jobId
+    )
+    this.updateManualAttempt.run(jobId)
+    this.appendEventUnsafe({
+      jobId,
+      fromState: current.status,
+      toState: 'queued',
+      detail: sanitizeDetail(input.detail ?? {}, { manual: true, deterministic: true, attempt: current.attempt + 1 }),
+      createdAt: now
+    })
+    return this.getUnsafe(jobId)!
   }
 
   get(id: string): Job | null {
@@ -509,7 +577,13 @@ function assertTransition(from: JobStatus | null, to: JobStatus, manual = false,
 }
 
 function validateKind(kind: JobKind): JobKind {
-  if (kind !== 'parse' && kind !== 'translate') throw new SqliteJobRepositoryError('JOB_INVALID_KIND', 'Job kind is not supported')
+  if (
+    kind !== 'parse' &&
+    kind !== 'translate' &&
+    kind !== 'rag-content-index' &&
+    kind !== 'rag-embed' &&
+    kind !== 'rag-delete'
+  ) throw new SqliteJobRepositoryError('JOB_INVALID_KIND', 'Job kind is not supported')
   return kind
 }
 

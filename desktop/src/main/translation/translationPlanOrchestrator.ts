@@ -15,7 +15,6 @@ import {
   translationPlanResponseEnvelopeSchema,
   validateTableTranslationResponse
 } from '@shared/translationPlanProtocol'
-import { FALLBACK_PROVIDER_ORDER } from '@shared/constants'
 import type { CredentialName, CopilotixTask, TranslationProviderId } from '@shared/types'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { ArtifactService } from '../artifactService'
@@ -41,6 +40,7 @@ export interface TranslationPlanOrchestratorOptions {
   task: CopilotixTask
   jobId: string
   providers: Map<TranslationProviderId, TranslationProvider>
+  providerOrder: readonly TranslationProviderId[]
   compute: TaskComputePort
   /** ArtifactService is accepted by structural typing; a small writer keeps tests lightweight. */
   artifacts?: TranslationPlanFileWriter | Pick<ArtifactService, 'atomicWriteFile'>
@@ -78,6 +78,7 @@ export class TranslationPlanOrchestrator {
   async run(): Promise<TranslationPlanFinalizeResult> {
     const { task, jobId, signal } = this.options
     throwIfAborted(signal)
+    if (this.options.providerOrder.length === 0) throw new Error('没有可用的翻译服务')
     const compute = requirePlanCompute(this.options.compute)
     const opened = translationPlanOpenResultSchema.parse(await compute.openTranslationPlan(task.id, jobId, signal))
     throwIfAborted(signal)
@@ -124,7 +125,7 @@ export class TranslationPlanOrchestrator {
     throwIfAborted(signal)
     const errors: string[] = []
     const request = lazyRequest(() => this.readRequest(descriptor))
-    for (const providerId of providerOrder(task.translationProvider)) {
+    for (const providerId of this.options.providerOrder) {
       throwIfAborted(signal)
       const provider = providers.get(providerId)
       if (!provider) continue
@@ -294,10 +295,6 @@ function requirePlanCompute(compute: TaskComputePort): PlanComputePort {
     throw new Error('翻译计划计算接口尚未初始化')
   }
   return compute as PlanComputePort
-}
-
-function providerOrder(preferred: TranslationProviderId): TranslationProviderId[] {
-  return [preferred, ...FALLBACK_PROVIDER_ORDER.filter((provider) => provider !== preferred)]
 }
 
 async function translateRequest(

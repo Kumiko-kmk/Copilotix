@@ -39,9 +39,9 @@ describe('SettingsService credential isolation', () => {
     expect(result.fieldErrors).toEqual({
       qwen: { code: 'CREDENTIAL_INVALID', message: '凭据验证失败' }
     })
-    expect(result.settings.credentials.parser).toMatchObject({ state: 'valid', maskedValue: 'pars****-new' })
+    expect(result.settings.credentials.parser).toMatchObject({ state: 'valid', maskedValue: 'pa****ew' })
     expect(result.settings.credentials.qwen).toMatchObject({ state: 'unknown', maskedValue: 'qw****ld' })
-    expect(result.settings.credentials.deepseek).toMatchObject({ state: 'valid', maskedValue: 'deep****-new' })
+    expect(result.settings.credentials.deepseek).toMatchObject({ state: 'valid', maskedValue: 'deeps****k-new' })
     expect(repository.saved).toHaveLength(1)
     expect(JSON.stringify(repository.saved[0])).not.toContain('parser-new')
     expect(JSON.stringify(repository.saved[0])).not.toContain('deepseek-new')
@@ -72,18 +72,82 @@ describe('SettingsService credential isolation', () => {
     expect(cleared.settings.credentials.qwen).toEqual({ state: 'missing' })
   })
 
-  it('keeps validation cache process-local and revalidates configured values after restart', async () => {
+  it('restores validated credentials across restart from a versioned vault receipt', async () => {
     const repository = new SettingsRepository()
     const vault = new MemoryVault({ 'parser-token': 'parser-secret' })
     const probe = { parser: async () => valid(true), provider: async () => valid(true) }
     const first = new SettingsService(repository, vault, 'C:\\output', probe)
     await first.validateCredential('parser')
-    await expect(first.get()).resolves.toMatchObject({ credentials: { parser: { state: 'valid', maskedValue: 'pars****cret' } } })
+    await expect(first.get()).resolves.toMatchObject({ credentials: { parser: { state: 'valid', maskedValue: 'parse****ecret' } } })
 
     const second = new SettingsService(repository, vault, 'C:\\output', probe)
-    await expect(second.get()).resolves.toMatchObject({ credentials: { parser: { state: 'unknown', maskedValue: 'pars****cret' } } })
-    await expect(second.validateCredential('parser')).resolves.toMatchObject({ state: 'valid' })
-    await expect(second.get()).resolves.toMatchObject({ credentials: { parser: { state: 'valid', maskedValue: 'pars****cret' } } })
+    await expect(second.get()).resolves.toMatchObject({ credentials: { parser: { state: 'valid', maskedValue: 'parse****ecret' } } })
+  })
+
+  it('persists a definitive validation failure but not raw credential material', async () => {
+    const repository = new SettingsRepository()
+    const vault = new MemoryVault({ 'deepseek-api-key': 'deepseek-secret' })
+    const first = new SettingsService(repository, vault, 'C:\\output', {
+      provider: async () => ({ ok: false, code: 'HTTP_401', message: '密钥无效' })
+    })
+
+    await expect(first.validateCredential('deepseek')).resolves.toMatchObject({ state: 'invalid', errorCode: 'CREDENTIAL_INVALID' })
+    const receipt = vault.values.get('deepseek-api-key-validation')!
+    expect(receipt).not.toContain('deepseek-secret')
+    await expect(new SettingsService(repository, vault, 'C:\\output').get()).resolves.toMatchObject({
+      credentials: { deepseek: { state: 'invalid', errorCode: 'CREDENTIAL_INVALID', maskedValue: 'deeps****ecret' } }
+    })
+  })
+
+  it('keeps provider endpoints and models on internal defaults', async () => {
+    const repository = new SettingsRepository()
+    const vault = new MemoryVault({ 'qwen-api-key': 'qwen-secret' })
+    const service = new SettingsService(repository, vault, 'C:\\output', {
+      provider: async () => valid(true)
+    })
+    await service.validateCredential('qwen')
+    await expect(new SettingsService(repository, vault, 'C:\\output').get()).resolves.toMatchObject({
+      credentials: { qwen: { state: 'valid' } }
+    })
+
+    const update = publicUpdate()
+    const changed = await service.save({
+      ...update,
+      qwenBaseUrl: 'https://untrusted.example/v1',
+      qwenModel: 'custom-qwen',
+      deepseekBaseUrl: 'https://untrusted.example/deepseek',
+      deepseekModel: 'custom-deepseek'
+    })
+    expect(changed.settings).toMatchObject({
+      qwenBaseUrl: DEFAULT_SETTINGS.qwenBaseUrl,
+      qwenModel: DEFAULT_SETTINGS.qwenModel,
+      deepseekBaseUrl: DEFAULT_SETTINGS.deepseekBaseUrl,
+      deepseekModel: DEFAULT_SETTINGS.deepseekModel,
+      credentials: { qwen: { state: 'valid' } }
+    })
+    expect(vault.values.has('qwen-api-key-validation')).toBe(true)
+  })
+
+  it('distinguishes stale proxy failures from invalid credentials and preserves configuration errors', async () => {
+    const repository = new SettingsRepository()
+    const vault = new MemoryVault({})
+    let failure: HealthResult = { ok: false, code: 'PROXY_AUTH_REQUIRED', message: '网络代理要求身份验证，请检查或关闭代理后重试' }
+    const service = new SettingsService(repository, vault, 'C:\\output', {
+      provider: async () => failure
+    })
+
+    await expect(service.validateCredential('qwen', 'candidate-key')).resolves.toEqual({
+      state: 'unknown',
+      errorCode: 'CREDENTIAL_VALIDATION_UNAVAILABLE',
+      message: '网络代理要求身份验证，请检查或关闭代理后重试'
+    })
+
+    failure = { ok: false, code: 'PROVIDER_CONFIGURATION_INVALID', message: 'qwen 服务地址或模型配置不可用（HTTP 400）' }
+    await expect(service.validateCredential('qwen', 'candidate-key')).resolves.toEqual({
+      state: 'invalid',
+      errorCode: 'PROVIDER_CONFIGURATION_INVALID',
+      message: 'qwen 服务地址或模型配置不可用（HTTP 400）'
+    })
   })
 
   it('reports vault write failures per field while saving other fields and public settings', async () => {
@@ -139,7 +203,8 @@ describe('SettingsService credential isolation', () => {
 
 describe('credential masking', () => {
   it.each([
-    ['abcdefghij', 'abcd****ghij'],
+    ['abcdefghijkl', 'abcde****hijkl'],
+    ['abcdefghij', 'ab****ij'],
     ['abcde', 'ab****de'],
     ['abcd', '****'],
     ['abc', '****']

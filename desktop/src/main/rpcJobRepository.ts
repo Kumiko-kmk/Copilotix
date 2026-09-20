@@ -4,6 +4,7 @@ import type {
   JobEnqueueInput,
   JobFailOrRetryInput,
   JobHeartbeatInput,
+  JobClaimRequest,
   JobListQuery,
   JobManualRetryInput,
   JobProgressCheckpointInput,
@@ -31,7 +32,7 @@ export class RpcJobRepository implements JobRepositoryPort {
     return this.supervisor.request('jobs:list', payload)
   }
 
-  async claimBatch(input: { now: string; leaseOwner: string; leaseExpiresAt: string; limit?: number; kind?: 'parse' | 'translate' }): Promise<Job[]> {
+  async claimBatch(input: JobClaimRequest): Promise<Job[]> {
     return this.supervisor.request('jobs:claim-batch', input)
   }
 

@@ -180,6 +180,199 @@ describe('temporary v2 task repository compatibility projection', () => {
     }
   })
 
+  it('publishes one canonical content revision/job for duplicate parsed bundles and supersedes obsolete content work', async () => {
+    const fixture = await createFixture()
+    try {
+      const parse = fixture.database.connection.prepare("SELECT id FROM jobs WHERE document_id=? AND kind='parse'").get(fixture.task.id) as { id: string }
+      fixture.database.connection.prepare("UPDATE jobs SET status='succeeded',progress=100,finished_at=?,updated_at=? WHERE id=?")
+        .run('2026-01-01T00:00:01.000Z', '2026-01-01T00:00:01.000Z', parse.id)
+      const outputDir = fixture.task.outputDir
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(outputDir, 'full.md'), checksum: 'content-hash-1', jobId: parse.id },
+        {
+          taskId: fixture.task.id,
+          kind: 'block_mappings',
+          path: join(outputDir, 'block_list.json'),
+          checksum: 'mapping-hash-1',
+          metadata: { mappingFingerprint: 'mapping-fingerprint-1', chunkerFingerprint: 'chunker-v1' },
+          jobId: parse.id
+        }
+      ])
+
+      const firstRevision = fixture.database.connection.prepare('SELECT * FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id) as {
+        content_revision_id: string
+        artifact_id: string
+        content_hash: string
+        mapping_fingerprint: string
+        chunker_fingerprint: string
+        state: string
+      }
+      expect(firstRevision).toMatchObject({
+        content_hash: 'content-hash-1',
+        mapping_fingerprint: 'mapping-fingerprint-1',
+        chunker_fingerprint: 'chunker-v1',
+        state: 'building'
+      })
+      expect(fixture.database.connection.prepare("SELECT id,status FROM jobs WHERE document_id=? AND kind='rag-content-index'").all(fixture.task.id))
+        .toEqual([expect.objectContaining({ id: expect.stringMatching(/^rag-content-job-/u), status: 'queued' })])
+
+      // A retry can use a different parse job and artifact IDs.  The three
+      // fingerprints, rather than artifact provenance, remain the identity.
+      fixture.database.connection.prepare(`
+        INSERT INTO jobs(
+          id,document_id,depends_on_job_id,kind,status,progress,priority,attempt,max_attempts,payload_json,checkpoint_json,
+          available_at,lease_owner,lease_expires_at,error_code,error_message,started_at,finished_at,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run('parse-retry-1', fixture.task.id, null, 'parse', 'succeeded', 100, 0, 1, 5, '{}', '{}',
+        '2026-01-01T00:00:02.000Z', null, null, null, null, '2026-01-01T00:00:02.000Z', '2026-01-01T00:00:02.000Z',
+        '2026-01-01T00:00:02.000Z', '2026-01-01T00:00:02.000Z')
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(outputDir, 'retry.md'), checksum: 'content-hash-1', jobId: 'parse-retry-1' },
+        {
+          taskId: fixture.task.id,
+          kind: 'block_mappings',
+          path: join(outputDir, 'retry-blocks.json'),
+          checksum: 'mapping-hash-1-retry',
+          metadata: { mappingFingerprint: 'mapping-fingerprint-1', chunkerFingerprint: 'chunker-v1' },
+          jobId: 'parse-retry-1'
+        }
+      ])
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ count: 1 })
+      expect(fixture.database.connection.prepare("SELECT COUNT(*) AS count FROM jobs WHERE document_id=? AND kind='rag-content-index'").get(fixture.task.id))
+        .toEqual({ count: 1 })
+      expect(fixture.database.connection.prepare('SELECT artifact_id FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ artifact_id: firstRevision.artifact_id })
+
+      // A deterministic row may already exist in a terminal state after a
+      // failed runner attempt. Republishing the same complete bundle must
+      // recover that row in place; otherwise local_state could be queued with
+      // no executable content job behind it.
+      const firstContentJob = fixture.database.connection.prepare(
+        "SELECT id FROM jobs WHERE document_id=? AND kind='rag-content-index'"
+      ).get(fixture.task.id) as { id: string }
+      fixture.database.connection.prepare(
+        "UPDATE jobs SET status='failed',error_code='RAG_CONTENT_FAILED',error_message='fixture',finished_at=?,updated_at=? WHERE id=?"
+      ).run('2026-01-01T00:00:02.500Z', '2026-01-01T00:00:02.500Z', firstContentJob.id)
+      // Leave an unrelated active row behind to prove supersession happens
+      // before the terminal deterministic target is requeued.
+      fixture.database.connection.prepare(`
+        INSERT INTO jobs(
+          id,document_id,depends_on_job_id,kind,status,progress,priority,attempt,max_attempts,payload_json,checkpoint_json,
+          available_at,lease_owner,lease_expires_at,error_code,error_message,started_at,finished_at,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run('obsolete-content-job', fixture.task.id, null, 'rag-content-index', 'queued', 0, -100, 0, 5, '{}', '{}',
+        '2026-01-01T00:00:02.500Z', null, null, null, null, null, null,
+        '2026-01-01T00:00:02.500Z', '2026-01-01T00:00:02.500Z')
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(outputDir, 'full.md'), checksum: 'content-hash-1', jobId: parse.id },
+        {
+          taskId: fixture.task.id,
+          kind: 'block_mappings',
+          path: join(outputDir, 'block_list.json'),
+          checksum: 'mapping-hash-1',
+          metadata: { mappingFingerprint: 'mapping-fingerprint-1', chunkerFingerprint: 'chunker-v1' },
+          jobId: parse.id
+        }
+      ])
+      expect(fixture.database.connection.prepare('SELECT status,attempt FROM jobs WHERE id=?').get(firstContentJob.id))
+        .toEqual({ status: 'queued', attempt: 1 })
+      expect(fixture.database.connection.prepare('SELECT status,error_code FROM jobs WHERE id=?').get('obsolete-content-job'))
+        .toEqual({ status: 'cancelled', error_code: 'RAG_CONTENT_SUPERSEDED' })
+
+      // A new immutable hash gets a new revision; the old queued work becomes
+      // terminal before the replacement job is inserted.
+      fixture.database.connection.prepare(`
+        INSERT INTO jobs(
+          id,document_id,depends_on_job_id,kind,status,progress,priority,attempt,max_attempts,payload_json,checkpoint_json,
+          available_at,lease_owner,lease_expires_at,error_code,error_message,started_at,finished_at,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run('parse-retry-2', fixture.task.id, null, 'parse', 'succeeded', 100, 0, 1, 5, '{}', '{}',
+        '2026-01-01T00:00:03.000Z', null, null, null, null, '2026-01-01T00:00:03.000Z', '2026-01-01T00:00:03.000Z',
+        '2026-01-01T00:00:03.000Z', '2026-01-01T00:00:03.000Z')
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(outputDir, 'new.md'), checksum: 'content-hash-2', jobId: 'parse-retry-2' },
+        {
+          taskId: fixture.task.id,
+          kind: 'block_mappings',
+          path: join(outputDir, 'new-blocks.json'),
+          checksum: 'mapping-hash-2',
+          metadata: { mappingFingerprint: 'mapping-fingerprint-2', chunkerFingerprint: 'chunker-v1' },
+          jobId: 'parse-retry-2'
+        }
+      ])
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ count: 2 })
+      expect(fixture.database.connection.prepare(
+        'SELECT state FROM rag_content_revisions WHERE document_id=? AND content_hash=?'
+      ).get(fixture.task.id, 'content-hash-1')).toEqual({ state: 'stale' })
+      const contentJobs = fixture.database.connection.prepare(
+        "SELECT status,error_code FROM jobs WHERE document_id=? AND kind='rag-content-index' ORDER BY id"
+      ).all(fixture.task.id) as Array<{ status: string; error_code: string | null }>
+      expect(contentJobs).toHaveLength(3)
+      expect(contentJobs.filter((job) => job.status === 'queued')).toHaveLength(1)
+      expect(contentJobs.filter((job) => job.status === 'cancelled')).toHaveLength(2)
+      expect(contentJobs.filter((job) => job.status === 'cancelled').every((job) => job.error_code === 'RAG_CONTENT_SUPERSEDED')).toBe(true)
+      expect(fixture.database.connection.prepare('SELECT local_state FROM rag_documents WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ local_state: 'queued' })
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('does not create a canonical content job from a translation-only artifact', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 1 })
+      const translatedJob = fixture.database.connection.prepare(
+        "SELECT id FROM jobs WHERE document_id=? AND kind='translate'"
+      ).get(fixture.task.id) as { id: string }
+      fixture.repository.recordArtifactRevision(
+        fixture.task.id,
+        'translated_markdown',
+        join(fixture.task.outputDir, 'full.zh-CN.md'),
+        'translation-hash',
+        {},
+        translatedJob.id
+      )
+      expect(fixture.database.connection.prepare("SELECT COUNT(*) AS count FROM jobs WHERE document_id=? AND kind='rag-content-index'").get(fixture.task.id))
+        .toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ count: 0 })
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('deletes all document-scoped RAG rows in the Utility transaction and leaves a succeeded tombstone', async () => {
+    const fixture = await createFixture()
+    try {
+      const parse = fixture.database.connection.prepare("SELECT id FROM jobs WHERE document_id=? AND kind='parse'").get(fixture.task.id) as { id: string }
+      fixture.database.connection.prepare("UPDATE jobs SET status='succeeded',progress=100,finished_at=?,updated_at=? WHERE id=?")
+        .run('2026-01-01T00:00:01.000Z', '2026-01-01T00:00:01.000Z', parse.id)
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(fixture.task.outputDir, 'full.md'), checksum: 'content-hash', jobId: parse.id },
+        { taskId: fixture.task.id, kind: 'block_mappings', path: join(fixture.task.outputDir, 'block_list.json'), checksum: 'mapping-hash', jobId: parse.id }
+      ])
+      // Include the normal parse -> translate dependency graph: document
+      // deletion must still cascade all workflow jobs and RAG jobs safely.
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 1 })
+      fixture.repository.deleteTask(fixture.task.id)
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM documents WHERE id=?').get(fixture.task.id)).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_documents WHERE document_id=?').get(fixture.task.id)).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id)).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_vector_indexes WHERE document_id=?').get(fixture.task.id)).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_chunks').get()).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_chunk_variants').get()).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_embeddings').get()).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT state FROM rag_deletion_tombstones WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ state: 'succeeded' })
+      expect(fixture.database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
   it('commits a bounded translation batch against its explicit translate job', async () => {
     const fixture = await createFixture()
     try {

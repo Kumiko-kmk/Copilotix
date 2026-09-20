@@ -6,7 +6,7 @@ import { buildBlockMappings } from '../src/core/blockMapping'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { ArtifactKind } from '../src/core/types'
-import { shouldDisableGpuSandbox } from '../src/shared/e2eLaunchPolicy'
+import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from '../src/shared/e2eLaunchPolicy'
 import {
   alignMarkdownBlocks,
   MARKDOWN_MAPPING_ALGORITHM_VERSION,
@@ -187,9 +187,10 @@ export async function seedReaderTask(
 }
 
 /**
- * All Electron launches share the same opt-in GPU workaround.  Keep the
- * production default untouched: only an explicit, exact `true` adds the
- * switch, and it is inserted before the development entry path.
+ * All Electron launches share the same test-only host policy. This Windows
+ * host rejects Chromium sandbox subprocess startup before renderer code runs,
+ * so trusted local E2E fixtures bypass that host boundary. Production keeps
+ * the BrowserWindow sandbox. Switches are inserted before the development entry.
  */
 export function launchElectron(options: {
   args?: string[]
@@ -199,6 +200,7 @@ export function launchElectron(options: {
   const env = { ...process.env, ...(options.env ?? {}) }
   const args = [...(options.args ?? [])]
   if (shouldDisableGpuSandbox(env)) args.unshift('--disable-gpu-sandbox')
+  if (shouldUseHostCompatibilityMode(env)) args.unshift('--no-sandbox')
   return electron.launch({ ...options, args, env })
 }
 

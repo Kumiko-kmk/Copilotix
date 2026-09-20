@@ -5,9 +5,22 @@ import type {
   DocumentId,
   Job,
   JsonObject,
+  RagChunk,
+  RagChunkInput,
+  RagCitationResolutionInput,
+  RagVectorEntry,
+  RagVectorSearchInput,
+  RagVectorSearchResult,
   TranslationBlock
 } from './types'
 import type { CopilotixTask } from '@shared/types'
+import type {
+  Citation,
+  LexicalSearchRequest,
+  LexicalSearchResult,
+  RagSearchRequest,
+  RagSearchResultPage
+} from '@shared/ragTypes'
 import type {
   TranslationPlanFinalizeResult,
   TranslationPlanListResult,
@@ -76,6 +89,7 @@ export interface ComputePort {
 export interface NormalizeParserOutputResult {
   normalized: true
   displayTitle: string | null
+  pageCount: number
 }
 
 export interface TaskComputePort {
@@ -121,4 +135,37 @@ export interface PathPolicyPort {
 export interface TranslationBlockRepositoryPort {
   upsert(block: TranslationBlock): void
   list(jobId: string): TranslationBlock[]
+}
+
+/** Builds deterministic, provenance-bearing chunks from a published artifact. */
+export interface ChunkerPort {
+  chunk(input: RagChunkInput, signal?: AbortSignal): Promise<readonly RagChunk[]>
+}
+
+/** Local lexical index contract. Implementations own persistence and deletes. */
+export interface LexicalIndexPort {
+  rebuild(input: {
+    documentId: DocumentId
+    contentRevisionId: string
+    chunks: readonly RagChunk[]
+  }, signal?: AbortSignal): Promise<void>
+  search(request: LexicalSearchRequest, signal?: AbortSignal): Promise<LexicalSearchResult>
+  delete(input: { documentId: DocumentId; contentRevisionId?: string }, signal?: AbortSignal): Promise<void>
+}
+
+/** Vector index contract; vectors remain Utility-internal Float32Array values. */
+export interface VectorStorePort {
+  upsert(input: readonly RagVectorEntry[], signal?: AbortSignal): Promise<void>
+  search(input: RagVectorSearchInput, signal?: AbortSignal): Promise<RagVectorSearchResult>
+  delete(input: { vectorIndexId: string; contentRevisionId?: string }, signal?: AbortSignal): Promise<void>
+}
+
+/** Combines bounded lexical/dense candidates while preserving result provenance. */
+export interface RetrieverPort {
+  retrieve(request: RagSearchRequest, signal?: AbortSignal): Promise<RagSearchResultPage>
+}
+
+/** Validates candidate provenance before exposing bounded Reader citations. */
+export interface CitationResolverPort {
+  resolve(input: RagCitationResolutionInput, signal?: AbortSignal): Promise<readonly Citation[]>
 }

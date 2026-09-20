@@ -36,10 +36,8 @@ export default function ReaderTextPane(props: {
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
 }): React.JSX.Element {
-  const [originalReady, setOriginalReady] = React.useState(false)
-  const [mountTranslated, setMountTranslated] = React.useState(false)
-  const [mountJson, setMountJson] = React.useState(false)
   const [highlightColor, setHighlightColor] = React.useState<HighlightColor>('yellow')
+  const scrollPositionsRef = React.useRef<Record<ReaderAnnotationView, number>>({ original: 0, translated: 0 })
   const originalAnnotations = React.useMemo(
     () => props.annotations.filter((annotation) => annotation.view === 'original'),
     [props.annotations]
@@ -69,24 +67,12 @@ export default function ReaderTextPane(props: {
     [props.onReplaceAnnotations]
   )
 
-  const markOriginalReady = React.useCallback(() => setOriginalReady(true), [])
-
-  React.useEffect(() => scheduleIdle(() => setMountJson(true)), [])
-  React.useEffect(() => {
-    if (!props.translatedReady) {
-      setMountTranslated(false)
-      return
-    }
-    if (props.tab === 'translated') {
-      setMountTranslated(true)
-      return
-    }
-    if (!originalReady) return
-    return scheduleIdle(() => setMountTranslated(true))
-  }, [originalReady, props.tab, props.translatedReady])
-
-  const shouldMountTranslated = props.translatedReady && (mountTranslated || props.tab === 'translated')
-  const shouldMountJson = mountJson || props.tab === 'json'
+  const rememberOriginalScroll = React.useCallback((scrollTop: number) => {
+    scrollPositionsRef.current.original = scrollTop
+  }, [])
+  const rememberTranslatedScroll = React.useCallback((scrollTop: number) => {
+    scrollPositionsRef.current.translated = scrollTop
+  }, [])
 
   return (
     <div className="text-pane">
@@ -114,7 +100,7 @@ export default function ReaderTextPane(props: {
         ) : null}
       </div>
       <ReaderPanel tab="original" activeTab={props.tab}>
-        <MarkdownPane
+        {props.tab === 'original' ? <MarkdownPane
           active={props.tab === 'original'}
           blocks={props.originalBlocks}
           assetBaseUrl={props.assetBaseUrl}
@@ -129,11 +115,12 @@ export default function ReaderTextPane(props: {
           onAddToChat={props.onAddToChat}
           selection={props.selection}
           onSelect={props.onSelect}
-          onRenderReady={markOriginalReady}
-        />
+          initialScrollTop={scrollPositionsRef.current.original}
+          onScrollTopChange={rememberOriginalScroll}
+        /> : null}
       </ReaderPanel>
       <ReaderPanel tab="translated" activeTab={props.tab}>
-        {shouldMountTranslated ? (
+        {props.translatedReady && props.tab === 'translated' ? (
           <MarkdownPane
             active={props.tab === 'translated'}
             blocks={props.translatedBlocks}
@@ -149,13 +136,15 @@ export default function ReaderTextPane(props: {
             onAddToChat={props.onAddToChat}
             selection={props.selection}
             onSelect={props.onSelect}
+            initialScrollTop={scrollPositionsRef.current.translated}
+            onScrollTopChange={rememberTranslatedScroll}
           />
         ) : props.translatedReady ? null : (
           <Empty className="translation-empty" description={translationLabel(props.taskStatus)} />
         )}
       </ReaderPanel>
       <ReaderPanel tab="json" activeTab={props.tab}>
-        {shouldMountJson ? <JsonPane json={props.layoutJson} query={props.jsonQuery} active={props.tab === 'json'} /> : null}
+        {props.tab === 'json' ? <JsonPane json={props.layoutJson} query={props.jsonQuery} active /> : null}
       </ReaderPanel>
     </div>
   )
@@ -176,19 +165,6 @@ function ReaderPanel(props: {
       {props.children}
     </div>
   )
-}
-
-function scheduleIdle(callback: () => void): () => void {
-  const idleWindow = window as Window & {
-    requestIdleCallback?: (handler: () => void, options?: { timeout: number }) => number
-    cancelIdleCallback?: (id: number) => void
-  }
-  if (typeof idleWindow.requestIdleCallback === 'function') {
-    const id = idleWindow.requestIdleCallback(callback, { timeout: 500 })
-    return () => idleWindow.cancelIdleCallback?.(id)
-  }
-  const id = globalThis.setTimeout(callback, 0)
-  return () => globalThis.clearTimeout(id)
 }
 
 function translationLabel(status: DocumentWorkflowStatus): string {

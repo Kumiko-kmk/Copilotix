@@ -19,8 +19,11 @@ desktop/out/
 desktop/dist/
 desktop/coverage/
 desktop/test-results/
+desktop/test-artifacts/
 desktop/playwright-report/
 release/
+release-latest/
+release-*/
 .release-*/
 
 # Local output and temporary files

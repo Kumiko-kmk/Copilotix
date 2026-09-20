@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { createTranslationProviders, probeOpenAiCompatibleCredential } from '@main/translation/providers'
 import { buildTableTranslationPlan } from '../src/utility/core/compute/tableTranslation'
@@ -15,6 +15,14 @@ const vault: CredentialVault = {
   has: async () => false
 }
 
+interface OpenAiRequestBody {
+  model?: string
+  max_tokens?: number
+  thinking?: { type: string }
+  messages: Array<{ role: string; content: string }>
+  translation_options?: { source_lang?: string; target_lang?: string }
+}
+
 function tableRequest(): TableTranslationRequest {
   return buildTableTranslationPlan([
     { sourceIndex: 0, markdown: 'Table 1. Results', mappingIds: [] },
@@ -24,9 +32,9 @@ function tableRequest(): TableTranslationRequest {
 
 describe('table provider transports', () => {
   it('validates a candidate key without writing it to the vault', async () => {
-    const calls: Array<{ headers?: HeadersInit; body?: string }> = []
-    const fetcher = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-      calls.push({ headers: init?.headers, body: String(init?.body) })
+    const calls: Array<{ url: string; headers?: HeadersInit; body?: string }> = []
+    const fetcher = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ url: String(input), headers: init?.headers, body: String(init?.body) })
       return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { status: 200 })
     }
     const settings = {
@@ -40,8 +48,28 @@ describe('table provider transports', () => {
     const result = await probeOpenAiCompatibleCredential('qwen', settings, 'candidate-key', fetcher)
 
     expect(result).toMatchObject({ ok: true })
+    expect(calls[0]?.url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions')
     expect(calls[0]?.headers).toMatchObject({ Authorization: 'Bearer candidate-key' })
-    expect(calls[0]?.body).toContain('"max_tokens":1')
+    expect(JSON.parse(calls[0]!.body!)).toEqual({
+      model: 'qwen-mt-plus',
+      messages: [{ role: 'user', content: 'Hello' }],
+      translation_options: { source_lang: 'English', target_lang: 'Chinese' }
+    })
+  })
+
+  it('validates DeepSeek credentials through the models endpoint without spending generation tokens', async () => {
+    let request: { url: string; init?: RequestInit } | undefined
+    const fetcher = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      request = { url: String(input), init }
+      return new Response(JSON.stringify({ data: [{ id: 'deepseek-flash' }] }), { status: 200 })
+    }
+
+    await expect(probeOpenAiCompatibleCredential('deepseek', DEFAULT_SETTINGS, 'candidate-key', fetcher))
+      .resolves.toMatchObject({ ok: true })
+    expect(request?.url).toBe('https://api.deepseek.com/models')
+    expect(request?.init?.method).toBe('GET')
+    expect(request?.init?.body).toBeUndefined()
+    expect(request?.init?.headers).toMatchObject({ Authorization: 'Bearer candidate-key', Accept: 'application/json' })
   })
 
   it('maps Qwen/DeepSeek authentication responses to a non-retryable validation error', async () => {
@@ -51,16 +79,16 @@ describe('table provider transports', () => {
   })
 
   it('sends the complete v2 JSON request to OpenAI-compatible providers', async () => {
-    const requestBodies: any[] = []
+    const requestBodies: OpenAiRequestBody[] = []
     const keyVault: CredentialVault = {
       ...vault,
       get: async (account) => account === 'qwen-api-key' ? 'fixture-key' : null,
       has: async (account) => account === 'qwen-api-key'
     }
     const fetcher = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-      const body = JSON.parse(String(init?.body))
+      const body = JSON.parse(String(init?.body)) as OpenAiRequestBody
       requestBodies.push(body)
-      const request = JSON.parse(body.messages[1].content) as TableTranslationRequest
+      const request = JSON.parse(body.messages[1]!.content) as TableTranslationRequest
       const content = JSON.stringify({
         protocol: request.protocol,
         translations: flattenSegments(request).map((segment) => ({ id: segment.id, text: `译:${segment.text}` }))
@@ -71,13 +99,66 @@ describe('table provider transports', () => {
       })
     }
     const request = tableRequest()
-    const provider = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+    const provider = createTranslationProviders({ ...DEFAULT_SETTINGS, qwenModel: 'qwen-plus' }, keyVault, fetcher).get('qwen')!
     const response = await provider.translateTable(request)
 
     expect(requestBodies).toHaveLength(1)
-    expect(requestBodies[0].messages[1].content).toContain('copilotix-table-translation-v2')
-    expect(requestBodies[0].messages[1].content).toContain('Table 1. Results')
+    expect(requestBodies[0]!.messages[1]!.content).toContain('copilotix-table-translation-v2')
+    expect(requestBodies[0]!.messages[1]!.content).toContain('Table 1. Results')
     expect(response.translations).toHaveLength(flattenSegments(request).length)
+  })
+
+  it('disables DeepSeek thinking mode so translated content is returned directly', async () => {
+    let body: OpenAiRequestBody | undefined
+    const usage = vi.fn()
+    const keyVault: CredentialVault = {
+      ...vault,
+      get: async (account) => account === 'deepseek-api-key' ? 'fixture-key' : null,
+      has: async (account) => account === 'deepseek-api-key'
+    }
+    const fetcher = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      body = JSON.parse(String(init?.body)) as OpenAiRequestBody
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '译文' } }],
+        usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 }
+      }), { status: 200 })
+    }
+    const provider = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher, usage).get('deepseek')!
+
+    await expect(provider.translate('source')).resolves.toBe('译文')
+    expect(body?.model).toBe('deepseek-flash')
+    expect(body?.thinking).toEqual({ type: 'disabled' })
+    expect(usage).toHaveBeenCalledWith('deepseek', { promptTokens: 12, completionTokens: 5, totalTokens: 17 })
+  })
+
+  it('uses the Qwen-MT transport for text and translates table segments independently', async () => {
+    const requestBodies: OpenAiRequestBody[] = []
+    const keyVault: CredentialVault = {
+      ...vault,
+      get: async (account) => account === 'qwen-api-key' ? 'fixture-key' : null,
+      has: async (account) => account === 'qwen-api-key'
+    }
+    const fetcher = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const body = JSON.parse(String(init?.body)) as OpenAiRequestBody
+      requestBodies.push(body)
+      return new Response(JSON.stringify({ choices: [{ message: { content: `译:${body.messages[0]!.content}` } }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+    const provider = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+
+    await expect(provider.translate('hello')).resolves.toBe('译:hello')
+    const request = tableRequest()
+    const response = await provider.translateTable(request)
+
+    expect(requestBodies.every((body) => body.messages.length === 1)).toBe(true)
+    expect(requestBodies.every((body) => body.translation_options?.target_lang === 'Chinese')).toBe(true)
+    expect(requestBodies).toHaveLength(1 + flattenSegments(request).length)
+    expect(response.translations).toEqual(flattenSegments(request).map((segment) => ({
+      id: segment.id,
+      text: `译:${segment.text}`
+    })))
   })
 
   it('uses one native TranSmart text_list request and maps its ordered array response', async () => {

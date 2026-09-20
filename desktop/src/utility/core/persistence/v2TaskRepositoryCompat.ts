@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
 import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
@@ -21,10 +21,12 @@ import {
   type ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
 import { DEFAULT_SETTINGS } from '@shared/constants'
+import { normalizeEnabledProviders, normalizeProviderOrder } from '@shared/providerPolicy'
 import type { ArtifactReference } from './taskRepositoryCompat'
 import { PathPolicy, resolveLexicalWithinRoot } from './pathPolicy'
 import { V2Database } from './v2Database'
 import { projectDocumentSummary } from './documentProjection'
+import { SqliteJobRepository } from './sqliteJobRepository'
 
 export interface CompatDocumentRow {
   id: string
@@ -39,6 +41,9 @@ export interface CompatDocumentRow {
 
 type V2JobKind = 'parse' | 'translate'
 type V2JobStatus = 'queued' | 'running' | 'retry-wait' | 'succeeded' | 'partial' | 'failed' | 'cancelled'
+
+/** Must match the Utility chunker identity used by the 03 index runner. */
+export const RAG_DEFAULT_CHUNKER_FINGERPRINT = 'structure-aware-v1:tokens-v1:utf16'
 
 export interface DocumentMetadataPatch {
   displayTitle?: string | null
@@ -86,6 +91,13 @@ export interface ArtifactRevisionInput {
   jobId?: string
 }
 
+type ArtifactBundleRow = {
+  id: string
+  created_by_job_id: string | null
+  content_hash: string
+  metadata_json: string
+}
+
 const TERMINAL: ReadonlySet<V2JobStatus> = new Set(['succeeded', 'partial', 'failed', 'cancelled'])
 const MAX_TRANSLATION_BATCH_ITEMS = 32
 const MAX_TRANSLATION_BATCH_BYTES = 768 * 1024
@@ -101,6 +113,7 @@ export class CompatDomainError extends Error {
 /** Temporary phase-2 compatibility adapter; remove when services use core ports directly in phase 3. */
 /** Utility-owned implementation. Main talks to this class only through RPC. */
 export class V2TaskRepositoryCompat {
+  private readonly jobRepository: SqliteJobRepository
   private readonly translationJobById: StatementSync
   private readonly translationBlockUpsert: StatementSync
   private readonly translationCacheUpsert: StatementSync
@@ -111,6 +124,7 @@ export class V2TaskRepositoryCompat {
     private readonly database: V2Database,
     private readonly pathPolicy: PathPolicyPort = new PathPolicy()
   ) {
+    this.jobRepository = new SqliteJobRepository(database)
     this.translationJobById = database.connection.prepare(
       "SELECT * FROM jobs WHERE id=? AND document_id=? AND kind='translate'"
     )
@@ -151,12 +165,17 @@ export class V2TaskRepositoryCompat {
   getSettings(outputRoot: string): AppSettings {
     const rows = this.database.connection.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>
     const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value)])) as Partial<AppSettings>
+    const translationProvider = stored.translationProvider ?? DEFAULT_SETTINGS.translationProvider
+    const translationProviderOrder = normalizeProviderOrder(stored.translationProviderOrder, translationProvider)
+    const enabledTranslationProviders = normalizeEnabledProviders(stored.enabledTranslationProviders, translationProviderOrder)
     return {
       ...DEFAULT_SETTINGS,
       outputRoot: stored.outputRoot ?? outputRoot,
-      formulaEnabled: stored.formulaEnabled ?? DEFAULT_SETTINGS.formulaEnabled,
-      tableEnabled: stored.tableEnabled ?? DEFAULT_SETTINGS.tableEnabled,
-      translationProvider: stored.translationProvider ?? DEFAULT_SETTINGS.translationProvider,
+      formulaEnabled: true,
+      tableEnabled: true,
+      translationProvider: enabledTranslationProviders[0]!,
+      translationProviderOrder,
+      enabledTranslationProviders,
       qwenBaseUrl: stored.qwenBaseUrl ?? DEFAULT_SETTINGS.qwenBaseUrl,
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
@@ -397,7 +416,46 @@ export class V2TaskRepositoryCompat {
 
   deleteTask(id: string): void {
     this.database.transaction(() => {
+      const now = new Date().toISOString()
+      // The tombstone is deliberately not FK-bound to documents.  Jobs for
+      // the document are deleted by the document cascade, so scheduling a
+      // rag-delete job here would create a false success (or delete the job
+      // before it can run).  Persist and complete cleanup in this boundary.
+      this.database.connection.prepare(`
+        INSERT INTO rag_deletion_tombstones(document_id,state,error_code,error_message,created_at,updated_at)
+        VALUES(?, 'queued', NULL, NULL, ?, ?)
+        ON CONFLICT(document_id) DO UPDATE SET state='queued', error_code=NULL,
+          error_message=NULL, updated_at=excluded.updated_at
+      `).run(id, now, now)
+      // Clear outgoing pointers before removing document-scoped rows.  The
+      // explicit deletes make this safe even for a partially-created database;
+      // normal FK cascades remove chunks, variants, embeddings, and jobs.
+      this.database.connection.prepare(`
+        UPDATE rag_documents SET
+          local_state='unindexed', local_progress=0, local_error_code=NULL,
+          local_error_message=NULL, local_error_retryable=NULL,
+          local_error_retry_after_ms=NULL, active_content_revision_id=NULL,
+          semantic_state='disabled', semantic_progress=0, semantic_error_code=NULL,
+          semantic_error_message=NULL, semantic_error_retryable=NULL,
+          semantic_error_retry_after_ms=NULL, semantic_content_revision_id=NULL,
+          active_vector_index_id=NULL, semantic_profile_id=?, updated_at=?
+        WHERE document_id=?
+      `).run(null, now, id)
+      this.database.connection.prepare('DELETE FROM rag_documents WHERE document_id=?').run(id)
+      this.database.connection.prepare('DELETE FROM rag_vector_indexes WHERE document_id=?').run(id)
+      this.database.connection.prepare('DELETE FROM rag_content_revisions WHERE document_id=?').run(id)
+      // The v4 jobs graph keeps a self-referencing dependency and artifacts
+      // retain their producing job with ON DELETE RESTRICT.  Remove ordinary
+      // document artifacts first, then detach the graph before the document
+      // cascade; otherwise SQLite correctly rejects deleting a parse job that
+      // is still referenced by translate or an artifact.
+      this.database.connection.prepare('DELETE FROM artifacts WHERE document_id=?').run(id)
+      this.database.connection.prepare('UPDATE jobs SET depends_on_job_id=NULL WHERE document_id=?').run(id)
       this.database.connection.prepare('DELETE FROM documents WHERE id = ?').run(id)
+      this.database.connection.prepare(`
+        UPDATE rag_deletion_tombstones SET state='succeeded', error_code=NULL,
+          error_message=NULL, updated_at=? WHERE document_id=?
+      `).run(now, id)
     })
   }
 
@@ -611,6 +669,15 @@ export class V2TaskRepositoryCompat {
   recordArtifactRevisions(revisions: readonly ArtifactRevisionInput[]): void {
     this.database.transaction(() => {
       for (const revision of revisions) this.recordArtifactRevisionUnsafe(revision)
+      // Only a newly published canonical bundle member may open the RAG
+      // lifecycle boundary.  A translation artifact must remain a replaceable
+      // variant and must not resurrect/trigger a canonical content job.
+      const documentIds = new Set(
+        revisions
+          .filter((revision) => revision.kind === 'parsed_markdown' || revision.kind === 'block_mappings')
+          .map((revision) => revision.taskId)
+      )
+      for (const documentId of documentIds) this.maybeQueueParsedContentIndexUnsafe(documentId)
     })
   }
 
@@ -639,6 +706,196 @@ export class V2TaskRepositoryCompat {
         id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at
       ) VALUES(?,?,?,?,?,?,?,?,?)
     `).run(randomUUID(), input.taskId, job.id, input.kind, latest.revision + 1, relativePath, input.checksum, JSON.stringify(input.metadata ?? {}), new Date().toISOString())
+  }
+
+  /**
+   * Publish the canonical-content boundary only after both parser artifacts
+   * exist.  The artifact ID is retained as provenance, while the identity is
+   * the document plus the three content fingerprints.  All work is performed
+   * inside recordArtifactRevisions()'s transaction, including superseding an
+   * obsolete active job and inserting the new durable job.
+   */
+  private maybeQueueParsedContentIndexUnsafe(documentId: string): void {
+    const parsed = this.database.connection.prepare(`
+      SELECT id,created_by_job_id,content_hash,metadata_json
+      FROM artifacts WHERE document_id=? AND kind='parsed_markdown'
+      ORDER BY revision DESC,id DESC LIMIT 1
+    `).get(documentId) as ArtifactBundleRow | undefined
+    const mappings = this.database.connection.prepare(`
+      SELECT id,created_by_job_id,content_hash,metadata_json
+      FROM artifacts WHERE document_id=? AND kind='block_mappings'
+      ORDER BY revision DESC,id DESC LIMIT 1
+    `).get(documentId) as ArtifactBundleRow | undefined
+    if (!parsed || !mappings) return
+    // A mapping produced by a different parse job may belong to an older
+    // markdown artifact.  Legacy mapping rebuilds have no job provenance and
+    // are allowed to pair with the current parsed artifact.
+    if (parsed.created_by_job_id && mappings.created_by_job_id && parsed.created_by_job_id !== mappings.created_by_job_id) return
+
+    const parsedMetadata = parseObject(parsed.metadata_json)
+    const mappingMetadata = parseObject(mappings.metadata_json)
+    const mappingFingerprint = metadataFingerprint(mappingMetadata, 'mappingFingerprint') ?? mappings.content_hash
+    const chunkerFingerprint = metadataFingerprint(parsedMetadata, 'chunkerFingerprint') ??
+      metadataFingerprint(mappingMetadata, 'chunkerFingerprint') ?? RAG_DEFAULT_CHUNKER_FINGERPRINT
+    const identity = JSON.stringify([documentId, parsed.content_hash, mappingFingerprint, chunkerFingerprint])
+    const digest = createHash('sha256').update(identity).digest('hex')
+    const contentRevisionId = `rag-content-revision-${digest}`
+    const contentJobId = `rag-content-job-${digest}`
+    const now = new Date().toISOString()
+
+    this.database.connection.prepare(
+      'INSERT INTO rag_documents(document_id,updated_at) VALUES(?,?) ON CONFLICT(document_id) DO NOTHING'
+    ).run(documentId, now)
+
+    this.database.connection.prepare(`
+      INSERT INTO rag_content_revisions(
+        content_revision_id,document_id,artifact_id,content_hash,mapping_fingerprint,
+        chunker_fingerprint,lexical_generation,state,error_code,error_message,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,'building',NULL,NULL,?,?)
+      ON CONFLICT(document_id,content_hash,mapping_fingerprint,chunker_fingerprint) DO NOTHING
+    `).run(contentRevisionId, documentId, parsed.id, parsed.content_hash, mappingFingerprint,
+      chunkerFingerprint, nextLexicalGeneration(this.database.connection, documentId), now, now)
+
+    const revision = this.database.connection.prepare(`
+      SELECT content_revision_id,state FROM rag_content_revisions
+      WHERE document_id=? AND content_hash=? AND mapping_fingerprint=? AND chunker_fingerprint=?
+    `).get(documentId, parsed.content_hash, mappingFingerprint, chunkerFingerprint) as {
+      content_revision_id: string
+      state: string
+    } | undefined
+    if (!revision) throw new Error('RAG_CONTENT_REVISION_NOT_CREATED')
+
+    // If a runner already completed this exact immutable revision, publishing
+    // the same parser bytes is a no-op.  A retry of an unimplemented queued
+    // job remains queued and is reused by its deterministic ID.
+    const knowledge = this.database.connection.prepare(`
+      SELECT local_state,active_content_revision_id,semantic_consent,semantic_state
+      FROM rag_documents WHERE document_id=?
+    `).get(documentId) as {
+      local_state: string
+      active_content_revision_id: string | null
+      semantic_consent: number
+      semantic_state: string
+    } | undefined
+    const existingJob = this.database.connection.prepare('SELECT id,kind,document_id,status FROM jobs WHERE id=?').get(contentJobId) as {
+      id: string
+      kind: string
+      document_id: string
+      status: V2JobStatus
+    } | undefined
+    if (existingJob && (existingJob.kind !== 'rag-content-index' || existingJob.document_id !== documentId)) {
+      throw new Error('RAG_CONTENT_JOB_ID_CONFLICT')
+    }
+    const sameActiveRevision = knowledge?.active_content_revision_id === revision.content_revision_id && knowledge.local_state === 'ready'
+    if (revision.state === 'ready' && sameActiveRevision) return
+
+    // The partial unique index permits only one active content job per
+    // document.  Supersede all obsolete queued/retry/running jobs before the
+    // new deterministic job is inserted; a runner cannot later mark them
+    // succeeded because they are already terminal.
+    const activeJobs = this.database.connection.prepare(`
+      SELECT id FROM jobs WHERE document_id=? AND kind='rag-content-index'
+        AND status NOT IN ('succeeded','partial','failed','cancelled') AND id<>?
+    `).all(documentId, contentJobId) as Array<{ id: string }>
+    for (const active of activeJobs) {
+      this.jobRepository.supersedeWithinTransaction({
+        jobId: active.id,
+        now,
+        errorCode: 'RAG_CONTENT_SUPERSEDED',
+        errorMessage: 'Canonical content was superseded by a newer parser artifact',
+        detail: { replacementRevisionId: revision.content_revision_id }
+      })
+    }
+
+    // A new canonical revision invalidates any in-flight semantic work for
+    // the previous revision.  Terminalising those rows here also prevents the
+    // jobs(document_id, kind) active uniqueness rule from blocking a later
+    // ensure-embed call for the new content.
+    if (!sameActiveRevision) {
+      // Retire the previously active canonical revision and every vector
+      // index derived from older content.  These rows remain for provenance,
+      // but no stale semantic result may be mistaken for the new revision.
+      // Do not stale the old active content revision while its replacement is
+      // merely queued/building.  It is the read-safe fallback if chunking
+      // fails; publication marks it stale only after the new revision is ready.
+      if (knowledge?.active_content_revision_id && knowledge.active_content_revision_id !== revision.content_revision_id && knowledge.local_state !== 'ready') {
+        this.database.connection.prepare(`
+          UPDATE rag_content_revisions SET state='stale',error_code=NULL,error_message=NULL,updated_at=?
+          WHERE content_revision_id=? AND state IN ('building','ready')
+        `).run(now, knowledge.active_content_revision_id)
+      }
+      this.database.connection.prepare(`
+        UPDATE rag_vector_indexes SET state='stale',error_code=NULL,error_message=NULL,updated_at=?
+        WHERE document_id=? AND content_revision_id<>? AND state IN ('queued','building','ready')
+      `).run(now, documentId, revision.content_revision_id)
+      const activeEmbeddingJobs = this.database.connection.prepare(`
+        SELECT id FROM jobs WHERE document_id=? AND kind='rag-embed'
+          AND status NOT IN ('succeeded','partial','failed','cancelled')
+      `).all(documentId) as Array<{ id: string }>
+      for (const active of activeEmbeddingJobs) {
+        this.jobRepository.supersedeWithinTransaction({
+          jobId: active.id,
+          now,
+          errorCode: 'RAG_EMBED_SUPERSEDED',
+          errorMessage: 'Embedding work was superseded by a newer canonical content revision',
+          detail: { replacementRevisionId: revision.content_revision_id }
+        })
+      }
+    }
+
+    // Keep the deterministic lifecycle identity reusable after a failed
+    // attempt. This must happen after obsolete active rows are terminalized:
+    // requeueing first would collide with jobs(document_id, kind)'s partial
+    // unique index. A succeeded job is recovered too when its revision is
+    // not ready: that state is inconsistent with successful indexing and must
+    // be made executable again rather than silently treated as complete.
+    if (existingJob && revision.state !== 'ready' && isTerminalJobStatus(existingJob.status)) {
+      this.jobRepository.requeueWithinTransaction({
+        jobId: existingJob.id,
+        now,
+        detail: { contentRevisionId: revision.content_revision_id, recovered: true }
+      })
+    }
+
+    if (!existingJob) {
+      this.jobRepository.enqueueWithinTransaction({
+        id: contentJobId,
+        documentId,
+        kind: 'rag-content-index',
+        priority: -100,
+        checkpoint: { phase: 'queued', contentRevisionId: revision.content_revision_id },
+        payload: {
+          contentRevisionId: revision.content_revision_id,
+          contentHash: parsed.content_hash,
+          mappingFingerprint,
+          chunkerFingerprint
+        },
+        now
+      })
+    }
+
+    this.database.connection.prepare(`
+      UPDATE rag_documents SET
+        local_state=CASE WHEN local_state='ready' AND active_content_revision_id IS NOT NULL THEN 'ready' ELSE 'queued' END,
+        local_progress=CASE WHEN local_state='ready' AND active_content_revision_id IS NOT NULL THEN 100 ELSE 0 END,
+        local_error_code=NULL,
+        local_error_message=NULL, local_error_retryable=NULL,
+        local_error_retry_after_ms=NULL,
+        -- Keep a previously ready revision addressable while the replacement
+        -- is building.  The runner swaps this pointer only after every chunk
+        -- and provenance row has passed validation; this is what makes a
+        -- failed replacement non-destructive to the user's last good index.
+        active_content_revision_id=CASE WHEN active_content_revision_id IS NULL THEN ? ELSE active_content_revision_id END,
+        semantic_state=CASE
+          WHEN semantic_consent=1 AND semantic_state NOT IN ('disabled','requires-consent','requires-credential') THEN 'stale'
+          ELSE semantic_state
+        END,
+        semantic_progress=0, semantic_error_code=NULL, semantic_error_message=NULL,
+        semantic_error_retryable=NULL, semantic_error_retry_after_ms=NULL,
+        semantic_content_revision_id=NULL, active_vector_index_id=NULL,
+        semantic_profile_id=NULL, updated_at=?
+      WHERE document_id=?
+    `).run(revision.content_revision_id, now, documentId)
   }
 
   private upsertTranslationBlockUnsafe(jobId: string, block: TranslationBatchBlock | TranslationBlockRecord): void {
@@ -917,6 +1174,20 @@ function parseObject(value: string): Record<string, unknown> {
   } catch {
     return {}
   }
+}
+
+function isTerminalJobStatus(status: V2JobStatus): boolean {
+  return status === 'succeeded' || status === 'partial' || status === 'failed' || status === 'cancelled'
+}
+
+function metadataFingerprint(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key]
+  return typeof value === 'string' && value.length > 0 && value.length <= 512 && !value.includes('\0') ? value : null
+}
+
+function nextLexicalGeneration(connection: V2Database['connection'], documentId: string): number {
+  const row = connection.prepare('SELECT COALESCE(MAX(lexical_generation), -1) AS generation FROM rag_content_revisions WHERE document_id=?').get(documentId) as { generation: number }
+  return row.generation + 1
 }
 
 function stringOrNull(value: unknown): string | null {

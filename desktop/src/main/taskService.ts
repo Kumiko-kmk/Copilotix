@@ -50,7 +50,11 @@ export class TaskService extends EventEmitter {
 
     options.scheduler?.on('job-changed', () => { void this.emitTasks().catch(() => undefined) })
     options.scheduler?.on('job-notification', (taskId: string, status: string, kind: string) => {
-      if ((kind === 'translate' || status === 'failed') && (status === 'succeeded' || status === 'partial' || status === 'failed')) {
+      // RAG jobs share the durable scheduler but have independent state and
+      // user-facing surfaces.  Only document workflow jobs may produce the
+      // legacy completion/failure notification consumed by the renderer.
+      const isDocumentJob = kind === 'parse' || kind === 'translate'
+      if (isDocumentJob && (kind === 'translate' || status === 'failed') && (status === 'succeeded' || status === 'partial' || status === 'failed')) {
         this.emit('notification', taskId, status === 'succeeded' ? 'completed' : status)
       }
     })

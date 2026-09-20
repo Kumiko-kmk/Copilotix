@@ -11,6 +11,7 @@ import type {
   SettingsSaveResult,
   SettingsUpdate
 } from '@shared/types'
+import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { CredentialAccount, CredentialVault } from './credentialVault'
 
@@ -23,6 +24,7 @@ export interface CredentialProbe {
 
 interface CachedValidation {
   fingerprint: string
+  configFingerprint: string
   state: Extract<CredentialValidation, 'valid' | 'invalid'>
   errorCode?: string
   message?: string
@@ -32,6 +34,12 @@ const ACCOUNT_BY_NAME: Record<CredentialName, CredentialAccount> = {
   parser: 'parser-token',
   qwen: 'qwen-api-key',
   deepseek: 'deepseek-api-key'
+}
+
+const VALIDATION_ACCOUNT_BY_NAME: Record<CredentialName, CredentialAccount> = {
+  parser: 'parser-token-validation',
+  qwen: 'qwen-api-key-validation',
+  deepseek: 'deepseek-api-key-validation'
 }
 
 const DEFAULT_PROBE: CredentialProbe = {
@@ -63,7 +71,9 @@ export class SettingsService {
     try {
       await Promise.all([
         this.vault.delete('qwen-api-key'),
-        this.vault.delete('deepseek-api-key')
+        this.vault.delete('deepseek-api-key'),
+        this.vault.delete('qwen-api-key-validation'),
+        this.vault.delete('deepseek-api-key-validation')
       ])
       this.validations.delete('qwen')
       this.validations.delete('deepseek')
@@ -76,18 +86,23 @@ export class SettingsService {
   }
 
   async get(): Promise<AppSettings> {
-    const settings = await this.repository.getSettings(this.defaultOutputRoot)
-    const values = await Promise.all([
+    const settings = internalProviderSettings(await this.repository.getSettings(this.defaultOutputRoot))
+    const [parserValue, qwenValue, deepseekValue] = await Promise.all([
       this.vault.get('parser-token'),
       this.vault.get('qwen-api-key'),
       this.vault.get('deepseek-api-key')
     ])
+    await Promise.all([
+      this.restoreValidation('parser', parserValue, settings),
+      this.restoreValidation('qwen', qwenValue, settings),
+      this.restoreValidation('deepseek', deepseekValue, settings)
+    ])
     return {
       ...settings,
       credentials: {
-        parser: this.statusFor('parser', values[0]),
-        qwen: this.statusFor('qwen', values[1]),
-        deepseek: this.statusFor('deepseek', values[2])
+        parser: this.statusFor('parser', parserValue, settings),
+        qwen: this.statusFor('qwen', qwenValue, settings),
+        deepseek: this.statusFor('deepseek', deepseekValue, settings)
       }
     }
   }
@@ -102,25 +117,31 @@ export class SettingsService {
         : { state: 'invalid', errorCode: 'CREDENTIAL_FORMAT_INVALID', message: '凭据不能为空或包含控制字符' }
     }
 
-    const settings = settingsOverride ?? await this.repository.getSettings(this.defaultOutputRoot)
+    const settings = internalProviderSettings(settingsOverride ?? await this.repository.getSettings(this.defaultOutputRoot))
     try {
       const result = name === 'parser'
         ? await this.probe.parser(normalized)
         : await this.probe.provider(name, normalized, settings)
       const validation = validationFromHealth(result)
       if (validatingStored && validation.state === 'valid') {
-        this.validations.set(name, {
+        const cached = {
           fingerprint: fingerprint(normalized),
+          configFingerprint: configFingerprint(name, settings),
           state: 'valid',
           message: validation.message
-        })
+        } satisfies CachedValidation
+        this.validations.set(name, cached)
+        await this.persistValidation(name, cached)
       } else if (validatingStored && validation.state === 'invalid') {
-        this.validations.set(name, {
+        const cached = {
           fingerprint: fingerprint(normalized),
+          configFingerprint: configFingerprint(name, settings),
           state: 'invalid',
           errorCode: validation.errorCode,
           message: validation.message
-        })
+        } satisfies CachedValidation
+        this.validations.set(name, cached)
+        await this.persistValidation(name, cached)
       }
       return validation
     } catch {
@@ -147,24 +168,41 @@ export class SettingsService {
     }
     this.validations.set(name, {
       fingerprint: fingerprint(value),
+      configFingerprint: configFingerprint(name, internalProviderSettings(await this.repository.getSettings(this.defaultOutputRoot))),
       state: 'invalid',
       errorCode,
       message
     })
+    await this.persistValidation(name, this.validations.get(name)!)
   }
 
   private async saveInternal(update: SettingsUpdate): Promise<SettingsSaveResult> {
-    const current = await this.repository.getSettings(this.defaultOutputRoot)
+    const current = internalProviderSettings(await this.repository.getSettings(this.defaultOutputRoot))
     const { credentialMutations: _credentialMutations, ...publicUpdate } = update
-    const candidateSettings = { ...current, ...publicUpdate }
+    const enabledTranslationProviders = publicUpdate.translationProviderOrder
+      .filter((provider) => publicUpdate.enabledTranslationProviders.includes(provider))
+    const candidateSettings = {
+      ...current,
+      ...publicUpdate,
+      qwenBaseUrl: DEFAULT_SETTINGS.qwenBaseUrl,
+      qwenModel: DEFAULT_SETTINGS.qwenModel,
+      deepseekBaseUrl: DEFAULT_SETTINGS.deepseekBaseUrl,
+      deepseekModel: DEFAULT_SETTINGS.deepseekModel,
+      formulaEnabled: true,
+      tableEnabled: true,
+      enabledTranslationProviders,
+      translationProvider: enabledTranslationProviders[0]!
+    }
     // A provider's validation is tied to its endpoint. Changing the endpoint
     // or model must return that credential to the pending state until it has
     // been checked against the new configuration.
-    if (publicUpdate.qwenBaseUrl !== current.qwenBaseUrl || publicUpdate.qwenModel !== current.qwenModel) {
+    if (candidateSettings.qwenBaseUrl !== current.qwenBaseUrl || candidateSettings.qwenModel !== current.qwenModel) {
       this.validations.delete('qwen')
+      await this.vault.delete(VALIDATION_ACCOUNT_BY_NAME.qwen)
     }
-    if (publicUpdate.deepseekBaseUrl !== current.deepseekBaseUrl || publicUpdate.deepseekModel !== current.deepseekModel) {
+    if (candidateSettings.deepseekBaseUrl !== current.deepseekBaseUrl || candidateSettings.deepseekModel !== current.deepseekModel) {
       this.validations.delete('deepseek')
+      await this.vault.delete(VALIDATION_ACCOUNT_BY_NAME.deepseek)
     }
     const fieldErrors: Partial<Record<CredentialName, CredentialFieldError>> = {}
     const committed: Array<{ name: CredentialName; mutation: CredentialMutation; value?: string }> = []
@@ -198,10 +236,18 @@ export class SettingsService {
       try {
         if (entry.mutation.action === 'clear') {
           await this.vault.delete(account)
+          await this.vault.delete(VALIDATION_ACCOUNT_BY_NAME[entry.name])
           this.validations.delete(entry.name)
         } else {
           await this.vault.set(account, entry.value!)
-          this.validations.set(entry.name, { fingerprint: fingerprint(entry.value!), state: 'valid', message: '凭据验证成功' })
+          const validation = {
+            fingerprint: fingerprint(entry.value!),
+            configFingerprint: configFingerprint(entry.name, candidateSettings),
+            state: 'valid' as const,
+            message: '凭据验证成功'
+          }
+          this.validations.set(entry.name, validation)
+          await this.persistValidation(entry.name, validation)
         }
       } catch {
         fieldErrors[entry.name] = {
@@ -211,15 +257,15 @@ export class SettingsService {
       }
     }
 
-    await this.repository.saveSettings({ ...current, ...publicUpdate })
+    await this.repository.saveSettings(candidateSettings)
     return { settings: await this.get(), fieldErrors }
   }
 
-  private statusFor(name: CredentialName, value: string | null): CredentialStatus {
+  private statusFor(name: CredentialName, value: string | null, settings: AppSettings): CredentialStatus {
     if (!value) return { state: 'missing' }
     const maskedValue = maskCredential(value)
     const cached = this.validations.get(name)
-    if (!cached || cached.fingerprint !== fingerprint(value)) return { state: 'unknown', maskedValue }
+    if (!cached || cached.fingerprint !== fingerprint(value) || cached.configFingerprint !== configFingerprint(name, settings)) return { state: 'unknown', maskedValue }
     return {
       state: cached.state,
       maskedValue,
@@ -227,13 +273,57 @@ export class SettingsService {
       ...(cached.message ? { message: cached.message } : {})
     }
   }
+
+  private async persistValidation(name: CredentialName, validation: CachedValidation): Promise<void> {
+    await this.vault.set(VALIDATION_ACCOUNT_BY_NAME[name], JSON.stringify({ version: 1, ...validation }))
+  }
+
+  private async restoreValidation(name: CredentialName, value: string | null, settings: AppSettings): Promise<void> {
+    if (!value) {
+      this.validations.delete(name)
+      return
+    }
+    const raw = await this.vault.get(VALIDATION_ACCOUNT_BY_NAME[name])
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw) as Partial<CachedValidation> & { version?: unknown }
+      if (parsed.version !== 1 || parsed.fingerprint !== fingerprint(value) ||
+        parsed.configFingerprint !== configFingerprint(name, settings) ||
+        (parsed.state !== 'valid' && parsed.state !== 'invalid')) return
+      this.validations.set(name, {
+        fingerprint: parsed.fingerprint,
+        configFingerprint: parsed.configFingerprint,
+        state: parsed.state,
+        ...(typeof parsed.errorCode === 'string' ? { errorCode: parsed.errorCode } : {}),
+        ...(typeof parsed.message === 'string' ? { message: parsed.message } : {})
+      })
+    } catch {
+      this.validations.delete(name)
+    }
+  }
+}
+
+function configFingerprint(name: CredentialName, settings: AppSettings): string {
+  if (name === 'qwen') return fingerprint(`${settings.qwenBaseUrl}\n${settings.qwenModel}`)
+  if (name === 'deepseek') return fingerprint(`${settings.deepseekBaseUrl}\n${settings.deepseekModel}`)
+  return fingerprint('mineru-parser-v1')
 }
 
 export function maskCredential(value: string): string {
   const normalized = value.trim()
   if (normalized.length <= 4) return '****'
-  if (normalized.length <= 8) return `${normalized.slice(0, 2)}****${normalized.slice(-2)}`
-  return `${normalized.slice(0, 4)}****${normalized.slice(-4)}`
+  if (normalized.length <= 10) return `${normalized.slice(0, 2)}****${normalized.slice(-2)}`
+  return `${normalized.slice(0, 5)}****${normalized.slice(-5)}`
+}
+
+function internalProviderSettings(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    qwenBaseUrl: DEFAULT_SETTINGS.qwenBaseUrl,
+    qwenModel: DEFAULT_SETTINGS.qwenModel,
+    deepseekBaseUrl: DEFAULT_SETTINGS.deepseekBaseUrl,
+    deepseekModel: DEFAULT_SETTINGS.deepseekModel
+  }
 }
 
 function normalizeCredential(value: string): string | null {
@@ -257,8 +347,11 @@ function fingerprint(value: string): string {
 function validationFromHealth(result: HealthResult): CredentialValidationResult {
   if (result.ok) return { state: 'valid', message: '凭据验证成功' }
   const code = typeof result.code === 'string' ? result.code : String(result.code ?? '')
-  const unavailable = code === 'VALIDATION_UNAVAILABLE' || code === 'NETWORK_UNAVAILABLE' || /^HTTP_(?:408|429|5\d{2})$/u.test(code) || /(?:timeout|network|socket|econn|temporar|不可达|超时)/iu.test(result.message)
-  if (unavailable) return { state: 'unknown', errorCode: 'CREDENTIAL_VALIDATION_UNAVAILABLE', message: '暂时无法验证服务，请检查网络后重试' }
+  const unavailable = code === 'VALIDATION_UNAVAILABLE' || code === 'NETWORK_UNAVAILABLE' || code === 'PROXY_AUTH_REQUIRED' || /^HTTP_(?:408|429|5\d{2})$/u.test(code) || /(?:timeout|network|socket|econn|temporar|不可达|超时|代理)/iu.test(result.message)
+  if (unavailable) return { state: 'unknown', errorCode: 'CREDENTIAL_VALIDATION_UNAVAILABLE', message: result.message || '暂时无法验证服务，请检查网络后重试' }
+  if (code === 'PROVIDER_CONFIGURATION_INVALID') {
+    return { state: 'invalid', errorCode: code, message: result.message || '服务地址或模型配置不可用' }
+  }
   const invalidCode = code === 'A0202' ? 'PARSER_TOKEN_INVALID' : code === 'A0211' ? 'PARSER_TOKEN_EXPIRED' : 'CREDENTIAL_INVALID'
-  return { state: 'invalid', errorCode: invalidCode, message: '凭据验证失败' }
+  return { state: 'invalid', errorCode: invalidCode, message: result.message || '凭据验证失败' }
 }

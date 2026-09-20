@@ -49,7 +49,7 @@ class FakeCompute {
     return {
       hashFile: async () => SOURCE_HASH,
       importPdf: async () => ({ sha256: SOURCE_HASH, size: 0 }),
-      normalizeParserOutput: async () => ({ normalized: true, displayTitle: null }),
+      normalizeParserOutput: async () => ({ normalized: true, displayTitle: null, pageCount: 1 }),
       rebuildMappings: async () => undefined,
       openTranslationPlan: async () => this.resultCounts('open'),
       listTranslationWork: async () => ({
@@ -164,11 +164,17 @@ function provider(
   }
 }
 
-function run(fixture: Fixture, providers: Map<TranslationProviderId, TranslationProvider>, signal = new AbortController().signal) {
+function run(
+  fixture: Fixture,
+  providers: Map<TranslationProviderId, TranslationProvider>,
+  signal = new AbortController().signal,
+  providerOrder: TranslationProviderId[] = ['qwen', 'deepseek', 'bing', 'transmart']
+) {
   return new TranslationPlanOrchestrator({
     task: fixture.task,
     jobId: JOB_ID,
     providers,
+    providerOrder,
     compute: fixture.compute.asTaskCompute(),
     pathPolicy: new PathPolicy(),
     signal,
@@ -177,6 +183,19 @@ function run(fixture: Fixture, providers: Map<TranslationProviderId, Translation
 }
 
 describe('translation plan orchestrator', () => {
+  it('fails clearly without opening a plan when no enabled provider is executable', async () => {
+    const fixture = await makeFixture('No verified provider')
+    const calls: string[] = []
+    const providers = new Map<TranslationProviderId, TranslationProvider>([
+      ['qwen', provider('qwen', async (text) => `q:${text}`, calls)],
+      ['deepseek', provider('deepseek', async (text) => `d:${text}`, calls)]
+    ])
+
+    await expect(run(fixture, providers, new AbortController().signal, [])).rejects.toThrow('没有可用的翻译服务')
+    expect(calls).toEqual([])
+    expect(fixture.compute.cacheCalls).toEqual([])
+  })
+
   it('uses a utility cache hit without calling a provider', async () => {
     const fixture = await makeFixture('Cached text', ['qwen'])
     const calls: string[] = []

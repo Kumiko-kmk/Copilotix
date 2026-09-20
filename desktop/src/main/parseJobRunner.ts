@@ -20,6 +20,7 @@ import type { SettingsService } from './settingsService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { JobRepositoryPort } from '@core/jobs'
 import { ProgressReporter } from './progressReporter'
+import type { UsageAnalyticsRecorder } from './usageAnalyticsService'
 
 const MAX_UPLOAD_CONCURRENCY = 3
 
@@ -32,6 +33,7 @@ export interface ParseJobRunnerOptions {
   compute: TaskComputePort
   pathPolicy: PathPolicyPort
   logger?: TaskLogger
+  usageAnalytics?: UsageAnalyticsRecorder
 }
 
 interface LoadedJob {
@@ -284,6 +286,7 @@ export class ParseJobRunner implements BatchJobRunner {
       if (normalized.displayTitle && this.options.repository.updateDocumentMetadata) {
         await this.options.repository.updateDocumentMetadata(originalTask.id, { displayTitle: normalized.displayTitle })
       }
+      await this.options.usageAnalytics?.recordDocumentPages(originalTask.id, originalTask.createdAt, normalized.pageCount)
       this.logger.info('result.normalized', { taskId: originalTask.id, jobId: job.id })
     } finally {
       await rm(zipPath, { force: true }).catch(() => undefined)

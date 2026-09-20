@@ -11,6 +11,8 @@ import { PathPolicy } from '@main/pathPolicy'
 import { ParseJobRunner } from '@main/parseJobRunner'
 import { projectDocumentDetails, projectDocumentSummary } from '@main/documentProjection'
 import { RpcJobRepository } from '@main/rpcJobRepository'
+import { RpcRagContentIndexer } from '@main/rpcRagContentIndexer'
+import { RpcRagRepository } from '@main/rpcRagRepository'
 import { RpcTaskCompute } from '@main/rpcTaskCompute'
 import { RpcTaskRepository } from '@main/rpcTaskRepository'
 import { SettingsService } from '@main/settingsService'
@@ -20,7 +22,7 @@ import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { TaskComputePort } from '@core/ports'
 import type { Job } from '@core/types'
 import type { JobRepositoryPort } from '@core/jobs'
-import type { DocumentPayload, CopilotixTask } from '@shared/types'
+import type { AppSettings, DocumentPayload, CopilotixTask } from '@shared/types'
 import { z } from 'zod'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
@@ -81,11 +83,13 @@ const baseTask: CopilotixTask = {
   updatedAt: now
 }
 
-const baseSettings = {
+const baseSettings: AppSettings = {
   outputRoot: 'C:\\output',
   formulaEnabled: true,
   tableEnabled: true,
-  translationProvider: 'qwen' as const,
+  translationProvider: 'qwen',
+  translationProviderOrder: ['qwen', 'deepseek', 'bing', 'transmart'],
+  enabledTranslationProviders: ['qwen', 'deepseek', 'bing', 'transmart'],
   qwenBaseUrl: 'https://qwen.example.test',
   qwenModel: 'qwen-model',
   deepseekBaseUrl: 'https://deepseek.example.test',
@@ -148,8 +152,22 @@ describe('main quality boundaries', () => {
         calls.push({ operation, payload, options })
         if (operation === 'compute:hash-file') return { sha256: 'hash' }
         if (operation === 'compute:import-pdf') return { sha256: 'hash', size: 12 }
+        if (operation === 'compute:rag-content-index') return {
+          documentId: 'task', contentRevisionId: 'revision', chunkCount: 3, revisionState: 'ready'
+        }
         if (operation === 'translation:cache-get') return { translated: 'cached' }
-        if (operation === 'tasks:get' || operation === 'documents:get-summary' || operation === 'artifacts:get-latest') return null
+        if (operation === 'tasks:get' || operation === 'documents:get-summary' || operation === 'artifacts:get-latest' || operation === 'knowledge:get') return null
+        if (operation === 'knowledge:set-semantic-consent') return {
+          documentId: 'task', localState: 'unindexed', localProgress: 0, localError: null,
+          activeContentRevisionId: null, semanticConsent: true, semanticState: 'requires-credential',
+          semanticProgress: 0, semanticError: null, semanticContentRevisionId: null,
+          activeVectorIndexId: null, semanticProfileId: null, updatedAt: now
+        }
+        if (operation === 'knowledge:ensure-embed') return {
+          documentId: 'task', profileId: 'profile', contentRevisionId: 'revision',
+          vectorIndexId: 'vector-index', jobId: 'embed-job', jobKind: 'rag-embed',
+          jobStatus: 'queued', vectorIndexState: 'queued', semanticState: 'queued'
+        }
         if (operation === 'jobs:list' || operation === 'jobs:claim-batch' || operation === 'jobs:recover-expired') return []
         if (operation === 'tasks:list' || operation === 'documents:list' || operation === 'translation:blocks-list' || operation === 'annotations:list' || operation === 'annotations:replace') return []
         return operation === 'tasks:update' ? baseTask : undefined
@@ -217,9 +235,34 @@ describe('main quality boundaries', () => {
     await jobs.recoverExpired({ now })
     await jobs.listEvents('job')
 
+    const rag = new RpcRagRepository(supervisor)
+    await expect(rag.getKnowledge('task')).resolves.toBeNull()
+    await rag.setSemanticConsent('task', true, now)
+    await rag.ensureEmbeddingJob('task', 'profile', now)
+
+    const contentIndexer = new RpcRagContentIndexer(supervisor)
+    const indexSignal = new AbortController().signal
+    await expect(contentIndexer.index('task', 'revision', indexSignal)).resolves.toMatchObject({ chunkCount: 3 })
+
     expect(calls.some((call) => call.operation === 'compute:translation-plan-open' && call.payload === 'full.md')).toBe(false)
     expect(calls.map((call) => call.operation)).toContain('translation:batch-commit')
     expect(calls.map((call) => call.operation)).toContain('jobs:cancel')
+    expect(calls).toContainEqual({ operation: 'knowledge:get', payload: { documentId: 'task' }, options: undefined })
+    expect(calls).toContainEqual({
+      operation: 'knowledge:set-semantic-consent',
+      payload: { documentId: 'task', consent: true, now },
+      options: undefined
+    })
+    expect(calls).toContainEqual({
+      operation: 'knowledge:ensure-embed',
+      payload: { documentId: 'task', profileId: 'profile', now },
+      options: undefined
+    })
+    expect(calls).toContainEqual({
+      operation: 'compute:rag-content-index',
+      payload: { documentId: 'task', contentRevisionId: 'revision' },
+      options: { signal: indexSignal }
+    })
   })
 
   it('loads and atomically writes bounded artifact projections', async () => {
@@ -313,9 +356,10 @@ describe('main quality boundaries', () => {
 
   it('validates credentials independently, masks stored values, and supports explicit clear', async () => {
     const saved: unknown[] = []
+    let repositorySettings = { ...baseSettings, credentials: { ...baseSettings.credentials } }
     const repository = {
-      getSettings: async () => ({ ...baseSettings, credentials: { ...baseSettings.credentials } }),
-      saveSettings: async (value: unknown) => { saved.push(value) }
+      getSettings: async () => repositorySettings,
+      saveSettings: async (value: AppSettings) => { saved.push(value); repositorySettings = value }
     } as unknown as TaskRepositoryCompat
     const values = new Map<CredentialAccount, string>([['parser-token', 'parser']])
     const vault: CredentialVault = {
@@ -339,6 +383,8 @@ describe('main quality boundaries', () => {
       formulaEnabled: true,
       tableEnabled: false,
       translationProvider: 'deepseek',
+      translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart'],
+      enabledTranslationProviders: ['deepseek', 'qwen', 'bing', 'transmart'],
       qwenBaseUrl: 'https://qwen.example.test',
       qwenModel: 'qwen',
       deepseekBaseUrl: 'https://deepseek.example.test',
@@ -347,9 +393,10 @@ describe('main quality boundaries', () => {
     expect(values.get('parser-token')).toBe('parser-next')
     expect(values.get('deepseek-api-key')).toBe('deepseek')
     expect(result.fieldErrors).toEqual({})
-    expect(result.settings.credentials.parser).toMatchObject({ state: 'valid', maskedValue: 'pars****next' })
+    expect(result.settings.credentials.parser).toMatchObject({ state: 'valid', maskedValue: 'parse****-next' })
     expect(result.settings.credentials.deepseek).toMatchObject({ state: 'valid', maskedValue: 'de****ek' })
     expect(saved).toHaveLength(1)
+    expect(saved[0]).toMatchObject({ formulaEnabled: true, tableEnabled: true })
     expect(splitIntoParserBatches([1, 2, 3], 2)).toEqual([[1, 2], [3]])
     expect(() => splitIntoParserBatches([], 0)).toThrow('Batch size')
   })
@@ -416,14 +463,11 @@ describe('main quality boundaries', () => {
       files: [
         { path: source, name: 'paper.pdf', size: 15 },
         { path: textFile, name: 'notes.txt', size: 9 }
-      ],
-      translationProvider: 'qwen'
+      ]
     })).resolves.toHaveLength(1)
     expect(enqueued.length).toBeGreaterThan(0)
     expect(scheduler.wake).toHaveBeenCalled()
-    await expect(service.importPaths([duplicateSource, duplicateSource, textFile], {
-      translationProvider: 'deepseek'
-    })).resolves.toHaveLength(1)
+    await expect(service.importPaths([duplicateSource, duplicateSource, textFile], {})).resolves.toHaveLength(1)
     await expect(service.retry(baseTask.id)).resolves.toBeUndefined()
     await expect(service.retry('missing')).rejects.toThrow('任务不存在')
     const noRetryJobs = { ...jobs, list: async () => [] } as unknown as JobRepositoryPort
@@ -439,7 +483,7 @@ describe('main quality boundaries', () => {
       new PathPolicy(),
       logger
     )
-    await expect(noTokenService.create({ files: [], translationProvider: 'qwen' })).rejects.toThrow('Token')
+    await expect(noTokenService.create({ files: [] })).rejects.toThrow('Token')
   })
 
   it('covers IPC URL/error/event boundary cases', () => {

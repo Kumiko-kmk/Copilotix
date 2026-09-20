@@ -1,3 +1,5 @@
+import type { CitationLocator, RagSearchResultItem, SelectionRequest } from '@shared/ragTypes'
+
 export type JsonObject = Record<string, unknown>
 
 export type DocumentId = string
@@ -14,7 +16,12 @@ export interface Document {
   updatedAt: string
 }
 
-export type JobKind = 'parse' | 'translate'
+/**
+ * Durable work kinds.  RAG jobs deliberately share the same job table and
+ * state machine as the foreground document jobs; they are not projected into
+ * DocumentWorkflowStatus.
+ */
+export type JobKind = 'parse' | 'translate' | 'rag-content-index' | 'rag-embed' | 'rag-delete'
 export type JobStatus = 'queued' | 'running' | 'retry-wait' | 'succeeded' | 'partial' | 'failed' | 'cancelled'
 
 export interface Job {
@@ -114,4 +121,76 @@ export interface TranslationBatchCommit {
   blocks: TranslationBatchBlock[]
   cacheEntries: TranslationCacheEntry[]
   checkpoint?: TranslationCheckpointSummary
+}
+
+/**
+ * Canonical source chunk held by the Utility-owned index.  This is an
+ * internal data shape, not a wire DTO; source text and provenance stay out of
+ * Renderer-facing contracts until a bounded result is produced.
+ */
+export type RagChunkContentType = NonNullable<RagSearchResultItem['contentType']>
+export type RagMappingConfidence = 'exact' | 'range' | 'media' | 'fallback' | 'none'
+
+export interface RagChunk {
+  chunkId: string
+  contentRevisionId: string
+  ordinal: number
+  contentHash: string
+  sourceText: string
+  sectionPath: readonly string[]
+  mappingIds: readonly string[]
+  pageStart: number | null
+  pageEnd: number | null
+  sourceStartOffset: number | null
+  sourceEndOffset: number | null
+  offsetUnit: CitationLocator['offsetUnit']
+  tokenCount: number
+  contentType: RagChunkContentType
+  mappingConfidence: RagMappingConfidence
+}
+
+/** Input consumed by a deterministic chunker after an artifact is validated. */
+export interface RagChunkInput {
+  documentId: DocumentId
+  artifactId: string
+  contentRevisionId: string
+  contentHash: string
+  sourceText: string
+}
+
+/**
+ * Internal vector entry used between Utility-owned indexing components.
+ * `Float32Array` is intentional: JSON float vectors are never wire data.
+ */
+export interface RagVectorEntry {
+  vectorIndexId: string
+  contentRevisionId: string
+  profileId: string
+  chunkId: string
+  vector: Float32Array
+}
+
+/** Utility-only dense query; wire requests are translated before this layer. */
+export interface RagVectorSearchInput {
+  vectorIndexId: string
+  contentRevisionId: string
+  profileId: string
+  queryVector: Float32Array
+  limit: number
+}
+
+export interface RagVectorSearchCandidate {
+  chunkId: string
+  rank: number
+  score: number
+}
+
+/** Bounded candidate metadata returned by the Utility vector store. */
+export interface RagVectorSearchResult {
+  candidates: readonly RagVectorSearchCandidate[]
+}
+
+export interface RagCitationResolutionInput {
+  candidates: readonly RagSearchResultItem[]
+  selection?: SelectionRequest
 }

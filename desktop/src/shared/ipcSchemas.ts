@@ -58,6 +58,15 @@ export const credentialStatusesSchema: z.ZodType<CredentialStatuses> = z.object(
   deepseek: credentialStatusSchemaPlaceholder()
 }).strict()
 
+const translationProviderOrderSchema = z.array(translationProviderIdSchema).length(4).refine(
+  (providers) => new Set(providers).size === 4,
+  '翻译模型顺序必须完整且不能重复'
+)
+const enabledTranslationProvidersSchema = z.array(translationProviderIdSchema).min(1).max(4).refine(
+  (providers) => new Set(providers).size === providers.length,
+  '启用的翻译模型不能重复'
+)
+
 function credentialStatusSchemaPlaceholder(): z.ZodType<CredentialStatus> {
   return z.object({
     state: z.enum(['missing', 'unknown', 'valid', 'invalid']),
@@ -88,18 +97,25 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
   translationProvider: translationProviderIdSchema,
+  translationProviderOrder: translationProviderOrderSchema,
+  enabledTranslationProviders: enabledTranslationProvidersSchema,
   qwenBaseUrl: z.string().min(1).max(2_048),
   qwenModel: z.string().min(1).max(512),
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
   credentials: credentialStatusesSchema
-}).strict()
+}).strict().refine(
+  (settings) => settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) === settings.translationProvider,
+  '首选翻译模型必须是顺序中第一个已启用模型'
+)
 
 export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
   outputRoot: boundedPath,
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
   translationProvider: translationProviderIdSchema,
+  translationProviderOrder: translationProviderOrderSchema,
+  enabledTranslationProviders: enabledTranslationProvidersSchema,
   qwenBaseUrl: z.string().min(1).max(2_048),
   qwenModel: z.string().min(1).max(512),
   deepseekBaseUrl: z.string().min(1).max(2_048),
@@ -109,7 +125,10 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
     qwen: credentialMutationSchema.optional(),
     deepseek: credentialMutationSchema.optional()
   }).strict().optional()
-}).strict()
+}).strict().refine(
+  (settings) => settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) === settings.translationProvider,
+  '首选翻译模型必须是顺序中第一个已启用模型'
+)
 
 export const settingsSaveResultSchema: z.ZodType<SettingsSaveResult> = z.object({
   settings: appSettingsSchema,
@@ -195,7 +214,6 @@ export const selectedPdfSchema: z.ZodType<SelectedPdf> = z.object({
 
 export const createTasksRequestSchema: z.ZodType<CreateTasksRequest> = z.object({
   files: z.array(selectedPdfSchema).min(1).max(100),
-  translationProvider: translationProviderIdSchema,
   createDuplicates: z.boolean().optional()
 }).strict()
 
@@ -233,6 +251,27 @@ export const taskIdRequestSchema = boundedId
 export const inspectPdfsRequestSchema = z.array(boundedPath).max(100)
 export const noRequestSchema = z.undefined()
 export const outputDirectorySchema = z.string().max(32_768).nullable()
+
+export const storageInfoSchema = z.object({
+  rootPath: boundedPath,
+  exists: z.boolean(),
+  documentCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  fileCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+}).strict()
+export type StorageInfo = z.infer<typeof storageInfoSchema>
+export const usageAnalyticsDaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+  documents: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  pages: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  deepseekTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  qwenTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+}).strict()
+export type UsageAnalyticsDay = z.infer<typeof usageAnalyticsDaySchema>
+export const usageAnalyticsSchema = z.object({
+  days: z.array(usageAnalyticsDaySchema).min(1).max(366)
+}).strict()
+export type UsageAnalytics = z.infer<typeof usageAnalyticsSchema>
 export const voidResponseSchema = z.undefined()
 
 export const ipcErrorSchema: z.ZodType<IpcError> = z.object({
@@ -324,7 +363,6 @@ export const documentDetailsSchema = z.object({
 export type DocumentDetails = z.infer<typeof documentDetailsSchema>
 
 export const importDocumentsRequestSchema = z.object({
-  translationProvider: translationProviderIdSchema,
   createDuplicates: z.boolean().optional()
 }).strict()
 export type ImportDocumentsRequest = z.infer<typeof importDocumentsRequestSchema>

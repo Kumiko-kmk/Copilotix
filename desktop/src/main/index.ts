@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   app,
@@ -8,6 +8,7 @@ import {
   net,
   Notification,
   protocol,
+  session,
   shell,
   Tray
 } from 'electron'
@@ -22,6 +23,7 @@ import { createAssetResponse } from './assetProtocol'
 import { TaskService } from './taskService'
 import { JsonLineLogger } from './logger'
 import { probeOpenAiCompatibleCredential } from './translation/providers'
+import { refreshNetworkProxy } from './networkProxy'
 import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike } from './ipc'
 import {
   appSettingsSchema,
@@ -31,6 +33,8 @@ import {
   outputDirectorySchema,
   settingsSaveResultSchema,
   settingsUpdateSchema,
+  storageInfoSchema,
+  usageAnalyticsSchema,
   voidResponseSchema,
   windowActionSchema,
   windowStateSchema
@@ -57,8 +61,13 @@ import { RpcJobRepository } from './rpcJobRepository'
 import { JobScheduler } from './jobScheduler'
 import { ParseJobRunner } from './parseJobRunner'
 import { TranslationJobRunner } from './translationJobRunner'
+import { RagContentIndexJobRunner } from './ragContentIndexJobRunner'
+import { RpcRagContentIndexer } from './rpcRagContentIndexer'
 import { PathPolicy } from './pathPolicy'
 import { formatPackagedSmokeMarker, shouldRunPackagedSmoke } from '@shared/packagedSmoke'
+import { inspectStorage } from './storageService'
+import { resolveUtilityEntryPath } from './utilityEntryPath'
+import { UsageAnalyticsService } from './usageAnalyticsService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -69,19 +78,26 @@ let documentSummaries = new Map<string, DocumentSummary>()
 let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
 let jobScheduler: JobScheduler | null = null
+let startupPhase = 'module-load'
 
 const packagedSmokeMode = shouldRunPackagedSmoke(process.argv, app.isPackaged)
 
 if (packagedSmokeMode) {
-  writePackagedSmokeMarker()
+  void runPackagedSmoke()
 } else {
   startNormalApp()
 }
 
 async function bootstrap(): Promise<void> {
+  startupPhase = 'app-ready'
   await app.whenReady()
+  startupPhase = 'core-start'
   utilitySupervisor = new UtilitySupervisor({
-    entryPath: join(__dirname, '../utility/index.js'),
+    entryPath: resolveUtilityEntryPath({
+      isPackaged: app.isPackaged,
+      bundleDirectory: __dirname,
+      resourcesPath: process.resourcesPath
+    }),
     fork: forkUtilityProcess,
     bootstrap: {
       databasePath: join(app.getPath('userData'), 'copilotix-desktop-v2.sqlite3'),
@@ -89,8 +105,10 @@ async function bootstrap(): Promise<void> {
     }
   })
   await utilitySupervisor.start()
+  startupPhase = 'repository-init'
   const jobRepository = new RpcJobRepository(utilitySupervisor)
   jobScheduler = new JobScheduler(jobRepository)
+  jobScheduler.registerRunner('rag-content-index', new RagContentIndexJobRunner(new RpcRagContentIndexer(utilitySupervisor)))
   const userData = app.getPath('userData')
   await mkdir(userData, { recursive: true })
   repository = new RpcTaskRepository(utilitySupervisor)
@@ -99,27 +117,39 @@ async function bootstrap(): Promise<void> {
     net.fetch(input instanceof URL ? input.toString() : input, init)
   const parserClient = new OfficialParserClient(fetcher, new ElectronFileUploader())
   const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'Copilotix'), {
-    parser: (value) => parserClient.verifyToken(value),
-    provider: (name, value, current) => probeOpenAiCompatibleCredential(name, current, value, fetcher)
+    parser: async (value) => {
+      await refreshNetworkProxy(session.defaultSession)
+      return parserClient.verifyToken(value)
+    },
+    provider: async (name, value, current) => {
+      await refreshNetworkProxy(session.defaultSession)
+      return probeOpenAiCompatibleCredential(name, current, value, fetcher)
+    }
   })
+  startupPhase = 'settings-init'
   await settings.initialize()
   const logger = new JsonLineLogger(join(userData, 'copilotix-desktop.log'))
+  const usageAnalytics = new UsageAnalyticsService(join(userData, 'usage-analytics-v1.json'))
   const compute = new RpcTaskCompute(utilitySupervisor)
   const pathPolicy = new PathPolicy()
   const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger, compute, pathPolicy, {
     jobRepository,
     scheduler: jobScheduler
   })
+  startupPhase = 'documents-load'
   documentSummaries = new Map((await tasks.list()).map((task) => {
     const summary = projectDocumentSummary(task)
     return [summary.id, summary] as const
   }))
   documentRevision = 0
 
+  startupPhase = 'protocol-register'
   protocol.handle('copilotix-asset', (request) => createAssetResponse(request, (taskId, path) => tasks.resolveAsset(taskId, path)))
 
-  registerIpc(tasks, settings)
+  registerIpc(tasks, settings, usageAnalytics)
+  startupPhase = 'window-create'
   createMainWindow()
+  startupPhase = 'tray-create'
   createTray()
 
   tasks.on('changed', (taskList) => {
@@ -158,7 +188,8 @@ async function bootstrap(): Promise<void> {
     parserClient,
     compute,
     pathPolicy,
-    logger
+    logger,
+    usageAnalytics
   }))
   jobScheduler.registerRunner('translate', new TranslationJobRunner({
     repository,
@@ -167,11 +198,14 @@ async function bootstrap(): Promise<void> {
     fetcher,
     compute,
     pathPolicy,
-    logger
+    logger,
+    usageAnalytics
   }))
+  startupPhase = 'scheduler-start'
   await jobScheduler.start()
 
   app.on('activate', showMainWindow)
+  startupPhase = 'ready'
 }
 
 function createMainWindow(): void {
@@ -263,7 +297,8 @@ function requestWindow(event: IpcInvokeEventLike): BrowserWindow {
 
 function registerIpc(
   tasks: TaskService,
-  settings: SettingsService
+  settings: SettingsService,
+  usageAnalytics: UsageAnalyticsService
 ): void {
   const validationOptions = {
     getMainWindow: () => mainWindow,
@@ -289,6 +324,19 @@ function registerIpc(
   registerValidatedHandler('dialog:output-directory', noRequestSchema, outputDirectorySchema, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] })
     return result.canceled ? null : (result.filePaths[0] ?? null)
+  }, validationOptions)
+  registerValidatedHandler('storage:info', noRequestSchema, storageInfoSchema, async () => {
+    const current = await settings.get()
+    return inspectStorage(current.outputRoot)
+  }, validationOptions)
+  registerValidatedHandler('analytics:usage', noRequestSchema, usageAnalyticsSchema, async () => {
+    return usageAnalytics.snapshot(await tasks.list())
+  }, validationOptions)
+  registerValidatedHandler('storage:open-location', noRequestSchema, voidResponseSchema, async () => {
+    const current = await settings.get()
+    await mkdir(current.outputRoot, { recursive: true })
+    const result = await shell.openPath(current.outputRoot)
+    if (result) throw new Error(result)
   }, validationOptions)
   registerValidatedHandler('documents:import', importDocumentsIpcRequestSchema, documentSummarySchema.array(), async (_event, request) => {
     let paths = request.paths
@@ -394,23 +442,48 @@ function startNormalApp(): void {
   void bootstrap().catch((error: unknown) => {
     // Keep startup diagnostics free of stack traces, local paths and credentials.
     const code = startupErrorCode(error)
-    console.error(`Copilotix startup failed [${code}]`)
+    console.error(`Copilotix startup failed [${code}] phase=${startupPhase}`)
+    if (process.env.COPILOTIX_STARTUP_DIAGNOSTICS === 'true') {
+      console.error(error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error))
+    }
     // Playwright and other headless checks must not wait on a native modal.
     if (process.env.NODE_ENV !== 'test') dialog.showErrorBox('Copilotix 启动失败', '核心服务无法启动，请重试。')
     app.quit()
   })
 }
 
-function writePackagedSmokeMarker(): void {
+async function runPackagedSmoke(): Promise<void> {
+  let smokeRoot: string | undefined
+  let supervisor: UtilitySupervisor | undefined
   try {
+    await app.whenReady()
+    smokeRoot = await mkdtemp(join(app.getPath('temp'), 'copilotix-packaged-smoke-'))
+    supervisor = new UtilitySupervisor({
+      entryPath: resolveUtilityEntryPath({
+        isPackaged: app.isPackaged,
+        bundleDirectory: __dirname,
+        resourcesPath: process.resourcesPath
+      }),
+      fork: forkUtilityProcess,
+      bootstrap: {
+        databasePath: join(smokeRoot, 'smoke.sqlite3'),
+        outputRoot: smokeRoot
+      }
+    })
+    await supervisor.start()
+    await supervisor.request('ping', {})
     const marker = formatPackagedSmokeMarker({
       appVersion: app.getVersion(),
       electronVersion: process.versions.electron ?? ''
     })
-    process.stdout.write(marker, 'utf8', (error) => {
-      app.exit(error ? 1 : 0)
-    })
+    await supervisor.shutdown()
+    supervisor = undefined
+    await rm(smokeRoot, { recursive: true, force: true })
+    smokeRoot = undefined
+    process.stdout.write(marker, 'utf8', (error) => app.exit(error ? 1 : 0))
   } catch {
+    await supervisor?.shutdown().catch(() => undefined)
+    if (smokeRoot) await rm(smokeRoot, { recursive: true, force: true }).catch(() => undefined)
     app.exit(1)
   }
 }

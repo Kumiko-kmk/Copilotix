@@ -25,6 +25,8 @@ import {
   saveDocumentAsResultSchema,
   settingsSaveResultSchema,
   settingsUpdateSchema,
+  storageInfoSchema,
+  usageAnalyticsSchema,
   voidResponseSchema,
   windowActionSchema,
   windowStateSchema
@@ -55,6 +57,9 @@ const api: CopilotixDesktopApi = {
     invokeValidated('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, { name, value }),
   chooseOutputDirectory: () =>
     invokeValidated('dialog:output-directory', noRequestSchema, outputDirectorySchema, undefined),
+  getStorageInfo: () => invokeValidated('storage:info', noRequestSchema, storageInfoSchema, undefined),
+  getUsageAnalytics: () => invokeValidated('analytics:usage', noRequestSchema, usageAnalyticsSchema, undefined),
+  openStorageLocation: () => invokeValidated('storage:open-location', noRequestSchema, voidResponseSchema, undefined),
   importDocuments: (request: ImportDocumentsRequest, droppedFiles?: File[]) => {
     const paths = droppedFiles
       ?.map((file) => webUtils.getPathForFile(file))

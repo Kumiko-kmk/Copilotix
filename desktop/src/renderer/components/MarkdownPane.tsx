@@ -35,6 +35,7 @@ import MarkdownMinimap from './MarkdownMinimap'
 import rehypeTableMath from '../rehypeTableMath'
 import ReaderFigureSnapshot from './ReaderFigureSnapshot'
 import type { ReaderFigureGroup } from '../readerFigureGroups'
+import { recordReaderDuration } from '../readerPerformance'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 const SCROLL_SELECTION_INTERVAL_MS = 80
@@ -80,6 +81,8 @@ export default function MarkdownPane(props: {
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
   onRenderReady?(): void
+  initialScrollTop?: number
+  onScrollTopChange?(scrollTop: number): void
 }): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const articleRef = React.useRef<HTMLElement>(null)
@@ -97,7 +100,9 @@ export default function MarkdownPane(props: {
   const blockPositionsRef = React.useRef<BlockPosition[]>([])
   const blockElementsRef = React.useRef<Map<string, HTMLElement>>(new Map())
   const ambiguousMappingIdsRef = React.useRef<Set<string>>(new Set())
+  const navigationElementsRef = React.useRef<HTMLElement[]>([])
   const lastNavigatedSelectionRef = React.useRef<BlockSelection | null>(null)
+  const initialScrollAppliedRef = React.useRef(false)
   const onRenderReadyRef = React.useRef(props.onRenderReady)
   onRenderReadyRef.current = props.onRenderReady
   const contentRevisionRef = React.useRef({ blocks: props.blocks, revision: 0 })
@@ -201,42 +206,53 @@ export default function MarkdownPane(props: {
   }, [props.assetBaseUrl, contentRevision, renderAttempt])
 
   const rebuildBlockPositions = React.useCallback(() => {
+    const startedAt = performance.now()
     const container = containerRef.current
     if (!container) return
-    const containerRect = container.getBoundingClientRect()
     const positions: BlockPosition[] = []
-    const elementsByMappingId = new Map<string, HTMLElement>()
-    const ambiguousMappingIds = new Set<string>()
-    const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-block-ids]'))
-    for (const element of elements) {
-      const mappingIds = parseMappingIds(element.dataset.blockIds)
-      for (const mappingId of mappingIds) {
-        if (ambiguousMappingIds.has(mappingId)) continue
-        const existing = elementsByMappingId.get(mappingId)
-        if (existing && existing !== element) {
-          elementsByMappingId.delete(mappingId)
-          ambiguousMappingIds.add(mappingId)
-        } else if (!existing) {
-          elementsByMappingId.set(mappingId, element)
+    let elements = navigationElementsRef.current
+    if (elements.length === 0) {
+      elements = Array.from(container.querySelectorAll<HTMLElement>('[data-block-ids]'))
+      navigationElementsRef.current = elements
+      const elementsByMappingId = new Map<string, HTMLElement>()
+      const ambiguousMappingIds = new Set<string>()
+      for (const element of elements) {
+        const mappingIds = parseMappingIds(element.dataset.blockIds)
+        for (const mappingId of mappingIds) {
+          if (ambiguousMappingIds.has(mappingId)) continue
+          const existing = elementsByMappingId.get(mappingId)
+          if (existing && existing !== element) {
+            elementsByMappingId.delete(mappingId)
+            ambiguousMappingIds.add(mappingId)
+          } else if (!existing) {
+            elementsByMappingId.set(mappingId, element)
+          }
         }
       }
+      for (const mappingId of ambiguousMappingIds) elementsByMappingId.delete(mappingId)
+      ambiguousMappingIdsRef.current = ambiguousMappingIds
+      blockElementsRef.current = elementsByMappingId
     }
-    for (const mappingId of ambiguousMappingIds) elementsByMappingId.delete(mappingId)
+    const ambiguousMappingIds = ambiguousMappingIdsRef.current
     for (const element of elements) {
       const mappingId = parseMappingIds(element.dataset.blockIds)
         .find((candidate) => !ambiguousMappingIds.has(candidate))
       if (!mappingId) continue
-      const rect = element.getBoundingClientRect()
       positions.push({
         mappingId,
-        center: rect.top - containerRect.top + container.scrollTop + rect.height / 2
+        center: element.offsetTop + element.offsetHeight / 2
       })
     }
-    ambiguousMappingIdsRef.current = ambiguousMappingIds
-    blockElementsRef.current = elementsByMappingId
-    blockPositionsRef.current = positions.sort((left, right) => left.center - right.center)
+    blockPositionsRef.current = positions
     setLayoutRevision((revision) => revision + 1)
+    recordReaderDuration('markdown-index', startedAt)
   }, [])
+
+  React.useLayoutEffect(() => {
+    navigationElementsRef.current = []
+    blockElementsRef.current = new Map()
+    ambiguousMappingIdsRef.current = new Set()
+  }, [contentRevision, renderAttempt])
 
   React.useLayoutEffect(() => {
     if (!props.active || !ready || !articleRef.current || !containerRef.current) return
@@ -264,6 +280,12 @@ export default function MarkdownPane(props: {
       }
     }
   }, [props.active, ready, rebuildBlockPositions])
+
+  React.useLayoutEffect(() => {
+    if (!ready || initialScrollAppliedRef.current || !containerRef.current) return
+    initialScrollAppliedRef.current = true
+    containerRef.current.scrollTop = props.initialScrollTop ?? 0
+  }, [props.initialScrollTop, ready])
 
   React.useLayoutEffect(() => {
     if (!ready || !articleRef.current) return
@@ -367,6 +389,8 @@ export default function MarkdownPane(props: {
 
   const onScroll = React.useCallback(() => {
     if (textSelection) closeTextSelection(true)
+    const container = containerRef.current
+    if (container) props.onScrollTopChange?.(container.scrollTop)
     if (!props.active || !ready) return
     scrollActiveRef.current = true
     if (scrollIdleTimerRef.current !== null) window.clearTimeout(scrollIdleTimerRef.current)
@@ -380,7 +404,7 @@ export default function MarkdownPane(props: {
       scrollSelectionTimerRef.current = null
       syncScrollSelection()
     }, SCROLL_SELECTION_INTERVAL_MS)
-  }, [closeTextSelection, flushDeferredResize, props.active, ready, syncScrollSelection, textSelection])
+  }, [closeTextSelection, flushDeferredResize, props.active, props.onScrollTopChange, ready, syncScrollSelection, textSelection])
 
   const applyTextAnnotation = React.useCallback((kind: ReaderAnnotationKind) => {
     const article = articleRef.current

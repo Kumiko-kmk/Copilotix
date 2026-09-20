@@ -28,45 +28,33 @@ afterEach(() => {
 })
 
 describe('ReaderTextPane', () => {
-  it('prewarms secondary views and preserves their DOM across repeated tab switches', async () => {
+  it('mounts only the active heavy view and restores Markdown scroll positions', async () => {
     const view = render(<Harness />)
     const originalPanel = view.container.querySelector<HTMLElement>('[data-reader-tab-panel="original"]')!
     await waitFor(() => expect(originalPanel.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
-    const originalScroller = originalPanel.querySelector('.markdown-scroll')
-
-    await waitFor(() => {
-      expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeTruthy()
-      expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBeTruthy()
-    })
-    const translatedScroller = view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')
-    const jsonView = view.container.querySelector('[data-reader-tab-panel="json"] .json-view')
-    const originalArticle = originalPanel.querySelector('article')
-    const translatedArticle = view.container.querySelector('[data-reader-tab-panel="translated"] article')
-    const originalCanvas = originalPanel.querySelector('.markdown-minimap-canvas')
-    const translatedCanvas = view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-minimap-canvas')
-    const originalFormulaLayer = originalPanel.querySelector('.markdown-minimap-formulas')
-    const translatedFormulaLayer = view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-minimap-formulas')
-
-    expect(originalArticle).not.toBe(translatedArticle)
-    expect(originalArticle?.textContent).toContain('Source paragraph')
-    expect(translatedArticle?.textContent).toContain('中文段落')
-    expect(originalCanvas).not.toBe(translatedCanvas)
-    expect(originalFormulaLayer).not.toBe(translatedFormulaLayer)
+    const originalScroller = originalPanel.querySelector<HTMLElement>('.markdown-scroll')!
+    originalScroller.scrollTop = 360
+    fireEvent.scroll(originalScroller)
+    expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeNull()
+    expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBeNull()
 
     fireEvent.click(view.getByText('Markdown（中文）'))
     expect(view.container.querySelector('[data-reader-tab-panel="translated"]')?.classList.contains('active')).toBe(true)
-    expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBe(originalScroller)
+    expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBeNull()
+    await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
 
     fireEvent.click(view.getByText('JSON', { exact: true }))
     expect(view.container.querySelector('[data-reader-tab-panel="json"]')?.classList.contains('active')).toBe(true)
-    expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBe(translatedScroller)
+    expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeNull()
+    expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBeTruthy()
 
     fireEvent.click(view.getByText('Markdown', { exact: true }))
-    expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBe(originalScroller)
-    expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBe(jsonView)
+    await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    expect(view.container.querySelector<HTMLElement>('[data-reader-tab-panel="original"] .markdown-scroll')?.scrollTop).toBe(360)
+    expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBeNull()
   })
 
-  it('stages a completed translation without reloading or repositioning the active original pane', async () => {
+  it('accepts a completed translation without reloading or repositioning the active original pane', async () => {
     const view = render(<TranslationArrivalHarness />)
     const originalPanel = view.container.querySelector<HTMLElement>('[data-reader-tab-panel="original"]')!
     const scroller = originalPanel.querySelector<HTMLElement>('.markdown-scroll')!
@@ -81,9 +69,7 @@ describe('ReaderTextPane', () => {
     expect(originalPanel.querySelector('article')).toBe(article)
     expect(scroller.scrollTop).toBe(360)
     expect(scrollIntoView).not.toHaveBeenCalled()
-    await waitFor(() => {
-      expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeTruthy()
-    })
+    expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeNull()
     expect(scroller.getAttribute('data-render-state')).toBe('ready')
     expect(scroller.scrollTop).toBe(360)
   })

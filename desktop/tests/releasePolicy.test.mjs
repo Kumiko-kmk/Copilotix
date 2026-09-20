@@ -46,8 +46,9 @@ describe('release policy', () => {
     expect(() => assertNoCanvasPaths(['resources/app.asar.unpacked/node_modules/@napi-rs/canvas-win32-x64-msvc/skia.node'])).toThrow(/canvas/)
   })
 
-  it('requires the application entry points and unpacked keyring dependency', () => {
+  it('requires the application entry points, unpacked utility, and keyring dependency', () => {
     const runtimeFiles = [
+      { path: 'resources/app.asar.unpacked/out/utility/index.js', size: 1 },
       { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js', size: 1 },
       { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/package.json', size: 1 },
       { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/keyring.win32-x64-msvc.node', size: 1 }

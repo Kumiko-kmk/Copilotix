@@ -21,7 +21,7 @@ export const fixtureTaskCompute: TaskComputePort = {
     await copyFile(layout, join(task.outputDir, 'layout.json'))
     const mappings = buildBlockMappings(task.id, JSON.parse(await readFile(join(task.outputDir, 'layout.json'), 'utf8')))
     await writeFile(join(task.outputDir, 'block_list.json'), JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }), 'utf8')
-    return { normalized: true, displayTitle: null }
+    return { normalized: true, displayTitle: null, pageCount: 1 }
   },
   async rebuildMappings(taskId, outputDir) {
     const mappings = buildBlockMappings(taskId, JSON.parse(await readFile(join(outputDir, 'layout.json'), 'utf8')))

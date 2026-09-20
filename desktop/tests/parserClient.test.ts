@@ -12,6 +12,8 @@ const settings: AppSettings = {
   formulaEnabled: true,
   tableEnabled: false,
   translationProvider: 'qwen',
+  translationProviderOrder: ['qwen', 'deepseek', 'bing', 'transmart'],
+  enabledTranslationProviders: ['qwen', 'deepseek', 'bing', 'transmart'],
   qwenBaseUrl: 'https://example.test/v1',
   qwenModel: 'qwen-mt-plus',
   deepseekBaseUrl: 'https://example.test/v1',
@@ -71,7 +73,7 @@ describe('OfficialParserClient', () => {
       files: [{ name: 'paper.pdf', data_id: 'task-1' }],
       model_version: 'vlm',
       enable_formula: true,
-      enable_table: false
+      enable_table: true
     })
   })
 

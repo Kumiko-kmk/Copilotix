@@ -1,18 +1,29 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   ArtifactRepositoryPort,
   ArtifactStorePort,
+  CitationResolverPort,
   ClockPort,
+  ChunkerPort,
   ComputePort,
   CredentialVaultPort,
   DocumentRepositoryPort,
   IdGeneratorPort,
   JobRepositoryPort,
+  LexicalIndexPort,
   ParserPort,
   PathPolicyPort,
-  TranslationProviderPort
+  RetrieverPort,
+  TranslationProviderPort,
+  VectorStorePort
 } from '@core/ports'
-import type { ArtifactRevision, Document, Job } from '@core/types'
+import type {
+  ArtifactRevision,
+  Document,
+  Job,
+  RagVectorEntry,
+  RagVectorSearchInput
+} from '@core/types'
 
 const document: Document = {
   id: 'document-1',
@@ -114,5 +125,48 @@ describe('core ports', () => {
     const ids: IdGeneratorPort = { next: () => 'id' }
     const paths: PathPolicyPort = { resolveChild: (_root, candidate) => candidate }
     expect([documents, jobs, artifacts, store, parser, translation, vault, compute, clock, ids, paths]).toHaveLength(11)
+  })
+
+  it('exposes minimal RAG ports and keeps vector queries Utility-internal', async () => {
+    const chunker: ChunkerPort = { chunk: async () => [] }
+    const lexicalIndex: LexicalIndexPort = {
+      rebuild: async () => undefined,
+      search: async () => ({ kind: 'lexical', items: [], nextCursor: null, total: 0 }),
+      delete: async () => undefined
+    }
+    const vectorQuery: RagVectorSearchInput = {
+      vectorIndexId: 'vector-index-1',
+      contentRevisionId: 'content-revision-1',
+      profileId: 'profile-1',
+      queryVector: new Float32Array([0.25, 0.75]),
+      limit: 5
+    }
+    const vectorEntry: RagVectorEntry = {
+      vectorIndexId: vectorQuery.vectorIndexId,
+      contentRevisionId: vectorQuery.contentRevisionId,
+      profileId: vectorQuery.profileId,
+      chunkId: 'chunk-1',
+      vector: new Float32Array([0.5, 0.5])
+    }
+    const vectorStore: VectorStorePort = {
+      upsert: async (entries) => {
+        expect(entries).toHaveLength(1)
+        expect(entries[0]?.profileId).toBe(vectorQuery.profileId)
+      },
+      search: async (input) => {
+        expect(input.queryVector).toBeInstanceOf(Float32Array)
+        return { candidates: [] }
+      },
+      delete: async () => undefined
+    }
+    const retriever: RetrieverPort = {
+      retrieve: async () => ({ kind: 'lexical', items: [], nextCursor: null, total: 0 })
+    }
+    const citationResolver: CitationResolverPort = { resolve: async () => [] }
+
+    expect([chunker, lexicalIndex, vectorStore, retriever, citationResolver]).toHaveLength(5)
+    expectTypeOf(vectorQuery.queryVector).toEqualTypeOf<Float32Array>()
+    await vectorStore.upsert([vectorEntry])
+    await expect(vectorStore.search(vectorQuery)).resolves.toEqual({ candidates: [] })
   })
 })

@@ -157,7 +157,7 @@ export class OfficialParserClient implements ParserClient {
     }
   }
 
-  async createUploadBatch(tasks: CopilotixTask[], settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission> {
+  async createUploadBatch(tasks: CopilotixTask[], _settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission> {
     if (!token?.trim()) throw new Error('未配置 Parser API Token')
     if (tasks.length === 0) throw new Error('没有可提交的 PDF')
     const response = await this.fetcher(`${PARSER_API_ORIGIN}/api/v4/file-urls/batch`, {
@@ -166,8 +166,8 @@ export class OfficialParserClient implements ParserClient {
       body: JSON.stringify({
         files: tasks.map((task) => ({ name: task.originalName || task.name, data_id: task.id })),
         model_version: 'vlm',
-        enable_formula: settings.formulaEnabled,
-        enable_table: settings.tableEnabled
+        enable_formula: true,
+        enable_table: true
       }),
       signal: signal ?? AbortSignal.timeout(30_000)
     })
