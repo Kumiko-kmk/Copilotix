@@ -323,7 +323,7 @@ export default function SettingsPage(props: {
         <div className="settings-content">
           <div className="settings-content-body">
           {section === 'connections' ? (
-            <section className="service-connections" aria-label="服务连接">
+            <section className="settings-section service-connections" aria-label="服务连接">
               <ServiceCard
                 title="MinerU"
                 badge="必需"
@@ -376,8 +376,7 @@ export default function SettingsPage(props: {
             </section>
           ) : null}
           {section === 'models' ? (
-            <section className="model-priority" aria-labelledby="model-priority-title">
-              <Typography.Title id="model-priority-title" level={3}>模型设置</Typography.Title>
+            <section className="settings-section model-priority" aria-label="模型设置">
               <div className="model-priority-card">
                 <div className="model-priority-heading">大语言模型优先级</div>
                 <div className="model-priority-list" role="list" aria-label="翻译模型优先级">
@@ -432,8 +431,7 @@ export default function SettingsPage(props: {
             </section>
           ) : null}
           {section === 'storage' ? (
-            <section className="storage-management" aria-labelledby="storage-management-title">
-              <Typography.Title id="storage-management-title" level={3}>文件管理</Typography.Title>
+            <section className="settings-section storage-management" aria-label="文件存储">
               <div className="storage-location-card">
                 <div className="storage-card-heading">
                   <span className="storage-card-icon"><FolderOutlined /></span>

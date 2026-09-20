@@ -58,6 +58,7 @@ describe('SettingsPage credential editor', () => {
     render(<SettingsPage settings={settings} onSaved={onSaved} />)
     expect(screen.getByRole('region', { name: '服务连接' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: '服务连接' })).toBeNull()
+    expect(document.querySelector('.settings-content-body > .settings-section.service-connections')).toBeTruthy()
     expect(screen.queryByText('文档解析必需')).toBeNull()
     expect(screen.queryByRole('button', { name: /更多/u })).toBeNull()
     expect(screen.getAllByLabelText('APIKey')).toHaveLength(3)
@@ -115,6 +116,9 @@ describe('SettingsPage credential editor', () => {
 
     render(<SettingsPage settings={settings} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /模型设置/u }))
+    expect(screen.getByRole('region', { name: '模型设置' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '模型设置' })).toBeNull()
+    expect(document.querySelector('.settings-content-body > .settings-section.model-priority')).toBeTruthy()
     expect(screen.getByText('大语言模型优先级')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '保存全部更改' })).toBeNull()
     fireEvent.keyDown(screen.getByRole('button', { name: '移动千问 / Qwen' }), { key: 'ArrowDown' })
@@ -186,6 +190,9 @@ describe('SettingsPage credential editor', () => {
 
     render(<SettingsPage settings={settings} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /文件存储/u }))
+    expect(screen.getByRole('region', { name: '文件存储' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '文件管理' })).toBeNull()
+    expect(document.querySelector('.settings-content-body > .settings-section.storage-management')).toBeTruthy()
     await vi.waitFor(() => expect(getStorageInfo).toHaveBeenCalledOnce())
     await vi.waitFor(() => expect(screen.getByText('3')).toBeTruthy())
     expect(screen.getByText('18')).toBeTruthy()
