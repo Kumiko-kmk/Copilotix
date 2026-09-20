@@ -1,7 +1,13 @@
 import { Entry } from '@napi-rs/keyring'
 import { CREDENTIAL_SERVICE } from '@shared/constants'
 
-export type CredentialAccount = 'parser-token' | 'qwen-api-key' | 'deepseek-api-key'
+export type CredentialAccount =
+  | 'parser-token'
+  | 'qwen-api-key'
+  | 'deepseek-api-key'
+  | 'parser-token-validation'
+  | 'qwen-api-key-validation'
+  | 'deepseek-api-key-validation'
 
 export interface CredentialVault {
   get(account: CredentialAccount): Promise<string | null>

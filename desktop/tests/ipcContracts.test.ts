@@ -41,6 +41,8 @@ describe('IPC contracts', () => {
       formulaEnabled: true,
       tableEnabled: true,
       translationProvider: 'qwen' as const,
+      translationProviderOrder: ['qwen', 'deepseek', 'bing', 'transmart'] as const,
+      enabledTranslationProviders: ['qwen', 'deepseek', 'bing', 'transmart'] as const,
       qwenBaseUrl: 'https://example.com',
       qwenModel: 'qwen',
       deepseekBaseUrl: 'https://example.com',

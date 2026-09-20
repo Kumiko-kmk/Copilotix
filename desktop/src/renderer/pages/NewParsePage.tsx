@@ -1,13 +1,42 @@
 import React from 'react'
-import { CloudUploadOutlined, FilePdfOutlined, InboxOutlined } from '@ant-design/icons'
-import { Alert, Button, Checkbox, Modal, Select, Space, Tag, message } from 'antd'
-import { MAX_PDF_BYTES, PROVIDER_LABELS } from '@shared/constants'
-import type { AppSettings, TranslationProviderId } from '@shared/types'
+import { FileOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { Alert, Button, Checkbox, Modal, Tag, message } from 'antd'
+import { MAX_PDF_BYTES } from '@shared/constants'
+import type { AppSettings } from '@shared/types'
 
 interface PendingPdf {
   file: File
   name: string
   size: number
+}
+
+const WORDMARK_GLYPHS = [
+  ['..#####', '.######', '###....', '##.....', '##.....', '##.....', '##.....', '###....', '.######', '..#####'],
+  ['..####..', '.##..##.', '##....##', '##....##', '##....##', '##....##', '##....##', '##....##', '.##..##.', '..####..'],
+  ['######..', '##...##.', '##....##', '##....##', '##...##.', '######..', '##......', '##......', '##......', '##......'],
+  ['########', '.######.', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...', '.######.', '########'],
+  ['##......', '##......', '##......', '##......', '##......', '##......', '##......', '##......', '########', '########'],
+  ['..####..', '.##..##.', '##....##', '##....##', '##....##', '##....##', '##....##', '##....##', '.##..##.', '..####..'],
+  ['########', '.######.', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...'],
+  ['########', '.######.', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...', '.######.', '########'],
+  ['##....##', '##....##', '.##..##.', '..####..', '...##...', '...##...', '..####..', '.##..##.', '##....##', '##....##']
+] as const
+
+const WORDMARK_LETTERS = 'COPILOTIX'
+
+function CopilotixWordmark(): React.JSX.Element {
+  const rows = Array.from({ length: 10 }, (_, row) => WORDMARK_GLYPHS
+    .map((glyph, index) => {
+      const cells = glyph[row]!.replaceAll('#', WORDMARK_LETTERS[index]!).replaceAll('.', ' ')
+      return index === 0 ? `${cells} ` : cells
+    })
+    .join('  '))
+
+  return (
+    <div className="copilotix-wordmark" role="img" aria-label="COPILOTIX">
+      {rows.map((row, index) => <span aria-hidden="true" key={index}>{row}</span>)}
+    </div>
+  )
 }
 
 export default function NewParsePage(props: {
@@ -16,7 +45,6 @@ export default function NewParsePage(props: {
   onOpenSettings(): void
 }): React.JSX.Element {
   const [files, setFiles] = React.useState<PendingPdf[]>([])
-  const [provider, setProvider] = React.useState<TranslationProviderId>(props.settings.translationProvider)
   const [createDuplicates, setCreateDuplicates] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
@@ -39,7 +67,7 @@ export default function NewParsePage(props: {
     setSubmitting(true)
     try {
       const created = await window.copilotix.importDocuments(
-        { translationProvider: provider, createDuplicates },
+        { createDuplicates },
         files.map(({ file }) => file)
       )
       if (created.length === 0) {
@@ -54,14 +82,17 @@ export default function NewParsePage(props: {
     } finally {
       setSubmitting(false)
     }
-  }, [createDuplicates, files, messageApi, props.onCreated, provider])
+  }, [createDuplicates, files, messageApi, props.onCreated])
 
   const oversizedFiles = files.filter((file) => file.size > MAX_PDF_BYTES)
 
   return (
     <section className="page new-parse-page">
       {contextHolder}
-      <div className="new-parse-content">
+      <div className="new-parse-hero">
+        <CopilotixWordmark />
+        <h1>今天想讀些什麼？</h1>
+        <div className="new-parse-content">
         <div
           className={dragging ? 'upload-entry dragging' : 'upload-entry'}
           data-testid="pdf-upload-entry"
@@ -75,8 +106,10 @@ export default function NewParsePage(props: {
           onDrop={onDrop}
         >
           <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此区域</span>
-          <InboxOutlined className="upload-icon" aria-hidden="true" />
-          <Button type="primary" size="large" icon={<CloudUploadOutlined />} onClick={chooseFiles}>
+          <FileOutlined className="upload-icon" aria-hidden="true" />
+          <span className="upload-prompt">拖入 PDF 文件</span>
+          <span className="upload-or" aria-hidden="true">or</span>
+          <Button type="primary" size="large" onClick={chooseFiles}>
             {dragging ? '松开以添加 PDF' : '选择 PDF'}
           </Button>
           <input
@@ -89,6 +122,20 @@ export default function NewParsePage(props: {
           />
         </div>
 
+        </div>
+      </div>
+
+      <Modal
+        title="确认解析任务"
+        open={files.length > 0}
+        width={720}
+        okText="开始解析"
+        cancelText="重新选择"
+        confirmLoading={submitting}
+        okButtonProps={{ disabled: props.settings.credentials.parser.state === 'missing' || props.settings.credentials.parser.state === 'invalid' || oversizedFiles.length > 0 }}
+        onOk={() => void start()}
+        onCancel={() => setFiles([])}
+      >
         {props.settings.credentials.parser.state === 'missing' ? (
           <Alert
             className="token-required"
@@ -107,19 +154,6 @@ export default function NewParsePage(props: {
             description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置重新验证</Button>}
           />
         ) : null}
-      </div>
-
-      <Modal
-        title="确认解析任务"
-        open={files.length > 0}
-        width={720}
-        okText="开始解析"
-        cancelText="重新选择"
-        confirmLoading={submitting}
-        okButtonProps={{ disabled: props.settings.credentials.parser.state === 'missing' || props.settings.credentials.parser.state === 'invalid' || oversizedFiles.length > 0 }}
-        onOk={() => void start()}
-        onCancel={() => setFiles([])}
-      >
         <div className="selected-files">
           {files.map((file) => (
             <div className="selected-file" key={`${file.name}:${file.size}:${file.file.lastModified}`}>
@@ -137,12 +171,6 @@ export default function NewParsePage(props: {
           description={<Checkbox checked={createDuplicates} onChange={(event) => setCreateDuplicates(event.target.checked)}>仍为重复文件创建新任务</Checkbox>}
         />
         {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="解析 API 不接受超过 200MB 的单个文件" /> : null}
-        <Space className="confirm-options" size="large">
-          <label>
-            <span>翻译模型</span>
-            <Select<TranslationProviderId> value={provider} onChange={setProvider} options={Object.entries(PROVIDER_LABELS).map(([value, label]) => ({ value: value as TranslationProviderId, label }))} />
-          </label>
-        </Space>
       </Modal>
     </section>
   )

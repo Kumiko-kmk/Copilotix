@@ -112,6 +112,11 @@ test('renders compact scrollable tables and independent real formula minimaps', 
 
 async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<void> {
   await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
+  await expect(activeTextPanel.locator('.markdown-body')).toHaveCSS('padding-top', '15px')
+  await expect(activeTextPanel.locator('.markdown-body h1')).toHaveCSS('margin-top', '4px')
+  await expect(activeTextPanel.locator('.markdown-body h1')).toHaveCSS('margin-bottom', '11px')
+  await expect(activeTextPanel.locator('.markdown-body p').first()).toHaveCSS('margin-top', '6px')
+  await expect(activeTextPanel.locator('.markdown-body p').first()).toHaveCSS('margin-bottom', '6px')
   await expect(activeTextPanel.locator('.markdown-body td .katex')).toHaveCount(4)
   await expect(activeTextPanel.locator('.markdown-minimap-formula .katex')).toHaveCount(5)
   await expect(activeTextPanel.locator('.markdown-body table')).not.toContainText('$x$')
@@ -192,19 +197,10 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await window.locator('[data-block-position="1-2"]').click()
     await expect.poll(() => isCentered(markdownImageBlock, '.markdown-scroll')).toBe(true)
 
-    await window.evaluate(() => {
-      Object.defineProperty(window, '__copilotixOriginalMarkdownScroller', {
-        value: document.querySelector('[data-reader-tab-panel="original"] .markdown-scroll'),
-        configurable: true
-      })
-    })
     await window.getByText('Markdown（中文）').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(originalBlockCount)
-    expect(await window.evaluate(() =>
-      document.querySelector('[data-reader-tab-panel="original"] .markdown-scroll') ===
-      Reflect.get(window, '__copilotixOriginalMarkdownScroller')
-    )).toBe(true)
+    await expect(window.locator('[data-reader-tab-panel="original"] .markdown-scroll')).toHaveCount(0)
     await expect(activeTextPanel.locator('.markdown-body sup')).toHaveText('12')
     await expect(activeTextPanel.locator('.markdown-body sub', { hasText: /^2$/ })).toHaveText('2')
     await expect(activeTextPanel.locator('.markdown-body td')).toHaveText('学术单元格')

@@ -11,7 +11,14 @@ vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   getDocument: getDocumentMock
 }))
 
-import PdfPane from '../src/renderer/components/PdfPane'
+import PdfPane, {
+  buildPdfPageLayout,
+  indexMappingsByPage,
+  pageIndexAtOffset,
+  pdfPageMetrics,
+  pdfRenderWindow,
+  readPdfContentWidth
+} from '../src/renderer/components/PdfPane'
 
 let scrollIntoView: ReturnType<typeof vi.fn>
 
@@ -20,9 +27,15 @@ class IntersectionObserverMock {
   disconnect(): void {}
 }
 
+class ResizeObserverMock {
+  observe(): void {}
+  disconnect(): void {}
+}
+
 beforeEach(() => {
   scrollIntoView = vi.fn()
   vi.stubGlobal('IntersectionObserver', IntersectionObserverMock)
+  vi.stubGlobal('ResizeObserver', ResizeObserverMock)
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     callback(0)
     return 1
@@ -102,6 +115,7 @@ describe('PdfPane mapping navigation', () => {
       <PdfPane url="copilotix-asset://document/original.pdf" mappings={mappings} selection={selection} onSelect={onSelect} />
     )
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'center', inline: 'nearest' })
     expect(continuation.classList.contains('active')).toBe(true)
   })
 
@@ -157,6 +171,68 @@ describe('PdfPane mapping navigation', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('PDF fit-width zoom', () => {
+  it('treats the available reader width as 100%', () => {
+    expect(pdfPageMetrics({ width: 612, height: 792 }, 500, 1)).toEqual({
+      scale: 500 / 612,
+      width: 500,
+      height: 792 * 500 / 612
+    })
+    expect(pdfPageMetrics({ width: 400, height: 600 }, 500, 1.1).width).toBeCloseTo(550)
+  })
+
+  it('handles different page sizes, zoom limits and an unavailable width', () => {
+    expect(pdfPageMetrics({ width: 300, height: 900 }, 450, 1).height).toBe(1350)
+    expect(pdfPageMetrics({ width: 612, height: 792 }, 0, 1).width).toBe(612)
+    expect(pdfPageMetrics({ width: 612, height: 792 }, 500, 0.1).width).toBeCloseTo(300)
+    expect(pdfPageMetrics({ width: 612, height: 792 }, 500, 3).width).toBeCloseTo(1000)
+  })
+
+  it('subtracts the scroll container inline padding', () => {
+    const scroller = document.createElement('div')
+    scroller.style.paddingLeft = '24px'
+    scroller.style.paddingRight = '24px'
+    Object.defineProperty(scroller, 'clientWidth', { configurable: true, value: 548 })
+    document.body.append(scroller)
+    expect(readPdfContentWidth(scroller)).toBe(500)
+    scroller.remove()
+  })
+})
+
+describe('PDF long-document indexing', () => {
+  it('keeps the heavy render window bounded for a thousand-page document', () => {
+    expect(pdfRenderWindow(0, 1000, 2)).toEqual({ start: 0, end: 3 })
+    expect(pdfRenderWindow(500, 1000, 2)).toEqual({ start: 498, end: 503 })
+    expect(pdfRenderWindow(999, 1000, 2)).toEqual({ start: 997, end: 1000 })
+  })
+
+  it('locates pages by binary-searchable cumulative geometry', () => {
+    const layout = buildPdfPageLayout(Array.from({ length: 1000 }, () => ({ width: 600, height: 800 })), 600, 1)
+    expect(layout.totalHeight).toBe(824_000)
+    expect(pageIndexAtOffset(layout, 0)).toBe(0)
+    expect(pageIndexAtOffset(layout, 824 * 500 + 20)).toBe(500)
+    expect(pageIndexAtOffset(layout, layout.totalHeight)).toBe(999)
+  })
+
+  it('indexes mappings once by every page they touch', () => {
+    const mapping: BlockMapping = {
+      id: 'continued',
+      order: 0,
+      type: 'text',
+      sourceText: 'continued text',
+      boxes: [
+        { pageIndex: 2, pageSize: [612, 792], bbox: [0, 0, 10, 10], blockPosition: '2-0' },
+        { pageIndex: 3, pageSize: [612, 792], bbox: [0, 0, 10, 10], blockPosition: '3-0' }
+      ]
+    }
+    const pages = indexMappingsByPage([mapping], 1000)
+    expect(pages[0]).toEqual([])
+    expect(pages[2]).toEqual([mapping])
+    expect(pages[3]).toEqual([mapping])
+    expect(pages[999]).toEqual([])
   })
 })
 

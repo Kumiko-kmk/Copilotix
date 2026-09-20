@@ -4,6 +4,7 @@ import { Alert, Button, Progress, Space } from 'antd'
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
 import type { BlockBox, BlockMapping, BlockSelection } from '@shared/types'
 import { acquirePdfDocument } from '../pdfDocumentCache'
+import { recordReaderDuration } from '../readerPerformance'
 
 type LoadingState =
   | { status: 'loading'; progress: number | null }
@@ -11,6 +12,7 @@ type LoadingState =
   | { status: 'error'; message: string }
 
 const PAGE_RENDER_RADIUS = 2
+const PDF_PAGE_GAP = 24
 const SCROLLBAR_HOT_ZONE_PX = 16
 const SCROLLBAR_HIDE_DELAY_MS = 300
 
@@ -31,11 +33,17 @@ export default function PdfPane(props: {
   const [loadingState, setLoadingState] = React.useState<LoadingState>({ status: 'loading', progress: null })
   const [currentPage, setCurrentPage] = React.useState(1)
   const [zoom, setZoom] = React.useState(1)
+  const [contentWidth, setContentWidth] = React.useState(0)
+  const [pageSizes, setPageSizes] = React.useState<readonly PdfBaseSize[]>([])
   const [reloadKey, setReloadKey] = React.useState(0)
   const [scrollbars, setScrollbars] = React.useState<ScrollbarVisibility>(HIDDEN_SCROLLBARS)
   const scrollerRef = React.useRef<HTMLDivElement>(null)
   const scrollbarHideTimerRef = React.useRef<number | null>(null)
   const scrollbarDraggingRef = React.useRef(false)
+  const scrollFrameRef = React.useRef<number | null>(null)
+  const mappingsByPage = React.useMemo(() => indexMappingsByPage(props.mappings, document?.numPages ?? 0), [document?.numPages, props.mappings])
+  const pageLayout = React.useMemo(() => buildPdfPageLayout(pageSizes, contentWidth, zoom), [contentWidth, pageSizes, zoom])
+  const renderWindow = pdfRenderWindow(currentPage - 1, pageSizes.length, PAGE_RENDER_RADIUS)
 
   const cancelScrollbarHide = React.useCallback(() => {
     if (scrollbarHideTimerRef.current === null) return
@@ -120,6 +128,7 @@ export default function PdfPane(props: {
         if (cancelled) return
         setDocument(value)
         setCurrentPage(1)
+        setPageSizes(Array.from({ length: value.numPages }, () => DEFAULT_PDF_PAGE_SIZE))
         setLoadingState({ status: 'ready' })
       })
       .catch((error: unknown) => {
@@ -130,6 +139,23 @@ export default function PdfPane(props: {
       handle.release()
     }
   }, [props.url, reloadKey])
+
+  React.useEffect(() => () => {
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
+  }, [])
+
+  React.useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const measure = (): void => {
+      const next = readPdfContentWidth(scroller)
+      setContentWidth((current) => current === next ? current : next)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(scroller)
+    return () => observer.disconnect()
+  }, [])
 
   React.useEffect(() => {
     const selection = props.selection
@@ -146,7 +172,7 @@ export default function PdfPane(props: {
         (element) => element.dataset.blockId === mapping.id && element.dataset.blockPosition === targetBox.blockPosition
       )
       const destination = target ?? page
-      destination.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+      destination.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
     })
   }, [props.mappings, props.selection])
 
@@ -159,7 +185,25 @@ export default function PdfPane(props: {
     })
   }, [document])
 
-  const onVisiblePage = React.useCallback((pageIndex: number) => setCurrentPage(pageIndex + 1), [])
+  const onPageSize = React.useCallback((pageIndex: number, size: PdfBaseSize) => {
+    setPageSizes((current) => {
+      const existing = current[pageIndex]
+      if (existing && existing.width === size.width && existing.height === size.height) return current
+      const next = [...current]
+      next[pageIndex] = size
+      return next
+    })
+  }, [])
+  const onPdfScroll = React.useCallback(() => {
+    if (scrollFrameRef.current !== null) return
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null
+      const scroller = scrollerRef.current
+      if (!scroller || pageSizes.length === 0) return
+      const pageIndex = pageIndexAtOffset(pageLayout, scroller.scrollTop + scroller.clientHeight * 0.45)
+      setCurrentPage((current) => current === pageIndex + 1 ? current : pageIndex + 1)
+    })
+  }, [pageLayout, pageSizes.length])
   const retry = React.useCallback(() => setReloadKey((value) => value + 1), [])
   const onPageError = React.useCallback((message: string) => setLoadingState({ status: 'error', message }), [])
   const onPdfBlock = React.useCallback((mappingId: string, blockPosition: string) => {
@@ -186,6 +230,7 @@ export default function PdfPane(props: {
         onPointerMove={revealScrollbarsNearEdge}
         onPointerLeave={scheduleScrollbarHide}
         onPointerDown={startScrollbarDrag}
+        onScroll={onPdfScroll}
       >
         {loadingState.status === 'loading' ? (
           <div className="pdf-loading">
@@ -204,20 +249,29 @@ export default function PdfPane(props: {
           />
         ) : null}
         {document && loadingState.status === 'ready'
-          ? Array.from({ length: document.numPages }, (_, pageIndex) => (
-              <PdfPage
-                key={pageIndex}
-                document={document}
-                pageIndex={pageIndex}
-                zoom={zoom}
-                shouldRender={Math.abs(pageIndex - (currentPage - 1)) <= PAGE_RENDER_RADIUS}
-                mappings={props.mappings}
-                selection={props.selection}
-                onSelect={onPdfBlock}
-                onVisible={onVisiblePage}
-                onError={onPageError}
-              />
-            ))
+          ? <>
+            {renderWindow.start > 0 ? <div className="pdf-page-spacer" style={{ height: pageLayout.pages[renderWindow.start]?.top ?? 0 }} aria-hidden="true" /> : null}
+            {Array.from({ length: renderWindow.end - renderWindow.start }, (_, offset) => {
+              const pageIndex = renderWindow.start + offset
+              const baseSize = pageSizes[pageIndex] ?? DEFAULT_PDF_PAGE_SIZE
+              return (
+            <PdfPage
+              key={pageIndex}
+              document={document}
+              pageIndex={pageIndex}
+              zoom={zoom}
+              contentWidth={contentWidth}
+              baseSize={baseSize}
+              mappings={mappingsByPage[pageIndex] ?? EMPTY_PAGE_MAPPINGS}
+              selection={props.selection}
+              onSelect={onPdfBlock}
+              onPageSize={onPageSize}
+              onError={onPageError}
+            />
+              )
+            })}
+            {renderWindow.end < pageSizes.length ? <div className="pdf-page-spacer" style={{ height: remainingPdfLayoutHeight(pageLayout, renderWindow.end) }} aria-hidden="true" /> : null}
+          </>
           : null}
       </div>
     </div>
@@ -228,36 +282,24 @@ const PdfPage = React.memo(function PdfPage(props: {
   document: PDFDocumentProxy
   pageIndex: number
   zoom: number
-  shouldRender: boolean
+  contentWidth: number
+  baseSize: PdfBaseSize
   mappings: BlockMapping[]
   selection: BlockSelection | null
   onSelect(mappingId: string, blockPosition: string): void
-  onVisible(pageIndex: number): void
+  onPageSize(pageIndex: number, size: PdfBaseSize): void
   onError(message: string): void
 }): React.JSX.Element {
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const pageRef = React.useRef<HTMLDivElement>(null)
   const renderTaskRef = React.useRef<RenderTask | null>(null)
   const [page, setPage] = React.useState<PDFPageProxy | null>(null)
-  const [baseSize, setBaseSize] = React.useState({ width: 612, height: 792 })
-  const scale = props.zoom * 1.25
-  const size = { width: baseSize.width * scale, height: baseSize.height * scale }
+  const { scale, width, height } = pdfPageMetrics(props.baseSize, props.contentWidth, props.zoom)
+  const size = { width, height }
 
   React.useEffect(() => {
-    if (!props.shouldRender) {
-      renderTaskRef.current?.cancel()
-      setPage((current) => {
-        current?.cleanup()
-        return null
-      })
-      const canvas = canvasRef.current
-      if (canvas) {
-        canvas.width = 0
-        canvas.height = 0
-      }
-      return
-    }
     let cancelled = false
+    let loadedPage: PDFPageProxy | null = null
     void props.document.getPage(props.pageIndex + 1)
       .then((value) => {
         if (cancelled) {
@@ -265,15 +307,19 @@ const PdfPage = React.memo(function PdfPage(props: {
           return
         }
         const viewport = value.getViewport({ scale: 1 })
-        setBaseSize({ width: viewport.width, height: viewport.height })
+        loadedPage = value
+        props.onPageSize(props.pageIndex, { width: viewport.width, height: viewport.height })
         setPage(value)
       })
       .catch((error: unknown) => { if (!cancelled) props.onError(pdfErrorMessage(error)) })
-    return () => { cancelled = true }
-  }, [props.document, props.onError, props.pageIndex, props.shouldRender])
+    return () => {
+      cancelled = true
+      loadedPage?.cleanup()
+    }
+  }, [props.document, props.onError, props.onPageSize, props.pageIndex])
 
   React.useEffect(() => {
-    if (!page || !canvasRef.current || !props.shouldRender) return
+    if (!page || !canvasRef.current) return
     const viewport = page.getViewport({ scale })
     const canvas = canvasRef.current
     const ratio = window.devicePixelRatio || 1
@@ -283,6 +329,7 @@ const PdfPage = React.memo(function PdfPage(props: {
     canvas.style.height = `${viewport.height}px`
     const context = canvas.getContext('2d')
     if (!context) return
+    const renderStartedAt = performance.now()
     const renderTask = page.render({
       canvas,
       canvasContext: context,
@@ -290,25 +337,16 @@ const PdfPage = React.memo(function PdfPage(props: {
       transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0]
     })
     renderTaskRef.current = renderTask
-    void renderTask.promise.catch((error: unknown) => {
-      if (!isRenderingCancelled(error)) props.onError(pdfErrorMessage(error))
-    })
+    void renderTask.promise
+      .then(() => recordReaderDuration('pdf-render', renderStartedAt))
+      .catch((error: unknown) => {
+        if (!isRenderingCancelled(error)) props.onError(pdfErrorMessage(error))
+      })
     return () => {
       renderTask.cancel()
       renderTaskRef.current = null
     }
-  }, [page, props.onError, props.shouldRender, scale])
-
-  React.useEffect(() => {
-    const element = pageRef.current
-    if (!element) return
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry && entry.intersectionRatio > 0.55) props.onVisible(props.pageIndex) },
-      { threshold: [0.55] }
-    )
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [props.onVisible, props.pageIndex])
+  }, [page, props.onError, scale])
 
   const overlays = React.useMemo(
     () => props.mappings.flatMap((mapping) => mapping.boxes
@@ -366,12 +404,100 @@ const PdfPage = React.memo(function PdfPage(props: {
   )
 })
 
+const DEFAULT_PDF_PAGE_SIZE: PdfBaseSize = Object.freeze({ width: 612, height: 792 })
+const EMPTY_PAGE_MAPPINGS: BlockMapping[] = []
+
+interface PdfBaseSize {
+  width: number
+  height: number
+}
+
+export function indexMappingsByPage(mappings: BlockMapping[], pageCount: number): BlockMapping[][] {
+  const pages = Array.from({ length: pageCount }, () => [] as BlockMapping[])
+  for (const mapping of mappings) {
+    const seen = new Set<number>()
+    for (const box of mapping.boxes) {
+      if (box.pageIndex < 0 || box.pageIndex >= pageCount || seen.has(box.pageIndex)) continue
+      pages[box.pageIndex]?.push(mapping)
+      seen.add(box.pageIndex)
+    }
+  }
+  return pages
+}
+
+export interface PdfPageLayout {
+  pages: Array<{ top: number; width: number; height: number }>
+  totalHeight: number
+}
+
+export function buildPdfPageLayout(
+  pageSizes: readonly PdfBaseSize[],
+  contentWidth: number,
+  zoom: number
+): PdfPageLayout {
+  let consumed = 0
+  const pages = pageSizes.map((size) => {
+    const top = consumed
+    const metrics = pdfPageMetrics(size, contentWidth, zoom)
+    consumed += metrics.height + PDF_PAGE_GAP
+    return { top, width: metrics.width, height: metrics.height }
+  })
+  return { pages, totalHeight: consumed }
+}
+
+export function pageIndexAtOffset(layout: PdfPageLayout, offset: number): number {
+  if (layout.pages.length === 0) return 0
+  let low = 0
+  let high = layout.pages.length
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if ((layout.pages[middle]?.top ?? 0) <= offset) low = middle + 1
+    else high = middle
+  }
+  if (low >= layout.pages.length) return layout.pages.length - 1
+  return Math.max(0, low - 1)
+}
+
+export function pdfRenderWindow(currentPageIndex: number, pageCount: number, radius: number): { start: number; end: number } {
+  const safeCurrent = Math.min(Math.max(0, currentPageIndex), Math.max(0, pageCount - 1))
+  return {
+    start: Math.max(0, safeCurrent - radius),
+    end: Math.min(pageCount, safeCurrent + radius + 1)
+  }
+}
+
+function remainingPdfLayoutHeight(layout: PdfPageLayout, firstHiddenPage: number): number {
+  return Math.max(0, layout.totalHeight - (layout.pages[firstHiddenPage]?.top ?? layout.totalHeight))
+}
+
 function findTargetBox(mapping: BlockMapping, blockPosition?: string): BlockBox | undefined {
   return (
     (blockPosition ? mapping.boxes.find((box) => box.blockPosition === blockPosition) : undefined) ??
     mapping.boxes.find((box) => box.mergeRole === 'source') ??
     mapping.boxes[0]
   )
+}
+
+export function pdfPageMetrics(
+  baseSize: { width: number; height: number },
+  contentWidth: number,
+  zoom: number
+): { scale: number; width: number; height: number } {
+  const safeWidth = Number.isFinite(contentWidth) && contentWidth > 0 ? contentWidth : baseSize.width
+  const safeZoom = Number.isFinite(zoom) ? Math.min(2, Math.max(0.6, zoom)) : 1
+  const scale = baseSize.width > 0 ? safeWidth / baseSize.width * safeZoom : safeZoom
+  return { scale, width: baseSize.width * scale, height: baseSize.height * scale }
+}
+
+export function readPdfContentWidth(scroller: HTMLElement): number {
+  const style = window.getComputedStyle(scroller)
+  const padding = numericPixels(style.paddingLeft) + numericPixels(style.paddingRight)
+  return Math.max(0, scroller.clientWidth - padding)
+}
+
+function numericPixels(value: string): number {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 interface MergeConnector {

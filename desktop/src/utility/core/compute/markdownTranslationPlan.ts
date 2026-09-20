@@ -169,6 +169,7 @@ interface PlanMetadata {
  */
 export class MarkdownTranslationPlanManager {
   private readonly plans = new Map<string, PlanState>()
+  private readonly metadataWriteTails = new Map<string, Promise<void>>()
   private readonly blockMappingVersion: number
   private readonly outputRoot: string | undefined
 
@@ -895,6 +896,22 @@ export class MarkdownTranslationPlanManager {
   }
 
   private async writeMetadata(state: PlanState): Promise<void> {
+    const key = planKey(state.taskId, state.jobId)
+    const previous = this.metadataWriteTails.get(key) ?? Promise.resolve()
+    const next = previous.then(() => this.writeMetadataNow(state), () => this.writeMetadataNow(state))
+    const tail = next.then(() => undefined, () => undefined)
+    this.metadataWriteTails.set(key, tail)
+    try {
+      await next
+    } finally {
+      if (this.metadataWriteTails.get(key) === tail) {
+        this.metadataWriteTails.delete(key)
+      }
+    }
+  }
+
+  /** Serialize replacement of one plan.json on Windows and other platforms. */
+  private async writeMetadataNow(state: PlanState): Promise<void> {
     const metadata: PlanMetadata = {
       formatVersion: 1,
       planId: state.planId,

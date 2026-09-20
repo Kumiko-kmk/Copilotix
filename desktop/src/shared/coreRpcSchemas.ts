@@ -120,8 +120,9 @@ const corePathSchema = z.string().min(1).max(32_768).refine(noNul, 'path cannot 
 const coreIdSchema = z.string().min(1).max(512).refine(noNul, 'id cannot contain NUL')
 const coreHashSchema = z.string().min(1).max(512).refine(noNul, 'hash cannot contain NUL')
 const coreTimestampSchema = z.string().min(1).max(128).refine(noNul, 'timestamp cannot contain NUL')
-const coreJobKindSchema = z.enum(['parse', 'translate'])
-const coreJobStatusSchema = z.enum(['queued', 'running', 'retry-wait', 'succeeded', 'partial', 'failed', 'cancelled'])
+/** Job kinds are metadata only; raw document/vector/credential data is never a job RPC field. */
+export const coreJobKindSchema = z.enum(['parse', 'translate', 'rag-content-index', 'rag-embed', 'rag-delete'])
+export const coreJobStatusSchema = z.enum(['queued', 'running', 'retry-wait', 'succeeded', 'partial', 'failed', 'cancelled'])
 export const coreTaskPatchSchema = z.object({
   originalName: z.string().min(1).max(32_768).refine(noNul).optional(),
   title: z.string().max(32_768).refine(noNul).nullable().optional(),
@@ -192,6 +193,62 @@ const coreReaderAnnotationSchema = z.object({
 }).strict()
 const coreReaderAnnotationsSchema = z.array(coreReaderAnnotationSchema).max(10_000)
 
+/**
+ * Knowledge lifecycle DTOs contain only bounded identities, state, progress,
+ * and retry metadata.  Source text, vectors, paths, provider URLs, and
+ * credentials are Utility-owned and are intentionally absent from this
+ * process boundary.
+ */
+const coreKnowledgeStateErrorSchema = z.object({
+  code: z.string().min(1).max(128).refine(noNul),
+  message: z.string().max(4_096).refine(noNul),
+  retryable: z.boolean(),
+  retryAfterMs: z.number().int().min(0).max(86_400_000).nullable()
+}).strict()
+const coreLocalIndexStateSchema = z.enum(['unindexed', 'queued', 'indexing', 'ready', 'stale', 'failed'])
+const coreSemanticIndexStateSchema = z.enum(['disabled', 'requires-consent', 'requires-credential', 'queued', 'indexing', 'ready', 'stale', 'failed'])
+const coreVectorIndexStateSchema = z.enum(['queued', 'building', 'ready', 'stale', 'failed'])
+export const coreKnowledgeSchema = z.object({
+  documentId: coreIdSchema,
+  localState: coreLocalIndexStateSchema,
+  localProgress: z.number().int().min(0).max(100),
+  localError: coreKnowledgeStateErrorSchema.nullable(),
+  activeContentRevisionId: coreIdSchema.nullable(),
+  semanticConsent: z.boolean(),
+  semanticState: coreSemanticIndexStateSchema,
+  semanticProgress: z.number().int().min(0).max(100),
+  semanticError: coreKnowledgeStateErrorSchema.nullable(),
+  semanticContentRevisionId: coreIdSchema.nullable(),
+  activeVectorIndexId: coreIdSchema.nullable(),
+  semanticProfileId: coreIdSchema.nullable(),
+  updatedAt: coreTimestampSchema
+}).strict()
+
+export const coreKnowledgeGetPayloadSchema = z.object({ documentId: coreIdSchema }).strict()
+export const coreKnowledgeGetResultSchema = coreKnowledgeSchema.nullable()
+export const coreSemanticConsentPayloadSchema = z.object({
+  documentId: coreIdSchema,
+  consent: z.boolean(),
+  now: coreTimestampSchema.optional()
+}).strict()
+export const coreSemanticConsentResultSchema = coreKnowledgeSchema
+export const coreEnsureEmbeddingPayloadSchema = z.object({
+  documentId: coreIdSchema,
+  profileId: coreIdSchema,
+  now: coreTimestampSchema.optional()
+}).strict()
+export const coreEmbeddingJobResultSchema = z.object({
+  documentId: coreIdSchema,
+  profileId: coreIdSchema,
+  contentRevisionId: coreIdSchema,
+  vectorIndexId: coreIdSchema,
+  jobId: coreIdSchema,
+  jobKind: z.literal('rag-embed'),
+  jobStatus: coreJobStatusSchema,
+  vectorIndexState: coreVectorIndexStateSchema,
+  semanticState: coreSemanticIndexStateSchema
+}).strict()
+
 const coreOperationNames = [
   'ping', 'cancel', 'drain', 'shutdown',
   'database:init', 'database:flush', 'database:close',
@@ -200,10 +257,12 @@ const coreOperationNames = [
   'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
   'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
   'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:get-latest', 'artifacts:record-revision',
+  'knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed',
   'translation:block-upsert', 'translation:batch-commit', 'translation:blocks-list', 'translation:run-update',
   'translation:cache-get', 'translation:cache-put',
   'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
   'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
+  'compute:rag-content-index',
   'compute:translation-plan-open', 'compute:translation-plan-list', 'compute:translation-plan-cache',
   'compute:translation-plan-apply', 'compute:translation-plan-fail', 'compute:translation-plan-finalize'
 ] as const
@@ -414,10 +473,21 @@ export const coreImportPdfResultSchema = z.object({ sha256: coreHashSchema, size
 export const coreNormalizeParserPayloadSchema = z.object({ task: copilotixTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()
 export const coreNormalizeParserResultSchema = z.object({
   normalized: z.literal(true),
-  displayTitle: z.string().max(32_768).refine(noNul).nullable()
+  displayTitle: z.string().max(32_768).refine(noNul).nullable(),
+  pageCount: z.number().int().min(0).max(100_000)
 }).strict()
 export const coreRebuildMappingsPayloadSchema = z.object({ taskId: coreIdSchema, outputDir: corePathSchema }).strict()
 export const coreRebuildMappingsResultSchema = z.object({ rebuilt: z.literal(true) }).strict()
+export const coreRagContentIndexPayloadSchema = z.object({
+  documentId: coreIdSchema,
+  contentRevisionId: coreIdSchema
+}).strict()
+export const coreRagContentIndexResultSchema = z.object({
+  documentId: coreIdSchema,
+  contentRevisionId: coreIdSchema,
+  chunkCount: z.number().int().min(0).max(100_000),
+  revisionState: z.literal('ready')
+}).strict()
 
 const coreTranslationPlanIdSchema = z.string().uuid().refine(noNul, 'translation plan id cannot contain NUL')
 const coreTranslationPlanPathSchema = z.string().min(1).max(1_024).refine(noNul, 'translation plan path cannot contain NUL').refine((value) =>
@@ -508,6 +578,9 @@ export const coreOperationRegistry = {
   'documents:update-metadata': { payload: coreDocumentMetadataPayloadSchema, result: coreMutationResultSchema },
   'artifacts:get-latest': { payload: coreArtifactLatestPayloadSchema, result: coreArtifactLatestResultSchema },
   'artifacts:record-revision': { payload: coreArtifactRecordPayloadSchema, result: coreMutationResultSchema },
+  'knowledge:get': { payload: coreKnowledgeGetPayloadSchema, result: coreKnowledgeGetResultSchema },
+  'knowledge:set-semantic-consent': { payload: coreSemanticConsentPayloadSchema, result: coreSemanticConsentResultSchema },
+  'knowledge:ensure-embed': { payload: coreEnsureEmbeddingPayloadSchema, result: coreEmbeddingJobResultSchema },
   'translation:block-upsert': { payload: coreTranslationBlockUpsertPayloadSchema, result: coreMutationResultSchema },
   'translation:batch-commit': { payload: coreTranslationBatchCommitPayloadSchema, result: coreMutationResultSchema },
   'translation:blocks-list': { payload: coreTranslationBlocksListPayloadSchema, result: coreTranslationBlocksListResultSchema },
@@ -522,6 +595,7 @@ export const coreOperationRegistry = {
   'compute:import-pdf': { payload: coreImportPdfPayloadSchema, result: coreImportPdfResultSchema },
   'compute:normalize-parser': { payload: coreNormalizeParserPayloadSchema, result: coreNormalizeParserResultSchema },
   'compute:rebuild-mappings': { payload: coreRebuildMappingsPayloadSchema, result: coreRebuildMappingsResultSchema },
+  'compute:rag-content-index': { payload: coreRagContentIndexPayloadSchema, result: coreRagContentIndexResultSchema },
   'compute:translation-plan-open': { payload: coreTranslationPlanOpenPayloadSchema, result: coreTranslationPlanOpenResultSchema },
   'compute:translation-plan-list': { payload: coreTranslationPlanListPayloadSchema, result: coreTranslationPlanListResultSchema },
   'compute:translation-plan-cache': { payload: coreTranslationPlanCachePayloadSchema, result: coreTranslationPlanCacheResultSchema },

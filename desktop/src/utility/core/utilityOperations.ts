@@ -20,9 +20,13 @@ import {
   coreJobManualRetryPayloadSchema,
   coreJobRecoverExpiredPayloadSchema,
   coreJobEventsPayloadSchema,
+  coreKnowledgeGetPayloadSchema,
+  coreSemanticConsentPayloadSchema,
+  coreEnsureEmbeddingPayloadSchema,
   coreSettingsMigrationPayloadSchema,
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
+  coreRagContentIndexPayloadSchema,
   coreTranslationBatchCommitPayloadSchema,
   coreTranslationPlanOpenPayloadSchema,
   coreTranslationPlanListPayloadSchema,
@@ -40,8 +44,11 @@ import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../
 import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
 import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sqliteJobRepository'
+import { SqliteRagRepository, SqliteRagRepositoryError } from './persistence/sqliteRagRepository'
+import { RagDomainService } from './ragDomainService'
 import { PathPolicy } from './persistence/pathPolicy'
 import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
+import { RagContentIndexError, RagContentIndexService } from './compute/ragContentIndexService'
 
 type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
 
@@ -49,6 +56,9 @@ interface UtilityPersistenceState {
   database?: V2Database
   repository?: V2TaskRepositoryCompat
   jobRepository?: SqliteJobRepository
+  ragRepository?: SqliteRagRepository
+  ragService?: RagDomainService
+  ragContentIndexService?: RagContentIndexService
   translationPlanManager?: MarkdownTranslationPlanManager
   databasePath?: string
   outputRoot?: string
@@ -85,6 +95,14 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     if (!state.jobRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
     return state.jobRepository
   }
+  const requireRagService = (): RagDomainService => {
+    if (!state.ragService) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
+    return state.ragService
+  }
+  const requireRagContentIndexService = (): RagContentIndexService => {
+    if (!state.ragContentIndexService) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
+    return state.ragContentIndexService
+  }
   const requireTranslationPlanManager = (): MarkdownTranslationPlanManager => {
     if (!state.repository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
     if (!state.translationPlanManager) {
@@ -101,7 +119,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'database:init': async (request) => {
       const payload = coreDatabaseInitPayloadSchema.parse(request.payload)
       validateBootstrapPaths(payload.databasePath, payload.outputRoot)
-      if (state.databasePath === payload.databasePath && state.outputRoot === payload.outputRoot && state.repository && state.jobRepository) return { initialized: true }
+      if (state.databasePath === payload.databasePath && state.outputRoot === payload.outputRoot && state.repository && state.jobRepository && state.ragService && state.ragContentIndexService) return { initialized: true }
       closeState(state)
       try {
         await mkdir(dirname(payload.databasePath), { recursive: true })
@@ -109,6 +127,9 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
         state.database = new V2Database(payload.databasePath)
         state.repository = new V2TaskRepositoryCompat(state.database, new PathPolicy())
         state.jobRepository = new SqliteJobRepository(state.database)
+        state.ragRepository = new SqliteRagRepository(state.database)
+        state.ragService = new RagDomainService(state.database, state.ragRepository, state.jobRepository)
+        state.ragContentIndexService = new RagContentIndexService(state.database, state.ragRepository, new PathPolicy())
         state.translationPlanManager = new MarkdownTranslationPlanManager(state.repository, new PathPolicy(), { outputRoot: payload.outputRoot })
         state.databasePath = payload.databasePath
         return { initialized: true }
@@ -189,6 +210,18 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       requireRepository().updateDocumentMetadata(payload.id, payload.patch)
       return { changed: true }
     },
+    'knowledge:get': (request) => {
+      const payload = coreKnowledgeGetPayloadSchema.parse(request.payload)
+      return requireRagService().getKnowledge(payload.documentId)
+    },
+    'knowledge:set-semantic-consent': (request) => {
+      const payload = coreSemanticConsentPayloadSchema.parse(request.payload)
+      return requireRagService().setSemanticConsent(payload.documentId, payload.consent, payload.now)
+    },
+    'knowledge:ensure-embed': (request) => {
+      const payload = coreEnsureEmbeddingPayloadSchema.parse(request.payload)
+      return requireRagService().ensureEmbeddingJob(payload)
+    },
     'artifacts:get-latest': (request) => {
       const payload = request.payload as { documentId: string; kind: Parameters<V2TaskRepositoryCompat['getLatestArtifactReference']>[1] }
       return requireRepository().getLatestArtifactReference(payload.documentId, payload.kind)
@@ -242,6 +275,10 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       await rebuildMappings(payload.taskId, payload.outputDir, requireRepository())
       return { rebuilt: true }
     },
+    'compute:rag-content-index': async (request, signal) => {
+      const payload = coreRagContentIndexPayloadSchema.parse(request.payload)
+      return requireRagContentIndexService().index(payload, signal)
+    },
     'compute:translation-plan-open': async (request) => {
       const payload = coreTranslationPlanOpenPayloadSchema.parse(request.payload)
       return requireTranslationPlanManager().open(payload.taskId, payload.jobId)
@@ -282,10 +319,12 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
     'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
     'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:get-latest', 'artifacts:record-revision',
+    'knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed',
     'translation:block-upsert', 'translation:batch-commit', 'translation:blocks-list', 'translation:run-update',
     'translation:cache-get', 'translation:cache-put',
     'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
     'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
+    'compute:rag-content-index',
     'compute:translation-plan-open', 'compute:translation-plan-list', 'compute:translation-plan-cache',
     'compute:translation-plan-apply', 'compute:translation-plan-fail', 'compute:translation-plan-finalize'
   ]
@@ -293,7 +332,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     const handler = handlers[operation]
     if (!handler) continue
     handlers[operation] = (request, signal) => serializePersistence(() => handler(request, signal)).catch((error: unknown) => {
-      if (error instanceof SqliteJobRepositoryError) {
+      if (error instanceof SqliteJobRepositoryError || error instanceof SqliteRagRepositoryError || error instanceof RagContentIndexError) {
         throw new CoreUtilityOperationError(error.code, error.message, error.retryable)
       }
       throw error
@@ -314,6 +353,9 @@ function closeState(state: UtilityPersistenceState): void {
     state.translationPlanManager = undefined
     state.repository = undefined
     state.jobRepository = undefined
+    state.ragService = undefined
+    state.ragRepository = undefined
+    state.ragContentIndexService = undefined
   } finally {
     try { state.database?.close() } finally {
       state.database = undefined
@@ -439,7 +481,7 @@ async function normalizeParserOutput(
   extractedDir: string,
   repository: V2TaskRepositoryCompat,
   jobId?: string
-): Promise<{ normalized: true; displayTitle: string | null }> {
+): Promise<{ normalized: true; displayTitle: string | null; pageCount: number }> {
   assertTaskPath(task.outputDir)
   assertTaskPath(extractedDir)
   await mkdir(task.outputDir, { recursive: true })
@@ -480,6 +522,7 @@ async function normalizeParserOutput(
 
     const layoutData = JSON.parse(await readFile(layoutStaged, 'utf8')) as unknown
     const mappings = buildBlockMappings(task.id, layoutData)
+    const pageCount = mappings.reduce((maximum, mapping) => Math.max(maximum, ...mapping.boxes.map((box) => box.pageIndex + 1), 0), 0)
     const markdownText = await readFile(markdownStaged, 'utf8')
     const extractedTitle = extractPaperTitle(markdownText, mappings)
     const displayTitle = extractedTitle ? sanitizeTitleStem(extractedTitle) : null
@@ -498,7 +541,7 @@ async function normalizeParserOutput(
       await publishStagedFile(image.stagedPath, destination, await hashFile(image.stagedPath))
     }
     repository.recordArtifactRevisions(revisions)
-    return { normalized: true, displayTitle }
+    return { normalized: true, displayTitle, pageCount }
   } finally {
     await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined)
   }

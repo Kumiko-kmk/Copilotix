@@ -11,6 +11,19 @@ const processor = unified()
   .use(remarkMath)
   .use(remarkStringify, { bullet: '-', fences: true, listItemIndent: 'one' })
 
+/**
+ * The RAG indexer uses the exact same remark pipeline as block alignment.  It
+ * is intentionally exported as a small AST boundary instead of duplicating a
+ * Markdown parser in the Utility process.
+ */
+export function parseMarkdownAst(markdown: string): any {
+  return processor.parse(markdown)
+}
+
+export function stringifyMarkdownAst(node: any): string {
+  return String(processor.stringify({ type: 'root', children: [node] } as any)).trimEnd()
+}
+
 export interface AlignedMarkdownBlock {
   markdown: string
   mappingIds: string[]

@@ -1,4 +1,5 @@
 import React from 'react'
+import { recordReaderDuration } from '../readerPerformance'
 
 const MINIMAP_FRAME_MIN_HEIGHT = 24
 const MINIMAP_HEADING_INDENTS = [4, 10, 16, 22, 28, 34] as const
@@ -99,6 +100,7 @@ export default function MarkdownMinimap(props: {
   const frameRequestRef = React.useRef<number | null>(null)
   const pointerRequestRef = React.useRef<number | null>(null)
   const wheelRequestRef = React.useRef<number | null>(null)
+  const measurementCancelRef = React.useRef<(() => void) | null>(null)
   const draggingRef = React.useRef(false)
   const pendingPointerYRef = React.useRef<number | null>(null)
   const pendingWheelDeltaRef = React.useRef(0)
@@ -127,7 +129,9 @@ export default function MarkdownMinimap(props: {
     })
   }, [updateFrame])
 
-  React.useLayoutEffect(() => {
+  React.useEffect(() => {
+    measurementCancelRef.current?.()
+    measurementCancelRef.current = null
     if (!props.active || !props.ready) {
       setContent(emptyMinimapContent)
       return
@@ -136,8 +140,8 @@ export default function MarkdownMinimap(props: {
     const scroller = props.scrollerRef.current
     const article = props.articleRef.current
     if (!rail || !scroller || !article) return
-    article.classList.add('markdown-minimap-measuring')
-    try {
+    measurementCancelRef.current = scheduleIdleMeasurement(() => {
+      const startedAt = performance.now()
       const measured = measureMarkdownMinimapContent(
         article,
         scroller,
@@ -147,10 +151,14 @@ export default function MarkdownMinimap(props: {
       )
       geometryRef.current = measured.geometry
       setContent(measured)
-    } finally {
-      article.classList.remove('markdown-minimap-measuring')
+      recordReaderDuration('minimap-measure', startedAt)
+      updateFrame()
+      measurementCancelRef.current = null
+    })
+    return () => {
+      measurementCancelRef.current?.()
+      measurementCancelRef.current = null
     }
-    updateFrame()
   }, [props.active, props.articleRef, props.layoutRevision, props.ready, props.scrollerRef, props.yellowHighlightRanges, updateFrame])
 
   React.useLayoutEffect(() => {
@@ -179,6 +187,7 @@ export default function MarkdownMinimap(props: {
     if (frameRequestRef.current !== null) window.cancelAnimationFrame(frameRequestRef.current)
     if (pointerRequestRef.current !== null) window.cancelAnimationFrame(pointerRequestRef.current)
     if (wheelRequestRef.current !== null) window.cancelAnimationFrame(wheelRequestRef.current)
+    measurementCancelRef.current?.()
   }, [])
 
   const writeFrame = React.useCallback((top: number, height: number, preview: boolean) => {
@@ -669,38 +678,35 @@ function measureTextFragments(textNode: Text, parent: HTMLElement): Array<{ text
   const fallback = [{ text: textNode.data, bounds: parent.getBoundingClientRect() }]
   const range = document.createRange()
   if (typeof range.getClientRects !== 'function') return fallback
-  const fragments: Array<{ text: string; bounds: DOMRect }> = []
-  for (const segment of segmentText(textNode.data)) {
-    if (!segment.text.trim()) continue
-    range.setStart(textNode, segment.start)
-    range.setEnd(textNode, segment.end)
-    const rects = Array.from(range.getClientRects()).filter((bounds) => bounds.width > 0 && bounds.height > 0)
-    if (rects.length === 1 && rects[0]) fragments.push({ text: segment.text, bounds: rects[0] })
-    else if (rects.length > 1) fragments.push(...measureGraphemeFragments(textNode, segment.start, segment.text))
-  }
+  range.selectNodeContents(textNode)
+  const rects = Array.from(range.getClientRects()).filter((bounds) => bounds.width > 0 && bounds.height > 0)
   range.detach()
-  return fragments.length > 0 ? fragments : fallback
+  if (rects.length === 0) return fallback
+  const text = textNode.data.replace(/\s+/g, ' ').trim()
+  const totalWidth = rects.reduce((sum, bounds) => sum + bounds.width, 0)
+  let textOffset = 0
+  return rects.map((bounds, index) => {
+    const remaining = text.length - textOffset
+    const length = index === rects.length - 1
+      ? remaining
+      : Math.max(1, Math.min(remaining, Math.round(text.length * bounds.width / Math.max(1, totalWidth))))
+    const fragment = text.slice(textOffset, textOffset + length)
+    textOffset += length
+    return { text: fragment, bounds }
+  })
 }
 
-function measureGraphemeFragments(textNode: Text, start: number, text: string): Array<{ text: string; bounds: DOMRect }> {
-  const fragments: Array<{ text: string; bounds: DOMRect }> = []
-  const range = document.createRange()
-  let offset = start
-  for (const grapheme of Array.from(text)) {
-    const end = offset + grapheme.length
-    range.setStart(textNode, offset)
-    range.setEnd(textNode, end)
-    const bounds = range.getBoundingClientRect()
-    if (grapheme.trim() && bounds.width > 0 && bounds.height > 0) fragments.push({ text: grapheme, bounds })
-    offset = end
+function scheduleIdleMeasurement(callback: () => void): () => void {
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (handler: () => void, options?: { timeout: number }) => number
+    cancelIdleCallback?: (id: number) => void
   }
-  range.detach()
-  return fragments
-}
-
-function segmentText(text: string): Array<{ text: string; start: number; end: number }> {
-  const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' })
-  return Array.from(segmenter.segment(text), ({ segment, index }) => ({ text: segment, start: index, end: index + segment.length }))
+  if (idleWindow.requestIdleCallback) {
+    const id = idleWindow.requestIdleCallback(callback, { timeout: 500 })
+    return () => idleWindow.cancelIdleCallback?.(id)
+  }
+  const id = window.setTimeout(callback, 32)
+  return () => window.clearTimeout(id)
 }
 
 function isVisibleMinimapContent(element: HTMLElement): boolean {

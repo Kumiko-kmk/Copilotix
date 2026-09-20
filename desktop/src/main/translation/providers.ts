@@ -9,8 +9,10 @@ import {
   type TableTranslationRequest,
   type TableTranslationResponse
 } from '@shared/translationPlanProtocol'
+import type { ProviderTokenUsage } from '../usageAnalyticsService'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+type UsageObserver = (provider: 'qwen' | 'deepseek', usage: ProviderTokenUsage) => void | Promise<void>
 
 export interface TranslationProvider {
   readonly id: TranslationProviderId
@@ -69,7 +71,8 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     private readonly credentialAccount: 'qwen-api-key' | 'deepseek-api-key',
     private readonly vault: CredentialVault,
     private readonly fetcher: Fetcher,
-    private readonly credentialState: AppSettings['credentials']['qwen']['state']
+    private readonly credentialState: AppSettings['credentials']['qwen']['state'],
+    private readonly onUsage?: UsageObserver
   ) {
     super()
   }
@@ -85,34 +88,35 @@ class OpenAiCompatibleProvider extends QueuedProvider {
   protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
     const apiKey = await this.vault.get(this.credentialAccount)
     if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
+    return this.translateText(apiKey, text, signal)
+  }
+
+  private async translateText(apiKey: string, text: string, signal?: AbortSignal): Promise<string> {
     const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        model: this.model,
-        temperature: 0.1,
-        messages: [
-          {
-            role: 'system',
-            content:
-              '你是严谨的学术翻译器。把用户提供的文本翻译为简体中文，不增删信息；保留人名、缩写、公式、代码和无法可靠翻译的术语。只输出译文。'
-          },
-          { role: 'user', content: text }
-        ]
-      }),
+      body: JSON.stringify(translationRequestBody(this.id, this.model, text)),
       signal: requestSignal(signal, 90_000)
     })
     if (!response.ok) throw await toHttpError(response, `${this.id} 翻译失败`)
     const payload: unknown = await response.json()
+    await this.reportUsage(payload)
     return openAiResponseContent(payload, this.id)
   }
 
   protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
     const apiKey = await this.vault.get(this.credentialAccount)
     if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
+    if (isQwenMtModel(this.id, this.model)) {
+      const translations: Array<{ id: string; text: string }> = []
+      for (const segment of flattenSegments(request)) {
+        translations.push({ id: segment.id, text: await this.translateText(apiKey, segment.text, signal) })
+      }
+      return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
+    }
     const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -121,6 +125,7 @@ class OpenAiCompatibleProvider extends QueuedProvider {
       },
       body: JSON.stringify({
         model: this.model,
+        ...(this.id === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
         temperature: 0.1,
         messages: [
           {
@@ -135,8 +140,14 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     })
     if (!response.ok) throw await toHttpError(response, `${this.id} 表格翻译失败`)
     const payload: unknown = await response.json()
+    await this.reportUsage(payload)
     const content = openAiResponseContent(payload, this.id)
     return parseTableTranslationResponse(content, request)
+  }
+
+  private async reportUsage(payload: unknown): Promise<void> {
+    const usage = openAiTokenUsage(payload)
+    if (usage && this.onUsage) await this.onUsage(this.id, usage)
   }
 }
 
@@ -320,10 +331,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 export function createTranslationProviders(
   settings: AppSettings,
   vault: CredentialVault,
-  fetcher: Fetcher
+  fetcher: Fetcher,
+  onUsage?: UsageObserver
 ): Map<TranslationProviderId, TranslationProvider> {
   return new Map<TranslationProviderId, TranslationProvider>([
-    ['qwen', new OpenAiCompatibleProvider('qwen', settings.qwenModel, settings.qwenBaseUrl, 'qwen-api-key', vault, fetcher, settings.credentials.qwen.state)],
+    ['qwen', new OpenAiCompatibleProvider('qwen', settings.qwenModel, settings.qwenBaseUrl, 'qwen-api-key', vault, fetcher, settings.credentials.qwen.state, onUsage)],
     [
       'deepseek',
       new OpenAiCompatibleProvider(
@@ -333,12 +345,30 @@ export function createTranslationProviders(
         'deepseek-api-key',
         vault,
         fetcher,
-        settings.credentials.deepseek.state
+        settings.credentials.deepseek.state,
+        onUsage
       )
     ],
     ['bing', new BingProvider(fetcher)],
     ['transmart', new TransmartProvider(fetcher)]
   ])
+}
+
+function openAiTokenUsage(payload: unknown): ProviderTokenUsage | null {
+  const usage = asRecord(asRecord(payload)?.usage)
+  const promptTokens = nonNegativeUsageInteger(usage?.prompt_tokens)
+  const completionTokens = nonNegativeUsageInteger(usage?.completion_tokens)
+  const totalTokens = nonNegativeUsageInteger(usage?.total_tokens)
+  if (totalTokens === null && promptTokens === null && completionTokens === null) return null
+  return {
+    promptTokens: promptTokens ?? 0,
+    completionTokens: completionTokens ?? 0,
+    totalTokens: totalTokens ?? (promptTokens ?? 0) + (completionTokens ?? 0)
+  }
+}
+
+function nonNegativeUsageInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
 /** Validate a candidate OpenAI-compatible credential without touching the vault. */
@@ -350,29 +380,42 @@ export async function probeOpenAiCompatibleCredential(
 ): Promise<HealthResult> {
   const baseUrl = providerId === 'qwen' ? settings.qwenBaseUrl : settings.deepseekBaseUrl
   const model = providerId === 'qwen' ? settings.qwenModel : settings.deepseekModel
-  const response = await fetcher(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey.trim()}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      max_tokens: 1,
-      messages: [
-        { role: 'system', content: '只输出 OK。' },
-        { role: 'user', content: 'OK' }
-      ]
-    }),
-    signal: AbortSignal.timeout(15_000)
-  })
+  const response = providerId === 'deepseek'
+    ? await fetcher(`${baseUrl.replace(/\/+$/, '')}/models`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey.trim()}`,
+          Accept: 'application/json'
+        },
+        signal: AbortSignal.timeout(15_000)
+      })
+    : await fetcher(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(credentialProbeBody(providerId, model)),
+        signal: AbortSignal.timeout(15_000)
+      })
   if (!response.ok) {
     const code = response.status === 401 || response.status === 403
       ? 'AUTH_INVALID'
+      : response.status === 407
+        ? 'PROXY_AUTH_REQUIRED'
+        : response.status === 400 || response.status === 404
+          ? 'PROVIDER_CONFIGURATION_INVALID'
       : `HTTP_${response.status}`
-    return { ok: false, code, message: `${providerId} API Key 验证失败（HTTP ${response.status}）` }
+    const message = code === 'AUTH_INVALID'
+      ? `${providerId} API Key 验证失败（HTTP ${response.status}）`
+      : code === 'PROXY_AUTH_REQUIRED'
+        ? '网络代理要求身份验证，请检查或关闭代理后重试'
+        : code === 'PROVIDER_CONFIGURATION_INVALID'
+          ? `${providerId} 服务地址或模型配置不可用（HTTP ${response.status}）`
+          : `${providerId} 服务暂时不可用（HTTP ${response.status}）`
+    return { ok: false, code, message }
   }
+  if (providerId === 'deepseek') return { ok: true, message: 'deepseek API Key 验证成功' }
   try {
     const payload: unknown = await response.json()
     openAiResponseContent(payload, providerId)
@@ -380,6 +423,53 @@ export async function probeOpenAiCompatibleCredential(
   } catch {
     return { ok: false, code: 'INVALID_RESPONSE', message: `${providerId} 接口返回了无法识别的响应` }
   }
+}
+
+function credentialProbeBody(providerId: 'qwen' | 'deepseek', model: string): Record<string, unknown> {
+  if (isQwenMtModel(providerId, model)) {
+    return {
+      model,
+      messages: [{ role: 'user', content: 'Hello' }],
+      translation_options: { source_lang: 'English', target_lang: 'Chinese' }
+    }
+  }
+  return {
+    model,
+    ...(providerId === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
+    temperature: 0,
+    max_tokens: 16,
+    messages: [
+      { role: 'system', content: '只输出 OK。' },
+      { role: 'user', content: 'OK' }
+    ]
+  }
+}
+
+function translationRequestBody(providerId: 'qwen' | 'deepseek', model: string, text: string): Record<string, unknown> {
+  if (isQwenMtModel(providerId, model)) {
+    return {
+      model,
+      messages: [{ role: 'user', content: text }],
+      translation_options: { source_lang: 'auto', target_lang: 'Chinese' }
+    }
+  }
+  return {
+    model,
+    ...(providerId === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
+    temperature: 0.1,
+    messages: [
+      {
+        role: 'system',
+        content:
+          '你是严谨的学术翻译器。把用户提供的文本翻译为简体中文，不增删信息；保留人名、缩写、公式、代码和无法可靠翻译的术语。只输出译文。'
+      },
+      { role: 'user', content: text }
+    ]
+  }
+}
+
+function isQwenMtModel(providerId: 'qwen' | 'deepseek', model: string): boolean {
+  return providerId === 'qwen' && /^qwen-mt(?:-|$)/iu.test(model.trim())
 }
 
 async function toHttpError(response: Response, prefix: string): Promise<TranslationHttpError> {

@@ -2,6 +2,7 @@ import type { JobRunner, JobRunnerInput, JobRunnerResult } from '@core/jobs'
 import { JobRunnerError } from '@core/jobs'
 import type { TaskComputePort } from '@core/ports'
 import { createTranslationProviders } from './translation/providers'
+import { executableProviderOrder } from '@shared/providerPolicy'
 import { runTranslationPlan } from './translation/translationPlanOrchestrator'
 import type { CredentialVault } from './credentialVault'
 import type { SettingsService } from './settingsService'
@@ -9,6 +10,7 @@ import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { TaskLogger } from './logger'
 import { ArtifactService } from './artifactService'
 import { ProgressReporter } from './progressReporter'
+import type { UsageAnalyticsRecorder } from './usageAnalyticsService'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
@@ -21,6 +23,7 @@ export interface TranslationJobRunnerOptions {
   pathPolicy: import('@core/ports').PathPolicyPort
   logger?: TaskLogger
   artifacts?: ArtifactService
+  usageAnalytics?: UsageAnalyticsRecorder
 }
 
 /** Executes one durable translate job; job state is changed only by Scheduler. */
@@ -43,7 +46,14 @@ export class TranslationJobRunner implements JobRunner {
         : 'Parser API Token 尚未验证或已经失效'
       throw new JobRunnerError(`${stateMessage}，请在设置中验证后重试`, 'TRANSLATION_CREDENTIALS_REQUIRED', false)
     }
-    const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher)
+    const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher, (provider, usage) =>
+      this.options.usageAnalytics?.recordTokens(provider, usage)
+    )
+    const providerOrder = executableProviderOrder(
+      settings.translationProviderOrder,
+      settings.enabledTranslationProviders,
+      settings.credentials
+    )
     // Provider selection is resolved at execution time so a manual retry can
     // use the corrected setting instead of an old task snapshot.
     const effectiveTask = { ...task, translationProvider: settings.translationProvider }
@@ -63,6 +73,7 @@ export class TranslationJobRunner implements JobRunner {
       task: effectiveTask,
       jobId: input.job.id,
       providers,
+      providerOrder,
       compute: this.options.compute,
       artifacts: this.artifacts,
       pathPolicy: this.options.pathPolicy,

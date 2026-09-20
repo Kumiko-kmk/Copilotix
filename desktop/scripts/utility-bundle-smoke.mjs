@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url'
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const desktopDirectory = resolve(scriptDirectory, '..')
 const utilityEntry = './out/utility/index.js'
-const MAX_CAPTURED_OUTPUT = 16 * 1024
+// Bundled Utility stack traces are single very long lines; keep enough output
+// to observe the intentional parent-port guard after larger RAG bundles.
+export const MAX_CAPTURED_OUTPUT = 128 * 1024
 
 /**
  * Keep this check independent from process execution so the failure contract

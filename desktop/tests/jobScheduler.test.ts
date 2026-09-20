@@ -52,6 +52,33 @@ function runningJob(): Job {
   }
 }
 
+function queuedJob(kind: Job['kind'], id: string): Job {
+  return {
+    ...runningJob(),
+    id,
+    kind,
+    status: 'queued',
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    startedAt: null
+  }
+}
+
+function deferredRunner(onStart?: () => void): { runner: { run: ({ signal }: { signal: AbortSignal }) => Promise<{ status: 'succeeded' }> }; release: () => void } {
+  let release!: () => void
+  const result = new Promise<{ status: 'succeeded' }>((resolve) => { release = () => resolve({ status: 'succeeded' }) })
+  return {
+    runner: {
+      run: async ({ signal }) => {
+        onStart?.()
+        if (signal.aborted) return { status: 'succeeded' }
+        return result
+      }
+    },
+    release
+  }
+}
+
 describe('JobScheduler lifecycle', () => {
   it('recovers expired leases on start without claiming when no runner is registered', async () => {
     let recoverCalls = 0
@@ -154,5 +181,103 @@ describe('JobScheduler lifecycle', () => {
     expect(runnerSignal.aborted).toBe(true)
     expect(cancelCalls).toBe(0)
     release()
+  })
+
+  it('does not claim queued RAG work when no corresponding runner is registered', async () => {
+    const claimKinds: Job['kind'][] = []
+    const repository = repositoryWith({
+      recoverExpired: () => [],
+      claimBatch: ({ kind }) => {
+        if (kind) claimKinds.push(kind)
+        return []
+      }
+    })
+    const scheduler = new JobScheduler(repository, { now: () => now })
+
+    await scheduler.start()
+
+    expect(claimKinds).toEqual([])
+    await scheduler.shutdown()
+  })
+
+  it('claims foreground work before low-priority RAG lanes', async () => {
+    const claimKinds: Job['kind'][] = []
+    const parse = queuedJob('parse', 'parse-1')
+    const rag = queuedJob('rag-content-index', 'rag-content-1')
+    const parseDeferred = deferredRunner()
+    const ragDeferred = deferredRunner()
+    const repository = repositoryWith({
+      recoverExpired: () => [],
+      claimBatch: ({ kind }) => {
+        if (!kind) return []
+        claimKinds.push(kind)
+        if (kind === 'parse') return [parse]
+        if (kind === 'rag-content-index') return [rag]
+        return []
+      },
+      complete: (input) => ({ ...runningJob(), id: input.jobId, kind: input.jobId === parse.id ? 'parse' : rag.kind, status: input.status }),
+      heartbeat: (input) => ({ ...runningJob(), id: input.jobId, kind: input.jobId === parse.id ? 'parse' : rag.kind })
+    })
+    const scheduler = new JobScheduler(repository, {
+      leaseOwner: 'scheduler-test',
+      parseAggregationWindowMs: 0,
+      pollIntervalMs: 60_000,
+      runners: { parse: parseDeferred.runner, 'rag-content-index': ragDeferred.runner }
+    })
+
+    await scheduler.start()
+    expect(claimKinds).toEqual(['parse', 'rag-content-index'])
+
+    parseDeferred.release()
+    ragDeferred.release()
+    await scheduler.shutdown()
+  })
+
+  it('isolates RAG lane concurrency and keeps deletion independently runnable', async () => {
+    const queues: Record<Job['kind'], Job[]> = {
+      parse: [],
+      translate: [],
+      'rag-content-index': [queuedJob('rag-content-index', 'content-1'), queuedJob('rag-content-index', 'content-2')],
+      'rag-embed': [queuedJob('rag-embed', 'embed-1')],
+      'rag-delete': [queuedJob('rag-delete', 'delete-1')]
+    }
+    const claimed: Job['kind'][] = []
+    const started: Job['kind'][] = []
+    const runners = {
+      'rag-content-index': deferredRunner(() => started.push('rag-content-index')),
+      'rag-embed': deferredRunner(() => started.push('rag-embed')),
+      'rag-delete': deferredRunner(() => started.push('rag-delete'))
+    }
+    const repository = repositoryWith({
+      recoverExpired: () => [],
+      claimBatch: ({ kind }) => {
+        if (!kind) return []
+        claimed.push(kind)
+        const queue = queues[kind]
+        const job = queue?.shift()
+        return job ? [job] : []
+      }
+    })
+    const scheduler = new JobScheduler(repository, {
+      leaseOwner: 'scheduler-test',
+      parseAggregationWindowMs: 0,
+      pollIntervalMs: 60_000,
+      concurrency: { ragContent: 1, ragEmbed: 1, ragDelete: 1 },
+      runners: {
+        'rag-content-index': runners['rag-content-index'].runner,
+        'rag-embed': runners['rag-embed'].runner,
+        'rag-delete': runners['rag-delete'].runner
+      }
+    })
+
+    await scheduler.start()
+    expect(started.sort()).toEqual(['rag-content-index', 'rag-delete', 'rag-embed'])
+    expect(claimed.filter((kind) => kind === 'rag-content-index')).toHaveLength(1)
+    expect(scheduler.getActiveCount()).toBe(3)
+
+    runners['rag-content-index'].release()
+    runners['rag-embed'].release()
+    runners['rag-delete'].release()
+    await scheduler.shutdown()
   })
 })

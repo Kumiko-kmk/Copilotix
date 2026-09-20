@@ -8,7 +8,9 @@ import type {
   MutateReaderAnnotationsRequest,
   ReaderAnnotationSnapshot,
   SaveDocumentAsRequest,
-  SaveDocumentAsResult
+  SaveDocumentAsResult,
+  StorageInfo,
+  UsageAnalytics
 } from './ipcSchemas'
 
 export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart'
@@ -55,6 +57,8 @@ export interface AppSettings {
   formulaEnabled: boolean
   tableEnabled: boolean
   translationProvider: TranslationProviderId
+  translationProviderOrder: TranslationProviderId[]
+  enabledTranslationProviders: TranslationProviderId[]
   qwenBaseUrl: string
   qwenModel: string
   deepseekBaseUrl: string
@@ -102,7 +106,6 @@ export interface SelectedPdf {
 
 export interface CreateTasksRequest {
   files: SelectedPdf[]
-  translationProvider: TranslationProviderId
   createDuplicates?: boolean
 }
 
@@ -241,6 +244,9 @@ export interface CopilotixDesktopApi {
   saveSettings(update: SettingsUpdate): Promise<SettingsSaveResult>
   validateCredential(name: CredentialName, value?: string): Promise<CredentialValidationResult>
   chooseOutputDirectory(): Promise<string | null>
+  getStorageInfo(): Promise<StorageInfo>
+  getUsageAnalytics(): Promise<UsageAnalytics>
+  openStorageLocation(): Promise<void>
   importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[]): Promise<DocumentSummary[]>
   listDocuments(): Promise<DocumentSummary[]>
   retryDocument(documentId: string): Promise<void>

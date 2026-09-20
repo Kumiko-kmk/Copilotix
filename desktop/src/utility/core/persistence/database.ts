@@ -10,6 +10,7 @@ import type {
   TranslationProviderId
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
+import { normalizeEnabledProviders, normalizeProviderOrder } from '@shared/providerPolicy'
 
 interface TaskRow {
   id: string
@@ -146,12 +147,17 @@ export class TaskRepository {
       value: string
     }>
     const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value)])) as Partial<AppSettings>
+    const translationProvider = stored.translationProvider ?? DEFAULT_SETTINGS.translationProvider
+    const translationProviderOrder = normalizeProviderOrder(stored.translationProviderOrder, translationProvider)
+    const enabledTranslationProviders = normalizeEnabledProviders(stored.enabledTranslationProviders, translationProviderOrder)
     return {
       ...DEFAULT_SETTINGS,
       outputRoot: stored.outputRoot ?? outputRoot,
-      formulaEnabled: stored.formulaEnabled ?? DEFAULT_SETTINGS.formulaEnabled,
-      tableEnabled: stored.tableEnabled ?? DEFAULT_SETTINGS.tableEnabled,
-      translationProvider: stored.translationProvider ?? DEFAULT_SETTINGS.translationProvider,
+      formulaEnabled: true,
+      tableEnabled: true,
+      translationProvider: enabledTranslationProviders[0]!,
+      translationProviderOrder,
+      enabledTranslationProviders,
       qwenBaseUrl: stored.qwenBaseUrl ?? DEFAULT_SETTINGS.qwenBaseUrl,
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,

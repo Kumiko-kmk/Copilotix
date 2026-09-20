@@ -465,6 +465,10 @@ function attachUtilityDiagnostics(child: UtilityProcessLike): void {
   child.stderr.on('data', (chunk) => {
     if (emitted >= 8) return
     emitted += 1
+    if (process.env.COPILOTIX_STARTUP_DIAGNOSTICS === 'true') {
+      console.error(`Core utility raw diagnostic: ${String(chunk).slice(0, 4_096)}`)
+      return
+    }
     console.error(`Core utility diagnostic: ${classifyUtilityDiagnostic(chunk)}`)
   })
 }

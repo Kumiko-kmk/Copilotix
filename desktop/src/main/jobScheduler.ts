@@ -23,13 +23,22 @@ export interface SchedulerConcurrencyConfig {
   upload: number
   normalize: number
   translate: number
+  /** Low-priority local canonical-content indexing lane. */
+  ragContent: number
+  /** Low-priority semantic embedding lane. */
+  ragEmbed: number
+  /** Cleanup lane is independent so stale app-index entries cannot starve. */
+  ragDelete: number
 }
 
 export const DEFAULT_SCHEDULER_CONCURRENCY: Readonly<SchedulerConcurrencyConfig> = Object.freeze({
   parse: 2,
   upload: 3,
   normalize: 2,
-  translate: 2
+  translate: 2,
+  ragContent: 1,
+  ragEmbed: 1,
+  ragDelete: 1
 })
 
 export interface SchedulerBackoffOptions {
@@ -46,7 +55,10 @@ export interface JobSchedulerOptions {
   heartbeatIntervalMs?: number
   shutdownDrainTimeoutMs?: number
   claimLimit?: number
-  concurrency?: Partial<SchedulerConcurrencyConfig>
+  concurrency?: Partial<SchedulerConcurrencyConfig> & {
+    /** Backward-compatible explicit spelling for the content-index lane. */
+    ragContentIndex?: number
+  }
   backoff?: SchedulerBackoffOptions
   runners?: JobRunnerRegistry
   now?: () => string
@@ -129,7 +141,7 @@ export class AsyncSemaphore {
 
 /**
  * Durable scheduler foundation. It intentionally claims work only for kinds
- * with a registered runner; 3B2 will register the real parse/translate work.
+ * with a registered runner; unimplemented RAG kinds therefore remain queued.
  */
 export class JobScheduler extends EventEmitter {
   private readonly repository: JobRepositoryPort
@@ -146,7 +158,7 @@ export class JobScheduler extends EventEmitter {
   private readonly schedule: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>
   private readonly cancelSchedule: (handle: ReturnType<typeof setTimeout>) => void
   private readonly runners: JobRunnerRegistry
-  private readonly semaphores: Record<'parse' | 'translate', AsyncSemaphore>
+  private readonly semaphores: Record<JobKind, AsyncSemaphore>
   private readonly active = new Map<string, ActiveJob>()
   private state: JobSchedulerState = 'idle'
   private controller: AbortController | undefined
@@ -168,7 +180,13 @@ export class JobScheduler extends EventEmitter {
       parse: positiveInt(options.concurrency?.parse ?? DEFAULT_SCHEDULER_CONCURRENCY.parse, DEFAULT_SCHEDULER_CONCURRENCY.parse),
       upload: positiveInt(options.concurrency?.upload ?? DEFAULT_SCHEDULER_CONCURRENCY.upload, DEFAULT_SCHEDULER_CONCURRENCY.upload),
       normalize: positiveInt(options.concurrency?.normalize ?? DEFAULT_SCHEDULER_CONCURRENCY.normalize, DEFAULT_SCHEDULER_CONCURRENCY.normalize),
-      translate: positiveInt(options.concurrency?.translate ?? DEFAULT_SCHEDULER_CONCURRENCY.translate, DEFAULT_SCHEDULER_CONCURRENCY.translate)
+      translate: positiveInt(options.concurrency?.translate ?? DEFAULT_SCHEDULER_CONCURRENCY.translate, DEFAULT_SCHEDULER_CONCURRENCY.translate),
+      ragContent: positiveInt(
+        options.concurrency?.ragContent ?? options.concurrency?.ragContentIndex ?? DEFAULT_SCHEDULER_CONCURRENCY.ragContent,
+        DEFAULT_SCHEDULER_CONCURRENCY.ragContent
+      ),
+      ragEmbed: positiveInt(options.concurrency?.ragEmbed ?? DEFAULT_SCHEDULER_CONCURRENCY.ragEmbed, DEFAULT_SCHEDULER_CONCURRENCY.ragEmbed),
+      ragDelete: positiveInt(options.concurrency?.ragDelete ?? DEFAULT_SCHEDULER_CONCURRENCY.ragDelete, DEFAULT_SCHEDULER_CONCURRENCY.ragDelete)
     }
     this.backoff = options.backoff ?? {}
     this.now = options.now ?? (() => new Date().toISOString())
@@ -177,7 +195,10 @@ export class JobScheduler extends EventEmitter {
     this.runners = { ...(options.runners ?? {}) }
     this.semaphores = {
       parse: new AsyncSemaphore(this.concurrency.parse),
-      translate: new AsyncSemaphore(this.concurrency.translate)
+      translate: new AsyncSemaphore(this.concurrency.translate),
+      'rag-content-index': new AsyncSemaphore(this.concurrency.ragContent),
+      'rag-embed': new AsyncSemaphore(this.concurrency.ragEmbed),
+      'rag-delete': new AsyncSemaphore(this.concurrency.ragDelete)
     }
   }
 
@@ -287,7 +308,13 @@ export class JobScheduler extends EventEmitter {
   }
 
   private hasRunner(): boolean {
-    return Boolean(this.runners.parse || this.runners.translate)
+    return Boolean(
+      this.runners.parse ||
+      this.runners.translate ||
+      this.runners['rag-content-index'] ||
+      this.runners['rag-embed'] ||
+      this.runners['rag-delete']
+    )
   }
 
   private async pollOnce(): Promise<void> {
@@ -297,10 +324,27 @@ export class JobScheduler extends EventEmitter {
     }
     const controller = this.controller
     if (!controller || controller.signal.aborted) return
-    const run = Promise.all([
+    // Foreground parse/translate claim first.  RAG work is intentionally
+    // started only after those claims complete, which preserves the existing
+    // parse aggregation/translate behavior and gives user-facing work first
+    // opportunity to acquire repository leases.
+    const foreground = Promise.all([
       this.runners.parse ? this.claimKind('parse', this.parseAggregationWindowMs, controller.signal) : Promise.resolve(),
       this.runners.translate ? this.claimKind('translate', 0, controller.signal) : Promise.resolve()
-    ]).then(() => undefined)
+    ])
+    const run = foreground.then(async () => {
+      if (controller.signal.aborted || this.state !== 'running') return
+
+      // Deletion is a low-priority operation, but it has its own lane and is
+      // claimed before rebuild work so stale app-index entries are cleaned up
+      // promptly without competing for content/embedding capacity.
+      if (this.runners['rag-delete']) await this.claimKind('rag-delete', 0, controller.signal)
+      if (controller.signal.aborted || this.state !== 'running') return
+      await Promise.all([
+        this.runners['rag-content-index'] ? this.claimKind('rag-content-index', 0, controller.signal) : Promise.resolve(),
+        this.runners['rag-embed'] ? this.claimKind('rag-embed', 0, controller.signal) : Promise.resolve()
+      ])
+    }).then(() => undefined)
     this.pollInFlight = run
     try {
       await run

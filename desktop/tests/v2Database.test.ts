@@ -35,12 +35,22 @@ function insertJob(database: V2Database, id: string, documentId = 'document-1', 
 }
 
 describe('v2 migration ledger and strict persistence schema', () => {
+  it('never changes checksums of migrations already released to users', () => {
+    expect(V2_MIGRATIONS.slice(0, 3).map(checksumFor)).toEqual([
+      '0f3dcf20d8c779eeb08b36cf9a9dbfc6675432cc01a67c9a88f8f745f2451e76',
+      '336f9249a757c9be08a72cf9f0c6264ad2470f853f72a781002d4621bef01061',
+      '7d81145083a17c71267394e272bd8fe263deca6ae4afae968cde7646e5ff88b3'
+    ])
+  })
+
   it('creates every v2 table without a tasks fact table and enables WAL', async () => {
     const path = await databasePath()
     const database = new V2Database(path)
     const tables = (database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as Array<{ name: string }>).map((row) => row.name)
     expect(tables).toEqual([
-      'annotation_sets', 'app_migrations', 'artifacts', 'documents', 'job_events', 'jobs', 'reader_annotations',
+      'annotation_sets', 'app_migrations', 'artifacts', 'documents', 'job_events', 'jobs',
+      'rag_chunk_variants', 'rag_chunks', 'rag_content_revisions', 'rag_deletion_tombstones', 'rag_documents',
+      'rag_embedding_cache', 'rag_embeddings', 'rag_profiles', 'rag_vector_indexes', 'reader_annotations',
       'schema_migrations', 'settings', 'translation_blocks', 'translation_cache'
     ])
     expect(tables).not.toContain('tasks')
@@ -92,6 +102,9 @@ describe('v2 migration ledger and strict persistence schema', () => {
     expect(() => insertJob(database, 'parse-2')).toThrow()
     insertJob(database, 'parse-2', 'document-1', 'parse', 'succeeded')
     expect(() => insertJob(database, 'translate-1', 'document-1', 'translate', 'retry-wait')).not.toThrow()
+    expect(() => insertJob(database, 'rag-content-1', 'document-1', 'rag-content-index')).not.toThrow()
+    expect(() => insertJob(database, 'rag-embed-1', 'document-1', 'rag-embed')).not.toThrow()
+    expect(() => insertJob(database, 'rag-delete-1', 'document-1', 'rag-delete')).not.toThrow()
     expect(() => insertJob(database, 'translate-2', 'document-1', 'translation', 'queued')).toThrow()
     database.connection.prepare("UPDATE jobs SET status = 'succeeded' WHERE id = 'parse-1'").run()
     expect(() => database.connection.prepare(`
@@ -203,7 +216,7 @@ describe('v2 migration ledger and strict persistence schema', () => {
     const first = new V2Database(path)
     first.close()
     const second = new V2Database(path)
-    expect(second.migrationRows()).toHaveLength(3)
+    expect(second.migrationRows()).toHaveLength(V2_MIGRATIONS.length)
     second.close()
     const drifted: V2Migration = { version: 1, name: 'create-v2-document-persistence', sql: 'SELECT 1;' }
     expect(() => new V2Database(path, [drifted])).toThrow(/checksum mismatch/)
@@ -223,6 +236,35 @@ describe('v2 migration ledger and strict persistence schema', () => {
     database.close()
   })
 
+  it('rolls back the complete RAG graph replacement when v4 fails midway', async () => {
+    const path = await databasePath('v4-rollback.sqlite3')
+    const prefix = new V2Database(path, V2_MIGRATIONS.slice(0, 3))
+    insertDocument(prefix, 'rollback-document', 'C:/rollback-document')
+    insertJob(prefix, 'rollback-job', 'rollback-document')
+    prefix.close()
+
+    const v4 = V2_MIGRATIONS[3]!
+    const brokenMigrations: readonly V2Migration[] = [
+      ...V2_MIGRATIONS.slice(0, 3),
+      { ...v4, sql: `${v4.sql}\nINSERT INTO migration_failure_probe VALUES (1);` }
+    ]
+    expect(() => new V2Database(path, brokenMigrations)).toThrow()
+
+    const afterFailure = new DatabaseSync(path)
+    expect(afterFailure.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([
+      { version: 1 }, { version: 2 }, { version: 3 }
+    ])
+    expect(afterFailure.prepare('SELECT kind FROM jobs WHERE id=?').get('rollback-job')).toEqual({ kind: 'parse' })
+    expect(afterFailure.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='jobs_v4_rebuild'").get()).toBeUndefined()
+    expect(afterFailure.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rag_documents'").get()).toBeUndefined()
+    afterFailure.close()
+
+    const recovered = new V2Database(path)
+    expect(recovered.connection.prepare('SELECT kind FROM jobs WHERE id=?').get('rollback-job')).toEqual({ kind: 'parse' })
+    expect(recovered.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    recovered.close()
+  })
+
   it('does not inspect or mutate a separate v1 database', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'copilotix-v1-v2-'))
     directories.push(directory)
@@ -235,5 +277,65 @@ describe('v2 migration ledger and strict persistence schema', () => {
     const reopened = new DatabaseSync(v1Path)
     expect(reopened.prepare('SELECT marker FROM tasks WHERE id = ?').get('legacy')).toEqual({ marker: 'untouched' })
     reopened.close()
+  })
+
+  it('upgrades each committed prefix and preserves the complete legacy FK graph', async () => {
+    for (let prefixLength = 1; prefixLength < V2_MIGRATIONS.length; prefixLength += 1) {
+      const path = await databasePath(`prefix-${prefixLength}.sqlite3`)
+      const prefix = new V2Database(path, V2_MIGRATIONS.slice(0, prefixLength))
+      if (prefixLength === 1) {
+        prefix.connection.prepare(`
+          INSERT INTO documents(id,original_filename,display_title,storage_path,source_checksum,parser_model,translation_provider,created_at,updated_at)
+          VALUES('legacy-document','paper.pdf','Paper','C:/legacy-prefix','legacy-hash','pipeline','qwen','now','now')
+        `).run()
+      } else {
+        insertDocument(prefix, 'legacy-document', 'C:/legacy-prefix')
+      }
+      prefix.connection.prepare(`
+        INSERT INTO jobs(id,document_id,kind,status,payload_json,checkpoint_json,available_at,created_at,updated_at)
+        VALUES('legacy-job','legacy-document','parse','queued','{"legacy":true}','{"cursor":3}','now','now','now')
+      `).run()
+      prefix.connection.prepare(`
+        INSERT INTO jobs(id,document_id,depends_on_job_id,kind,status,payload_json,checkpoint_json,available_at,created_at,updated_at)
+        VALUES('legacy-dependent-job','legacy-document','legacy-job','translate','queued','{}','{}','now','now','now')
+      `).run()
+      prefix.connection.prepare(`
+        INSERT INTO job_events(id,job_id,sequence,from_state,to_state,detail_json,created_at)
+        VALUES('legacy-event','legacy-job',1,NULL,'queued','{"legacy":true}','now')
+      `).run()
+      prefix.connection.prepare(`
+        INSERT INTO artifacts(id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at)
+        VALUES('legacy-artifact','legacy-document','legacy-job','parsed_markdown',1,'paper.md','artifact-hash','{"legacy":true}','now')
+      `).run()
+      prefix.connection.prepare(`
+        INSERT INTO translation_blocks(job_id,block_id,source_hash,source_markdown,status)
+        VALUES('legacy-job','legacy-block','source-hash','source','pending')
+      `).run()
+      prefix.connection.prepare(`
+        INSERT INTO annotation_sets(id,document_id,artifact_id,view,revision,created_at,updated_at)
+        VALUES('legacy-set','legacy-document','legacy-artifact','original',1,'now','now')
+      `).run()
+      prefix.connection.prepare(`
+        INSERT INTO reader_annotations(id,document_id,artifact_id,annotation_set_id,view,kind,block_key,start_offset,end_offset,quote,prefix,suffix,created_at,updated_at)
+        VALUES('legacy-annotation','legacy-document','legacy-artifact','legacy-set','original','highlight','block',0,1,'q','','','now','now')
+      `).run()
+      prefix.close()
+
+      const database = new V2Database(path)
+      expect(database.migrationRows()).toHaveLength(V2_MIGRATIONS.length)
+      expect(database.connection.prepare('SELECT kind,payload_json,checkpoint_json FROM jobs WHERE id=?').get('legacy-job')).toEqual({
+        kind: 'parse', payload_json: '{"legacy":true}', checkpoint_json: '{"cursor":3}'
+      })
+      expect(database.connection.prepare('SELECT depends_on_job_id FROM jobs WHERE id=?').get('legacy-dependent-job')).toEqual({
+        depends_on_job_id: 'legacy-job'
+      })
+      expect(database.connection.prepare('SELECT job_id FROM job_events WHERE id=?').get('legacy-event')).toEqual({ job_id: 'legacy-job' })
+      expect(database.connection.prepare('SELECT created_by_job_id FROM artifacts WHERE id=?').get('legacy-artifact')).toEqual({ created_by_job_id: 'legacy-job' })
+      expect(database.connection.prepare('SELECT block_id FROM translation_blocks WHERE job_id=?').get('legacy-job')).toEqual({ block_id: 'legacy-block' })
+      expect(database.connection.prepare('SELECT id FROM annotation_sets WHERE id=?').get('legacy-set')).toEqual({ id: 'legacy-set' })
+      expect(database.connection.prepare('SELECT id FROM reader_annotations WHERE id=?').get('legacy-annotation')).toEqual({ id: 'legacy-annotation' })
+      expect(database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      database.close()
+    }
   })
 })

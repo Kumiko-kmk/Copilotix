@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -17,6 +18,8 @@ import type { CredentialAccount, CredentialVault } from '../src/main/credentialV
 import type { BatchResult, BatchSubmission, ParserClient } from '../src/main/parserClient'
 import type { HealthResult, CopilotixTask } from '@shared/types'
 import type { TaskComputePort } from '../src/core/ports'
+import type { JobScheduler } from '../src/main/jobScheduler'
+import type { TaskRepositoryCompat } from '../src/main/taskRepositoryCompat'
 import { fixtureTaskCompute } from './taskComputeFixture'
 
 const roots: string[] = []
@@ -28,6 +31,37 @@ afterEach(async () => {
 })
 
 describe('durable TaskService cutover', () => {
+  it('forwards legacy document notifications only for parse and translate jobs', () => {
+    const scheduler = new EventEmitter() as unknown as JobScheduler
+    const service = new TaskService(
+      {} as TaskRepositoryCompat,
+      {} as SettingsService,
+      {} as CredentialVault,
+      {} as ParserClient,
+      async () => new Response(),
+      fixtureTaskCompute,
+      undefined,
+      undefined,
+      { scheduler }
+    )
+    const notifications: Array<[string, string]> = []
+    service.on('notification', (taskId: string, status: string) => notifications.push([taskId, status]))
+
+    scheduler.emit('job-notification', 'parse-failed', 'failed', 'parse')
+    scheduler.emit('job-notification', 'translation-complete', 'succeeded', 'translate')
+    scheduler.emit('job-notification', 'translation-partial', 'partial', 'translate')
+    scheduler.emit('job-notification', 'rag-content-failed', 'failed', 'rag-content-index')
+    scheduler.emit('job-notification', 'rag-content-complete', 'succeeded', 'rag-content-index')
+    scheduler.emit('job-notification', 'rag-embed-failed', 'failed', 'rag-embed')
+    scheduler.emit('job-notification', 'rag-delete-complete', 'succeeded', 'rag-delete')
+
+    expect(notifications).toEqual([
+      ['parse-failed', 'failed'],
+      ['translation-complete', 'completed'],
+      ['translation-partial', 'partial']
+    ])
+  })
+
   it('creates exactly one queued parse job without a legacy execution queue', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-durable-create-'))
     roots.push(root)
@@ -44,7 +78,6 @@ describe('durable TaskService cutover', () => {
     try {
       const created = await service.create({
         files: [{ path: source, name: 'paper.pdf', size: 16 }],
-        translationProvider: 'qwen',
         createDuplicates: false
       })
       const parseJobs = jobs.list({ documentId: created[0]!.id, kind: 'parse' })
@@ -161,6 +194,50 @@ describe('durable TaskService cutover', () => {
       expect(jobs.list({ documentId: task.id, kind: 'translate' })).toHaveLength(1)
       expect(repository.listTranslationBlocks(task.id, translate.id).every((block) => block.jobId === undefined || block.jobId === translate.id)).toBe(true)
       await expect(readFile(join(outputDir, 'full.zh-CN.md'), 'utf8')).resolves.toContain('译文')
+    } finally {
+      database.close()
+    }
+  })
+
+  it('always deletes the database document, while deleteFiles only controls its directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-delete-boundary-'))
+    roots.push(root)
+    const outputRoot = join(root, 'output')
+    const documentsRoot = join(outputRoot, 'documents-v2')
+    await mkdir(documentsRoot, { recursive: true })
+    const database = new V2Database(join(root, 'copilotix.sqlite3'))
+    const repository = new V2TaskRepositoryCompat(database)
+    const settings = new SettingsService(repository, new MemoryVault({}), outputRoot)
+
+    const firstDir = join(documentsRoot, 'document-delete-keep')
+    await mkdir(firstDir, { recursive: true })
+    await writeFile(join(firstDir, 'artifact.md'), 'keep')
+    const firstTask = makeTask(firstDir, join(firstDir, 'original.pdf'))
+    repository.insertTask({ ...firstTask, id: 'document-delete-keep' })
+
+    const secondDir = join(documentsRoot, 'document-delete-files')
+    await mkdir(secondDir, { recursive: true })
+    await writeFile(join(secondDir, 'artifact.md'), 'remove')
+    const secondTask = makeTask(secondDir, join(secondDir, 'original.pdf'))
+    repository.insertTask({ ...secondTask, id: 'document-delete-files' })
+
+    const service = new TaskService(
+      repository,
+      settings,
+      new MemoryVault({}),
+      new NeverCalledClient(),
+      async () => new Response(),
+      fixtureTaskCompute,
+      new PathPolicy()
+    )
+    try {
+      await service.delete('document-delete-keep', false)
+      expect(repository.getTask('document-delete-keep')).toBeNull()
+      await expect(stat(firstDir)).resolves.toBeTruthy()
+
+      await service.delete('document-delete-files', true)
+      expect(repository.getTask('document-delete-files')).toBeNull()
+      await expect(stat(secondDir)).rejects.toMatchObject({ code: 'ENOENT' })
     } finally {
       database.close()
     }

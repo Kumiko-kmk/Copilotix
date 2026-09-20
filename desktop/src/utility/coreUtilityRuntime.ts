@@ -99,6 +99,9 @@ export function createCoreUtilityRuntime(
         else if (!handler && request.operation !== 'ping') sendError(request.requestId, 'CORE_PROTOCOL_ERROR', 'Core utility operation is unavailable', false)
         else post(makeCoreSuccessResponse(request.requestId, request.operation, value as never))
       } catch (error) {
+        if (process.env.COPILOTIX_STARTUP_DIAGNOSTICS === 'true') {
+          process.stderr.write(error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}\n` : `${String(error)}\n`)
+        }
         if (controller.signal.aborted) sendError(request.requestId, 'CORE_CANCELLED', 'Core RPC request cancelled', false)
         else if (error instanceof CoreUtilityOperationError) sendError(request.requestId, error.code, error.message, error.retryable)
         else sendError(request.requestId, 'CORE_UNAVAILABLE', 'Core utility operation failed', false)

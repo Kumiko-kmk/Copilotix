@@ -14,6 +14,7 @@ import { IpcClientError } from '@shared/ipc'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutations'
 import PdfPane from '../components/PdfPane'
 import ReaderTextPane, { type ReaderTab } from '../components/ReaderTextPane'
+import ReaderSplitPane from '../components/ReaderSplitPane'
 
 export default function ReaderPage(props: { documentId: string; onBack(): void }): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -116,9 +117,9 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
           </Dropdown>
         </Space>
       </header>
-      <div className="reader-split">
-        <PdfPane url={document.pdfUrl} mappings={document.mappings} selection={selection} onSelect={selectBlock} />
-        <ReaderTextPane
+      <ReaderSplitPane
+        left={<PdfPane url={document.pdfUrl} mappings={document.mappings} selection={selection} onSelect={selectBlock} />}
+        right={<ReaderTextPane
           key={document.summary.id}
           tab={tab}
           onTabChange={changeTab}
@@ -137,8 +138,8 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
           onReplaceAnnotations={replaceAnnotations}
           selection={selection}
           onSelect={selectBlock}
-        />
-      </div>
+        />}
+      />
     </section>
   )
 }

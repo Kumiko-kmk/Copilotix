@@ -51,6 +51,53 @@ describe('SqliteJobRepository', () => {
     }
   })
 
+  it('accepts all durable RAG kinds while keeping active-job uniqueness per kind', async () => {
+    const { database, repository } = await fixture()
+    try {
+      const kinds = ['rag-content-index', 'rag-embed', 'rag-delete'] as const
+      for (const kind of kinds) {
+        const job = repository.enqueue({ id: `${kind}-1`, documentId: 'document-1', kind, now })
+        expect(job.kind).toBe(kind)
+        expect(repository.list({ documentId: 'document-1', kind })).toHaveLength(1)
+        expect(() => repository.enqueue({ id: `${kind}-2`, documentId: 'document-1', kind, now })).toThrowError(
+          expect.objectContaining({ code: 'JOB_ACTIVE_EXISTS' })
+        )
+      }
+      expect(repository.list({ documentId: 'document-1' }).map((job) => job.kind)).toEqual([
+        'rag-content-index', 'rag-delete', 'rag-embed'
+      ])
+    } finally {
+      close(database)
+    }
+  })
+
+  it('rejects an unknown kind before it reaches the database', async () => {
+    const { database, repository } = await fixture()
+    try {
+      expect(() => repository.enqueue({ id: 'unknown-1', documentId: 'document-1', kind: 'rag-unknown' as never, now })).toThrowError(
+        expect.objectContaining({ code: 'JOB_INVALID_KIND' })
+      )
+      expect(() => repository.claimBatch({ now, leaseOwner: 'worker-a', leaseExpiresAt: expiry, kind: 'rag-unknown' as never })).toThrowError(
+        expect.objectContaining({ code: 'JOB_INVALID_KIND' })
+      )
+    } finally {
+      close(database)
+    }
+  })
+
+  it('recovers an expired RAG lease through the shared durable state machine', async () => {
+    const { database, repository } = await fixture()
+    try {
+      repository.enqueue({ id: 'rag-embed-1', documentId: 'document-1', kind: 'rag-embed', maxAttempts: 2, now })
+      repository.claimBatch({ now, leaseOwner: 'worker-a', leaseExpiresAt: '2025-12-31T23:59:00.000Z', kind: 'rag-embed' })
+      const recovered = repository.recoverExpired({ now })
+      expect(recovered).toMatchObject([{ id: 'rag-embed-1', kind: 'rag-embed', status: 'queued', errorCode: 'LEASE_EXPIRED' }])
+      expect(repository.listEvents('rag-embed-1').map((event) => event.toState)).toEqual(['queued', 'running', 'queued'])
+    } finally {
+      close(database)
+    }
+  })
+
   it('does not duplicate jobs across concurrent or continuous claims', async () => {
     const { database, repository } = await fixture(['document-1', 'document-2'])
     try {

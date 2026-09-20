@@ -7,6 +7,7 @@ import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { CopilotixTask } from '@shared/types'
 import { DEFAULT_SETTINGS } from '../src/shared/constants'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
+import { SqliteRagRepository } from '../src/utility/core/persistence/sqliteRagRepository'
 import { createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
 
 describe('utility persistence lifecycle', () => {
@@ -214,6 +215,95 @@ describe('utility persistence lifecycle', () => {
       await expect(persistence.handlers['compute:translation-plan-open']!({ payload: { taskId, jobId: job.id } } as never, signal))
         .rejects.toThrow()
       expect(state.translationPlanManager).not.toBe(originalManager)
+      await persistence.close()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('routes knowledge consent and embedding precondition errors through Utility handlers', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-knowledge-operations-'))
+    try {
+      const outputRoot = join(root, 'output')
+      const outputDir = join(outputRoot, 'documents-v2', '11111111-1111-4111-8111-111111111111')
+      await mkdir(outputDir, { recursive: true })
+      const state = {} as { database?: V2Database; databasePath?: string; outputRoot?: string }
+      const persistence = createUtilityOperationHandlers(state as never)
+      const signal = new AbortController().signal
+      await persistence.handlers['database:init']!({
+        payload: { databasePath: join(root, 'state', 'copilotix.sqlite3'), outputRoot }
+      } as never, signal)
+      const task: CopilotixTask = {
+        id: '11111111-1111-4111-8111-111111111111',
+        originalName: 'knowledge.pdf',
+        title: null,
+        name: 'knowledge.pdf',
+        sourcePath: join(outputDir, 'original.pdf'),
+        sourceHash: 'knowledge-source-hash',
+        outputDir,
+        status: 'uploading',
+        progress: 0,
+        translationProvider: 'qwen',
+        remoteBatchId: null,
+        remoteDataId: null,
+        remoteResultUrl: null,
+        error: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      }
+      await persistence.handlers['tasks:insert']!({ payload: { task } } as never, signal)
+      await expect(persistence.handlers['knowledge:get']!({ payload: { documentId: task.id } } as never, signal)).resolves.toMatchObject({
+        documentId: task.id,
+        localState: 'unindexed',
+        semanticConsent: false
+      })
+      await expect(persistence.handlers['knowledge:set-semantic-consent']!({
+        payload: { documentId: task.id, consent: true }
+      } as never, signal)).resolves.toMatchObject({ semanticConsent: true, semanticState: 'requires-credential' })
+      await expect(persistence.handlers['knowledge:ensure-embed']!({
+        payload: { documentId: task.id, profileId: 'embedding-default' }
+      } as never, signal)).rejects.toThrow(expect.objectContaining({ code: 'RAG_CONTENT_NOT_READY' }))
+      await persistence.close()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves non-retryable RAG content errors through the Utility handler', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-rag-error-'))
+    try {
+      const outputRoot = join(root, 'output')
+      const documentId = '11111111-1111-4111-8111-111111111111'
+      const documentRoot = join(outputRoot, 'documents-v2', documentId)
+      await mkdir(join(documentRoot, 'artifacts'), { recursive: true })
+      const markdown = '# Mapping\n\nbody'
+      const mappingJson = '{invalid-json'
+      await writeFile(join(documentRoot, 'artifacts', 'paper.md'), markdown, 'utf8')
+      await writeFile(join(documentRoot, 'artifacts', 'bad-mappings.json'), mappingJson, 'utf8')
+      const state = {} as { database?: V2Database; databasePath?: string; outputRoot?: string }
+      const persistence = createUtilityOperationHandlers(state as never)
+      const signal = new AbortController().signal
+      await persistence.handlers['database:init']!({
+        payload: { databasePath: join(root, 'state', 'copilotix.sqlite3'), outputRoot }
+      } as never, signal)
+      const now = '2026-01-01T00:00:00.000Z'
+      const hash = (value: string) => createHash('sha256').update(value).digest('hex')
+      state.database!.connection.prepare(`INSERT INTO documents(id,original_filename,display_title,storage_path,source_checksum,translation_provider,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`).run(
+        documentId, 'paper.pdf', null, documentRoot, 'source', 'qwen', now, now
+      )
+      state.database!.connection.prepare(`INSERT INTO artifacts(id,document_id,kind,revision,relative_path,content_hash,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?)`).run(
+        'parsed', documentId, 'parsed_markdown', 1, 'artifacts/paper.md', hash(markdown), '{}', now
+      )
+      state.database!.connection.prepare(`INSERT INTO artifacts(id,document_id,kind,revision,relative_path,content_hash,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?)`).run(
+        'bad-mappings', documentId, 'block_mappings', 1, 'artifacts/bad-mappings.json', hash(mappingJson), '{}', now
+      )
+      const revision = new SqliteRagRepository(state.database!).createContentRevision({
+        documentId, artifactId: 'parsed', contentHash: hash(markdown), mappingFingerprint: hash(mappingJson),
+        chunkerFingerprint: 'chunker', contentRevisionId: 'rag-error-revision', now
+      })
+      await expect(persistence.handlers['compute:rag-content-index']!({
+        payload: { documentId, contentRevisionId: revision.contentRevisionId }
+      } as never, signal)).rejects.toMatchObject({ code: 'RAG_BLOCK_MAPPING_INVALID_JSON', retryable: false })
       await persistence.close()
     } finally {
       await rm(root, { recursive: true, force: true })
