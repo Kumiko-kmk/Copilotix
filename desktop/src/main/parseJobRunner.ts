@@ -311,7 +311,7 @@ export class ParseJobRunner implements BatchJobRunner {
         { signal: input.signal }
       )
       if (!normalized) throw new Error('Parser normalization queue returned no result')
-      if (normalized.displayTitle && this.options.repository.updateDocumentMetadata) {
+      if (normalized.displayTitle && originalTask.title === null && this.options.repository.updateDocumentMetadata) {
         await this.options.repository.updateDocumentMetadata(originalTask.id, { displayTitle: normalized.displayTitle })
       }
       await this.options.usageAnalytics?.recordDocumentPages(originalTask.id, originalTask.createdAt, normalized.pageCount)

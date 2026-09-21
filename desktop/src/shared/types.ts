@@ -107,6 +107,7 @@ export interface SelectedPdf {
 export interface CreateTasksRequest {
   files: SelectedPdf[]
   createDuplicates?: boolean
+  useOriginalFilename?: boolean
 }
 
 export interface DeleteTaskRequest {

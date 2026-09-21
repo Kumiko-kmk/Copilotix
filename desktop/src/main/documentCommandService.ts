@@ -75,7 +75,7 @@ export class DocumentCommandService {
       created.push({
         id,
         originalName: file.name,
-        title: null,
+        title: request.useOriginalFilename ? originalFilenameTitle(file.name) : null,
         name: file.name,
         sourcePath: localPdf,
         sourceHash,
@@ -131,7 +131,7 @@ export class DocumentCommandService {
         created.push({
           id,
           originalName: name,
-          title: null,
+          title: options.useOriginalFilename ? originalFilenameTitle(name) : null,
           name,
           sourcePath: join(outputDir, 'original.pdf'),
           sourceHash: imported.sha256,
@@ -212,6 +212,12 @@ export class DocumentCommandService {
       })
     }
   }
+}
+
+function originalFilenameTitle(name: string): string | null {
+  const extension = extname(name)
+  const title = basename(name, extension).trim()
+  return title || null
 }
 
 function assertParserCredentialUsable(settings: Awaited<ReturnType<SettingsService['get']>>): void {

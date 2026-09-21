@@ -78,12 +78,21 @@ describe('durable TaskService cutover', () => {
     try {
       const created = await service.create({
         files: [{ path: source, name: 'paper.pdf', size: 16 }],
-        createDuplicates: false
+        createDuplicates: false,
+        useOriginalFilename: true
       })
+      expect(created[0]).toMatchObject({ originalName: 'paper.pdf', title: 'paper' })
       const parseJobs = jobs.list({ documentId: created[0]!.id, kind: 'parse' })
       expect(parseJobs).toHaveLength(1)
       expect(parseJobs[0]).toMatchObject({ status: 'queued', attempt: 0 })
       expect(client.createCalls).toBe(0)
+
+      const duplicate = await service.create({
+        files: [{ path: source, name: 'renamed-copy.pdf', size: 16 }],
+        createDuplicates: false
+      })
+      expect(duplicate).toEqual([])
+      expect(repository.listTasks()).toHaveLength(1)
     } finally {
       database.close()
     }

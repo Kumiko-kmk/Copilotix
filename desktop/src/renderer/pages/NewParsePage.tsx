@@ -45,7 +45,8 @@ export default function NewParsePage(props: {
   onOpenSettings(): void
 }): React.JSX.Element {
   const [files, setFiles] = React.useState<PendingPdf[]>([])
-  const [createDuplicates, setCreateDuplicates] = React.useState(false)
+  const [useOriginalFilename, setUseOriginalFilename] = React.useState(false)
+  const [skipDuplicates, setSkipDuplicates] = React.useState(true)
   const [submitting, setSubmitting] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -101,11 +102,11 @@ export default function NewParsePage(props: {
     setSubmitting(true)
     try {
       const created = await window.copilotix.importDocuments(
-        { createDuplicates },
+        { createDuplicates: !skipDuplicates, useOriginalFilename },
         files.map(({ file }) => file)
       )
       if (created.length === 0) {
-        messageApi.warning('没有创建任务；重复文件可勾选“仍创建新任务”')
+        messageApi.warning('没有创建任务；所选 PDF 已存在于论文库')
         return
       }
       messageApi.success(`已创建 ${created.length} 个任务`)
@@ -116,7 +117,7 @@ export default function NewParsePage(props: {
     } finally {
       setSubmitting(false)
     }
-  }, [createDuplicates, files, messageApi, props.onCreated])
+  }, [files, messageApi, props.onCreated, skipDuplicates, useOriginalFilename])
 
   const oversizedFiles = files.filter((file) => file.size > MAX_PDF_BYTES)
 
@@ -158,9 +159,9 @@ export default function NewParsePage(props: {
         open={files.length > 0}
         width={720}
         okText="开始解析"
-        cancelText="重新选择"
         confirmLoading={submitting}
         okButtonProps={{ disabled: props.settings.credentials.parser.state === 'missing' || props.settings.credentials.parser.state === 'invalid' || oversizedFiles.length > 0 }}
+        footer={(_, { OkBtn }) => <OkBtn />}
         onOk={() => void start()}
         onCancel={() => setFiles([])}
       >
@@ -182,6 +183,10 @@ export default function NewParsePage(props: {
             description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置重新验证</Button>}
           />
         ) : null}
+        <div className="import-options" role="group" aria-label="导入选项">
+          <Checkbox checked={useOriginalFilename} onChange={(event) => setUseOriginalFilename(event.target.checked)}>使用原文件名</Checkbox>
+          <Checkbox checked={skipDuplicates} onChange={(event) => setSkipDuplicates(event.target.checked)}>跳过重复文件</Checkbox>
+        </div>
         <div className="selected-files">
           {files.map((file) => (
             <div className="selected-file" key={`${file.name}:${file.size}:${file.file.lastModified}`}>
@@ -192,12 +197,6 @@ export default function NewParsePage(props: {
             </div>
           ))}
         </div>
-        <Alert
-          type="info"
-          showIcon
-          message="导入时会自动跳过已有相同文件"
-          description={<Checkbox checked={createDuplicates} onChange={(event) => setCreateDuplicates(event.target.checked)}>仍为重复文件创建新任务</Checkbox>}
-        />
         {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="解析 API 不接受超过 200MB 的单个文件" /> : null}
       </Modal>
     </section>

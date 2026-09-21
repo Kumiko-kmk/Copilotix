@@ -214,7 +214,8 @@ export const selectedPdfSchema: z.ZodType<SelectedPdf> = z.object({
 
 export const createTasksRequestSchema: z.ZodType<CreateTasksRequest> = z.object({
   files: z.array(selectedPdfSchema).min(1).max(100),
-  createDuplicates: z.boolean().optional()
+  createDuplicates: z.boolean().optional(),
+  useOriginalFilename: z.boolean().optional()
 }).strict()
 
 export const deleteTaskRequestSchema: z.ZodType<DeleteTaskRequest> = z.object({
@@ -363,7 +364,8 @@ export const documentDetailsSchema = z.object({
 export type DocumentDetails = z.infer<typeof documentDetailsSchema>
 
 export const importDocumentsRequestSchema = z.object({
-  createDuplicates: z.boolean().optional()
+  createDuplicates: z.boolean().optional(),
+  useOriginalFilename: z.boolean().optional()
 }).strict()
 export type ImportDocumentsRequest = z.infer<typeof importDocumentsRequestSchema>
 

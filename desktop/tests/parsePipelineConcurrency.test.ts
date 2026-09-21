@@ -30,7 +30,7 @@ describe('parse artifact pipeline concurrency', () => {
       const outputDir = join(root, id)
       await mkdir(outputDir, { recursive: true })
       await writeFile(join(outputDir, 'original.pdf'), '%PDF-1.4 fixture')
-      tasks.set(id, task(id, outputDir))
+      tasks.set(id, { ...task(id, outputDir), title: index === 0 ? 'original-file-name' : null })
       jobs.push(job(id, index))
     }
 
@@ -38,6 +38,7 @@ describe('parse artifact pipeline concurrency', () => {
     let peakDownloads = 0
     let activeNormalizations = 0
     let peakNormalizations = 0
+    const metadataUpdates: string[] = []
     const parserClient: ParserClient = {
       verifyToken: async () => ({ ok: true, message: 'ok' }),
       createUploadBatch: async () => { throw new Error('fresh upload is not expected') },
@@ -63,7 +64,7 @@ describe('parse artifact pipeline concurrency', () => {
         peakNormalizations = Math.max(peakNormalizations, activeNormalizations)
         await delay(15)
         activeNormalizations -= 1
-        return { normalized: true, displayTitle: null, pageCount: 1 }
+        return { normalized: true, displayTitle: 'Extracted paper title', pageCount: 1 }
       },
       rebuildMappings: async () => undefined,
       openTranslationPlan: async () => { throw new Error('unused') },
@@ -78,7 +79,10 @@ describe('parse artifact pipeline concurrency', () => {
       enqueue: async (input: { documentId: string }) => job(input.documentId, 99)
     } as unknown as JobRepositoryPort
     const runner = new ParseJobRunner({
-      repository: { getTask: async (id: string) => tasks.get(id) ?? null } as never,
+      repository: {
+        getTask: async (id: string) => tasks.get(id) ?? null,
+        updateDocumentMetadata: async (id: string) => { metadataUpdates.push(id) }
+      } as never,
       jobRepository,
       settingsService: { get: async () => ({ ...DEFAULT_SETTINGS, credentials: { ...DEFAULT_SETTINGS.credentials, parser: { state: 'valid' as const } } }) } as never,
       vault: { get: async () => 'token' } as never,
@@ -97,6 +101,8 @@ describe('parse artifact pipeline concurrency', () => {
     expect(results.every((result) => result.result?.status === 'succeeded')).toBe(true)
     expect(peakDownloads).toBe(1)
     expect(peakNormalizations).toBe(1)
+    expect(metadataUpdates).not.toContain(jobs[0]!.documentId)
+    expect(metadataUpdates).toHaveLength(3)
   })
 })
 
