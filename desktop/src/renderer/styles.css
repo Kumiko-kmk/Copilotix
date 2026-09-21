@@ -106,10 +106,11 @@ button, input, select { font: inherit; }
 
 .task-header .ant-input-affix-wrapper { width: 310px; }
 .task-header .ant-select { width: 150px; }
-.task-link { max-width: 100%; padding: 0; overflow: hidden; border: 0; color: var(--text); background: none; cursor: pointer; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.task-link { width: 100%; max-width: 100%; padding: 0; overflow: hidden; border: 0; color: var(--text); background: none; cursor: pointer; font-weight: 600; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .task-link:hover { color: var(--primary); }
-.task-status { display: flex; align-items: center; gap: 8px; }
+.task-status { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .task-status .ant-progress { width: 72px; margin: 0; }
+.task-status .ant-tag, .task-type { margin-inline-end: 0; }
 
 .settings-page { display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 36px 54px; overflow: hidden; }
 .settings-page .page-header { margin-bottom: 24px; }

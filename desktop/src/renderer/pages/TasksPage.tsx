@@ -45,23 +45,30 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
       <Table
         rowKey="id"
         dataSource={filtered}
+        tableLayout="fixed"
         pagination={{ pageSize: 20, showSizeChanger: false, showTotal: (total) => `共 ${total} 项` }}
         onRow={(document) => ({ onDoubleClick: () => props.onOpen(document.id) })}
         columns={[
           {
-            title: '任务名称', dataIndex: 'displayName', ellipsis: true,
+            title: '任务名称', dataIndex: 'displayName', width: '43%', align: 'center', ellipsis: true,
             render: (name: string, document: DocumentSummary) => <button className="task-link" onClick={() => props.onOpen(document.id)}>{name}</button>
           },
           {
-            title: '状态', width: 210,
+            title: '状态', width: '15%', align: 'center',
             render: (_: unknown, document: DocumentSummary) => (
               <div className="task-status"><Tag color={statusColor(document.workflow.status)}>{statusLabels[document.workflow.status]}</Tag>{['queued', 'uploading', 'parsing', 'translating'].includes(document.workflow.status) ? <Progress percent={document.workflow.progress} size="small" showInfo={false} /> : null}</div>
             )
           },
-          { title: '类型', width: 100, render: () => '文档' },
-          { title: '创建时间', dataIndex: 'createdAt', width: 190, render: (value: string) => new Date(value).toLocaleString('zh-CN') },
           {
-            title: '操作', width: 170,
+            title: '类型', width: '10%', align: 'center',
+            render: (_: unknown, document: DocumentSummary) => {
+              const type = documentTypeLabel(document.originalName)
+              return <Tag className="task-type" color={type === 'PDF' ? 'red' : 'blue'}>{type}</Tag>
+            }
+          },
+          { title: '创建时间', dataIndex: 'createdAt', width: '17%', align: 'center', render: (value: string) => formatTaskCreatedAt(value) },
+          {
+            title: '操作', width: '15%', align: 'center',
             render: (_: unknown, document: DocumentSummary) => (
               <Space>
                 <Button type="text" aria-label="打开输出目录" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.id)} />
@@ -85,4 +92,15 @@ function statusColor(status: DocumentSummary['workflow']['status']): string {
   if (status === 'failed') return 'error'
   if (status === 'partial') return 'warning'
   return 'processing'
+}
+
+export function documentTypeLabel(originalName: string): 'PDF' | 'Markdown' {
+  return /\.(?:md|markdown)$/iu.test(originalName.trim()) ? 'Markdown' : 'PDF'
+}
+
+export function formatTaskCreatedAt(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (part: number): string => String(part).padStart(2, '0')
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
