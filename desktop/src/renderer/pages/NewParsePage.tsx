@@ -49,6 +49,7 @@ export default function NewParsePage(props: {
   const [submitting, setSubmitting] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const dragDepthRef = React.useRef(0)
   const [messageApi, contextHolder] = message.useMessage()
 
   const setPdfFiles = React.useCallback((nextFiles: File[]): void => {
@@ -57,10 +58,43 @@ export default function NewParsePage(props: {
       .map((file) => ({ file, name: file.name, size: file.size })))
   }, [])
   const chooseFiles = React.useCallback(() => inputRef.current?.click(), [])
-  const onDrop = React.useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    setDragging(false)
-    setPdfFiles([...event.dataTransfer.files])
+
+  React.useEffect(() => {
+    const containsFiles = (event: DragEvent): boolean => Array.from(event.dataTransfer?.types ?? []).includes('Files')
+    const onDragEnter = (event: DragEvent): void => {
+      if (!containsFiles(event)) return
+      event.preventDefault()
+      dragDepthRef.current += 1
+      setDragging(true)
+    }
+    const onDragOver = (event: DragEvent): void => {
+      if (!containsFiles(event)) return
+      event.preventDefault()
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    }
+    const onDragLeave = (event: DragEvent): void => {
+      if (!containsFiles(event)) return
+      event.preventDefault()
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+      if (dragDepthRef.current === 0) setDragging(false)
+    }
+    const onDrop = (event: DragEvent): void => {
+      if (!containsFiles(event)) return
+      event.preventDefault()
+      dragDepthRef.current = 0
+      setDragging(false)
+      setPdfFiles(Array.from(event.dataTransfer?.files ?? []))
+    }
+    window.addEventListener('dragenter', onDragEnter)
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('dragleave', onDragLeave)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('dragleave', onDragLeave)
+      window.removeEventListener('drop', onDrop)
+    }
   }, [setPdfFiles])
 
   const start = React.useCallback(async () => {
@@ -91,21 +125,15 @@ export default function NewParsePage(props: {
       {contextHolder}
       <div className="new-parse-hero">
         <CopilotixWordmark />
-        <h1>今天想讀些什麼？</h1>
+        <h1>今天想读些什么？</h1>
         <div className="new-parse-content">
         <div
           className={dragging ? 'upload-entry dragging' : 'upload-entry'}
           data-testid="pdf-upload-entry"
           role="region"
           aria-label="PDF 文件上传区"
-          onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
-          onDragOver={(event) => event.preventDefault()}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false)
-          }}
-          onDrop={onDrop}
         >
-          <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此区域</span>
+          <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此窗口</span>
           <FileOutlined className="upload-icon" aria-hidden="true" />
           <span className="upload-prompt">拖入 PDF 文件</span>
           <span className="upload-or" aria-hidden="true">or</span>
