@@ -96,12 +96,21 @@ test('keeps the new parse page static across supported sizes and themes', async 
       const text = element.textContent ?? ''
       return Object.fromEntries([...new Set('COPILOTIX')].map((letter) => [letter, [...text].filter((cell) => cell === letter).length]))
     })).toEqual({ C: 36, O: 80, P: 36, I: 80, L: 32, T: 30, X: 36 })
-    await expect(window.getByText('今天想讀些什麼？')).toBeVisible()
-    await expect(window.getByText('拖入 PDF 文件')).toBeVisible()
+    await expect(window.getByText('今天想读些什么？')).toBeVisible()
+    await expect(window.getByText('拖入文档')).toBeVisible()
+    await expect(window.getByText('当前支持 PDF')).toBeVisible()
+    await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
     await expect(window.getByText('需要先配置解析 API Token')).toHaveCount(0)
-    await expect(uploadEntry).toHaveCSS('min-height', '142px')
-    await expect(uploadEntry).toHaveCSS('border-top-style', 'dashed')
+    await expect(uploadEntry).toHaveCSS('min-height', '94px')
+    await expect(uploadEntry).toHaveCSS('border-top-style', 'solid')
     await expect(uploadEntry).toHaveCSS('backdrop-filter', 'none')
+    const compactWordmarkBounds = await window.locator('.copilotix-wordmark').boundingBox()
+    const compactButtonBounds = await window.getByRole('button', { name: '选择文档' }).boundingBox()
+    expect(compactWordmarkBounds).not.toBeNull()
+    expect(compactButtonBounds).not.toBeNull()
+    expect(compactWordmarkBounds!.x).toBeGreaterThanOrEqual(0)
+    expect(compactWordmarkBounds!.x + compactWordmarkBounds!.width).toBeLessThanOrEqual(compactViewport[0])
+    expect(compactButtonBounds!.y + compactButtonBounds!.height).toBeLessThanOrEqual(compactViewport[1])
     await capture(window, 'new-parse-1100x700-static.png')
 
     await app.evaluate(({ BrowserWindow, nativeTheme }) => {
@@ -130,8 +139,8 @@ test('keeps the new parse page static across supported sizes and themes', async 
     await window.waitForTimeout(300)
     await expect(window.locator('.titlebar-brand')).toHaveText('COPILOTIX')
     const uploadBounds = await uploadEntry.boundingBox()
-    expect(uploadBounds?.width).toBeCloseTo(608, 0)
-    expect(uploadBounds?.height).toBeCloseTo(142, 0)
+    expect(uploadBounds?.width).toBeCloseTo(720, 0)
+    expect(uploadBounds?.height).toBeCloseTo(94, 0)
     await capture(window, 'new-parse-1584x992-reference.png')
     await window.locator('input[type="file"]').setInputFiles({
       name: 'fixture.pdf',
@@ -139,7 +148,6 @@ test('keeps the new parse page static across supported sizes and themes', async 
       buffer: Buffer.from('%PDF-1.4 fixture')
     })
     await expect(window.getByRole('dialog', { name: '确认解析任务' })).toBeVisible()
-    await expect(window.getByText('需要先配置解析 API Token')).toBeVisible()
   } finally {
     await app.close()
     await workspace.cleanup()

@@ -20,12 +20,13 @@ test('opens the minimal new parse page', async () => {
     await window.locator('[data-edge-dock="top"]').hover()
     await expect(window.getByRole('button', { name: '任务管理' })).toBeVisible()
     await expect(window.getByText('智能解析')).toHaveCount(0)
-    await expect(window.getByText('拖入 PDF 文件')).toBeVisible()
-    await expect(window.getByRole('button', { name: '选择 PDF' })).toBeVisible()
+    await expect(window.getByText('拖入文档')).toBeVisible()
+    await expect(window.getByText('当前支持 PDF')).toBeVisible()
+    await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
     const uploadEntry = window.getByTestId('pdf-upload-entry')
     await expect(uploadEntry).toBeVisible()
     await expect(uploadEntry).toHaveCSS('border-radius', '16px')
-    await expect(uploadEntry).toHaveCSS('border-style', 'dashed')
+    await expect(uploadEntry).toHaveCSS('border-style', 'solid')
     await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
   } finally {
     await app.close()
@@ -77,7 +78,7 @@ test('opens the packaged Windows executable', async () => {
       }
     })
     expect(settingsResult, JSON.stringify(settingsResult)).toMatchObject({ ok: true })
-    await expect(window.getByRole('button', { name: '选择 PDF' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
     await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
   } finally {
     await app.close()

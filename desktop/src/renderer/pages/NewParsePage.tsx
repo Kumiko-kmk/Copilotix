@@ -132,14 +132,18 @@ export default function NewParsePage(props: {
           className={dragging ? 'upload-entry dragging' : 'upload-entry'}
           data-testid="pdf-upload-entry"
           role="region"
-          aria-label="PDF 文件上传区"
+          aria-label="文档导入区，当前支持 PDF"
         >
           <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此窗口</span>
-          <FileOutlined className="upload-icon" aria-hidden="true" />
-          <span className="upload-prompt">拖入 PDF 文件</span>
-          <span className="upload-or" aria-hidden="true">or</span>
-          <Button type="primary" size="large" onClick={chooseFiles}>
-            {dragging ? '松开以添加 PDF' : '选择 PDF'}
+          <div className="upload-entry-copy">
+            <FileOutlined className="upload-icon" aria-hidden="true" />
+            <div className="upload-entry-text">
+              <span className="upload-prompt">拖入文档</span>
+              <small>当前支持 PDF</small>
+            </div>
+          </div>
+          <Button type="primary" size="large" loading={submitting} onClick={chooseFiles}>
+            选择文档
           </Button>
           <input
             ref={inputRef}
@@ -147,6 +151,8 @@ export default function NewParsePage(props: {
             type="file"
             accept="application/pdf,.pdf"
             multiple
+            aria-hidden="true"
+            tabIndex={-1}
             onChange={(event) => setPdfFiles([...event.target.files ?? []])}
           />
         </div>
