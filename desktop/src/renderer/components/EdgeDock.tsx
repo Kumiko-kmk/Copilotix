@@ -91,7 +91,7 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
         aria-expanded={open}
         onClick={handleTriggerClick}
       >
-        <span aria-hidden="true" />
+        {props.edge === 'bottom' ? <span aria-hidden="true" /> : null}
       </button>
       <div className="edge-dock-panel" aria-hidden={!open} inert={open ? undefined : true} onPointerEnter={show}>
         {props.children}

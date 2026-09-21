@@ -70,11 +70,13 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
           {
             title: '操作', width: '15%', align: 'center',
             render: (_: unknown, document: DocumentSummary) => (
-              <Space>
+              <div className="task-actions">
                 <Button type="text" aria-label="打开输出目录" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.id)} />
-                {document.workflow.status === 'failed' || document.workflow.status === 'partial' ? <Button type="text" aria-label="重试" icon={<RedoOutlined />} onClick={() => void window.copilotix.retryDocument(document.id)} /> : null}
+                {document.workflow.status === 'failed' || document.workflow.status === 'partial'
+                  ? <Button type="text" aria-label="重试" icon={<RedoOutlined />} onClick={() => void window.copilotix.retryDocument(document.id)} />
+                  : <span className="task-action-placeholder" aria-hidden="true" />}
                 <Button danger type="text" aria-label="删除" icon={<DeleteOutlined />} onClick={() => setDeleting(document)} />
-              </Space>
+              </div>
             )
           }
         ]}

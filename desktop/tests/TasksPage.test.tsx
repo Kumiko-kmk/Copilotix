@@ -44,6 +44,17 @@ describe('TasksPage', () => {
       expect(header.style.textAlign).toBe('center')
     }
     expect(Array.from(container.querySelectorAll('col'), (column) => column.style.width)).toEqual(['43%', '15%', '10%', '17%', '15%'])
+
+    const completedRow = screen.getByRole('button', { name: 'PDF paper' }).closest('tr')!
+    const partialRow = screen.getByRole('button', { name: 'Markdown notes' }).closest('tr')!
+    const completedSlots = completedRow.querySelector('.task-actions')!.children
+    const partialSlots = partialRow.querySelector('.task-actions')!.children
+    expect(completedSlots).toHaveLength(3)
+    expect(completedSlots.item(0)!.getAttribute('aria-label')).toBe('打开输出目录')
+    expect(completedSlots.item(1)!.classList.contains('task-action-placeholder')).toBe(true)
+    expect(completedSlots.item(2)!.getAttribute('aria-label')).toBe('删除')
+    expect(partialSlots).toHaveLength(3)
+    expect(partialSlots.item(1)!.getAttribute('aria-label')).toBe('重试')
   })
 
   it('keeps legacy unknown extensions compatible with the PDF-only importer', () => {

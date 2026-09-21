@@ -73,4 +73,13 @@ describe('EdgeDock', () => {
     expect(panel.getAttribute('aria-hidden')).toBe('true')
     expect(document.activeElement).toBe(trigger)
   })
+
+  it('never renders a top grab bar over the persistent project name', () => {
+    const top = render(<EdgeDock edge="top" label="展开主导航"><button>新解析</button></EdgeDock>)
+    expect(top.getByRole('button', { name: '展开主导航' }).querySelector('span')).toBeNull()
+    top.unmount()
+
+    const bottom = render(<EdgeDock edge="bottom" label="展开论文切换"><button>论文</button></EdgeDock>)
+    expect(bottom.getByRole('button', { name: '展开论文切换' }).querySelector('span')).not.toBeNull()
+  })
 })
