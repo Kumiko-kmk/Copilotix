@@ -198,6 +198,17 @@ test('reorders and enables translation providers with immediate persistent saves
     await expect(window.getByText('通过 DeepSeek API 提供大语言模型翻译')).toBeVisible()
     await expect(window.getByText('通过阿里云百炼 API 提供专业翻译模型')).toBeVisible()
     await expect(window.getByRole('button', { name: '保存全部更改' })).toHaveCount(0)
+    const modelCardBounds = await window.locator('.model-priority-item').evaluateAll((elements) => elements.map((element) => {
+      const bounds = element.getBoundingClientRect()
+      return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
+    }))
+    expect(modelCardBounds).toHaveLength(4)
+    for (const [index, bounds] of modelCardBounds.entries()) {
+      expect(bounds.y).toBeCloseTo(modelCardBounds[0]!.y, 0)
+      expect(bounds.height).toBeCloseTo(192, 0)
+      if (index > 0) expect(bounds.x).toBeGreaterThan(modelCardBounds[index - 1]!.x)
+    }
+    await capture(window, 'settings-models-horizontal.png')
 
     await window.getByRole('button', { name: '移动千问 / Qwen' }).dragTo(window.locator('[data-provider="bing"]'))
     await expect(window.getByText('DeepSeek → Bing → 千问 → Transmart')).toBeVisible()
@@ -232,7 +243,8 @@ test('shows live file storage usage and location controls', async () => {
     await window.getByRole('button', { name: '设置' }).click()
     await window.getByRole('button', { name: /文件存储/u }).click()
 
-    await expect(window.getByRole('heading', { name: '文件管理' })).toBeVisible()
+    await expect(window.getByRole('region', { name: '文件存储' })).toBeVisible()
+    await expect(window.getByRole('heading', { name: '文件管理' })).toHaveCount(0)
     await expect(window.getByLabel('文档保存位置')).not.toHaveValue('')
     await expect(window.getByRole('button', { name: /修改位置/u })).toBeVisible()
     await expect(window.getByRole('button', { name: '打开当前目录' })).toBeVisible()
