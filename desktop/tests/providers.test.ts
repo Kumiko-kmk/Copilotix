@@ -233,4 +233,50 @@ describe('table provider transports', () => {
     expect(translatedTexts.every((text) => !text.includes('COPILOTIX_SEGMENT'))).toBe(true)
     expect(response.translations).toHaveLength(flattenSegments(request).length)
   })
+
+  it('shares the provider concurrency limit across independently created document jobs', async () => {
+    let active = 0
+    let peak = 0
+    const keyVault: CredentialVault = {
+      ...vault,
+      get: async (account) => account === 'qwen-api-key' ? 'fixture-key' : null
+    }
+    const fetcher = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      active += 1
+      peak = Math.max(peak, active)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      active -= 1
+      const body = JSON.parse(String(init?.body)) as OpenAiRequestBody
+      return new Response(JSON.stringify({ choices: [{ message: { content: `译:${body.messages[0]!.content}` } }] }), { status: 200 })
+    }
+    const first = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+    const second = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+
+    await Promise.all(Array.from({ length: 8 }, (_, index) =>
+      (index % 2 === 0 ? first : second).translate(`request-${index}`)
+    ))
+
+    expect(peak).toBe(3)
+  })
+
+  it('applies a shared cooldown after a provider returns HTTP 429', async () => {
+    let calls = 0
+    const keyVault: CredentialVault = {
+      ...vault,
+      get: async (account) => account === 'qwen-api-key' ? 'fixture-key' : null
+    }
+    const fetcher = async (): Promise<Response> => {
+      calls += 1
+      if (calls === 1) return new Response('', { status: 429, headers: { 'Retry-After': '0' } })
+      return new Response(JSON.stringify({ choices: [{ message: { content: '译文' } }] }), { status: 200 })
+    }
+    const first = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+    const second = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+
+    await expect(first.translate('limited')).rejects.toMatchObject({ status: 429 })
+    const startedAt = Date.now()
+    await expect(second.translate('after-limit')).resolves.toBe('译文')
+
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(900)
+  })
 })

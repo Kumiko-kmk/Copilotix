@@ -221,6 +221,79 @@ describe('translation plan orchestrator', () => {
     expect(response.response.translations[0]!.text).toHaveLength(9_001 + 2 * lengths.length)
   })
 
+  it('consumes and releases each translation-plan page before requesting the next page', async () => {
+    const fixture = await makeFixture('First page')
+    const secondId = '55555555-5555-4555-8555-555555555555'
+    const second: TranslationPlanWorkDescriptor = {
+      ...fixture.descriptor,
+      unitId: secondId,
+      blockIds: ['translation-block-2'],
+      requestPath: `.translation/${JOB_ID}/requests/${secondId}.json`,
+      responsePath: `.translation/${JOB_ID}/responses/${secondId}.json`,
+      resultPath: `.translation/${JOB_ID}/results/${secondId}.md`
+    }
+    await writeFile(join(fixture.root, ...second.requestPath.split('/')), `${JSON.stringify({
+      ...fixture.request,
+      unitId: secondId,
+      segments: [{ id: `${secondId}-segment-0`, text: 'Second page' }]
+    })}\n`, 'utf8')
+    const events: string[] = []
+    const completed = new Set<string>()
+    const counts = (): TranslationPlanCounts => ({ total: 2, completed: completed.size, failed: 0 })
+    const mutation = (unitId: string): TranslationPlanMutationResult => ({
+      ...counts(),
+      unitId,
+      status: completed.has(unitId) ? 'completed' : 'pending'
+    })
+    const compute: TaskComputePort = {
+      hashFile: async () => SOURCE_HASH,
+      importPdf: async () => ({ sha256: SOURCE_HASH, size: 0 }),
+      normalizeParserOutput: async () => ({ normalized: true, displayTitle: null, pageCount: 1 }),
+      rebuildMappings: async () => undefined,
+      openTranslationPlan: async () => ({ planId: PLAN_ID, taskId: TASK_ID, jobId: JOB_ID, sourceHash: SOURCE_HASH, reused: false, ...counts() }),
+      listTranslationWork: async (_taskId, _jobId, cursor) => {
+        events.push(`list:${cursor}`)
+        const descriptor = cursor === 0 ? fixture.descriptor : second
+        return { items: [descriptor], nextCursor: cursor === 0 ? 1 : null, counts: counts() }
+      },
+      tryTranslationCache: async (_taskId, _jobId, unitId) => mutation(unitId),
+      applyTranslation: async (_taskId, _jobId, unitId) => {
+        completed.add(unitId)
+        events.push(`apply:${unitId}`)
+        return mutation(unitId)
+      },
+      failTranslation: async (_taskId, _jobId, unitId) => mutation(unitId),
+      finalizeTranslation: async () => ({
+        ...counts(),
+        status: 'succeeded',
+        failedBlockIdsSample: [],
+        translatedRelativePath: 'full.zh-CN.md',
+        manifestRelativePath: 'translation.manifest.json',
+        checkpointRelativePath: 'translation.checkpoint.json',
+        hashes: { translated: SOURCE_HASH, manifest: SOURCE_HASH, checkpoint: SOURCE_HASH }
+      })
+    }
+    const calls: string[] = []
+    const providers = new Map<TranslationProviderId, TranslationProvider>([
+      ['qwen', provider('qwen', async (text) => `译:${text}`, calls)]
+    ])
+
+    const result = await new TranslationPlanOrchestrator({
+      task: fixture.task,
+      jobId: JOB_ID,
+      providers,
+      providerOrder: ['qwen'],
+      compute,
+      pathPolicy: new PathPolicy(),
+      signal: new AbortController().signal,
+      onProgress: () => undefined
+    }).run()
+
+    expect(result.completed).toBe(2)
+    expect(events.indexOf(`apply:${fixture.descriptor.unitId}`)).toBeLessThan(events.indexOf('list:1'))
+    expect(calls).toHaveLength(2)
+  })
+
   it('falls back after provider or utility apply failure', async () => {
     const fixture = await makeFixture('Fallback me')
     fixture.compute.applyFailureFor = 'qwen'

@@ -22,7 +22,19 @@ import type { JobRepositoryPort } from '@core/jobs'
 import { ProgressReporter } from './progressReporter'
 import type { UsageAnalyticsRecorder } from './usageAnalyticsService'
 
-const MAX_UPLOAD_CONCURRENCY = 3
+const DEFAULT_PARSE_PIPELINE_CONCURRENCY = Object.freeze({
+  upload: 3,
+  download: 2,
+  extract: 2,
+  normalize: 2
+})
+
+export interface ParsePipelineConcurrency {
+  upload: number
+  download: number
+  extract: number
+  normalize: number
+}
 
 export interface ParseJobRunnerOptions {
   repository: TaskRepositoryCompat
@@ -34,6 +46,7 @@ export interface ParseJobRunnerOptions {
   pathPolicy: PathPolicyPort
   logger?: TaskLogger
   usageAnalytics?: UsageAnalyticsRecorder
+  concurrency?: Partial<ParsePipelineConcurrency>
 }
 
 interface LoadedJob {
@@ -45,9 +58,17 @@ interface LoadedJob {
 export class ParseJobRunner implements BatchJobRunner {
   private readonly logger: TaskLogger
   private readonly remoteSnapshots = new Map<string, string>()
+  private readonly uploadQueue: PQueue
+  private readonly downloadQueue: PQueue
+  private readonly extractQueue: PQueue
+  private readonly normalizeQueue: PQueue
 
   constructor(private readonly options: ParseJobRunnerOptions) {
     this.logger = options.logger ?? { info: () => undefined, error: () => undefined }
+    this.uploadQueue = new PQueue({ concurrency: positiveConcurrency(options.concurrency?.upload, DEFAULT_PARSE_PIPELINE_CONCURRENCY.upload) })
+    this.downloadQueue = new PQueue({ concurrency: positiveConcurrency(options.concurrency?.download, DEFAULT_PARSE_PIPELINE_CONCURRENCY.download) })
+    this.extractQueue = new PQueue({ concurrency: positiveConcurrency(options.concurrency?.extract, DEFAULT_PARSE_PIPELINE_CONCURRENCY.extract) })
+    this.normalizeQueue = new PQueue({ concurrency: positiveConcurrency(options.concurrency?.normalize, DEFAULT_PARSE_PIPELINE_CONCURRENCY.normalize) })
   }
 
   async run(input: { job: Job; signal: AbortSignal; updateProgress: (progress: number, checkpoint: JobCheckpoint) => Promise<Job> }): Promise<JobRunnerResult> {
@@ -113,7 +134,6 @@ export class ParseJobRunner implements BatchJobRunner {
     const byTaskId = new Map(loaded.map((item) => [item.task.id, item]))
     const reporters = new Map(loaded.map(({ job }) => [job.id, new ProgressReporter((progress, checkpoint) => input.updateProgress(job.id, progress, checkpoint))]))
     const progressTails = new Map<string, Promise<void>>()
-    const queue = new PQueue({ concurrency: MAX_UPLOAD_CONCURRENCY })
     const uploaded = new Set<string>()
     const uploadErrors = new Map<string, unknown>()
     const uploadTargets = new Map(submission.uploads.map((upload) => [upload.taskId, upload]))
@@ -131,7 +151,7 @@ export class ParseJobRunner implements BatchJobRunner {
       }), true)
     }
 
-    await Promise.all([...uploadTargets.values()].map((upload) => queue.add(async () => {
+    await Promise.all([...uploadTargets.values()].map((upload) => this.uploadQueue.add(async () => {
       const loadedJob = byTaskId.get(upload.taskId)
       if (!loadedJob || input.signal.aborted || uploadErrors.has(upload.taskId)) return
       const { job, task } = loadedJob
@@ -163,7 +183,7 @@ export class ParseJobRunner implements BatchJobRunner {
       } catch (error) {
         uploadErrors.set(task.id, toRunnerError(error, 'PARSER_UPLOAD_FAILED', [token]))
       }
-    })))
+    }, { signal: input.signal })))
 
     if (input.signal.aborted) return loaded.map(({ job, task }) => failure(job, uploadErrors.get(task.id) ?? new Error('Job runner aborted')))
     if (uploaded.size === 0) return loaded.map(({ job, task }) => failure(job, uploadErrors.get(task.id) ?? new RunnerError('没有成功上传的 PDF', 'PARSER_UPLOAD_FAILED', false)))
@@ -276,13 +296,21 @@ export class ParseJobRunner implements BatchJobRunner {
     const partialZipPath = `${zipPath}.partial-${job.id}`
     const extractedDir = join(originalTask.outputDir, `.parsed.partial-${job.id}`)
     try {
-      await this.options.parserClient.downloadResult(resultUrl, partialZipPath, input.signal)
-      if (input.signal.aborted) throw new Error('Job runner aborted')
-      await rm(zipPath, { force: true })
-      await rename(partialZipPath, zipPath)
-      await rm(extractedDir, { recursive: true, force: true })
-      await extract(zipPath, { dir: extractedDir })
-      const normalized = await this.options.compute.normalizeParserOutput(originalTask, extractedDir, job.id)
+      await this.downloadQueue.add(async () => {
+        await this.options.parserClient.downloadResult(resultUrl, partialZipPath, input.signal)
+        if (input.signal.aborted) throw new Error('Job runner aborted')
+        await rm(zipPath, { force: true })
+        await rename(partialZipPath, zipPath)
+      }, { signal: input.signal })
+      await this.extractQueue.add(async () => {
+        await rm(extractedDir, { recursive: true, force: true })
+        await extract(zipPath, { dir: extractedDir })
+      }, { signal: input.signal })
+      const normalized = await this.normalizeQueue.add(
+        () => this.options.compute.normalizeParserOutput(originalTask, extractedDir, job.id),
+        { signal: input.signal }
+      )
+      if (!normalized) throw new Error('Parser normalization queue returned no result')
       if (normalized.displayTitle && this.options.repository.updateDocumentMetadata) {
         await this.options.repository.updateDocumentMetadata(originalTask.id, { displayTitle: normalized.displayTitle })
       }
@@ -342,6 +370,10 @@ export class ParseJobRunner implements BatchJobRunner {
       tails.set(current.job.id, next.then(() => undefined).catch(() => undefined))
     }
   }
+}
+
+function positiveConcurrency(value: number | undefined, fallback: number): number {
+  return Number.isInteger(value) && value! > 0 ? value! : fallback
 }
 
 function checkpointFor(job: Job, stage: string, patch: Record<string, unknown> = {}): JobCheckpoint {

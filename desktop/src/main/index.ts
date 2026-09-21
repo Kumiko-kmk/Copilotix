@@ -189,7 +189,13 @@ async function bootstrap(): Promise<void> {
     compute,
     pathPolicy,
     logger,
-    usageAnalytics
+    usageAnalytics,
+    concurrency: {
+      upload: jobScheduler.getConcurrency().upload,
+      download: jobScheduler.getConcurrency().normalize,
+      extract: jobScheduler.getConcurrency().normalize,
+      normalize: jobScheduler.getConcurrency().normalize
+    }
   }))
   jobScheduler.registerRunner('translate', new TranslationJobRunner({
     repository,

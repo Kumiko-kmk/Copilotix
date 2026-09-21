@@ -14,6 +14,15 @@ import type { ProviderTokenUsage } from '../usageAnalyticsService'
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 type UsageObserver = (provider: 'qwen' | 'deepseek', usage: ProviderTokenUsage) => void | Promise<void>
 
+const PROVIDER_CONCURRENCY: Readonly<Record<TranslationProviderId, number>> = Object.freeze({
+  qwen: 3,
+  deepseek: 3,
+  bing: 1,
+  transmart: 1
+})
+const MIN_RATE_LIMIT_BACKOFF_MS = 1_000
+const MAX_RATE_LIMIT_BACKOFF_MS = 60_000
+
 export interface TranslationProvider {
   readonly id: TranslationProviderId
   readonly model: string
@@ -47,23 +56,20 @@ export class TranslationCredentialError extends Error {
 abstract class QueuedProvider implements TranslationProvider {
   abstract readonly id: TranslationProviderId
   abstract readonly model: string
-  protected abstract readonly queue: PQueue
   abstract isAvailable(): Promise<boolean>
   protected abstract translateDirect(text: string, signal?: AbortSignal): Promise<string>
   protected abstract translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse>
 
   translate(text: string, signal?: AbortSignal): Promise<string> {
-    return this.queue.add(() => this.translateDirect(text, signal), { throwOnTimeout: true }) as Promise<string>
+    return sharedProviderLimiter(this.id).run(() => this.translateDirect(text, signal), signal)
   }
 
   translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
-    return this.queue.add(() => this.translateTableDirect(request, signal), { throwOnTimeout: true }) as Promise<TableTranslationResponse>
+    return sharedProviderLimiter(this.id).run(() => this.translateTableDirect(request, signal), signal)
   }
 }
 
 class OpenAiCompatibleProvider extends QueuedProvider {
-  protected readonly queue = new PQueue({ concurrency: 3 })
-
   constructor(
     readonly id: 'qwen' | 'deepseek',
     readonly model: string,
@@ -154,7 +160,6 @@ class OpenAiCompatibleProvider extends QueuedProvider {
 class BingProvider extends QueuedProvider {
   readonly id = 'bing' as const
   readonly model = 'bing-translator-web'
-  protected readonly queue = new PQueue({ concurrency: 1 })
   private session: { ig: string; iid: string; key: string; token: string; expiresAt: number } | null = null
 
   constructor(private readonly fetcher: Fetcher) {
@@ -227,7 +232,6 @@ class BingProvider extends QueuedProvider {
 class TransmartProvider extends QueuedProvider {
   readonly id = 'transmart' as const
   readonly model = 'transmart-web'
-  protected readonly queue = new PQueue({ concurrency: 1 })
 
   constructor(private readonly fetcher: Fetcher) {
     super()
@@ -474,7 +478,7 @@ function isQwenMtModel(providerId: 'qwen' | 'deepseek', model: string): boolean 
 
 async function toHttpError(response: Response, prefix: string): Promise<TranslationHttpError> {
   const retryAfter = response.headers.get('retry-after')
-  const retryAfterMs = retryAfter ? Number(retryAfter) * 1000 : undefined
+  const retryAfterMs = parseRetryAfter(retryAfter)
   // Do not copy a provider response body into an Error.  Some gateways echo
   // request data (including an API key) in error payloads; keeping the body out
   // of the error prevents it from reaching task state or logs.
@@ -483,6 +487,81 @@ async function toHttpError(response: Response, prefix: string): Promise<Translat
     response.status,
     Number.isFinite(retryAfterMs) ? retryAfterMs : undefined
   )
+}
+
+class SharedProviderLimiter {
+  private readonly queue: PQueue
+  private blockedUntil = 0
+  private nextBackoffMs = MIN_RATE_LIMIT_BACKOFF_MS
+
+  constructor(concurrency: number) {
+    this.queue = new PQueue({ concurrency })
+  }
+
+  run<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const options = signal ? { signal } : undefined
+    return this.queue.add(async () => {
+      await waitUntil(this.blockedUntil, signal)
+      try {
+        const result = await operation()
+        this.nextBackoffMs = MIN_RATE_LIMIT_BACKOFF_MS
+        return result
+      } catch (error) {
+        if (error instanceof TranslationHttpError && error.status === 429) {
+          const delayMs = Math.min(
+            MAX_RATE_LIMIT_BACKOFF_MS,
+            Math.max(MIN_RATE_LIMIT_BACKOFF_MS, error.retryAfterMs ?? this.nextBackoffMs)
+          )
+          this.blockedUntil = Math.max(this.blockedUntil, Date.now() + delayMs)
+          this.nextBackoffMs = Math.min(MAX_RATE_LIMIT_BACKOFF_MS, delayMs * 2)
+        }
+        throw error
+      }
+    }, options) as Promise<T>
+  }
+}
+
+const sharedProviderLimiters = new Map<TranslationProviderId, SharedProviderLimiter>()
+
+function sharedProviderLimiter(provider: TranslationProviderId): SharedProviderLimiter {
+  let limiter = sharedProviderLimiters.get(provider)
+  if (!limiter) {
+    limiter = new SharedProviderLimiter(PROVIDER_CONCURRENCY[provider])
+    sharedProviderLimiters.set(provider, limiter)
+  }
+  return limiter
+}
+
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined
+}
+
+async function waitUntil(timestamp: number, signal?: AbortSignal): Promise<void> {
+  const delayMs = timestamp - Date.now()
+  if (delayMs <= 0) return
+  if (signal?.aborted) throw abortError()
+  await new Promise<void>((resolve, reject) => {
+    const finish = (operation: () => void): void => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      operation()
+    }
+    const timer = setTimeout(() => finish(resolve), delayMs)
+    const onAbort = (): void => {
+      finish(() => reject(abortError()))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+function abortError(): Error {
+  const error = new Error('Translation request aborted')
+  error.name = 'AbortError'
+  return error
 }
 
 function requestSignal(jobSignal: AbortSignal | undefined, timeoutMs: number): AbortSignal {

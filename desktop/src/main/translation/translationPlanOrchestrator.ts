@@ -84,7 +84,6 @@ export class TranslationPlanOrchestrator {
     throwIfAborted(signal)
     await this.report(opened, [])
 
-    const pending: TranslationPlanWorkDescriptor[] = []
     let cursor = 0
     for (;;) {
       throwIfAborted(signal)
@@ -93,19 +92,14 @@ export class TranslationPlanOrchestrator {
       )
       throwIfAborted(signal)
       this.rememberFailed(page.items)
-      pending.push(...page.items.filter((item) => item.status === 'pending'))
       await this.report(page.counts, [])
+      const pending = page.items.filter((item) => item.status === 'pending')
+      if (pending.length > 0) await this.processPage(pending, compute)
       if (page.nextCursor === null) break
       if (page.nextCursor <= cursor) throw new Error('翻译计划分页 cursor 未前进')
       cursor = page.nextCursor
     }
 
-    const queue = new PQueue({ concurrency: 3 })
-    const tasks = pending.map((descriptor) => queue.add(() => this.processUnit(descriptor, compute)))
-    const settled = await Promise.allSettled(tasks)
-    await queue.onIdle()
-    const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected')
-    if (rejected) throw rejected.reason
     throwIfAborted(signal)
 
     const finalized = translationPlanFinalizeResultSchema.parse(
@@ -115,6 +109,18 @@ export class TranslationPlanOrchestrator {
     this.rememberFailedIds(finalized.failedBlockIdsSample)
     await this.report(finalized, [])
     return finalized
+  }
+
+  private async processPage(
+    descriptors: readonly TranslationPlanWorkDescriptor[],
+    compute: PlanComputePort
+  ): Promise<void> {
+    const queue = new PQueue({ concurrency: 3 })
+    const tasks = descriptors.map((descriptor) => queue.add(() => this.processUnit(descriptor, compute)))
+    const settled = await Promise.allSettled(tasks)
+    await queue.onIdle()
+    const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (rejected) throw rejected.reason
   }
 
   private async processUnit(
