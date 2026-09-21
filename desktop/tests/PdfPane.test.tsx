@@ -15,6 +15,7 @@ import PdfPane, {
   buildPdfPageLayout,
   indexMappingsByPage,
   pageIndexAtOffset,
+  pdfCanvasOutput,
   pdfPageMetrics,
   pdfRenderWindow,
   readPdfContentWidth
@@ -102,6 +103,11 @@ describe('PdfPane mapping navigation', () => {
     )
 
     await waitFor(() => expect(view.container.querySelectorAll('[data-block-id]').length).toBe(3))
+    expect(getDocumentMock).toHaveBeenCalledWith({
+      url: 'copilotix-asset://document/original.pdf',
+      rangeChunkSize: 128 * 1024,
+      canvasMaxAreaInBytes: 32 * 1024 * 1024
+    })
     const continuation = view.container.querySelector<HTMLElement>('[data-block-position="1-0"]')!
     fireEvent.click(continuation)
     expect(onSelect).toHaveBeenLastCalledWith({ mappingId: 'text-block', blockPosition: '1-0', origin: 'pdf' })
@@ -200,13 +206,26 @@ describe('PDF fit-width zoom', () => {
     expect(readPdfContentWidth(scroller)).toBe(500)
     scroller.remove()
   })
+
+  it('bounds backing canvases by DPR, pixel area and browser-safe dimensions', () => {
+    expect(pdfCanvasOutput(600, 800, 3)).toEqual({ width: 1200, height: 1600, scale: 2 })
+
+    const large = pdfCanvasOutput(4000, 6000, 2)
+    expect(large.width * large.height).toBeLessThanOrEqual(8 * 1024 * 1024)
+    expect(large.width).toBeLessThanOrEqual(8192)
+    expect(large.height).toBeLessThanOrEqual(8192)
+    expect(large.scale).toBeLessThan(1)
+
+    const veryWide = pdfCanvasOutput(20_000, 100, 1)
+    expect(veryWide.width).toBeLessThanOrEqual(8192)
+  })
 })
 
 describe('PDF long-document indexing', () => {
   it('keeps the heavy render window bounded for a thousand-page document', () => {
-    expect(pdfRenderWindow(0, 1000, 2)).toEqual({ start: 0, end: 3 })
-    expect(pdfRenderWindow(500, 1000, 2)).toEqual({ start: 498, end: 503 })
-    expect(pdfRenderWindow(999, 1000, 2)).toEqual({ start: 997, end: 1000 })
+    expect(pdfRenderWindow(0, 1000, 1)).toEqual({ start: 0, end: 2 })
+    expect(pdfRenderWindow(500, 1000, 1)).toEqual({ start: 499, end: 502 })
+    expect(pdfRenderWindow(999, 1000, 1)).toEqual({ start: 998, end: 1000 })
   })
 
   it('locates pages by binary-searchable cumulative geometry', () => {

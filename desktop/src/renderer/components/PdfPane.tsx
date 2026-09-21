@@ -1,9 +1,10 @@
 import React from 'react'
 import { LeftOutlined, MinusOutlined, PlusOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons'
 import { Alert, Button, Progress, Space } from 'antd'
-import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
+import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import type { BlockBox, BlockMapping, BlockSelection } from '@shared/types'
 import { acquirePdfDocument } from '../pdfDocumentCache'
+import { pdfPageRenderScheduler, type ScheduledPdfRender } from '../pdfRenderScheduler'
 import { recordReaderDuration } from '../readerPerformance'
 
 type LoadingState =
@@ -11,8 +12,10 @@ type LoadingState =
   | { status: 'ready' }
   | { status: 'error'; message: string }
 
-const PAGE_RENDER_RADIUS = 2
+const PAGE_RENDER_RADIUS = 1
 const PDF_PAGE_GAP = 24
+const PDF_MAX_CANVAS_PIXELS = 8 * 1024 * 1024
+const PDF_MAX_CANVAS_DIMENSION = 8192
 const SCROLLBAR_HOT_ZONE_PX = 16
 const SCROLLBAR_HIDE_DELAY_MS = 300
 
@@ -259,6 +262,7 @@ export default function PdfPane(props: {
               key={pageIndex}
               document={document}
               pageIndex={pageIndex}
+              renderPriority={Math.abs(pageIndex - (currentPage - 1))}
               zoom={zoom}
               contentWidth={contentWidth}
               baseSize={baseSize}
@@ -281,6 +285,7 @@ export default function PdfPane(props: {
 const PdfPage = React.memo(function PdfPage(props: {
   document: PDFDocumentProxy
   pageIndex: number
+  renderPriority: number
   zoom: number
   contentWidth: number
   baseSize: PdfBaseSize
@@ -292,7 +297,7 @@ const PdfPage = React.memo(function PdfPage(props: {
 }): React.JSX.Element {
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const pageRef = React.useRef<HTMLDivElement>(null)
-  const renderTaskRef = React.useRef<RenderTask | null>(null)
+  const renderTaskRef = React.useRef<ScheduledPdfRender | null>(null)
   const [page, setPage] = React.useState<PDFPageProxy | null>(null)
   const { scale, width, height } = pdfPageMetrics(props.baseSize, props.contentWidth, props.zoom)
   const size = { width, height }
@@ -314,7 +319,13 @@ const PdfPage = React.memo(function PdfPage(props: {
       .catch((error: unknown) => { if (!cancelled) props.onError(pdfErrorMessage(error)) })
     return () => {
       cancelled = true
-      loadedPage?.cleanup()
+      const render = renderTaskRef.current
+      if (render) {
+        render.cancel()
+        void render.promise.catch(() => undefined).finally(() => loadedPage?.cleanup())
+      } else {
+        loadedPage?.cleanup()
+      }
     }
   }, [props.document, props.onError, props.onPageSize, props.pageIndex])
 
@@ -322,19 +333,22 @@ const PdfPage = React.memo(function PdfPage(props: {
     if (!page || !canvasRef.current) return
     const viewport = page.getViewport({ scale })
     const canvas = canvasRef.current
-    const ratio = window.devicePixelRatio || 1
-    canvas.width = Math.floor(viewport.width * ratio)
-    canvas.height = Math.floor(viewport.height * ratio)
     canvas.style.width = `${viewport.width}px`
     canvas.style.height = `${viewport.height}px`
-    const context = canvas.getContext('2d')
-    if (!context) return
+    const output = pdfCanvasOutput(viewport.width, viewport.height, window.devicePixelRatio || 1)
     const renderStartedAt = performance.now()
-    const renderTask = page.render({
-      canvas,
-      canvasContext: context,
-      viewport,
-      transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0]
+    const renderTask = pdfPageRenderScheduler.schedule(canvas, props.renderPriority, () => {
+      canvas.width = output.width
+      canvas.height = output.height
+      const context = canvas.getContext('2d', { alpha: false })
+      if (!context) throw new Error('无法创建 PDF 页面画布，请降低缩放比例后重试。')
+      return page.render({
+        canvas,
+        canvasContext: context,
+        viewport,
+        background: 'rgb(255,255,255)',
+        transform: output.scale === 1 ? undefined : [output.scale, 0, 0, output.scale, 0, 0]
+      })
     })
     renderTaskRef.current = renderTask
     void renderTask.promise
@@ -347,6 +361,10 @@ const PdfPage = React.memo(function PdfPage(props: {
       renderTaskRef.current = null
     }
   }, [page, props.onError, scale])
+
+  React.useEffect(() => {
+    renderTaskRef.current?.setPriority(props.renderPriority)
+  }, [props.renderPriority])
 
   const overlays = React.useMemo(
     () => props.mappings.flatMap((mapping) => mapping.boxes
@@ -487,6 +505,24 @@ export function pdfPageMetrics(
   const safeZoom = Number.isFinite(zoom) ? Math.min(2, Math.max(0.6, zoom)) : 1
   const scale = baseSize.width > 0 ? safeWidth / baseSize.width * safeZoom : safeZoom
   return { scale, width: baseSize.width * scale, height: baseSize.height * scale }
+}
+
+export function pdfCanvasOutput(
+  cssWidth: number,
+  cssHeight: number,
+  devicePixelRatio: number
+): { width: number; height: number; scale: number } {
+  const safeWidth = Math.max(1, Number.isFinite(cssWidth) ? cssWidth : 1)
+  const safeHeight = Math.max(1, Number.isFinite(cssHeight) ? cssHeight : 1)
+  const safeDeviceScale = Math.max(1, Math.min(2, Number.isFinite(devicePixelRatio) ? devicePixelRatio : 1))
+  const dimensionScale = Math.min(PDF_MAX_CANVAS_DIMENSION / safeWidth, PDF_MAX_CANVAS_DIMENSION / safeHeight)
+  const pixelScale = Math.sqrt(PDF_MAX_CANVAS_PIXELS / (safeWidth * safeHeight))
+  const scale = Math.max(Number.EPSILON, Math.min(safeDeviceScale, dimensionScale, pixelScale))
+  return {
+    width: Math.max(1, Math.floor(safeWidth * scale)),
+    height: Math.max(1, Math.floor(safeHeight * scale)),
+    scale
+  }
 }
 
 export function readPdfContentWidth(scroller: HTMLElement): number {

@@ -16,6 +16,8 @@ interface CacheEntry {
 }
 
 const entries = new Map<string, CacheEntry>()
+const PDF_RANGE_CHUNK_SIZE = 128 * 1024
+const PDF_IMAGE_CANVAS_MAX_BYTES = 32 * 1024 * 1024
 
 export interface PdfDocumentHandle {
   promise: Promise<PDFDocumentProxy>
@@ -25,7 +27,11 @@ export interface PdfDocumentHandle {
 export function acquirePdfDocument(url: string, callbacks: PdfCallbacks = {}): PdfDocumentHandle {
   let entry = entries.get(url)
   if (!entry) {
-    const task = pdfjs.getDocument({ url, rangeChunkSize: 256 * 1024 })
+    const task = pdfjs.getDocument({
+      url,
+      rangeChunkSize: PDF_RANGE_CHUNK_SIZE,
+      canvasMaxAreaInBytes: PDF_IMAGE_CANVAS_MAX_BYTES
+    })
     entry = { task, promise: task.promise, references: 0, callbacks: new Set() }
     const stableEntry = entry
     task.onProgress = (progress) => stableEntry.callbacks.forEach((listener) => listener.onProgress?.(progress))
