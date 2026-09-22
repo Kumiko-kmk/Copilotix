@@ -75,7 +75,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="app-shell">
-      <div className="titlebar-brand" aria-hidden="true">COPILOTIX</div>
+      {view.name === 'new' ? null : <div className="titlebar-brand" aria-hidden="true">COPILOTIX</div>}
       <EdgeDock edge="top" label="展开主导航" persistent={<WindowControls />}>
         <nav className="top-navigation" aria-label="主导航">
           <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => setView({ name: 'new' })} />

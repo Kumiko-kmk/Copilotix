@@ -16,6 +16,7 @@ test('opens the minimal new parse page', async () => {
     const window = await app.firstWindow()
     await expect(window.locator('aside[aria-label="主导航"]')).toHaveCount(0)
     await expect(window.getByRole('group', { name: '窗口控制' })).toBeVisible()
+    await expect(window.locator('.titlebar-brand')).toHaveCount(0)
     expect(await window.title()).toBe('')
     await window.locator('[data-edge-dock="top"]').hover()
     await expect(window.getByRole('button', { name: '任务管理' })).toBeVisible()
@@ -28,6 +29,8 @@ test('opens the minimal new parse page', async () => {
     await expect(uploadEntry).toHaveCSS('border-radius', '16px')
     await expect(uploadEntry).toHaveCSS('border-style', 'solid')
     await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
+    await window.getByRole('button', { name: '任务管理' }).click()
+    await expect(window.locator('.titlebar-brand')).toHaveText('COPILOTIX')
   } finally {
     await app.close()
     await workspace.cleanup()

@@ -90,6 +90,7 @@ test('keeps the new parse page static across supported sizes and themes', async 
     expect(compactViewport[1]).toBeGreaterThanOrEqual(700)
     expect(compactViewport[1]).toBeLessThanOrEqual(702)
     await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
+    await expect(window.locator('.titlebar-brand')).toHaveCount(0)
     await expect(window.getByRole('img', { name: 'COPILOTIX' })).toBeVisible()
     await expect(window.locator('.copilotix-wordmark span')).toHaveCount(10)
     await expect.poll(() => window.locator('.copilotix-wordmark').evaluate((element) => {
@@ -137,7 +138,7 @@ test('keeps the new parse page static across supported sizes and themes', async 
     })
     await window.emulateMedia({ colorScheme: 'light' })
     await window.waitForTimeout(300)
-    await expect(window.locator('.titlebar-brand')).toHaveText('COPILOTIX')
+    await expect(window.locator('.titlebar-brand')).toHaveCount(0)
     const uploadBounds = await uploadEntry.boundingBox()
     expect(uploadBounds?.width).toBeCloseTo(720, 0)
     expect(uploadBounds?.height).toBeCloseTo(94, 0)
