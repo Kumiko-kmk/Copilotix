@@ -53,13 +53,10 @@ export default function SettingsPage(props: {
   const [credentialErrors, setCredentialErrors] = React.useState<CredentialErrors>({})
   const [testing, setTesting] = React.useState<CredentialName | null>(null)
   const [saving, setSaving] = React.useState(false)
-  const [policySaving, setPolicySaving] = React.useState(false)
   const [storageInfo, setStorageInfo] = React.useState<StorageInfo | null>(null)
   const [usageAnalytics, setUsageAnalytics] = React.useState<UsageAnalytics | null>(null)
   const [storageLoading, setStorageLoading] = React.useState(false)
   const [draggingProvider, setDraggingProvider] = React.useState<TranslationProviderId | null>(null)
-  const dragBaselineRef = React.useRef<TranslationProviderId[] | null>(null)
-  const providerOrderRef = React.useRef<TranslationProviderId[]>(props.settings.translationProviderOrder)
   const previousSettingsRef = React.useRef(props.settings)
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -87,10 +84,6 @@ export default function SettingsPage(props: {
     })
     previousSettingsRef.current = props.settings
   }, [props.settings])
-
-  React.useEffect(() => {
-    providerOrderRef.current = draft.translationProviderOrder
-  }, [draft.translationProviderOrder])
 
   const update = React.useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -216,61 +209,21 @@ export default function SettingsPage(props: {
     }
   }, [credentials, draft, messageApi, props.onSaved, refreshStorageInfo, section])
 
-  const persistProviderPolicy = React.useCallback(async (
-    order: TranslationProviderId[],
-    enabledCandidates: TranslationProviderId[]
-  ) => {
-    const enabled = order.filter((provider) => enabledCandidates.includes(provider))
-    if (enabled.length === 0) return
-    const previousOrder = props.settings.translationProviderOrder
-    const previousEnabled = props.settings.enabledTranslationProviders
-    setDraft((current) => ({
-      ...current,
-      translationProvider: enabled[0]!,
-      translationProviderOrder: order,
-      enabledTranslationProviders: enabled
-    }))
-    providerOrderRef.current = order
-    setPolicySaving(true)
-    try {
-      const { credentials: _credentials, ...savedPublicSettings } = props.settings
-      const result = await window.copilotix.saveSettings({
-        ...savedPublicSettings,
-        translationProvider: enabled[0]!,
-        translationProviderOrder: order,
-        enabledTranslationProviders: enabled
-      })
-      props.onSaved(result.settings)
-    } catch (error) {
-      providerOrderRef.current = previousOrder
-      setDraft((current) => ({
-        ...current,
-        translationProvider: previousOrder.find((provider) => previousEnabled.includes(provider))!,
-        translationProviderOrder: previousOrder,
-        enabledTranslationProviders: previousEnabled
-      }))
-      messageApi.error(error instanceof Error ? error.message : String(error))
-    } finally {
-      setPolicySaving(false)
-    }
-  }, [messageApi, props.onSaved, props.settings])
-
   const moveProvider = React.useCallback((source: TranslationProviderId, target: TranslationProviderId) => {
     setDraft((current) => {
       const order = moveProviderBefore(current.translationProviderOrder, source, target)
-      providerOrderRef.current = order
-      return { ...current, translationProviderOrder: order }
+      return {
+        ...current,
+        translationProvider: order.find((provider) => current.enabledTranslationProviders.includes(provider))!,
+        translationProviderOrder: order
+      }
     })
   }, [])
 
   const finishProviderDrag = React.useCallback(() => {
     if (!draggingProvider) return
-    const finalOrder = providerOrderRef.current
-    const changed = dragBaselineRef.current?.some((provider, index) => finalOrder[index] !== provider) ?? false
     setDraggingProvider(null)
-    dragBaselineRef.current = null
-    if (changed) void persistProviderPolicy(finalOrder, draft.enabledTranslationProviders)
-  }, [draft.enabledTranslationProviders, draggingProvider, persistProviderPolicy])
+  }, [draggingProvider])
 
   const toggleTranslationProvider = React.useCallback((provider: TranslationProviderId) => {
     const enabled = draft.enabledTranslationProviders.includes(provider)
@@ -278,11 +231,17 @@ export default function SettingsPage(props: {
       messageApi.warning('至少需要启用一个翻译模型')
       return
     }
-    const next = enabled
-      ? draft.enabledTranslationProviders.filter((candidate) => candidate !== provider)
-      : [...draft.enabledTranslationProviders, provider]
-    void persistProviderPolicy(draft.translationProviderOrder, next)
-  }, [draft.enabledTranslationProviders, draft.translationProviderOrder, messageApi, persistProviderPolicy])
+    setDraft((current) => {
+      const next = enabled
+        ? current.enabledTranslationProviders.filter((candidate) => candidate !== provider)
+        : [...current.enabledTranslationProviders, provider]
+      return {
+        ...current,
+        translationProvider: current.translationProviderOrder.find((candidate) => next.includes(candidate))!,
+        enabledTranslationProviders: next
+      }
+    })
+  }, [draft.enabledTranslationProviders, messageApi])
 
   const moveProviderByKeyboard = React.useCallback((provider: TranslationProviderId, direction: -1 | 1) => {
     const index = draft.translationProviderOrder.indexOf(provider)
@@ -290,12 +249,16 @@ export default function SettingsPage(props: {
     if (index < 0 || targetIndex < 0 || targetIndex >= draft.translationProviderOrder.length) return
     const next = [...draft.translationProviderOrder]
     ;[next[index], next[targetIndex]] = [next[targetIndex]!, next[index]!]
-    void persistProviderPolicy(next, draft.enabledTranslationProviders)
-  }, [draft.enabledTranslationProviders, draft.translationProviderOrder, persistProviderPolicy])
+    setDraft((current) => ({
+      ...current,
+      translationProvider: next.find((candidate) => current.enabledTranslationProviders.includes(candidate))!,
+      translationProviderOrder: next
+    }))
+  }, [draft.translationProviderOrder])
 
   const hasUnsavedChanges = React.useMemo(() => {
-    const { credentials: _draftCredentials, translationProvider: _draftProvider, translationProviderOrder: _draftOrder, enabledTranslationProviders: _draftEnabled, ...draftSettings } = draft
-    const { credentials: _savedCredentials, translationProvider: _savedProvider, translationProviderOrder: _savedOrder, enabledTranslationProviders: _savedEnabled, ...savedSettings } = props.settings
+    const { credentials: _draftCredentials, ...draftSettings } = draft
+    const { credentials: _savedCredentials, ...savedSettings } = props.settings
     const publicSettingsChanged = JSON.stringify(draftSettings) !== JSON.stringify(savedSettings)
     const credentialsChanged = (['parser', 'qwen', 'deepseek'] as const).some((name) => {
       const entry = credentials[name]
@@ -399,11 +362,10 @@ export default function SettingsPage(props: {
                           type="button"
                           className="model-drag-handle"
                           aria-label={`移动${details.label}`}
-                          draggable={!policySaving}
-                          disabled={policySaving}
+                          draggable={!saving}
+                          disabled={saving}
                           onDragStart={(event) => {
                             event.dataTransfer.effectAllowed = 'move'
-                            dragBaselineRef.current = [...draft.translationProviderOrder]
                             setDraggingProvider(provider)
                           }}
                           onDragEnd={finishProviderDrag}
@@ -416,7 +378,7 @@ export default function SettingsPage(props: {
                         <Checkbox
                           aria-label={`启用${details.label}`}
                           checked={draft.enabledTranslationProviders.includes(provider)}
-                          disabled={policySaving}
+                          disabled={saving}
                           onChange={() => toggleTranslationProvider(provider)}
                         />
                         <span className="model-priority-number">{String(index + 1).padStart(2, '0')}</span>
@@ -463,13 +425,13 @@ export default function SettingsPage(props: {
             </section>
           ) : null}
           </div>
-          {section !== 'models' ? <div className="settings-actions">
+          <div className="settings-actions">
             <Typography.Text type={hasUnsavedChanges ? 'warning' : 'secondary'}>{hasUnsavedChanges ? '有未保存的更改' : '所有更改均已保存'}</Typography.Text>
             <div className="settings-action-buttons">
               <Button size="large" disabled={!hasUnsavedChanges || saving} onClick={discard}>放弃更改</Button>
               <Button type="primary" size="large" loading={saving} disabled={!hasUnsavedChanges} onClick={() => void save()}>保存全部更改</Button>
             </div>
-          </div> : null}
+          </div>
         </div>
       </div>
     </section>

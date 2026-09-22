@@ -98,7 +98,7 @@ describe('SettingsPage credential editor', () => {
     expect(settingsContent.lastElementChild?.classList.contains('settings-actions')).toBe(true)
   }, 15000)
 
-  it('reorders the model policy from the keyboard and saves it immediately', async () => {
+  it('reorders the model policy from the keyboard and saves it from the shared action bar', async () => {
     const settings = configuredSettings()
     const saveSettings = vi.fn(async (update: Parameters<CopilotixDesktopApi['saveSettings']>[0]) => ({
       settings: { ...settings, ...update, credentials: settings.credentials },
@@ -120,9 +120,11 @@ describe('SettingsPage credential editor', () => {
     expect(screen.queryByRole('heading', { name: '模型设置' })).toBeNull()
     expect(document.querySelector('.settings-content-body > .settings-section.model-priority')).toBeTruthy()
     expect(screen.getByText('大语言模型优先级')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '保存全部更改' })).toBeNull()
+    expect((screen.getByRole('button', { name: '保存全部更改' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.keyDown(screen.getByRole('button', { name: '移动千问 / Qwen' }), { key: 'ArrowDown' })
-
+    expect(saveSettings).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: '保存全部更改' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '保存全部更改' }))
     await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
     expect(saveSettings.mock.calls[0]![0]).toMatchObject({
       translationProvider: 'deepseek',
@@ -131,7 +133,7 @@ describe('SettingsPage credential editor', () => {
     expect(screen.getByText('DeepSeek → 千问 → Bing → Transmart')).toBeTruthy()
   })
 
-  it('keeps the last visual provider enabled and rolls back an unsuccessful policy save', async () => {
+  it('keeps the last provider enabled and retains the draft after an unsuccessful policy save', async () => {
     const settings: AppSettings = {
       ...configuredSettings(),
       translationProvider: 'qwen',
@@ -157,8 +159,10 @@ describe('SettingsPage credential editor', () => {
 
     fireEvent.keyDown(screen.getByRole('button', { name: '移动千问 / Qwen' }), { key: 'ArrowDown' })
     expect(screen.getAllByRole('listitem')[0]!.textContent).toContain('DeepSeek')
+    expect(saveSettings).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '保存全部更改' }))
     await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
-    await vi.waitFor(() => expect(screen.getAllByRole('listitem')[0]!.textContent).toContain('千问 / Qwen'))
+    expect(screen.getAllByRole('listitem')[0]!.textContent).toContain('DeepSeek')
     expect((screen.getByRole('checkbox', { name: '启用千问 / Qwen' }) as HTMLInputElement).checked).toBe(true)
   })
 
