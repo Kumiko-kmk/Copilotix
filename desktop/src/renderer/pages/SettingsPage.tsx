@@ -1,6 +1,6 @@
 import React from 'react'
-import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, LinkOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons'
-import { Button, Checkbox, Input, Space, Typography, message } from 'antd'
+import { CheckCircleOutlined, CloseCircleOutlined, DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, LinkOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons'
+import { Button, Checkbox, Input, Typography, message } from 'antd'
 import type {
   AppSettings,
   CredentialMutation,
@@ -53,13 +53,10 @@ export default function SettingsPage(props: {
   const [credentialErrors, setCredentialErrors] = React.useState<CredentialErrors>({})
   const [testing, setTesting] = React.useState<CredentialName | null>(null)
   const [saving, setSaving] = React.useState(false)
-  const [policySaving, setPolicySaving] = React.useState(false)
   const [storageInfo, setStorageInfo] = React.useState<StorageInfo | null>(null)
   const [usageAnalytics, setUsageAnalytics] = React.useState<UsageAnalytics | null>(null)
   const [storageLoading, setStorageLoading] = React.useState(false)
   const [draggingProvider, setDraggingProvider] = React.useState<TranslationProviderId | null>(null)
-  const dragBaselineRef = React.useRef<TranslationProviderId[] | null>(null)
-  const providerOrderRef = React.useRef<TranslationProviderId[]>(props.settings.translationProviderOrder)
   const previousSettingsRef = React.useRef(props.settings)
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -87,10 +84,6 @@ export default function SettingsPage(props: {
     })
     previousSettingsRef.current = props.settings
   }, [props.settings])
-
-  React.useEffect(() => {
-    providerOrderRef.current = draft.translationProviderOrder
-  }, [draft.translationProviderOrder])
 
   const update = React.useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -216,61 +209,21 @@ export default function SettingsPage(props: {
     }
   }, [credentials, draft, messageApi, props.onSaved, refreshStorageInfo, section])
 
-  const persistProviderPolicy = React.useCallback(async (
-    order: TranslationProviderId[],
-    enabledCandidates: TranslationProviderId[]
-  ) => {
-    const enabled = order.filter((provider) => enabledCandidates.includes(provider))
-    if (enabled.length === 0) return
-    const previousOrder = props.settings.translationProviderOrder
-    const previousEnabled = props.settings.enabledTranslationProviders
-    setDraft((current) => ({
-      ...current,
-      translationProvider: enabled[0]!,
-      translationProviderOrder: order,
-      enabledTranslationProviders: enabled
-    }))
-    providerOrderRef.current = order
-    setPolicySaving(true)
-    try {
-      const { credentials: _credentials, ...savedPublicSettings } = props.settings
-      const result = await window.copilotix.saveSettings({
-        ...savedPublicSettings,
-        translationProvider: enabled[0]!,
-        translationProviderOrder: order,
-        enabledTranslationProviders: enabled
-      })
-      props.onSaved(result.settings)
-    } catch (error) {
-      providerOrderRef.current = previousOrder
-      setDraft((current) => ({
-        ...current,
-        translationProvider: previousOrder.find((provider) => previousEnabled.includes(provider))!,
-        translationProviderOrder: previousOrder,
-        enabledTranslationProviders: previousEnabled
-      }))
-      messageApi.error(error instanceof Error ? error.message : String(error))
-    } finally {
-      setPolicySaving(false)
-    }
-  }, [messageApi, props.onSaved, props.settings])
-
   const moveProvider = React.useCallback((source: TranslationProviderId, target: TranslationProviderId) => {
     setDraft((current) => {
       const order = moveProviderBefore(current.translationProviderOrder, source, target)
-      providerOrderRef.current = order
-      return { ...current, translationProviderOrder: order }
+      return {
+        ...current,
+        translationProvider: order.find((provider) => current.enabledTranslationProviders.includes(provider))!,
+        translationProviderOrder: order
+      }
     })
   }, [])
 
   const finishProviderDrag = React.useCallback(() => {
     if (!draggingProvider) return
-    const finalOrder = providerOrderRef.current
-    const changed = dragBaselineRef.current?.some((provider, index) => finalOrder[index] !== provider) ?? false
     setDraggingProvider(null)
-    dragBaselineRef.current = null
-    if (changed) void persistProviderPolicy(finalOrder, draft.enabledTranslationProviders)
-  }, [draft.enabledTranslationProviders, draggingProvider, persistProviderPolicy])
+  }, [draggingProvider])
 
   const toggleTranslationProvider = React.useCallback((provider: TranslationProviderId) => {
     const enabled = draft.enabledTranslationProviders.includes(provider)
@@ -278,11 +231,17 @@ export default function SettingsPage(props: {
       messageApi.warning('至少需要启用一个翻译模型')
       return
     }
-    const next = enabled
-      ? draft.enabledTranslationProviders.filter((candidate) => candidate !== provider)
-      : [...draft.enabledTranslationProviders, provider]
-    void persistProviderPolicy(draft.translationProviderOrder, next)
-  }, [draft.enabledTranslationProviders, draft.translationProviderOrder, messageApi, persistProviderPolicy])
+    setDraft((current) => {
+      const next = enabled
+        ? current.enabledTranslationProviders.filter((candidate) => candidate !== provider)
+        : [...current.enabledTranslationProviders, provider]
+      return {
+        ...current,
+        translationProvider: current.translationProviderOrder.find((candidate) => next.includes(candidate))!,
+        enabledTranslationProviders: next
+      }
+    })
+  }, [draft.enabledTranslationProviders, messageApi])
 
   const moveProviderByKeyboard = React.useCallback((provider: TranslationProviderId, direction: -1 | 1) => {
     const index = draft.translationProviderOrder.indexOf(provider)
@@ -290,12 +249,16 @@ export default function SettingsPage(props: {
     if (index < 0 || targetIndex < 0 || targetIndex >= draft.translationProviderOrder.length) return
     const next = [...draft.translationProviderOrder]
     ;[next[index], next[targetIndex]] = [next[targetIndex]!, next[index]!]
-    void persistProviderPolicy(next, draft.enabledTranslationProviders)
-  }, [draft.enabledTranslationProviders, draft.translationProviderOrder, persistProviderPolicy])
+    setDraft((current) => ({
+      ...current,
+      translationProvider: next.find((candidate) => current.enabledTranslationProviders.includes(candidate))!,
+      translationProviderOrder: next
+    }))
+  }, [draft.translationProviderOrder])
 
   const hasUnsavedChanges = React.useMemo(() => {
-    const { credentials: _draftCredentials, translationProvider: _draftProvider, translationProviderOrder: _draftOrder, enabledTranslationProviders: _draftEnabled, ...draftSettings } = draft
-    const { credentials: _savedCredentials, translationProvider: _savedProvider, translationProviderOrder: _savedOrder, enabledTranslationProviders: _savedEnabled, ...savedSettings } = props.settings
+    const { credentials: _draftCredentials, ...draftSettings } = draft
+    const { credentials: _savedCredentials, ...savedSettings } = props.settings
     const publicSettingsChanged = JSON.stringify(draftSettings) !== JSON.stringify(savedSettings)
     const credentialsChanged = (['parser', 'qwen', 'deepseek'] as const).some((name) => {
       const entry = credentials[name]
@@ -323,7 +286,7 @@ export default function SettingsPage(props: {
         <div className="settings-content">
           <div className="settings-content-body">
           {section === 'connections' ? (
-            <section className="service-connections" aria-label="服务连接">
+            <section className="settings-section service-connections" aria-label="服务连接">
               <ServiceCard
                 title="MinerU"
                 badge="必需"
@@ -376,8 +339,7 @@ export default function SettingsPage(props: {
             </section>
           ) : null}
           {section === 'models' ? (
-            <section className="model-priority" aria-labelledby="model-priority-title">
-              <Typography.Title id="model-priority-title" level={3}>模型设置</Typography.Title>
+            <section className="settings-section model-priority" aria-label="模型设置">
               <div className="model-priority-card">
                 <div className="model-priority-heading">大语言模型优先级</div>
                 <div className="model-priority-list" role="list" aria-label="翻译模型优先级">
@@ -400,11 +362,10 @@ export default function SettingsPage(props: {
                           type="button"
                           className="model-drag-handle"
                           aria-label={`移动${details.label}`}
-                          draggable={!policySaving}
-                          disabled={policySaving}
+                          draggable={!saving}
+                          disabled={saving}
                           onDragStart={(event) => {
                             event.dataTransfer.effectAllowed = 'move'
-                            dragBaselineRef.current = [...draft.translationProviderOrder]
                             setDraggingProvider(provider)
                           }}
                           onDragEnd={finishProviderDrag}
@@ -417,7 +378,7 @@ export default function SettingsPage(props: {
                         <Checkbox
                           aria-label={`启用${details.label}`}
                           checked={draft.enabledTranslationProviders.includes(provider)}
-                          disabled={policySaving}
+                          disabled={saving}
                           onChange={() => toggleTranslationProvider(provider)}
                         />
                         <span className="model-priority-number">{String(index + 1).padStart(2, '0')}</span>
@@ -432,8 +393,7 @@ export default function SettingsPage(props: {
             </section>
           ) : null}
           {section === 'storage' ? (
-            <section className="storage-management" aria-labelledby="storage-management-title">
-              <Typography.Title id="storage-management-title" level={3}>文件管理</Typography.Title>
+            <section className="settings-section storage-management" aria-label="文件存储">
               <div className="storage-location-card">
                 <div className="storage-card-heading">
                   <span className="storage-card-icon"><FolderOutlined /></span>
@@ -441,37 +401,41 @@ export default function SettingsPage(props: {
                 </div>
                 <label className="storage-location-field">
                   <span>目录位置</span>
-                  <Space.Compact block>
-                    <Input aria-label="文档保存位置" readOnly value={draft.outputRoot} />
-                    <Button icon={<FolderOpenOutlined />} onClick={() => void chooseOutput()}>修改位置</Button>
-                  </Space.Compact>
+                  <Input aria-label="文档保存位置" readOnly value={draft.outputRoot} />
                 </label>
                 {draft.outputRoot !== props.settings.outputRoot ? <Typography.Text type="warning">新位置将在保存全部更改后生效</Typography.Text> : null}
                 <div className="storage-location-actions">
-                  <Button onClick={() => void openStorageLocation()}>打开当前目录</Button>
-                  <Button icon={<ReloadOutlined />} loading={storageLoading} onClick={() => void refreshStorageInfo()}>刷新用量</Button>
+                  <Button onClick={() => void chooseOutput()}>修改位置</Button>
+                  <Button icon={<FolderOpenOutlined />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
                 </div>
               </div>
 
               <div className="storage-usage-card" aria-busy={storageLoading}>
-                <div className="storage-usage-heading"><strong>存储用量</strong><span>{storageInfo?.exists === false ? '文档目录尚未建立' : '当前已保存内容'}</span></div>
-                <div className="storage-usage-grid">
-                  <StorageMetric label="文档" value={storageInfo ? String(storageInfo.documentCount) : '—'} />
-                  <StorageMetric label="文件" value={storageInfo ? String(storageInfo.fileCount) : '—'} />
-                  <StorageMetric label="占用空间" value={storageInfo ? formatBytes(storageInfo.totalBytes) : '—'} />
+                <div className="storage-usage-heading">
+                  <span><strong>存储用量</strong><small>{storageInfo?.exists === false ? '文档目录尚未建立' : '当前已保存内容'}</small></span>
+                  <Button icon={<ReloadOutlined />} loading={storageLoading} onClick={() => void refreshStorageInfo()}>刷新用量</Button>
                 </div>
+                <div className="storage-usage-grid">
+                  <StorageMetric icon={<FileTextOutlined />} label="文档" value={storageInfo ? String(storageInfo.documentCount) : '—'} />
+                  <StorageMetric icon={<FileOutlined />} label="文件" value={storageInfo ? String(storageInfo.fileCount) : '—'} />
+                  <StorageMetric icon={<DatabaseOutlined />} label="占用空间" value={storageInfo ? formatBytes(storageInfo.totalBytes) : '—'} />
+                </div>
+              </div>
+              <div className="storage-insights">
+                <StorageComposition info={storageInfo} />
+                <StorageGrowth info={storageInfo} />
               </div>
               <Typography.Text className="storage-note" type="secondary">修改位置不会移动既有文档；既有任务仍保留原位置，新任务使用保存后的目录。</Typography.Text>
             </section>
           ) : null}
           </div>
-          {section !== 'models' ? <div className="settings-actions">
+          <div className="settings-actions">
             <Typography.Text type={hasUnsavedChanges ? 'warning' : 'secondary'}>{hasUnsavedChanges ? '有未保存的更改' : '所有更改均已保存'}</Typography.Text>
             <div className="settings-action-buttons">
               <Button size="large" disabled={!hasUnsavedChanges || saving} onClick={discard}>放弃更改</Button>
               <Button type="primary" size="large" loading={saving} disabled={!hasUnsavedChanges} onClick={() => void save()}>保存全部更改</Button>
             </div>
-          </div> : null}
+          </div>
         </div>
       </div>
     </section>
@@ -646,8 +610,63 @@ function compactNumber(value: number): string {
   return String(value)
 }
 
-function StorageMetric(props: { label: string; value: string }): React.JSX.Element {
-  return <div className="storage-metric"><span>{props.label}</span><strong>{props.value}</strong></div>
+const STORAGE_CATEGORY_DETAILS: Record<StorageInfo['categories'][number]['kind'], { label: string; color: string }> = {
+  source: { label: '源文档', color: '#626bd9' },
+  image: { label: '图片资源', color: '#65a879' },
+  translation: { label: '翻译结果', color: '#d69b53' },
+  other: { label: '其他文件', color: '#a7abb2' }
+}
+
+function StorageMetric(props: { icon: React.ReactNode; label: string; value: string }): React.JSX.Element {
+  return <div className="storage-metric"><span className="storage-metric-icon" aria-hidden="true">{props.icon}</span><span>{props.label}</span><strong>{props.value}</strong></div>
+}
+
+function StorageComposition({ info }: { info: StorageInfo | null }): React.JSX.Element {
+  const categories = info?.categories ?? []
+  const total = info?.totalBytes ?? 0
+  let position = 0
+  const stops = categories.filter((category) => category.bytes > 0).map((category) => {
+    const start = position
+    position += total > 0 ? (category.bytes / total) * 100 : 0
+    return `${STORAGE_CATEGORY_DETAILS[category.kind].color} ${start}% ${position}%`
+  })
+  const background = stops.length > 0 ? `conic-gradient(${stops.join(', ')})` : 'var(--border)'
+  return (
+    <section className="storage-insight-panel" aria-label="存储构成">
+      <div className="storage-insight-heading"><strong>存储构成</strong><small>按实际文件类型统计</small></div>
+      <div className="storage-composition-body">
+        <div className="storage-donut" role="img" aria-label={`存储构成，总计 ${formatBytes(total)}`} style={{ background }}>
+          <div><strong>{formatBytes(total)}</strong><span>总计</span></div>
+        </div>
+        <div className="storage-category-list">
+          {(categories.length > 0 ? categories : Object.keys(STORAGE_CATEGORY_DETAILS).map((kind) => ({ kind: kind as keyof typeof STORAGE_CATEGORY_DETAILS, fileCount: 0, bytes: 0 }))).map((category) => {
+            const details = STORAGE_CATEGORY_DETAILS[category.kind]
+            return <div className="storage-category-row" key={category.kind}><i style={{ background: details.color }} /><span>{details.label}</span><strong>{formatBytes(category.bytes)}</strong></div>
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function StorageGrowth({ info }: { info: StorageInfo | null }): React.JSX.Element {
+  const growth = info?.growth ?? []
+  const maximum = Math.max(1, ...growth.map((point) => point.totalBytes))
+  const points = growth.map((point, index) => {
+    const x = growth.length <= 1 ? 20 : 20 + (index / (growth.length - 1)) * 480
+    const y = 132 - (point.totalBytes / maximum) * 104
+    return `${x},${y}`
+  }).join(' ')
+  return (
+    <section className="storage-insight-panel" aria-label="近期存储增长">
+      <div className="storage-insight-heading"><strong>近期存储增长</strong><small>近 14 日 · 按修改时间估算</small></div>
+      <svg className="storage-growth-chart" role="img" aria-label="近 14 日存储增长曲线" viewBox="0 0 520 160" preserveAspectRatio="none">
+        {[28, 80, 132].map((y) => <line className="storage-growth-grid" key={y} x1="20" x2="500" y1={y} y2={y} />)}
+        {points ? <><polyline className="storage-growth-area" points={`20,132 ${points} 500,132`} /><polyline className="storage-growth-line" points={points} /></> : null}
+      </svg>
+      <div className="storage-growth-footer"><span>{growth[0]?.date.slice(5).replace('-', '/') ?? '—'}</span><strong>{formatBytes(growth.at(-1)?.totalBytes ?? 0)}</strong><span>{growth.at(-1)?.date.slice(5).replace('-', '/') ?? '—'}</span></div>
+    </section>
+  )
 }
 
 export function formatBytes(bytes: number): string {

@@ -58,6 +58,7 @@ describe('SettingsPage credential editor', () => {
     render(<SettingsPage settings={settings} onSaved={onSaved} />)
     expect(screen.getByRole('region', { name: '服务连接' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: '服务连接' })).toBeNull()
+    expect(document.querySelector('.settings-content-body > .settings-section.service-connections')).toBeTruthy()
     expect(screen.queryByText('文档解析必需')).toBeNull()
     expect(screen.queryByRole('button', { name: /更多/u })).toBeNull()
     expect(screen.getAllByLabelText('APIKey')).toHaveLength(3)
@@ -97,7 +98,7 @@ describe('SettingsPage credential editor', () => {
     expect(settingsContent.lastElementChild?.classList.contains('settings-actions')).toBe(true)
   }, 15000)
 
-  it('reorders the model policy from the keyboard and saves it immediately', async () => {
+  it('reorders the model policy from the keyboard and saves it from the shared action bar', async () => {
     const settings = configuredSettings()
     const saveSettings = vi.fn(async (update: Parameters<CopilotixDesktopApi['saveSettings']>[0]) => ({
       settings: { ...settings, ...update, credentials: settings.credentials },
@@ -115,10 +116,15 @@ describe('SettingsPage credential editor', () => {
 
     render(<SettingsPage settings={settings} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /模型设置/u }))
+    expect(screen.getByRole('region', { name: '模型设置' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '模型设置' })).toBeNull()
+    expect(document.querySelector('.settings-content-body > .settings-section.model-priority')).toBeTruthy()
     expect(screen.getByText('大语言模型优先级')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '保存全部更改' })).toBeNull()
+    expect((screen.getByRole('button', { name: '保存全部更改' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.keyDown(screen.getByRole('button', { name: '移动千问 / Qwen' }), { key: 'ArrowDown' })
-
+    expect(saveSettings).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: '保存全部更改' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '保存全部更改' }))
     await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
     expect(saveSettings.mock.calls[0]![0]).toMatchObject({
       translationProvider: 'deepseek',
@@ -127,7 +133,7 @@ describe('SettingsPage credential editor', () => {
     expect(screen.getByText('DeepSeek → 千问 → Bing → Transmart')).toBeTruthy()
   })
 
-  it('keeps the last visual provider enabled and rolls back an unsuccessful policy save', async () => {
+  it('keeps the last provider enabled and retains the draft after an unsuccessful policy save', async () => {
     const settings: AppSettings = {
       ...configuredSettings(),
       translationProvider: 'qwen',
@@ -153,8 +159,10 @@ describe('SettingsPage credential editor', () => {
 
     fireEvent.keyDown(screen.getByRole('button', { name: '移动千问 / Qwen' }), { key: 'ArrowDown' })
     expect(screen.getAllByRole('listitem')[0]!.textContent).toContain('DeepSeek')
+    expect(saveSettings).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '保存全部更改' }))
     await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
-    await vi.waitFor(() => expect(screen.getAllByRole('listitem')[0]!.textContent).toContain('千问 / Qwen'))
+    expect(screen.getAllByRole('listitem')[0]!.textContent).toContain('DeepSeek')
     expect((screen.getByRole('checkbox', { name: '启用千问 / Qwen' }) as HTMLInputElement).checked).toBe(true)
   })
 
@@ -169,7 +177,14 @@ describe('SettingsPage credential editor', () => {
       exists: true,
       documentCount: 3,
       fileCount: 18,
-      totalBytes: 1_572_864
+      totalBytes: 1_572_864,
+      categories: [
+        { kind: 'source' as const, fileCount: 3, bytes: 524_288 },
+        { kind: 'image' as const, fileCount: 10, bytes: 786_432 },
+        { kind: 'translation' as const, fileCount: 3, bytes: 196_608 },
+        { kind: 'other' as const, fileCount: 2, bytes: 65_536 }
+      ],
+      growth: Array.from({ length: 14 }, (_, index) => ({ date: `2026-09-${String(index + 10).padStart(2, '0')}`, totalBytes: (index + 1) * 112_347 }))
     }))
     const openStorageLocation = vi.fn(async () => undefined)
     Object.defineProperty(window, 'copilotix', {
@@ -186,10 +201,17 @@ describe('SettingsPage credential editor', () => {
 
     render(<SettingsPage settings={settings} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /文件存储/u }))
+    expect(screen.getByRole('region', { name: '文件存储' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '文件管理' })).toBeNull()
+    expect(document.querySelector('.settings-content-body > .settings-section.storage-management')).toBeTruthy()
     await vi.waitFor(() => expect(getStorageInfo).toHaveBeenCalledOnce())
     await vi.waitFor(() => expect(screen.getByText('3')).toBeTruthy())
     expect(screen.getByText('18')).toBeTruthy()
-    expect(screen.getByText('1.50 MB')).toBeTruthy()
+    expect(screen.getAllByText('1.50 MB').length).toBeGreaterThan(0)
+    expect(screen.getByRole('region', { name: '存储构成' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: /存储构成，总计 1\.50 MB/u })).toBeTruthy()
+    expect(screen.getByRole('region', { name: '近期存储增长' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: '近 14 日存储增长曲线' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /修改位置/u }))
     await vi.waitFor(() => expect((screen.getByLabelText('文档保存位置') as HTMLInputElement).value).toBe('D:\\Copilotix'))
