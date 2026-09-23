@@ -177,7 +177,14 @@ describe('SettingsPage credential editor', () => {
       exists: true,
       documentCount: 3,
       fileCount: 18,
-      totalBytes: 1_572_864
+      totalBytes: 1_572_864,
+      categories: [
+        { kind: 'source' as const, fileCount: 3, bytes: 524_288 },
+        { kind: 'image' as const, fileCount: 10, bytes: 786_432 },
+        { kind: 'translation' as const, fileCount: 3, bytes: 196_608 },
+        { kind: 'other' as const, fileCount: 2, bytes: 65_536 }
+      ],
+      growth: Array.from({ length: 14 }, (_, index) => ({ date: `2026-09-${String(index + 10).padStart(2, '0')}`, totalBytes: (index + 1) * 112_347 }))
     }))
     const openStorageLocation = vi.fn(async () => undefined)
     Object.defineProperty(window, 'copilotix', {
@@ -200,7 +207,11 @@ describe('SettingsPage credential editor', () => {
     await vi.waitFor(() => expect(getStorageInfo).toHaveBeenCalledOnce())
     await vi.waitFor(() => expect(screen.getByText('3')).toBeTruthy())
     expect(screen.getByText('18')).toBeTruthy()
-    expect(screen.getByText('1.50 MB')).toBeTruthy()
+    expect(screen.getAllByText('1.50 MB').length).toBeGreaterThan(0)
+    expect(screen.getByRole('region', { name: '存储构成' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: /存储构成，总计 1\.50 MB/u })).toBeTruthy()
+    expect(screen.getByRole('region', { name: '近期存储增长' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: '近 14 日存储增长曲线' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /修改位置/u }))
     await vi.waitFor(() => expect((screen.getByLabelText('文档保存位置') as HTMLInputElement).value).toBe('D:\\Copilotix'))

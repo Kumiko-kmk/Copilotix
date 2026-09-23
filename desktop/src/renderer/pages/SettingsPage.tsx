@@ -1,6 +1,6 @@
 import React from 'react'
-import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, LinkOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons'
-import { Button, Checkbox, Input, Space, Typography, message } from 'antd'
+import { CheckCircleOutlined, CloseCircleOutlined, DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, LinkOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons'
+import { Button, Checkbox, Input, Typography, message } from 'antd'
 import type {
   AppSettings,
   CredentialMutation,
@@ -401,25 +401,29 @@ export default function SettingsPage(props: {
                 </div>
                 <label className="storage-location-field">
                   <span>目录位置</span>
-                  <Space.Compact block>
-                    <Input aria-label="文档保存位置" readOnly value={draft.outputRoot} />
-                    <Button icon={<FolderOpenOutlined />} onClick={() => void chooseOutput()}>修改位置</Button>
-                  </Space.Compact>
+                  <Input aria-label="文档保存位置" readOnly value={draft.outputRoot} />
                 </label>
                 {draft.outputRoot !== props.settings.outputRoot ? <Typography.Text type="warning">新位置将在保存全部更改后生效</Typography.Text> : null}
                 <div className="storage-location-actions">
-                  <Button onClick={() => void openStorageLocation()}>打开当前目录</Button>
-                  <Button icon={<ReloadOutlined />} loading={storageLoading} onClick={() => void refreshStorageInfo()}>刷新用量</Button>
+                  <Button onClick={() => void chooseOutput()}>修改位置</Button>
+                  <Button icon={<FolderOpenOutlined />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
                 </div>
               </div>
 
               <div className="storage-usage-card" aria-busy={storageLoading}>
-                <div className="storage-usage-heading"><strong>存储用量</strong><span>{storageInfo?.exists === false ? '文档目录尚未建立' : '当前已保存内容'}</span></div>
-                <div className="storage-usage-grid">
-                  <StorageMetric label="文档" value={storageInfo ? String(storageInfo.documentCount) : '—'} />
-                  <StorageMetric label="文件" value={storageInfo ? String(storageInfo.fileCount) : '—'} />
-                  <StorageMetric label="占用空间" value={storageInfo ? formatBytes(storageInfo.totalBytes) : '—'} />
+                <div className="storage-usage-heading">
+                  <span><strong>存储用量</strong><small>{storageInfo?.exists === false ? '文档目录尚未建立' : '当前已保存内容'}</small></span>
+                  <Button icon={<ReloadOutlined />} loading={storageLoading} onClick={() => void refreshStorageInfo()}>刷新用量</Button>
                 </div>
+                <div className="storage-usage-grid">
+                  <StorageMetric icon={<FileTextOutlined />} label="文档" value={storageInfo ? String(storageInfo.documentCount) : '—'} />
+                  <StorageMetric icon={<FileOutlined />} label="文件" value={storageInfo ? String(storageInfo.fileCount) : '—'} />
+                  <StorageMetric icon={<DatabaseOutlined />} label="占用空间" value={storageInfo ? formatBytes(storageInfo.totalBytes) : '—'} />
+                </div>
+              </div>
+              <div className="storage-insights">
+                <StorageComposition info={storageInfo} />
+                <StorageGrowth info={storageInfo} />
               </div>
               <Typography.Text className="storage-note" type="secondary">修改位置不会移动既有文档；既有任务仍保留原位置，新任务使用保存后的目录。</Typography.Text>
             </section>
@@ -606,8 +610,63 @@ function compactNumber(value: number): string {
   return String(value)
 }
 
-function StorageMetric(props: { label: string; value: string }): React.JSX.Element {
-  return <div className="storage-metric"><span>{props.label}</span><strong>{props.value}</strong></div>
+const STORAGE_CATEGORY_DETAILS: Record<StorageInfo['categories'][number]['kind'], { label: string; color: string }> = {
+  source: { label: '源文档', color: '#626bd9' },
+  image: { label: '图片资源', color: '#65a879' },
+  translation: { label: '翻译结果', color: '#d69b53' },
+  other: { label: '其他文件', color: '#a7abb2' }
+}
+
+function StorageMetric(props: { icon: React.ReactNode; label: string; value: string }): React.JSX.Element {
+  return <div className="storage-metric"><span className="storage-metric-icon" aria-hidden="true">{props.icon}</span><span>{props.label}</span><strong>{props.value}</strong></div>
+}
+
+function StorageComposition({ info }: { info: StorageInfo | null }): React.JSX.Element {
+  const categories = info?.categories ?? []
+  const total = info?.totalBytes ?? 0
+  let position = 0
+  const stops = categories.filter((category) => category.bytes > 0).map((category) => {
+    const start = position
+    position += total > 0 ? (category.bytes / total) * 100 : 0
+    return `${STORAGE_CATEGORY_DETAILS[category.kind].color} ${start}% ${position}%`
+  })
+  const background = stops.length > 0 ? `conic-gradient(${stops.join(', ')})` : 'var(--border)'
+  return (
+    <section className="storage-insight-panel" aria-label="存储构成">
+      <div className="storage-insight-heading"><strong>存储构成</strong><small>按实际文件类型统计</small></div>
+      <div className="storage-composition-body">
+        <div className="storage-donut" role="img" aria-label={`存储构成，总计 ${formatBytes(total)}`} style={{ background }}>
+          <div><strong>{formatBytes(total)}</strong><span>总计</span></div>
+        </div>
+        <div className="storage-category-list">
+          {(categories.length > 0 ? categories : Object.keys(STORAGE_CATEGORY_DETAILS).map((kind) => ({ kind: kind as keyof typeof STORAGE_CATEGORY_DETAILS, fileCount: 0, bytes: 0 }))).map((category) => {
+            const details = STORAGE_CATEGORY_DETAILS[category.kind]
+            return <div className="storage-category-row" key={category.kind}><i style={{ background: details.color }} /><span>{details.label}</span><strong>{formatBytes(category.bytes)}</strong></div>
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function StorageGrowth({ info }: { info: StorageInfo | null }): React.JSX.Element {
+  const growth = info?.growth ?? []
+  const maximum = Math.max(1, ...growth.map((point) => point.totalBytes))
+  const points = growth.map((point, index) => {
+    const x = growth.length <= 1 ? 20 : 20 + (index / (growth.length - 1)) * 480
+    const y = 132 - (point.totalBytes / maximum) * 104
+    return `${x},${y}`
+  }).join(' ')
+  return (
+    <section className="storage-insight-panel" aria-label="近期存储增长">
+      <div className="storage-insight-heading"><strong>近期存储增长</strong><small>近 14 日 · 按修改时间估算</small></div>
+      <svg className="storage-growth-chart" role="img" aria-label="近 14 日存储增长曲线" viewBox="0 0 520 160" preserveAspectRatio="none">
+        {[28, 80, 132].map((y) => <line className="storage-growth-grid" key={y} x1="20" x2="500" y1={y} y2={y} />)}
+        {points ? <><polyline className="storage-growth-area" points={`20,132 ${points} 500,132`} /><polyline className="storage-growth-line" points={points} /></> : null}
+      </svg>
+      <div className="storage-growth-footer"><span>{growth[0]?.date.slice(5).replace('-', '/') ?? '—'}</span><strong>{formatBytes(growth.at(-1)?.totalBytes ?? 0)}</strong><span>{growth.at(-1)?.date.slice(5).replace('-', '/') ?? '—'}</span></div>
+    </section>
+  )
 }
 
 export function formatBytes(bytes: number): string {

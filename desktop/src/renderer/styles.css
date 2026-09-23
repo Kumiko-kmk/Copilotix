@@ -191,9 +191,8 @@ button, input, select { font: inherit; }
 .model-request-order { display: grid; gap: 6px; margin: 16px 4px 0; padding-top: 14px; border-top: 1px solid var(--border); }
 .model-request-order span { color: var(--muted); font-size: 13px; font-weight: 600; }
 .model-request-order strong { overflow-wrap: anywhere; font-size: 15px; }
-.storage-location-card { margin: 0 0 14px; }
-.storage-usage-card { margin: 14px 0; }
-.storage-location-card, .storage-usage-card { padding: 22px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--muted-surface) 34%, var(--surface)); }
+.storage-management { display: grid; grid-template-rows: auto auto minmax(230px, 1fr) auto; align-content: start; gap: 12px; overflow: hidden; }
+.storage-location-card, .storage-usage-card { padding: 18px 22px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--muted-surface) 34%, var(--surface)); }
 .storage-card-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
 .storage-card-heading > span:last-child { display: grid; min-width: 0; gap: 4px; }
 .storage-card-heading strong { font-size: 18px; }
@@ -202,16 +201,40 @@ button, input, select { font: inherit; }
 .storage-location-field { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 14px; }
 .storage-location-field > span { font-weight: 500; }
 .storage-location-field .ant-input { text-overflow: ellipsis; }
-.storage-location-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.storage-location-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .storage-usage-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
-.storage-usage-heading strong { font-size: 17px; }
-.storage-usage-heading span { color: var(--muted); font-size: 13px; }
+.storage-usage-heading > span { display: flex; align-items: baseline; gap: 10px; }
+.storage-usage-heading strong { color: var(--text); font-size: 17px; }
+.storage-usage-heading small { color: var(--muted); font-size: 13px; }
 .storage-usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface) 86%, transparent); }
-.storage-metric { display: grid; gap: 7px; padding: 18px 20px; border-right: 1px solid var(--border); }
+.storage-metric { display: grid; min-width: 0; padding: 14px 20px; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 3px 10px; border-right: 1px solid var(--border); }
 .storage-metric:last-child { border-right: 0; }
 .storage-metric span { color: var(--muted); font-size: 13px; }
-.storage-metric strong { font-size: 20px; font-variant-numeric: tabular-nums; }
-.storage-note { display: block; margin: 18px 4px 0; }
+.storage-metric .storage-metric-icon { display: grid; grid-row: 1 / 3; width: 32px; height: 32px; place-items: center; border-radius: 8px; color: var(--primary); background: var(--primary-soft); font-size: 17px; }
+.storage-metric strong { grid-column: 2; overflow: hidden; font-size: 20px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.storage-insights { display: grid; min-height: 230px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.storage-insight-panel { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; padding: 16px 20px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--muted-surface) 30%, var(--surface)); }
+.storage-insight-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.storage-insight-heading strong { font-size: 16px; }
+.storage-insight-heading small { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.storage-composition-body { display: grid; min-height: 0; grid-template-columns: minmax(132px, .8fr) minmax(150px, 1.2fr); align-items: center; gap: 22px; }
+.storage-donut { display: grid; width: min(150px, 100%); aspect-ratio: 1; justify-self: center; place-items: center; border-radius: 50%; }
+.storage-donut > div { display: grid; width: 61%; aspect-ratio: 1; place-content: center; border-radius: 50%; background: var(--surface); text-align: center; }
+.storage-donut strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.storage-donut span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.storage-category-list { display: grid; gap: 10px; }
+.storage-category-row { display: grid; min-width: 0; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 12px; }
+.storage-category-row i { width: 9px; height: 9px; border-radius: 50%; }
+.storage-category-row span { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.storage-category-row strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.storage-growth-chart { width: 100%; height: 100%; min-height: 145px; margin-top: 5px; overflow: visible; }
+.storage-growth-grid { stroke: color-mix(in srgb, var(--border) 72%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.storage-growth-area { fill: color-mix(in srgb, var(--primary) 12%, transparent); stroke: none; }
+.storage-growth-line { fill: none; stroke: var(--primary); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.storage-growth-footer { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; color: var(--muted); font-size: 11px; }
+.storage-growth-footer strong { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; }
+.storage-growth-footer span:last-child { text-align: right; }
+.storage-note { display: block; margin: 0 4px; }
 .experimental-tests { margin-top: 16px; }
 .settings-actions { position: relative; z-index: 2; display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 20px; padding: 10px 0 0; border-top: 1px solid var(--border); background: var(--surface); }
 .settings-action-buttons { display: flex; gap: 12px; }

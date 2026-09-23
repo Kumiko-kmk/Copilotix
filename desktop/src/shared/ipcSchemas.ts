@@ -252,12 +252,25 @@ export const inspectPdfsRequestSchema = z.array(boundedPath).max(100)
 export const noRequestSchema = z.undefined()
 export const outputDirectorySchema = z.string().max(32_768).nullable()
 
+export const storageCategorySchema = z.object({
+  kind: z.enum(['source', 'image', 'translation', 'other']),
+  fileCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+}).strict()
+export type StorageCategory = z.infer<typeof storageCategorySchema>
+export const storageGrowthPointSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+  totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+}).strict()
+export type StorageGrowthPoint = z.infer<typeof storageGrowthPointSchema>
 export const storageInfoSchema = z.object({
   rootPath: boundedPath,
   exists: z.boolean(),
   documentCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   fileCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-  totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+  totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  categories: z.array(storageCategorySchema).length(4),
+  growth: z.array(storageGrowthPointSchema).length(14)
 }).strict()
 export type StorageInfo = z.infer<typeof storageInfoSchema>
 export const usageAnalyticsDaySchema = z.object({
