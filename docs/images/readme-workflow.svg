@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="380" viewBox="0 0 1200 380" role="img" aria-labelledby="title desc">
+<title id="title">Copilotix 阅读工作流</title><desc id="desc">PDF 导入，经 MinerU 解析与翻译服务处理，在本地对照阅读、标注和导出。</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#10233f"/><stop offset="1" stop-color="#233a52"/></linearGradient><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="none" stroke="#8daac3" stroke-width="1.5"/></marker></defs>
+<rect width="1200" height="380" rx="24" fill="url(#bg)"/>
+<g font-family="Segoe UI,Microsoft YaHei,sans-serif"><text x="52" y="67" font-size="30" font-weight="700" fill="#fff">COPILOTIX</text><text x="52" y="106" font-size="19" fill="#bbccdc">从一篇 PDF，到一段流畅的论文阅读时间。</text>
+<g fill="#fff" fill-opacity=".07" stroke="#5b7690"><rect x="52" y="153" width="234" height="146" rx="15"/><rect x="340" y="153" width="234" height="146" rx="15"/><rect x="628" y="153" width="234" height="146" rx="15"/><rect x="916" y="153" width="232" height="146" rx="15"/></g>
+<g fill="#72d4c5" font-size="16" font-weight="600"><text x="74" y="188">01 / IMPORT</text><text x="362" y="188">02 / PARSE</text><text x="650" y="188">03 / TRANSLATE</text><text x="938" y="188">04 / READ</text></g>
+<g fill="#fff" font-size="23" font-weight="600"><text x="74" y="226">拖入 PDF</text><text x="362" y="226">理解文档结构</text><text x="650" y="226">生成中文译文</text><text x="938" y="226">回到阅读本身</text></g>
+<g fill="#bed0de" font-size="15"><text x="74" y="262">批量选择 · 重复检测</text><text x="362" y="262">MinerU · 公式与表格</text><text x="650" y="262">翻译源排序 · 失败回退</text><text x="938" y="262">对照定位 · 标注 · 导出</text></g>
+<g stroke="#8daac3" stroke-width="2" marker-end="url(#arrow)"><path d="M297 226H326"/><path d="M585 226H614"/><path d="M873 226H902"/></g>
+<text x="52" y="343" fill="#9eb5c9" font-size="14">功能流程示意 · 解析与翻译需要网络 · 文档产物保存在本地</text></g></svg>
