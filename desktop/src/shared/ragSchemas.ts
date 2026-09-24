@@ -233,10 +233,19 @@ export function canTransitionChatAvailability(fromState: ChatAvailability | null
 export const canTransitionLocalState = canTransitionLocalIndexState
 export const canTransitionSemanticState = canTransitionSemanticIndexState
 
+// Public identities must accept the deterministic IDs already persisted by
+// Utility, while preserving UUID compatibility without accepting arbitrary text.
+export const ragContentRevisionIdSchema = z.union([
+  uuidSchema, z.string().regex(/^rag-content-revision-[a-f0-9]{64}$/u)
+])
+export const ragVectorIndexIdSchema = z.union([
+  uuidSchema, z.string().regex(/^rag-vector-index-[a-f0-9]{64}$/u)
+])
+
 export const localIndexStatusSchema = z.object({
   state: localIndexStateSchema,
   progress: boundedProgressSchema,
-  activeContentRevisionId: uuidSchema.nullable(),
+  activeContentRevisionId: ragContentRevisionIdSchema.nullable(),
   error: ragErrorSchema.nullable()
 }).strict().superRefine((value, context) => {
   if (value.state === 'unindexed' && value.activeContentRevisionId !== null) {
@@ -258,8 +267,8 @@ export type LocalIndexStatus = z.infer<typeof localIndexStatusSchema>
 export const semanticIndexStatusSchema = z.object({
   state: semanticIndexStateSchema,
   progress: boundedProgressSchema,
-  activeContentRevisionId: uuidSchema.nullable(),
-  activeVectorIndexId: uuidSchema.nullable(),
+  activeContentRevisionId: ragContentRevisionIdSchema.nullable(),
+  activeVectorIndexId: ragVectorIndexIdSchema.nullable(),
   profileId: boundedIdSchema.nullable(),
   error: ragErrorSchema.nullable()
 }).strict().superRefine((value, context) => {
@@ -353,7 +362,7 @@ export type ScoreProvenance = z.infer<typeof scoreProvenanceSchema>
 export const citationLocatorSchema = z.object({
   documentId: uuidSchema,
   artifactId: uuidSchema,
-  contentRevisionId: uuidSchema,
+  contentRevisionId: ragContentRevisionIdSchema,
   contentHash: hashSchema,
   mappingIds: z.array(boundedIdSchema).max(RAG_MAX_MAPPING_IDS),
   pageStart: z.number().int().min(0).max(100_000).nullable(),
@@ -378,7 +387,7 @@ export type CitationLocator = z.infer<typeof citationLocatorSchema>
 export const searchResultItemSchema = z.object({
   resultId: boundedIdSchema.optional(),
   documentId: uuidSchema,
-  contentRevisionId: uuidSchema,
+  contentRevisionId: ragContentRevisionIdSchema,
   chunkId: boundedIdSchema,
   excerpt: boundedExcerptSchema,
   sectionPath: z.array(boundedSectionSchema).max(RAG_MAX_SECTION_DEPTH).optional(),
@@ -398,7 +407,7 @@ const searchRequestFields = {
   query: boundedQuerySchema,
   limit: z.number().int().min(1).max(RAG_MAX_RESULT_PAGE_ITEMS),
   cursor: boundedCursorSchema.nullable().optional(),
-  contentRevisionId: uuidSchema.nullable().optional()
+  contentRevisionId: ragContentRevisionIdSchema.nullable().optional()
 }
 
 export const lexicalSearchRequestSchema = z.object({
@@ -501,7 +510,7 @@ export type Citation = z.infer<typeof citationSchema>
 
 export const selectionSnapshotSchema = z.object({
   artifactId: uuidSchema,
-  contentRevisionId: uuidSchema,
+  contentRevisionId: ragContentRevisionIdSchema,
   contentHash: hashSchema
 }).strict()
 export type SelectionSnapshot = z.infer<typeof selectionSnapshotSchema>

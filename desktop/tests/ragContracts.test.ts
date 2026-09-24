@@ -651,3 +651,25 @@ describe('existing document and job contracts', () => {
     expect(() => documentSummarySchema.parse({ ...summary, indexing: 'ready' })).toThrow()
   })
 })
+
+
+describe('persisted RAG identities', () => {
+  const persistedRevision = `rag-content-revision-${'a'.repeat(64)}`
+  const persistedVector = `rag-vector-index-${'b'.repeat(64)}`
+
+  it('accepts deterministic repository identities throughout status, search, citations and selection', () => {
+    expect(localIndexStatusSchema.parse(localReady({ activeContentRevisionId: persistedRevision })).activeContentRevisionId).toBe(persistedRevision)
+    expect(semanticIndexStatusSchema.parse(semanticReady({ activeContentRevisionId: persistedRevision, activeVectorIndexId: persistedVector })).activeVectorIndexId).toBe(persistedVector)
+    expect(citationLocatorSchema.parse(locator({ contentRevisionId: persistedRevision })).contentRevisionId).toBe(persistedRevision)
+    expect(lexicalSearchRequestSchema.parse({ kind: 'lexical', scope: { kind: 'current-document', documentId }, query: 'test', limit: 10, contentRevisionId: persistedRevision }).contentRevisionId).toBe(persistedRevision)
+    expect(selectionSnapshotSchema.parse({ artifactId, contentRevisionId: persistedRevision, contentHash }).contentRevisionId).toBe(persistedRevision)
+  })
+
+  it('rejects malformed and cross-kind identities while retaining UUID compatibility', () => {
+    for (const id of ['arbitrary', `rag-content-revision-${'a'.repeat(63)}`, `rag-content-revision-${'g'.repeat(64)}`, persistedVector]) {
+      expect(() => localIndexStatusSchema.parse(localReady({ activeContentRevisionId: id }))).toThrow()
+    }
+    expect(() => semanticIndexStatusSchema.parse(semanticReady({ activeVectorIndexId: persistedRevision }))).toThrow()
+    expect(localIndexStatusSchema.parse(localReady()).activeContentRevisionId).toBe(contentRevisionId)
+  })
+})

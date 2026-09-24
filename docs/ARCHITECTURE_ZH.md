@@ -1,5 +1,7 @@
 # Copilotix Desktop P0/P1 架构基线与二次开发指南
 
+> 2026-09-23 implementation audit and continuation: [RAG review handoff](RAG_REVIEW_HANDOFF_20260923.md). This document retains its historical baseline; consult the handoff for verified current behavior and remaining work.
+
 > 本文是 Desktop 当前 P0/P1 架构的权威边界。它描述已经在源码和测试中存在的契约，也明确哪些能力尚未实现。若本文与代码冲突，以当前代码、运行时 schema 和测试为准；修复冲突时先记录证据，再由负责公共边界的 Agent 更新文档。
 
 ## 1. 基线与范围

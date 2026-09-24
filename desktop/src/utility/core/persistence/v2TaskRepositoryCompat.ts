@@ -1,3 +1,4 @@
+import { STRUCTURE_AWARE_CHUNKER_FINGERPRINT as RAG_DEFAULT_CHUNKER_FINGERPRINT } from '@shared/ragVersion'
 import { createHash, randomUUID } from 'node:crypto'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
@@ -43,7 +44,7 @@ type V2JobKind = 'parse' | 'translate'
 type V2JobStatus = 'queued' | 'running' | 'retry-wait' | 'succeeded' | 'partial' | 'failed' | 'cancelled'
 
 /** Must match the Utility chunker identity used by the 03 index runner. */
-export const RAG_DEFAULT_CHUNKER_FINGERPRINT = 'structure-aware-v1:tokens-v1:utf16'
+export { STRUCTURE_AWARE_CHUNKER_FINGERPRINT as RAG_DEFAULT_CHUNKER_FINGERPRINT } from '@shared/ragVersion'
 
 export interface DocumentMetadataPatch {
   displayTitle?: string | null
@@ -715,6 +716,20 @@ export class V2TaskRepositoryCompat {
    * inside recordArtifactRevisions()'s transaction, including superseding an
    * obsolete active job and inserting the new durable job.
    */
+  /** Queue missing/current-version work once; preserve paused or failed current jobs. */
+  reconcileContentIndexVersion(): void {
+    this.database.transaction(() => {
+      const rows = this.database.connection.prepare(`
+        SELECT DISTINCT a.document_id FROM artifacts a
+        WHERE a.kind='parsed_markdown' AND NOT EXISTS (
+          SELECT 1 FROM rag_content_revisions r
+          WHERE r.document_id=a.document_id AND r.chunker_fingerprint=?
+        )
+      `).all(RAG_DEFAULT_CHUNKER_FINGERPRINT) as Array<{ document_id: string }>
+      for (const row of rows) this.maybeQueueParsedContentIndexUnsafe(row.document_id)
+    })
+  }
+
   private maybeQueueParsedContentIndexUnsafe(documentId: string): void {
     const parsed = this.database.connection.prepare(`
       SELECT id,created_by_job_id,content_hash,metadata_json
@@ -732,11 +747,10 @@ export class V2TaskRepositoryCompat {
     // are allowed to pair with the current parsed artifact.
     if (parsed.created_by_job_id && mappings.created_by_job_id && parsed.created_by_job_id !== mappings.created_by_job_id) return
 
-    const parsedMetadata = parseObject(parsed.metadata_json)
     const mappingMetadata = parseObject(mappings.metadata_json)
     const mappingFingerprint = metadataFingerprint(mappingMetadata, 'mappingFingerprint') ?? mappings.content_hash
-    const chunkerFingerprint = metadataFingerprint(parsedMetadata, 'chunkerFingerprint') ??
-      metadataFingerprint(mappingMetadata, 'chunkerFingerprint') ?? RAG_DEFAULT_CHUNKER_FINGERPRINT
+    // The installed algorithm owns this identity; parser metadata cannot choose it.
+    const chunkerFingerprint = RAG_DEFAULT_CHUNKER_FINGERPRINT
     const identity = JSON.stringify([documentId, parsed.content_hash, mappingFingerprint, chunkerFingerprint])
     const digest = createHash('sha256').update(identity).digest('hex')
     const contentRevisionId = `rag-content-revision-${digest}`

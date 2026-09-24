@@ -1,3 +1,4 @@
+import { STRUCTURE_AWARE_CHUNKER_FINGERPRINT } from '@shared/ragVersion'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -48,6 +49,34 @@ function closeFixture(repository: V2TaskRepositoryCompat): void {
 }
 
 describe('temporary v2 task repository compatibility projection', () => {
+  it('reconciles an older chunker once and keeps its ready content while replacement is queued', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'full.md'), 'hash')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'block_mappings', join(fixture.task.outputDir, 'mappings.json'), 'mapping-hash')
+      const first = fixture.database.connection.prepare('SELECT content_revision_id FROM rag_content_revisions').get() as { content_revision_id: string }
+      // Simulate an on-disk index produced by the previous application version.
+      fixture.database.connection.prepare("UPDATE rag_documents SET active_content_revision_id=NULL").run()
+      fixture.database.connection.prepare("UPDATE rag_content_revisions SET content_revision_id='legacy-revision',chunker_fingerprint='structure-aware-v1:tokens-v1:utf16',state='ready'").run()
+      first.content_revision_id = 'legacy-revision'
+      fixture.database.connection.prepare("UPDATE rag_documents SET local_state='ready',local_progress=100,active_content_revision_id=?").run(first.content_revision_id)
+      fixture.database.connection.prepare("DELETE FROM job_events WHERE job_id IN (SELECT id FROM jobs WHERE kind='rag-content-index')").run()
+      fixture.database.connection.prepare("UPDATE jobs SET id='legacy-content-job',status='succeeded',progress=100 WHERE kind='rag-content-index'").run()
+      fixture.repository.reconcileContentIndexVersion()
+      const rows = fixture.database.connection.prepare('SELECT content_revision_id,chunker_fingerprint,state FROM rag_content_revisions').all()
+      expect(rows).toHaveLength(2)
+      expect(rows).toContainEqual(expect.objectContaining({ chunker_fingerprint: STRUCTURE_AWARE_CHUNKER_FINGERPRINT, state: 'building' }))
+      expect(fixture.database.connection.prepare('SELECT local_state,active_content_revision_id FROM rag_documents').get()).toEqual({ local_state: 'ready', active_content_revision_id: first.content_revision_id })
+      fixture.repository.reconcileContentIndexVersion()
+      expect(fixture.database.connection.prepare("SELECT COUNT(*) AS count FROM jobs WHERE kind='rag-content-index' AND status='queued'").get()).toEqual({ count: 1 })
+      fixture.database.connection.prepare("UPDATE jobs SET status='failed' WHERE kind='rag-content-index' AND status='queued'").run()
+      fixture.repository.reconcileContentIndexVersion()
+      expect(fixture.database.connection.prepare("SELECT COUNT(*) AS count FROM jobs WHERE kind='rag-content-index' AND status='queued'").get()).toEqual({ count: 0 })
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
   it('inserts one document, queued parse job and source artifact without a tasks table', async () => {
     const fixture = await createFixture()
     try {
@@ -210,7 +239,7 @@ describe('temporary v2 task repository compatibility projection', () => {
       expect(firstRevision).toMatchObject({
         content_hash: 'content-hash-1',
         mapping_fingerprint: 'mapping-fingerprint-1',
-        chunker_fingerprint: 'chunker-v1',
+        chunker_fingerprint: STRUCTURE_AWARE_CHUNKER_FINGERPRINT,
         state: 'building'
       })
       expect(fixture.database.connection.prepare("SELECT id,status FROM jobs WHERE document_id=? AND kind='rag-content-index'").all(fixture.task.id))

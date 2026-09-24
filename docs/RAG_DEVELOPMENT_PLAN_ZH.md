@@ -10,6 +10,8 @@ implementation_plans: docs/rag-implementation/README.md
 
 # Copilotix Desktop 论文知识库与 RAG 开发计划
 
+> 2026-09-23 implementation audit and continuation: [RAG review handoff](RAG_REVIEW_HANDOFF_20260923.md). This document retains its historical baseline; consult the handoff for verified current behavior and remaining work.
+
 > 本文是未来切块、索引、向量检索和论文问答的规划入口。它不宣布任何 RAG 功能已经存在。当前架构事实见 `ARCHITECTURE_ZH.md`；若规划与源码、schema 或测试冲突，以当前实现为准，并把差异记为后续事项。
 
 ## 0. 当前状态：明确未实现

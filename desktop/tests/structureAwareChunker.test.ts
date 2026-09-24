@@ -7,6 +7,36 @@ function mapping(id: string, order: number, sourceText: string, type = 'text'): 
 }
 
 describe('structure-aware chunker', () => {
+
+  it('keeps skipped heading levels as siblings and restores the correct parent', () => {
+    const source = '# Root\n\n### First\n\nOne.\n\n### Second\n\nTwo.\n\n## Middle\n\n### Child\n\nThree.'
+    const chunks = structureAwareChunk({ documentId: 'doc', contentRevisionId: 'rev', contentHash: 'h', sourceText: source })
+    expect(chunks.filter((chunk) => chunk.contentType === 'heading').map((chunk) => chunk.sectionPath)).toEqual([
+      ['Root'], ['Root', 'First'], ['Root', 'Second'], ['Root', 'Middle'], ['Root', 'Middle', 'Child']
+    ])
+    expect(chunks.find((chunk) => chunk.sourceText === 'Two.')?.sectionPath).toEqual(['Root', 'Second'])
+  })
+
+  it('bounds oversized headings while preserving their source and section identity', () => {
+    const title = '\u6807\u9898\u{1F600}'.repeat(800)
+    const heading = `# ${title}`
+    const source = `${heading}\n\nBody.`
+    const input = { documentId: 'doc', contentRevisionId: 'rev', contentHash: 'h', sourceText: source }
+    const chunks = structureAwareChunk(input)
+    const headings = chunks.filter((chunk) => chunk.contentType === 'heading')
+    expect(headings.length).toBeGreaterThan(1)
+    expect(headings.map((chunk) => chunk.sourceText).join('')).toBe(heading)
+    expect(chunks.every((chunk) => chunk.tokenCount <= DEFAULT_CHUNK_HARD_MAX_TOKENS)).toBe(true)
+    for (const chunk of headings) {
+      expect(source.slice(chunk.sourceStartOffset!, chunk.sourceEndOffset!)).toBe(chunk.sourceText)
+      expect(chunk.sourceText).not.toMatch(/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u)
+      expect(chunk.sectionPath[0]!.length).toBeLessThanOrEqual(512)
+      expect(title.startsWith(chunk.sectionPath[0]!.slice(0, -1))).toBe(true)
+    }
+    expect(chunks.find((chunk) => chunk.sourceText === 'Body.')?.sectionPath).toEqual(headings[0]!.sectionPath)
+    expect(structureAwareChunk(input)).toEqual(chunks)
+  })
+
   it('is deterministic, preserves UTF-16 offsets, sections, types, and page provenance', () => {
     const source = '# 方法 Introduction\n\n这是正文😀，包含公式 $x^2$。\n\n```ts\nconst value = 1\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |'
     const mappings = [

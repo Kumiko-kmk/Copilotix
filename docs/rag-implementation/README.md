@@ -1,5 +1,7 @@
 # RAG 分步实施计划索引
 
+> 2026-09-23 implementation audit and continuation: [RAG review handoff](../RAG_REVIEW_HANDOFF_20260923.md). This document retains its historical baseline; consult the handoff for verified current behavior and remaining work.
+
 > 状态：`planned`
 >
 > 适用基线：`RAG_DEVELOPMENT_PLAN_ZH.md` v6（2026-09-16）

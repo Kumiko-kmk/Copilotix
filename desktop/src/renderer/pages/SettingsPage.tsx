@@ -406,7 +406,7 @@ export default function SettingsPage(props: {
                 {draft.outputRoot !== props.settings.outputRoot ? <Typography.Text type="warning">新位置将在保存全部更改后生效</Typography.Text> : null}
                 <div className="storage-location-actions">
                   <Button onClick={() => void chooseOutput()}>修改位置</Button>
-                  <Button icon={<FolderOpenOutlined />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
+                  <Button icon={<FolderOpenOutlined aria-hidden="true" />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
                 </div>
               </div>
 

@@ -126,6 +126,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
         state.outputRoot = payload.outputRoot
         state.database = new V2Database(payload.databasePath)
         state.repository = new V2TaskRepositoryCompat(state.database, new PathPolicy())
+        state.repository.reconcileContentIndexVersion()
         state.jobRepository = new SqliteJobRepository(state.database)
         state.ragRepository = new SqliteRagRepository(state.database)
         state.ragService = new RagDomainService(state.database, state.ragRepository, state.jobRepository)

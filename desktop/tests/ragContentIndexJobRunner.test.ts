@@ -38,6 +38,16 @@ async function fixture(markdown: string): Promise<{ database: V2Database; rag: S
 }
 
 describe('rag content index runner', () => {
+  it('persists oversized headings without losing source text or exceeding metadata limits', async () => {
+    const heading = `# ${'\u6807\u9898\u{1F600}'.repeat(800)}`
+    const value = await fixture(`${heading}\n\nBody.`)
+    await value.service.index({ documentId: 'doc', contentRevisionId: value.revisionId })
+    const chunks = value.rag.listChunks(value.revisionId)
+    expect(chunks.filter((chunk) => chunk.contentType === 'heading').map((chunk) => chunk.sourceText).join('')).toBe(heading)
+    expect(chunks.every((chunk) => chunk.sectionPath.every((label) => label.length <= 512))).toBe(true)
+    expect(value.rag.getDocumentKnowledge('doc')?.localState).toBe('ready')
+  })
+
   it('reads only registered artifacts and atomically publishes deterministic chunks', async () => {
     const value = await fixture('# Intro\n\n这是内容😀。')
     const first = await value.service.index({ documentId: 'doc', contentRevisionId: value.revisionId })

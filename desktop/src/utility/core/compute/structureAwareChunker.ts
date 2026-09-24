@@ -3,10 +3,7 @@ import type { BlockMapping } from '@shared/types'
 import type { RagChunk, RagChunkContentType, RagChunkInput, RagMappingConfidence } from '@core/types'
 import { alignMarkdownBlocks, parseMarkdownAst, stringifyMarkdownAst } from '@shared/markdownBlocks'
 
-/** Bumping either value intentionally creates a new content-revision identity. */
-export const STRUCTURE_AWARE_CHUNKER_VERSION = 1
-export const TOKEN_ESTIMATOR_VERSION = 1
-export const STRUCTURE_AWARE_CHUNKER_FINGERPRINT = `structure-aware-v${STRUCTURE_AWARE_CHUNKER_VERSION}:tokens-v${TOKEN_ESTIMATOR_VERSION}:utf16`
+export { STRUCTURE_AWARE_CHUNKER_VERSION, TOKEN_ESTIMATOR_VERSION, STRUCTURE_AWARE_CHUNKER_FINGERPRINT } from '@shared/ragVersion'
 
 export const DEFAULT_CHUNK_TARGET_TOKENS = 420
 export const DEFAULT_CHUNK_HARD_MAX_TOKENS = 700
@@ -91,6 +88,7 @@ export function structureAwareChunk(input: StructureAwareChunkInput): readonly R
   const children = Array.isArray(root.children) ? root.children : []
   const leaves: Leaf[] = []
   let sectionPath: string[] = []
+  const headingStack: Array<{ depth: number; title: string }> = []
   let alignedCursor = 0
 
   for (const node of children) {
@@ -99,8 +97,11 @@ export function structureAwareChunk(input: StructureAwareChunkInput): readonly R
       const title = visibleText(node).trim()
       if (title) {
         const depth = Math.max(1, node.depth ?? 1)
-        sectionPath = sectionPath.slice(0, depth - 1)
-        sectionPath.push(title)
+        // Markdown can skip levels (H1 -> H3). Array length is not depth:
+        // discard actual peers/descendants before adding the new heading.
+        while (headingStack.length && headingStack[headingStack.length - 1]!.depth >= depth) headingStack.pop()
+        headingStack.push({ depth, title })
+        sectionPath = headingStack.map((heading) => sectionLabel(heading.title))
         // Heading chunks are stable parent anchors.  Leaf chunks carry the
         // same sectionPath, which provides a resolvable parent/child relation
         // without changing the pre-existing v4 schema.
@@ -144,6 +145,15 @@ export function structureAwareChunk(input: StructureAwareChunkInput): readonly R
   return chunks
 }
 
+/** Labels are bounded metadata; complete heading text stays in source chunks. */
+function sectionLabel(title: string): string {
+  const normalized = title.replace(/\p{Cc}/gu, ' ').trim()
+  if (normalized.length <= 512) return normalized
+  let prefix = normalized.slice(0, 511)
+  if (/[\uD800-\uDBFF]$/u.test(prefix)) prefix = prefix.slice(0, -1)
+  return `${prefix}\u2026`
+}
+
 function makeLeaf(
   node: AstNode,
   contentType: RagChunkContentType,
@@ -181,7 +191,7 @@ function splitLeaf(leaf: Leaf): Array<{
   const text = leaf.markdown
   if (!text) return []
   const count = estimateTokens(text)
-  if (count <= DEFAULT_CHUNK_HARD_MAX_TOKENS || leaf.contentType === 'heading') {
+  if (count <= DEFAULT_CHUNK_HARD_MAX_TOKENS) {
     return [{ text, start: leaf.start, end: leaf.end, sectionPath: leaf.sectionPath, mappingIds: leaf.mappingIds, contentType: leaf.contentType, wasSplit: false }]
   }
 
