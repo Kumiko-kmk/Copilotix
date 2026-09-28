@@ -1,9 +1,10 @@
 # SignPath application preparation
 
-Status: prepared locally, not submitted. The repository was made public on
+Status: submission attempted; receipt not confirmed. The repository was made public on
 2026-09-28 after cleanup commit 8625d23. A contact email has been supplied privately.
-The project has no public release or established reputation evidence yet. Required
-form consents remain unconfirmed; no approval or certificate issuance is claimed.
+The project has no public release or established reputation evidence yet. The maintainer accepted the required form consents. The website remained in
+"Form is submitting" without an application receipt. A prefilled browser was handed
+to the maintainer for manual completion; no approval or certificate issuance is claimed.
 
 ## Project information
 
@@ -42,7 +43,7 @@ returned executable's signature before publishing.
 
 ## Information still required
 
-- Required application consent and any further information requested by SignPath.
+- A confirmed application receipt and any further information requested by SignPath.
 - Public source revision: 8625d23 (MIT cleanup and signing policy).
 - Existing public Windows release URL and verifiable build origin.
 - Confirmed GitHub / SignPath MFA and approved signing roles.

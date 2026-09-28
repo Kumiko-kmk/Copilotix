@@ -1,6 +1,6 @@
-﻿# Code signing policy
+# Code signing policy
 
-Status: SignPath Foundation application preparation; not yet submitted or approved.
+Status: SignPath Foundation application submission attempted; receipt and approval not yet confirmed.
 Copilotix currently provides local unsigned development builds. The locally generated
 self-signed certificate is for testing only and is not used for public releases.
 
