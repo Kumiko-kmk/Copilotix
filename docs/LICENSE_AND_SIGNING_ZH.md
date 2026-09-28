@@ -112,4 +112,4 @@ powershell -NoProfile -File desktop/scripts/create-test-certificate.ps1
 - **SSL.com IV + 云签名**：官方明确证书展示经核验的个人姓名，并要求政府签发证件。GitHub 昵称不能直接替代真实姓名。官方页面未提供足以确认台湾和中国大陆个人申请均获受理的地区清单，付款前须向厂商确认身份文件、地区和云服务适用性。证书之外可能另收云签名订阅费或硬件费用。参考 [IV 产品说明](https://www.ssl.com/products/software-integrity/code-signing/iv/)。
 - **SignPath Foundation**：面向符合条件的开源项目，发行者显示 SignPath Foundation，不显示个人 GitHub 昵称；需要已发布项目、可核验的项目声誉和其他审核要求，MIT 并不保证批准。参考 [申请](https://signpath.org/apply.html) 与 [条件](https://signpath.org/terms.html)。
 
-目前未提交申请、购买服务或上传身份材料。待维护者选定路线后，再按真实审核结果接入生产签名；本地测试证书不代表申请已获批。
+目前未提交申请、购买服务或上传身份材料。维护者已选择 SignPath Foundation 免费开源路线并接受基金会发行者名称。仓库已公开，申请资料已准备；正式提交仍待必选条款确认。生产签名须待审核获批后接入，本地测试证书不代表申请已获批。

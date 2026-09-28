@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { existsSync, realpathSync } from 'node:fs'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
 import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
@@ -1218,8 +1219,11 @@ function stringOrNull(value: unknown): string | null {
 
 function toRelativePath(storagePath: string, path: string): string {
   const flavor = process.platform === 'win32' ? 'win32' : 'posix'
-  const resolvedPath = resolveLexicalWithinRoot(storagePath, path, flavor)
-  const normalized = relative(storagePath, resolvedPath).replaceAll('\\', '/')
+  // PathPolicy returns a real path; compare it against the same canonical root.
+  // Windows short-name aliases (e.g. RUNNER~1) need not match that spelling.
+  const canonicalRoot = existsSync(storagePath) ? realpathSync.native(storagePath) : storagePath
+  const resolvedPath = resolveLexicalWithinRoot(canonicalRoot, path, flavor)
+  const normalized = relative(canonicalRoot, resolvedPath).replaceAll('\\', '/')
   if (!normalized || normalized === '.' || normalized === '..' || normalized.startsWith('../') || normalized.includes('\0')) {
     throw new Error('产物路径必须是文档根目录下的相对路径')
   }

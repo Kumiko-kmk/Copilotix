@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -13,13 +13,15 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-async function createFixture(): Promise<{ root: string; database: V2Database; repository: V2TaskRepositoryCompat; task: CopilotixTask }> {
+async function createFixture(useStorageAlias = false): Promise<{ root: string; database: V2Database; repository: V2TaskRepositoryCompat; task: CopilotixTask }> {
   const root = await mkdtemp(join(tmpdir(), 'copilotix-v2-compat-'))
   roots.push(root)
   const database = new V2Database(join(root, 'copilotix-desktop-v2.sqlite3'))
   const repository = new V2TaskRepositoryCompat(database)
-  const outputDir = join(root, 'documents-v2', 'document-1')
-  await mkdir(outputDir, { recursive: true })
+  const actualOutputDir = join(root, 'documents-v2', 'document-1')
+  await mkdir(actualOutputDir, { recursive: true })
+  const outputDir = useStorageAlias ? join(root, 'storage-alias') : actualOutputDir
+  if (useStorageAlias) await symlink(actualOutputDir, outputDir, process.platform === 'win32' ? 'junction' : 'dir')
   const now = '2026-01-01T00:00:00.000Z'
   const task: CopilotixTask = {
     id: 'document-1',
@@ -48,6 +50,24 @@ function closeFixture(repository: V2TaskRepositoryCompat): void {
 }
 
 describe('temporary v2 task repository compatibility projection', () => {
+  it('stores relative artifact paths through a root alias while still rejecting escaping links', async () => {
+    const fixture = await createFixture(true)
+    try {
+      expect(fixture.database.connection.prepare("SELECT relative_path FROM artifacts WHERE kind='source_pdf'").get())
+        .toEqual({ relative_path: 'original.pdf' })
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'full.md'), 'hash')
+      expect(fixture.database.connection.prepare("SELECT relative_path FROM artifacts WHERE kind='parsed_markdown'").get())
+        .toEqual({ relative_path: 'full.md' })
+      const outside = join(fixture.root, 'outside')
+      await mkdir(outside)
+      await symlink(outside, join(fixture.task.outputDir, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
+      expect(() => fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'escape', 'full.md'), 'unsafe'))
+        .toThrow(/path escapes root/)
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
   it('publishes improved translation revisions only after a new attempt', async () => {
     const fixture = await createFixture()
     try {

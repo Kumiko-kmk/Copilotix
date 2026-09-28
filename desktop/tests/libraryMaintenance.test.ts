@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -76,10 +76,10 @@ describe('document library maintenance', () => {
     const result = await manageLibrary(f.db, f.databasePath, { action: 'migrate', path: destination })
     expect(result.restartRequired).toBe(true)
     const row = f.db.connection.prepare('SELECT storage_path FROM documents').get() as { storage_path: string }
-    expect(row.storage_path).toBe(join(destination, 'documents-v2', f.doc))
+    expect(row.storage_path).toBe(join(await realpath(destination), 'documents-v2', f.doc))
     expect(await readFile(join(row.storage_path, 'original.pdf'), 'utf8')).toContain('%PDF')
     expect(await readFile(join(f.documentPath, 'original.pdf'), 'utf8')).toContain('%PDF')
-    expect(f.db.connection.prepare("SELECT value FROM settings WHERE key='outputRoot'").get()).toMatchObject({ value: JSON.stringify(destination) })
+    expect(f.db.connection.prepare("SELECT value FROM settings WHERE key='outputRoot'").get()).toMatchObject({ value: JSON.stringify(await realpath(destination)) })
   })
 
   it('refuses nonempty migration targets and active jobs without changing source paths', async () => {

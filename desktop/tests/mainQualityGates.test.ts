@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -314,7 +314,7 @@ describe('main quality boundaries', () => {
       { sourceIndex: 0, markdown: '# 译文', mappingIds: [] }
     ])
 
-    expect(await service.resolveAsset(task.id, '/images/figure.png')).toBe(join(root, 'images', 'figure.png'))
+    expect(await service.resolveAsset(task.id, '/images/figure.png')).toBe(join(await realpath(root), 'images', 'figure.png'))
     await service.recordArtifact(task, 'parsed_markdown', join(root, 'full.md'), 'job')
     expect(revisions).toHaveLength(1)
     await service.atomicWriteJson(join(root, 'atomic.json'), { ok: true })

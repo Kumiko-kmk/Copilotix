@@ -1,8 +1,9 @@
-﻿# SignPath application preparation
+# SignPath application preparation
 
-Status: prepared locally, not submitted. The configured GitHub repository returns
-404 to anonymous access as checked on 2026-09-28. A public repository address,
-public release and contact email still need confirmation.
+Status: prepared locally, not submitted. The repository was made public on
+2026-09-28 after cleanup commit 8625d23. A contact email has been supplied privately.
+The project has no public release or established reputation evidence yet. Required
+form consents remain unconfirmed; no approval or certificate issuance is claimed.
 
 ## Project information
 
@@ -41,8 +42,8 @@ returned executable's signature before publishing.
 
 ## Information still required
 
-- Contact email and publicly accessible repository URL.
-- Public source revision containing the MIT cleanup and signing policy.
+- Required application consent and any further information requested by SignPath.
+- Public source revision: 8625d23 (MIT cleanup and signing policy).
 - Existing public Windows release URL and verifiable build origin.
 - Confirmed GitHub / SignPath MFA and approved signing roles.
 - SignPath review of project eligibility, including project reputation.
