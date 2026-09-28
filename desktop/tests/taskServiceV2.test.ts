@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -35,7 +35,7 @@ describe('TaskService v2 path integration', () => {
       const settings = new SettingsService(repository, vault, outputRoot)
       const service = new TaskService(repository, settings, vault, unusedClient(), async () => new Response(), fixtureTaskCompute)
 
-      await expect(service.resolveAsset('document-1', 'original.pdf')).resolves.toBe(sourcePath)
+      await expect(service.resolveAsset('document-1', 'original.pdf')).resolves.toBe(await realpath(sourcePath))
       await expect(service.resolveAsset('document-1', '../outside.pdf')).rejects.toThrow()
       await expect(service.resolveAsset('document-1', `${outputDir}\0escape.pdf`)).rejects.toThrow(/NUL/)
 

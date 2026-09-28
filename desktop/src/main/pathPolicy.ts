@@ -36,12 +36,7 @@ const HOST_FLAVOR: PathFlavor = process.platform === 'win32' ? 'win32' : 'posix'
 /** Pure lexical check used by both host resolution and cross-platform tests. */
 export function resolveLexicalWithinRoot(root: string, candidate: string, flavor: PathFlavor): string {
   const api = pathApi(flavor)
-  assertNoNul(root)
-  assertNoNul(candidate)
-  assertNoParentSegment(candidate)
-  if (flavor === 'posix' && (/^[A-Za-z]:[\\/]/u.test(candidate) || /^\\\\[^\\/]+[\\/][^\\/]+/u.test(candidate))) {
-    throw new Error('拒绝跨平台绝对路径')
-  }
+  validateCandidate(root, candidate, flavor)
   const rootResolved = api.resolve(root)
   const candidateResolved = api.resolve(rootResolved, candidate)
   assertInside(api, rootResolved, candidateResolved, '路径必须位于根目录内')
@@ -62,7 +57,8 @@ export class PathPolicy implements PathPolicyPort {
 
   resolveChild(root: string, candidate: string): string {
     const api = pathApi(this.flavor)
-    const candidateResolved = resolveLexicalWithinRoot(root, candidate, this.flavor)
+    validateCandidate(root, candidate, this.flavor)
+    const candidateResolved = api.resolve(root, candidate)
     const rootReal = this.realpath(api.resolve(root))
     const candidateReal = resolveExistingOrFuture(candidateResolved, api, this.exists, this.realpath)
     assertInside(api, rootReal, candidateReal, '拒绝 symlink/junction 越界路径')
@@ -102,5 +98,14 @@ function assertNoNul(value: string): void {
 function assertNoParentSegment(value: string): void {
   if (value.split(/[\\/]+/u).some((segment) => segment === '..')) {
     throw new Error('路径不能包含 ..')
+  }
+}
+
+function validateCandidate(root: string, candidate: string, flavor: PathFlavor): void {
+  assertNoNul(root)
+  assertNoNul(candidate)
+  assertNoParentSegment(candidate)
+  if (flavor === 'posix' && (/^[A-Za-z]:[\\/]/u.test(candidate) || /^\\\\[^\\/]+[\\/][^\\/]+/u.test(candidate))) {
+    throw new Error('拒绝跨平台绝对路径')
   }
 }

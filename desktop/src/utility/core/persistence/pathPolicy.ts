@@ -24,9 +24,7 @@ const HOST_FLAVOR: PathFlavor = process.platform === 'win32' ? 'win32' : 'posix'
 
 export function resolveLexicalWithinRoot(root: string, candidate: string, flavor: PathFlavor): string {
   const api = APIs[flavor]
-  assertNoNul(root); assertNoNul(candidate)
-  if (candidate.split(/[\\/]+/u).some((segment) => segment === '..')) throw new Error('path escapes root')
-  if (flavor === 'posix' && (/^[A-Za-z]:[\\/]/u.test(candidate) || /^\\\\[^\\/]+[\\/][^\\/]+/u.test(candidate))) throw new Error('cross-platform path')
+  validateCandidate(root, candidate, flavor)
   const rootResolved = api.resolve(root)
   const candidateResolved = api.resolve(rootResolved, candidate)
   assertInside(api, rootResolved, candidateResolved)
@@ -38,7 +36,8 @@ export class PathPolicy implements PathPolicyPort {
 
   resolveChild(root: string, candidate: string): string {
     const api = APIs[this.flavor]
-    const lexical = resolveLexicalWithinRoot(root, candidate, this.flavor)
+    validateCandidate(root, candidate, this.flavor)
+    const lexical = api.resolve(root, candidate)
     const rootReal = realpathSync.native(api.resolve(root))
     const candidateReal = existingOrFuture(lexical, api)
     assertInside(api, rootReal, candidateReal)
@@ -65,4 +64,10 @@ function assertInside(api: PathApi, root: string, candidate: string): void {
 
 function assertNoNul(value: string): void {
   if (value.includes('\0')) throw new Error('NUL in path')
+}
+
+function validateCandidate(root: string, candidate: string, flavor: PathFlavor): void {
+  assertNoNul(root); assertNoNul(candidate)
+  if (candidate.split(/[\\/]+/u).some((segment) => segment === '..')) throw new Error('path escapes root')
+  if (flavor === 'posix' && (/^[A-Za-z]:[\\/]/u.test(candidate) || /^\\\\[^\\/]+[\\/][^\\/]+/u.test(candidate))) throw new Error('cross-platform path')
 }

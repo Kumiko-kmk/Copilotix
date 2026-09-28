@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -55,7 +55,7 @@ describe('temporary v2 task repository compatibility projection', () => {
     try {
       expect(fixture.database.connection.prepare("SELECT relative_path FROM artifacts WHERE kind='source_pdf'").get())
         .toEqual({ relative_path: 'original.pdf' })
-      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'full.md'), 'hash')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(await realpath(fixture.task.outputDir), 'full.md'), 'hash')
       expect(fixture.database.connection.prepare("SELECT relative_path FROM artifacts WHERE kind='parsed_markdown'").get())
         .toEqual({ relative_path: 'full.md' })
       const outside = join(fixture.root, 'outside')
