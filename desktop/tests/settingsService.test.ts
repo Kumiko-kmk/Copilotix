@@ -172,32 +172,49 @@ describe('SettingsService credential isolation', () => {
     expect(repository.saved).toHaveLength(1)
   })
 
-  it('clears only legacy translation credentials once and preserves Copilotix', async () => {
+  it('preserves existing translation credentials and records the migration once', async () => {
     const repository = new SettingsRepository()
-    const vault = new MemoryVault({
+    repository.migrationMarkers.add('translation-credentials-reset-v1')
+    const initialCredentials = {
       'parser-token': 'parser-secret',
       'qwen-api-key': 'old-qwen',
-      'deepseek-api-key': 'old-deepseek'
-    })
+      'deepseek-api-key': 'old-deepseek',
+      'qwen-api-key-validation': 'qwen-validation-receipt',
+      'deepseek-api-key-validation': 'deepseek-validation-receipt'
+    } as const
+    const vault = new MemoryVault(initialCredentials)
     const service = new SettingsService(repository, vault, 'C:\\output')
 
     await service.initialize()
-    expect(vault.values).toEqual(new Map([['parser-token', 'parser-secret']]))
+    expect(vault.values).toEqual(new Map(Object.entries(initialCredentials)))
     expect(repository.migrationMarker).toBe(true)
-    const deletesAfterFirstRun = vault.deleteCalls
+    expect(repository.migrationMarkers.has(TRANSLATION_CREDENTIAL_RESET_MIGRATION)).toBe(true)
+    expect(vault.deleteCalls).toBe(0)
+    const entriesAfterFirstRun = [...vault.values]
     await service.initialize()
-    expect(vault.deleteCalls).toBe(deletesAfterFirstRun)
+    expect([...vault.values]).toEqual(entriesAfterFirstRun)
+    expect(vault.deleteCalls).toBe(0)
+    expect(repository.markerCalls).toBe(1)
     expect(repository.migrationId).toBe(TRANSLATION_CREDENTIAL_RESET_MIGRATION)
   })
 
-  it('does not mark the migration complete when credential cleanup fails', async () => {
+  it('retries a failed migration marker write without changing credentials', async () => {
     const repository = new SettingsRepository()
-    const vault = new MemoryVault({ 'qwen-api-key': 'old-qwen', 'deepseek-api-key': 'old-deepseek' })
-    vault.failDelete.add('qwen-api-key')
+    const initialCredentials = { 'qwen-api-key': 'old-qwen', 'deepseek-api-key': 'old-deepseek' }
+    const vault = new MemoryVault(initialCredentials)
+    repository.failMarkMigration = true
     const service = new SettingsService(repository, vault, 'C:\\output')
 
     await expect(service.initialize()).resolves.toBeUndefined()
     expect(repository.migrationMarker).toBe(false)
+    expect(vault.values).toEqual(new Map(Object.entries(initialCredentials)))
+    expect(vault.deleteCalls).toBe(0)
+
+    repository.failMarkMigration = false
+    await service.initialize()
+    expect(repository.migrationMarker).toBe(true)
+    expect(vault.values).toEqual(new Map(Object.entries(initialCredentials)))
+    expect(vault.deleteCalls).toBe(0)
   })
 })
 
@@ -238,6 +255,9 @@ class SettingsRepository implements TaskRepositoryCompat {
   readonly saved: AppSettings[] = []
   migrationMarker = false
   migrationId: string | undefined
+  markerCalls = 0
+  failMarkMigration = false
+  readonly migrationMarkers = new Set<string>()
   private settings = baseSettings()
 
   async close(): Promise<void> {}
@@ -248,8 +268,14 @@ class SettingsRepository implements TaskRepositoryCompat {
     this.saved.push(settings)
     this.settings = { ...settings, credentials: baseSettings().credentials }
   }
-  async getMigrationMarker(_id: string): Promise<boolean> { return this.migrationMarker }
-  async markMigration(id: string): Promise<void> { this.migrationMarker = true; this.migrationId = id }
+  async getMigrationMarker(id: string): Promise<boolean> { return this.migrationMarkers.has(id) }
+  async markMigration(id: string): Promise<void> {
+    this.markerCalls += 1
+    if (this.failMarkMigration) throw new Error('migration marker store unavailable')
+    this.migrationMarker = true
+    this.migrationId = id
+    this.migrationMarkers.add(id)
+  }
   listTasks(): never[] { return [] }
   getTask(): null { return null }
   findByHash(): null { return null }

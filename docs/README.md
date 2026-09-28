@@ -10,3 +10,7 @@
 - [安全策略](SECURITY.md)
 
 產品介紹站點、歷史更新日誌、插件教程、硬件適配教程與演示素材已移除，避免與當前 Copilotix 實現混淆。
+
+- [许可证与签名配置](LICENSE_AND_SIGNING_ZH.md)
+- [Windows 桌面发布](DESKTOP_RELEASE_ZH.md)
+- [文档库备份、恢复与迁移](LIBRARY_MANAGEMENT_ZH.md)

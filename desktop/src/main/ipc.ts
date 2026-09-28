@@ -32,6 +32,7 @@ export interface IpcMainLike {
 }
 
 export interface IpcValidationOptions {
+  gate?: { run<T>(channel: string, operation: () => T | Promise<T>): Promise<T> }
   getMainWindow: () => WindowLike | null
   rendererEntryPath: string
   rendererOrigin?: string
@@ -123,7 +124,7 @@ export function registerValidatedHandler<Request, Response>(
 
     let result: Response
     try {
-      result = await handler(event, request)
+      result = options.gate ? await options.gate.run(channel, () => handler(event, request)) : await handler(event, request)
     } catch (error) {
       return ipcFailure(toIpcError(error, 'HANDLER_ERROR', traceId))
     }

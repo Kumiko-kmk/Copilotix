@@ -1,3 +1,5 @@
+import { assertLibraryIdle, manageLibrary } from './libraryMaintenance'
+import { libraryCoreRequestSchema } from '@shared/librarySchemas'
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -115,6 +117,13 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     return state.translationPlanManager
   }
   const handlers: UtilityHandlerMap = {
+    'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
+    'library:manage': async (request, signal) => {
+      if (!state.databasePath) throw new Error('文档库尚未初始化')
+      const result = await manageLibrary(requireDatabase(), state.databasePath, libraryCoreRequestSchema.parse(request.payload), signal)
+      if (result.restartRequired) state.translationPlanManager = undefined
+      return result
+    },
     ping: () => ({ pong: true }),
     'database:init': async (request) => {
       const payload = coreDatabaseInitPayloadSchema.parse(request.payload)
@@ -313,7 +322,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
   }
 
   const persistenceOperations: readonly CoreOperation[] = [
-    'database:init', 'database:flush', 'database:close',
+    'database:init', 'database:flush', 'database:close', 'library:check', 'library:manage',
     'settings:get', 'settings:save', 'settings:migration-get', 'settings:migration-mark',
     'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
     'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
@@ -332,6 +341,10 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     const handler = handlers[operation]
     if (!handler) continue
     handlers[operation] = (request, signal) => serializePersistence(() => handler(request, signal)).catch((error: unknown) => {
+      if (operation === 'library:manage' || operation === 'library:check') {
+        const message = error instanceof Error ? error.message : '文档库操作失败，请检查目录权限与磁盘空间。'
+        throw new CoreUtilityOperationError('LIBRARY_MAINTENANCE_FAILED', message, false)
+      }
       if (error instanceof SqliteJobRepositoryError || error instanceof SqliteRagRepositoryError || error instanceof RagContentIndexError) {
         throw new CoreUtilityOperationError(error.code, error.message, error.retryable)
       }
@@ -409,7 +422,6 @@ async function importPdf(
   }
   if (!sourceInfo.isFile()) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'PDF source must be a regular file', false)
   if (sourceInfo.size > MAX_PDF_BYTES) throw new CoreUtilityOperationError('CORE_LIMIT_EXCEEDED', 'PDF exceeds the supported size limit', false)
-
   const policy = new PathPolicy()
   await mkdir(state.outputRoot, { recursive: true })
   const documentsRoot = policy.resolveChild(state.outputRoot, 'documents-v2')

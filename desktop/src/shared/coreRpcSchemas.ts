@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { libraryCoreRequestSchema, libraryResultSchema } from './librarySchemas'
 import {
   appSettingsSchema,
   documentAnnotationViewSchema,
@@ -251,7 +252,7 @@ export const coreEmbeddingJobResultSchema = z.object({
 
 const coreOperationNames = [
   'ping', 'cancel', 'drain', 'shutdown',
-  'database:init', 'database:flush', 'database:close',
+  'database:init', 'database:flush', 'database:close', 'library:check', 'library:manage',
   'settings:get', 'settings:save', 'settings:migration-get', 'settings:migration-mark',
   'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
   'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
@@ -543,6 +544,8 @@ export const coreTranslationPlanFinalizeResultSchema = translationPlanFinalizeRe
  * compute operations must add one entry here with strict schemas on both sides.
  */
 export const coreOperationRegistry = {
+  'library:check': { payload: emptyPayloadSchema, result: z.object({ idle: z.literal(true) }).strict() },
+  'library:manage': { payload: libraryCoreRequestSchema, result: libraryResultSchema },
   ping: { payload: corePingPayloadSchema, result: corePingResultSchema },
   cancel: { payload: coreCancelPayloadSchema, result: coreCancelResultSchema },
   drain: { payload: coreDrainPayloadSchema, result: coreDrainResultSchema },

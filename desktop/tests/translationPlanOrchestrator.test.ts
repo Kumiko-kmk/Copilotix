@@ -1,11 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TaskComputePort } from '../src/core/ports'
 import { PathPolicy } from '../src/main/pathPolicy'
 import { TranslationCredentialError, TranslationHttpError, type TranslationProvider } from '../src/main/translation/providers'
-import { TranslationPlanOrchestrator } from '../src/main/translation/translationPlanOrchestrator'
+import { TranslationPlanOrchestrator, withRetry } from '../src/main/translation/translationPlanOrchestrator'
 import type {
   PlainTranslationRequest,
   TranslationPlanCounts,
@@ -347,6 +347,21 @@ describe('translation plan orchestrator', () => {
     expect(result.status).toBe('partial')
     expect(calls).toBe(1)
     expect(fixture.compute.failCalls).toEqual([fixture.descriptor.unitId])
+  })
+
+  it('retries request AbortError when the job itself was not cancelled', async () => {
+    vi.useFakeTimers()
+    try {
+      const error = new Error('transport aborted')
+      error.name = 'AbortError'
+      const operation = vi.fn().mockRejectedValueOnce(error).mockResolvedValue('translated')
+      const result = withRetry(operation, new AbortController().signal)
+      await vi.runAllTimersAsync()
+      await expect(result).resolves.toBe('translated')
+      expect(operation).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('stops without failing the unit when the signal is aborted', async () => {

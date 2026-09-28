@@ -7,14 +7,21 @@ on:
   pull_request:
     paths:
       - 'desktop/**'
+      - 'LICENSE.md'
+      - 'THIRD_PARTY_NOTICES.md'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/desktop-windows.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -24,24 +31,120 @@ jobs:
         with:
           node-version: 24.19.0
           cache: pnpm
+      - name: Validate release tag version
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        run: node desktop/scripts/verify-release-tag.mjs
+      - name: Verify desktop release license
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        run: node desktop/scripts/verify-release-license.mjs
+      - name: Require a signing certificate for a production release
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        run: node desktop/scripts/verify-release-signing.mjs
+        env:
+          COPILOTIX_RELEASE_MODE: production
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm desktop:lint
       - run: pnpm desktop:typecheck
       - run: pnpm desktop:test:coverage
       - run: pnpm desktop:build:bundles
-      - run: pnpm desktop:release:from-built
+      - name: Package verified Windows runtime
+        run: pnpm desktop:release:from-built
+        env:
+          COPILOTIX_RELEASE_MODE: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && 'production' || 'development' }}
+          WIN_CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_KEY_PASSWORD || '' }}
       - run: pnpm desktop:test:e2e
       - uses: actions/upload-artifact@v4
         with:
           name: Copilotix-Windows-x64
+          if-no-files-found: error
+          retention-days: 14
           path: |
             release/Copilotix-*-win-x64.zip
             release/SHA256SUMS.txt
             release/release-manifest.json
-      - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
         with:
-          files: |
-            release/Copilotix-*-win-x64.zip
-            release/SHA256SUMS.txt
-            release/release-manifest.json
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: Copilotix-Windows-x64
+          path: release
+      - name: Create or reuse a draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF_NAME
+          $repo = $env:GITHUB_REPOSITORY
+          $existingJson = & gh release view $tag --repo $repo --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $existing = $existingJson | ConvertFrom-Json
+            if (-not $existing.isDraft) { throw "Release $tag already exists and is published; refusing to replace it." }
+          } else {
+            & gh release create $tag --repo $repo --draft --verify-tag --generate-notes --title "Copilotix $tag"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Upload the complete release asset set to the draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archives = @(Get-ChildItem -LiteralPath 'release' -File -Filter 'Copilotix-*-win-x64.zip')
+          if ($archives.Count -ne 1) { throw "Expected exactly one Windows x64 ZIP; found $($archives.Count)." }
+          $files = @($archives[0].FullName, (Join-Path 'release' 'SHA256SUMS.txt'), (Join-Path 'release' 'release-manifest.json'))
+          foreach ($file in $files) { if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Required release asset missing: $file" } }
+          $arguments = @('release', 'upload', $env:GITHUB_REF_NAME) + $files + @('--repo', $env:GITHUB_REPOSITORY, '--clobber')
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify all draft assets, then publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF_NAME
+          $repo = $env:GITHUB_REPOSITORY
+          $releaseJson = & gh release view $tag --repo $repo --json isDraft,assets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $release = $releaseJson | ConvertFrom-Json
+          if (-not $release.isDraft) { throw "Release $tag stopped being a draft before asset verification." }
+          $env:COPILOTIX_RELEASE_ASSET_NAMES_JSON = ConvertTo-Json -InputObject @($release.assets | ForEach-Object { $_.name }) -Compress
+          node desktop/scripts/verify-release-assets.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $remoteAssetDirectory = 'release-remote-assets'
+          New-Item -ItemType Directory -Force -Path $remoteAssetDirectory | Out-Null
+          & gh release download $tag --repo $repo --dir $remoteAssetDirectory
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $remoteFiles = @(Get-ChildItem -LiteralPath $remoteAssetDirectory -File)
+          if ($remoteFiles.Count -ne 3) { throw "Expected exactly three downloaded release assets; found $($remoteFiles.Count)." }
+          $files = @(Get-ChildItem -LiteralPath 'release' -File | ForEach-Object { $_.FullName })
+          if ($files.Count -ne 3) { throw 'Local release asset set must contain exactly three files.' }
+          foreach ($file in $files) {
+            $assetName = Split-Path -Leaf $file
+            $remotePath = Join-Path $remoteAssetDirectory $assetName
+            if (-not (Test-Path -LiteralPath $remotePath -PathType Leaf)) { throw "Uploaded release asset missing from download: $assetName" }
+            $localHash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
+            $remoteHash = (Get-FileHash -LiteralPath $remotePath -Algorithm SHA256).Hash
+            if ($localHash -ne $remoteHash) { throw "Uploaded release asset hash mismatch: $assetName" }
+          }
+          & gh release edit $tag --repo $repo --verify-tag --draft=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $published = (& gh release view $tag --repo $repo --json isDraft | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($published.isDraft) { throw "Release $tag was not published." }

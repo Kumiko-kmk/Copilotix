@@ -46,4 +46,24 @@ describe('ElectronFileUploader', () => {
 
     await expect(uploader.upload(filePath, 'https://upload.example/signed')).rejects.toThrow('HTTP 204')
   })
+
+  it('retries a closed Electron connection with the same signed PUT through direct fetch', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-uploader-'))
+    temporaryRoots.push(root)
+    const filePath = join(root, 'fixture.pdf')
+    await writeFile(filePath, '%PDF fixture')
+    const electronFetch = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(
+      async () => { throw new Error('net::ERR_CONNECTION_CLOSED') }
+    )
+    const directFetch = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(
+      async () => new Response(null, { status: 200 })
+    )
+    const uploader = new ElectronFileUploader(electronFetch, directFetch)
+
+    await uploader.upload(filePath, 'https://upload.example/signed')
+
+    expect(electronFetch).toHaveBeenCalledOnce()
+    expect(directFetch).toHaveBeenCalledOnce()
+    expect(directFetch.mock.calls[0]?.[1]).toBe(electronFetch.mock.calls[0]?.[1])
+  })
 })

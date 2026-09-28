@@ -1,6 +1,6 @@
 # Copilotix Desktop 桌面翻译版
 
-这是基于 Copilotix 开源项目的非官方个人 Electron 客户端。当前版本连接 Copilotix 官方 v4 API，在本地保存解析产物并生成简体中文 Markdown；它不在运行时启动仓库内的 Python `copilotix-api`，也不包含本地解析模型。
+Copilotix 是个人开发的 Electron 论文阅读客户端。当前版本连接 MinerU 在线 v4 API，在本地保存解析产物并生成简体中文 Markdown，不包含本地解析引擎或模型。
 
 完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`ARCHITECTURE_ZH.md`](ARCHITECTURE_ZH.md)；RAG 未来计划见 [`RAG_DEVELOPMENT_PLAN_ZH.md`](RAG_DEVELOPMENT_PLAN_ZH.md)。
 
@@ -82,4 +82,4 @@ PDF 会上传到 Parser 服务返回的预签名地址；待翻译文本会发�
 
 共享工作区中的公共契约必须有唯一 owner：`shared` schema、Preload API、Main IPC、Core RPC、v2 migration、JobRepository、Artifact/PathPolicy 和发布脚本均需先登记变更、兼容策略、测试和恢复语义。开始/结束记录 `git status --short --branch`；不得覆盖他人改动、stash、清理 release、升级无关依赖或修改其他 worktree。文档中的 `implemented`、`verified`、`planned`、`blocked` 必须有源码/测试证据。
 
-根仓库许可证文件与 `desktop/package.json` 的许可证元数据当前不一致；这是后续法务/发布事项，本次不修改许可证文本、package 声明或署名信息。
+Copilotix 自有代码已采用根目录 MIT 许可证，桌面 package 元数据同步为 MIT；第三方组件仍按各自许可分发。

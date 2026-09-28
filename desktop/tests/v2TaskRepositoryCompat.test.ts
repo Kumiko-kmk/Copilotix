@@ -48,6 +48,42 @@ function closeFixture(repository: V2TaskRepositoryCompat): void {
 }
 
 describe('temporary v2 task repository compatibility projection', () => {
+  it('publishes improved translation revisions only after a new attempt', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 45 })
+      const output = join(fixture.task.outputDir, 'full.zh-CN.md')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', output, 'partial-hash')
+      expect(() => fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', output, 'improved-hash')).toThrow('ARTIFACT_COMMIT_CONFLICT')
+      fixture.database.connection.prepare("UPDATE jobs SET attempt=attempt+1 WHERE document_id=? AND kind='translate'").run(fixture.task.id)
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', output, 'improved-hash')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', output, 'improved-hash')
+      expect(fixture.database.connection.prepare("SELECT revision,content_hash FROM artifacts WHERE document_id=? AND kind='translated_markdown' ORDER BY revision").all(fixture.task.id)).toEqual([
+        { revision: 1, content_hash: 'partial-hash' }, { revision: 2, content_hash: 'improved-hash' }
+      ])
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('does not report completion when parse finishes after translation was queued', async () => {
+    const fixture = await createFixture()
+    try {
+      const id = '11111111-1111-4111-8111-111111111111'
+      await mkdir(join(fixture.root, id), { recursive: true })
+      fixture.repository.insertTask({ ...fixture.task, id, outputDir: join(fixture.root, id), sourcePath: join(fixture.root, id, 'original.pdf'), sourceHash: 'batch-paper-hash' })
+      fixture.repository.updateTask(id, { status: 'translating', progress: 0 })
+      fixture.database.connection.prepare("UPDATE jobs SET status='queued',progress=0,updated_at='2026-01-01T00:00:01.000Z' WHERE document_id=? AND kind='translate'").run(id)
+      fixture.database.connection.prepare("UPDATE jobs SET status='succeeded',progress=100,updated_at='2026-01-01T00:00:02.000Z' WHERE document_id=? AND kind='parse'").run(id)
+      expect(fixture.repository.getTask(id)).toMatchObject({ status: 'translating', progress: 0 })
+      expect(fixture.repository.getDocumentSummary(id)?.workflow).toMatchObject({ status: 'queued', activeJobKind: 'translate', progress: 0 })
+      fixture.database.connection.prepare("UPDATE jobs SET status='succeeded',progress=100 WHERE document_id=? AND kind='translate'").run(id)
+      expect(fixture.repository.getTask(id)?.status).toBe('completed')
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
   it('inserts one document, queued parse job and source artifact without a tasks table', async () => {
     const fixture = await createFixture()
     try {

@@ -1,5 +1,5 @@
-*.js linguist-vendored
-*.mjs linguist-vendored
-*.html linguist-documentation
-*.css linguist-vendored
-*.scss linguist-vendored
+# Normalize source text while preserving binary assets.
+* text=auto
+*.png binary
+*.ico binary
+*.pdf binary

@@ -235,12 +235,27 @@ export class V2TaskRepositoryCompat {
   }
 
   listDocumentSummaries(): DocumentSummary[] {
-    return this.listTasks().map((task) => projectDocumentSummary(task))
+    return this.listTasks().map((task) => this.projectSummary(task))
   }
 
   getDocumentSummary(id: string): DocumentSummary | null {
     const task = this.getTask(id)
-    return task ? projectDocumentSummary(task) : null
+    return task ? this.projectSummary(task) : null
+  }
+
+  private projectSummary(task: CopilotixTask): DocumentSummary {
+    const summary = projectDocumentSummary(task)
+    const job = this.latestJob(task.id, 'translate')
+    if (!job || (task.status !== 'translating' && task.status !== 'partial' && task.status !== 'completed')) return summary
+    const checkpoint = parseObject(job.checkpoint_json)
+    if (task.status === 'translating' && (job.status === 'queued' || job.status === 'retry-wait')) summary.workflow.status = 'queued'
+    const { totalBlocks, completedBlocks, failedBlocks } = checkpoint
+    if ([totalBlocks, completedBlocks, failedBlocks].every((value) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)) {
+      summary.workflow.translationProgress = {
+        totalBlocks: totalBlocks as number, completedBlocks: completedBlocks as number, failedBlocks: failedBlocks as number
+      }
+    }
+    return summary
   }
 
   getLatestArtifactReference(documentId: string, kind: ArtifactKind): ArtifactReference | null {
@@ -691,12 +706,15 @@ export class V2TaskRepositoryCompat {
     if (!job || job.document_id !== input.taskId || job.kind !== jobKind) throw new Error('产物对应的作业不存在')
     const relativePath = this.toRelativeArtifactPath(document.storage_path, input.path)
     const existing = this.database.connection.prepare(`
-      SELECT id,relative_path,content_hash FROM artifacts
-      WHERE document_id=? AND kind=? AND created_by_job_id=? LIMIT 1
-    `).get(input.taskId, input.kind, job.id) as { id: string; relative_path: string; content_hash: string } | undefined
+      SELECT id,relative_path,content_hash,metadata_json FROM artifacts
+      WHERE document_id=? AND kind=? AND created_by_job_id=? ORDER BY revision DESC LIMIT 1
+    `).get(input.taskId, input.kind, job.id) as { id: string; relative_path: string; content_hash: string; metadata_json: string } | undefined
     if (existing) {
       if (existing.relative_path === relativePath && existing.content_hash === input.checksum) return
-      throw new Error('ARTIFACT_COMMIT_CONFLICT')
+      const previousAttempt = parseObject(existing.metadata_json).attempt ?? 0
+      // Retried translation keeps its job ID and publishes improved revisions.
+      if (jobKind !== 'translate' || existing.relative_path !== relativePath ||
+        typeof previousAttempt !== 'number' || job.attempt <= previousAttempt) throw new Error('ARTIFACT_COMMIT_CONFLICT')
     }
     const latest = this.database.connection.prepare(
       'SELECT COALESCE(MAX(revision),0) as revision FROM artifacts WHERE document_id=? AND kind=?'
@@ -705,7 +723,8 @@ export class V2TaskRepositoryCompat {
       INSERT INTO artifacts(
         id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at
       ) VALUES(?,?,?,?,?,?,?,?,?)
-    `).run(randomUUID(), input.taskId, job.id, input.kind, latest.revision + 1, relativePath, input.checksum, JSON.stringify(input.metadata ?? {}), new Date().toISOString())
+    `).run(randomUUID(), input.taskId, job.id, input.kind, latest.revision + 1, relativePath, input.checksum,
+      JSON.stringify(jobKind === 'translate' ? { ...input.metadata, attempt: job.attempt } : input.metadata ?? {}), new Date().toISOString())
   }
 
   /**
@@ -1128,6 +1147,9 @@ function latestJobOfKind(jobs: readonly CompatJobRow[], kind: V2JobKind): Compat
 function selectProjectionJob(parse: CompatJobRow | undefined, translate: CompatJobRow | undefined): CompatJobRow | undefined {
   if (!parse) return translate
   if (!translate) return parse
+  // Parse can finish after it enqueues translation. Its later timestamp must
+  // not hide a queued/running translation or advertise an absent translation.
+  if (parse.status === 'succeeded') return translate
   if (parse.updated_at > translate.updated_at) return parse
   if (translate.updated_at > parse.updated_at) return translate
   return parse.status === 'queued' || parse.status === 'running' || parse.status === 'retry-wait' ? parse : translate

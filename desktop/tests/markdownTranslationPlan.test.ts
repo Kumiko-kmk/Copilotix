@@ -79,6 +79,30 @@ function closeFixture(fixture: Fixture): void {
 }
 
 describe('utility markdown translation plan manager', () => {
+  it('keeps references and protected blocks complete and repairs old false failures on reopen', async () => {
+    const fixture = await createFixture('```js\nconst x = 1\n```\n\n# References\n\n[1] Smith. A paper, 2020.\n')
+    try {
+      const manager = new MarkdownTranslationPlanManager(fixture.repository)
+      const opened = await manager.open(fixture.task.id, fixture.jobId)
+      expect(opened.completed).toBe(opened.total)
+      expect(opened.failed).toBe(0)
+      expect((await manager.listWork(fixture.task.id, fixture.jobId)).items.every((unit) => unit.status === 'completed')).toBe(true)
+      const metadataPath = absolutePath(fixture.outputDir, `.translation/${fixture.jobId}/plan.json`)
+      const metadata = await readJson(metadataPath)
+      metadata.units.forEach((unit: { status: string }) => { unit.status = 'failed' })
+      await writeFile(metadataPath, JSON.stringify(metadata), 'utf8')
+      fixture.database.connection.prepare("UPDATE translation_blocks SET status='failed',translated_markdown=NULL,error='Core utility operation failed' WHERE job_id=?").run(fixture.jobId)
+      await expect(manager.open(fixture.task.id, fixture.jobId)).resolves.toMatchObject({ completed: opened.total, failed: 0 })
+      expect(fixture.repository.listTranslationBlocks(fixture.task.id, fixture.jobId).every((block) => block.status === 'completed')).toBe(true)
+      await expect(manager.finalize(fixture.task.id, fixture.jobId)).resolves.toMatchObject({ status: 'succeeded' })
+      const translated = await readFile(join(fixture.outputDir, 'full.zh-CN.md'), 'utf8')
+      expect(translated).toContain('Smith. A paper')
+      expect(translated).toContain('const x = 1')
+    } finally {
+      closeFixture(fixture)
+    }
+  })
+
   it('keeps descriptors metadata-only and stores request bodies on disk', async () => {
     const fixture = await createFixture('# Hello\n\nUse `KEEP` and **world**\n')
     try {

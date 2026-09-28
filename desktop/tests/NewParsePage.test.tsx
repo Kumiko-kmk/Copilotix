@@ -29,7 +29,7 @@ describe('NewParsePage', () => {
 
     expect(screen.getByRole('heading', { name: '今天想读些什么？' })).toBeTruthy()
     expect(screen.getByText('拖入文档')).toBeTruthy()
-    expect(screen.getByText('当前支持 PDF')).toBeTruthy()
+    expect(screen.getByText('当前支持 PDF，单篇最多 600 页')).toBeTruthy()
     expect(screen.getByRole('button', { name: '选择文档' })).toBeTruthy()
     expect(screen.queryByText('or')).toBeNull()
     fireEvent.dragEnter(window, { dataTransfer })

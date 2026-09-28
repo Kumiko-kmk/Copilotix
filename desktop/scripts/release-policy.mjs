@@ -9,6 +9,69 @@ export const RELEASE_LIMITS = Object.freeze({
   zipBytes: 155 * MEBIBYTE
 })
 
+const RELEASE_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
+
+/** Require the pushed desktop tag to describe the version being packaged. */
+export function assertReleaseTagMatchesVersion(tag, version) {
+  if (typeof version !== 'string' || !RELEASE_VERSION_PATTERN.test(version)) {
+    throw new Error(`Invalid desktop release version: ${String(version)}`)
+  }
+  const expectedTag = `desktop-v${version}`
+  if (tag !== expectedTag) {
+    throw new Error(`Desktop release tag ${String(tag)} does not match package version ${version}; expected ${expectedTag}`)
+  }
+  return expectedTag
+}
+
+/** Keep public release tags blocked until maintainers decide desktop licensing. */
+export function assertDesktopReleaseLicenseMetadata(packageJson) {
+  const license = packageJson?.license
+  if (typeof license !== 'string' || license.trim().length === 0 || license.trim().toUpperCase() === 'UNLICENSED') {
+    throw new Error('Public desktop release is blocked: desktop/package.json has no selected release license (UNLICENSED is not releasable); resolve the desktop code license before releasing')
+  }
+  return license.trim()
+}
+
+/** Keep local unsigned builds available and require credentials for production tags. */
+export function assertReleaseSigningConfiguration(environment = process.env) {
+  const mode = environment?.COPILOTIX_RELEASE_MODE ?? 'development'
+  if (mode === 'development') return false
+  if (mode !== 'production') throw new Error(`Unsupported Copilotix release mode: ${String(mode)}`)
+  const certificate = environment?.WIN_CSC_LINK ?? environment?.CSC_LINK
+  if (typeof certificate !== 'string' || certificate.trim().length === 0) {
+    throw new Error('Production release requires WIN_CSC_LINK (or CSC_LINK); refusing to build an unsigned release')
+  }
+  return true
+}
+
+/** Require the exact release asset set before a draft can be published. */
+export function assertReleaseAssetNames(assetNames, releaseName) {
+  if (!Array.isArray(assetNames) || typeof releaseName !== 'string' || !releaseName) {
+    throw new TypeError('Release asset names and release name are required')
+  }
+  const expected = [`${releaseName}.zip`, 'SHA256SUMS.txt', 'release-manifest.json'].sort()
+  const actual = assetNames.map((name) => String(name)).sort()
+  if (
+    actual.length !== expected.length ||
+    new Set(actual).size !== actual.length ||
+    actual.some((name, index) => name !== expected[index])
+  ) {
+    throw new Error(`Unexpected release assets: ${actual.join(', ') || '(none)'}; expected ${expected.join(', ')}`)
+  }
+  return true
+}
+
+/** Validate the Authenticode result returned by Windows PowerShell. */
+export function assertValidAuthenticodeSignature(result) {
+  if (result?.status !== 'Valid') {
+    throw new Error(`Windows Authenticode signature is not valid: ${String(result?.status ?? 'missing signature')}`)
+  }
+  if (typeof result.signerSubject !== 'string' || result.signerSubject.trim().length === 0) {
+    throw new Error('Windows Authenticode signature has no signer certificate subject')
+  }
+  return result.signerSubject.trim()
+}
+
 const EXPECTED_LOCALES = Object.freeze(['zh-CN.pak'])
 const CANVAS_PATH_PATTERN = /(^|[\\/])@napi-rs[\\/]canvas(?:[-\\/]|$)/i
 const REQUIRED_ASAR_ENTRIES = Object.freeze([

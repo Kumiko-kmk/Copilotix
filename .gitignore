@@ -45,3 +45,9 @@ debug/
 # Local configuration
 .env
 *.ipynb
+
+# Private signing material (keep outside the repository)
+*.pfx
+*.p12
+*.key
+*.pem

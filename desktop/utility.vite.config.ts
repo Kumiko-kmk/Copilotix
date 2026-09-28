@@ -24,7 +24,7 @@ export default defineConfig({
     rollupOptions: {
       // The utility is a Node process. Keep every Node builtin external so
       // runtime-only modules such as node:sqlite are not browser-shimmed.
-      external: [/^node:/u, 'electron']
+      external: [/^node:/u, /^pdfjs-dist(?:\/|$)/u, 'electron']
     }
   }
 })

@@ -1,10 +1,19 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { closeSync, existsSync, fsyncSync, openSync, unlinkSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
+import { resolve } from 'node:path'
 
 export interface V2Migration {
   version: number
   name: string
   sql: string
+}
+
+export class V2MigrationError extends Error {
+  constructor(readonly recoverySnapshotPath: string, cause: unknown) {
+    super(`V2 database migration failed. A pre-migration snapshot was retained at ${recoverySnapshotPath}`, { cause })
+    this.name = 'V2MigrationError'
+  }
 }
 
 const V2_SCHEMA_SQL = `
@@ -571,9 +580,9 @@ export class V2Database {
 
   constructor(databasePath: string, migrations: readonly V2Migration[] = V2_MIGRATIONS) {
     this.connection = new DatabaseSync(databasePath)
-    this.connection.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
+    this.connection.exec('PRAGMA foreign_keys = ON;')
     try {
-      this.applyMigrations(migrations)
+      this.applyMigrations(databasePath, migrations)
     } catch (error) {
       this.connection.close()
       throw error
@@ -606,12 +615,67 @@ export class V2Database {
       .all() as Array<{ version: number; name: string; checksum: string }>
   }
 
-  private applyMigrations(migrations: readonly V2Migration[]): void {
+  private applyMigrations(databasePath: string, migrations: readonly V2Migration[]): void {
     const ordered = [...migrations].sort((left, right) => left.version - right.version)
     if (ordered.some((migration, index) => migration.version !== index + 1)) {
       throw new Error('v2 migration versions must be contiguous starting at 1')
     }
 
+    const hasLedger = Boolean(this.connection
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'")
+      .get())
+    const appliedRows = hasLedger
+      ? this.connection
+        .prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version')
+        .all() as Array<{ version: number; name: string; checksum: string }>
+      : []
+    const highestSupportedVersion = ordered.at(-1)?.version ?? 0
+    const unsupportedVersion = appliedRows.find((row) => row.version > highestSupportedVersion)
+    if (unsupportedVersion) {
+      throw new Error(`v2 database schema version ${unsupportedVersion.version} is newer than supported version ${highestSupportedVersion}`)
+    }
+    if (appliedRows.some((row, index) => row.version !== index + 1)) {
+      throw new Error('v2 migration ledger is not contiguous starting at version 1')
+    }
+
+    const appliedByVersion = new Map(appliedRows.map((row) => [row.version, row] as const))
+    for (const migration of ordered) {
+      const applied = appliedByVersion.get(migration.version)
+      if (!applied) continue
+      if (applied.name !== migration.name || applied.checksum !== checksumFor(migration)) {
+        throw new Error(`v2 migration checksum mismatch at version ${migration.version}`)
+      }
+    }
+
+    const pending = ordered.filter((migration) => !appliedByVersion.has(migration.version))
+    const snapshotPath = pending.length > 0
+      ? createMigrationSnapshot(this.connection, databasePath, pending[0]!.version)
+      : null
+
+    try {
+      this.connection.exec('PRAGMA journal_mode = WAL;')
+      if (pending.length === 0) {
+        if (!hasLedger) this.createMigrationLedger()
+        return
+      }
+
+      this.transaction(() => {
+        if (!hasLedger) this.createMigrationLedger()
+        for (const migration of pending) {
+          const checksum = checksumFor(migration)
+          this.connection.exec(migration.sql)
+          this.connection
+            .prepare('INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES(?,?,?,?)')
+            .run(migration.version, migration.name, checksum, new Date().toISOString())
+        }
+      })
+    } catch (error) {
+      if (snapshotPath) throw new V2MigrationError(snapshotPath, error)
+      throw error
+    }
+  }
+
+  private createMigrationLedger(): void {
     this.connection.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version INTEGER PRIMARY KEY,
@@ -620,27 +684,64 @@ export class V2Database {
         applied_at TEXT NOT NULL
       ) STRICT;
     `)
-
-    for (const migration of ordered) {
-      const checksum = checksumFor(migration)
-      const applied = this.connection
-        .prepare('SELECT name, checksum FROM schema_migrations WHERE version = ?')
-        .get(migration.version) as { name: string; checksum: string } | undefined
-      if (applied) {
-        if (applied.name !== migration.name || applied.checksum !== checksum) {
-          throw new Error(`v2 migration checksum mismatch at version ${migration.version}`)
-        }
-        continue
-      }
-
-      this.transaction(() => {
-        this.connection.exec(migration.sql)
-        this.connection
-          .prepare('INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES(?,?,?,?)')
-          .run(migration.version, migration.name, checksum, new Date().toISOString())
-      })
-    }
   }
+}
+
+function createMigrationSnapshot(connection: DatabaseSync, databasePath: string, pendingVersion: number): string | null {
+  if (databasePath === ':memory:' || !hasPersistentDatabaseState(connection)) return null
+
+  const timestamp = new Date().toISOString().replace(/[:.]/gu, '-')
+  const snapshotPath = `${resolve(databasePath)}.pre-migration-v${pendingVersion}-${timestamp}-${randomUUID()}.sqlite3`
+  if (existsSync(snapshotPath)) throw new Error('Refusing to overwrite an existing pre-migration snapshot')
+
+  try {
+    const previousSynchronous = connection.prepare('PRAGMA synchronous').get() as { synchronous: number }
+    connection.exec('PRAGMA synchronous = FULL;')
+    try {
+      // FULL asks SQLite to flush the completed VACUUM INTO snapshot to disk.
+      connection.exec(`VACUUM INTO '${snapshotPath.replace(/'/gu, "''")}'`)
+    } finally {
+      try {
+        connection.exec(`PRAGMA synchronous = ${previousSynchronous.synchronous};`)
+      } catch {
+        // Keep FULL if restoring a weaker caller-selected setting fails.
+      }
+    }
+
+    const snapshotFd = openSync(snapshotPath, 'r+')
+    try {
+      fsyncSync(snapshotFd)
+    } finally {
+      closeSync(snapshotFd)
+    }
+
+    const snapshot = new DatabaseSync(snapshotPath, { readOnly: true })
+    try {
+      const integrity = snapshot.prepare('PRAGMA integrity_check').all() as Array<{ integrity_check: string }>
+      if (integrity.length !== 1 || integrity[0]?.integrity_check !== 'ok') {
+        throw new Error('Pre-migration snapshot failed SQLite integrity_check')
+      }
+    } finally {
+      snapshot.close()
+    }
+    return snapshotPath
+  } catch (error) {
+    try {
+      if (existsSync(snapshotPath)) unlinkSync(snapshotPath)
+    } catch {
+      // Keep the original snapshot error; migrations still do not start.
+    }
+    throw new Error('Failed to create a valid pre-migration database snapshot', { cause: error })
+  }
+}
+
+function hasPersistentDatabaseState(connection: DatabaseSync): boolean {
+  const hasUserObjects = Boolean(connection
+    .prepare("SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1")
+    .get())
+  const userVersion = connection.prepare('PRAGMA user_version').get() as { user_version: number }
+  const applicationId = connection.prepare('PRAGMA application_id').get() as { application_id: number }
+  return hasUserObjects || userVersion.user_version !== 0 || applicationId.application_id !== 0
 }
 
 export function checksumFor(migration: V2Migration): string {

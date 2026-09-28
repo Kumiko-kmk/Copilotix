@@ -18,7 +18,7 @@
 | 当前产品能力 | Parser API 解析、Markdown/表格翻译、PDF 与 Markdown 阅读、映射和阅读标注、可恢复作业与验证发布 |
 | RAG | 尚未实现；见第 10 节和 `RAG_DEVELOPMENT_PLAN_ZH.md` |
 
-本文只讨论 `desktop/` 运行时。仓库中的 Python `copilotix/`、`docker/`、`docs/` 和 Python CLI 不是 Desktop EXE 的运行时依赖；Desktop 当前连接 Copilotix 官方 v4 API，不在本机启动 `copilotix-api` 或本地解析模型。
+本文只讨论 `desktop/` 运行时。Desktop 连接 MinerU 在线 v4 API，不依赖 Python CLI 或本地解析模型。旧 Python 引擎和 Docker 配置已从当前 master 工作树移除。
 
 ## 2. 权威架构图
 
@@ -316,7 +316,7 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 
 ## 15. 已知后续事项
 
-- 根仓库许可证文件与 `desktop/package.json` 的许可证元数据当前不一致；这是后续法务/发布事项。本次不修改许可证文本、package 声明或署名信息。
+- Copilotix 自有代码已采用根目录 MIT 许可证，桌面 package 元数据同步为 MIT；第三方组件仍按各自许可分发。
 - macOS/Linux 的 Credential Vault、原生 Renderer/GPU、路径、打包、签名/公证和 CI 尚未形成发布验收，不能从纯函数测试推断桌面发布可用。
 - RAG 的 chunk/index/embedding/vector/FTS/reranker/retrieval/chat 仍需按独立计划实现，不得直接添加未经 migration 和隐私评审的表或 Provider。
 

@@ -38,6 +38,20 @@ function close(database: V2Database): void {
 }
 
 describe('SqliteJobRepository', () => {
+  it('puts an old job retried now behind documents already waiting at the same priority', async () => {
+    const { database, repository } = await fixture(['document-1', 'document-2'])
+    try {
+      const old = repository.enqueue({ documentId: 'document-1', kind: 'translate', now })
+      repository.claimBatch({ now, leaseOwner: 'runner', leaseExpiresAt: expiry, kind: 'translate' })
+      repository.complete({ jobId: old.id, leaseOwner: 'runner', status: 'partial', progress: 100, checkpoint: { completedBlocks: 4 }, now })
+      const waiting = repository.enqueue({ documentId: 'document-2', kind: 'translate', now: '2026-01-01T00:00:10.000Z' })
+      repository.manualRetry({ jobId: old.id, now: later })
+      expect(repository.claimBatch({ now: later, leaseOwner: 'next-runner', leaseExpiresAt: '2026-01-01T00:02:00.000Z', limit: 1, kind: 'translate' })[0]?.id).toBe(waiting.id)
+    } finally {
+      database.close()
+    }
+  })
+
   it('enforces one active job per document and kind', async () => {
     const { database, repository } = await fixture()
     try {
@@ -150,6 +164,22 @@ describe('SqliteJobRepository', () => {
     }
   })
 
+  it('repairs old queued manual retries stuck at 100% without losing translation checkpoints', async () => {
+    const { database, repository } = await fixture()
+    try {
+      repository.enqueue({ id: 'translate-old', documentId: 'document-1', kind: 'translate',
+        checkpoint: { completedBlocks: 2, failedBlockIds: ['block-3'] }, now })
+      database.connection.prepare("UPDATE jobs SET progress=100,attempt=3 WHERE id='translate-old'").run()
+      expect(repository.recoverExpired({ now: later })).toEqual([])
+      expect(repository.get('translate-old')).toMatchObject({
+        status: 'queued', progress: 0, attempt: 3,
+        checkpoint: { completedBlocks: 2, failedBlockIds: ['block-3'] }
+      })
+    } finally {
+      close(database)
+    }
+  })
+
   it('gates a dependent job until its dependency is succeeded or partial', async () => {
     const { database, repository } = await fixture()
     try {
@@ -177,7 +207,9 @@ describe('SqliteJobRepository', () => {
       repository.failOrRetry({ jobId: 'parse-1', leaseOwner: 'worker-a', errorCode: 'REMOTE', errorMessage: 'temporary', availableAt: later, now: later })
       expect(repository.get('parse-1')?.status).toBe('failed')
       const eventCount = repository.listEvents('parse-1').length
-      expect(repository.manualRetry({ jobId: 'parse-1', now: later }).status).toBe('queued')
+      expect(repository.manualRetry({ jobId: 'parse-1', now: later })).toMatchObject({
+        status: 'queued', progress: 0, checkpoint: { phase: 'uploading' }
+      })
       expect(repository.listEvents('parse-1')).toHaveLength(eventCount + 1)
       expect(() => repository.manualRetry({ jobId: 'parse-1', now: later })).toThrowError(
         expect.objectContaining({ code: 'JOB_RETRY_NOT_ALLOWED' })
@@ -194,7 +226,7 @@ describe('SqliteJobRepository', () => {
       repository.claimBatch({ now, leaseOwner: 'worker-a', leaseExpiresAt: expiry, kind: 'translate' })
       repository.complete({ jobId: 'translate-1', leaseOwner: 'worker-a', status: 'partial', progress: 100, checkpoint: { completedBlocks: 2 }, now })
       const retried = repository.manualRetry({ jobId: 'translate-1', now: later })
-      expect(retried).toMatchObject({ id: 'translate-1', status: 'queued', attempt: 2, checkpoint: { completedBlocks: 2 } })
+      expect(retried).toMatchObject({ id: 'translate-1', status: 'queued', progress: 0, attempt: 2, checkpoint: { completedBlocks: 2 } })
       expect(retried.errorCode).toBeNull()
     } finally {
       close(database)

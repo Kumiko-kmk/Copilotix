@@ -1,3 +1,4 @@
+import type { LibraryRequest, LibraryResult } from './librarySchemas'
 import type {
   DeleteDocumentRequest,
   DocumentChangeEvent,
@@ -241,6 +242,7 @@ export interface WindowState {
 }
 
 export interface CopilotixDesktopApi {
+  manageLibrary(request: LibraryRequest): Promise<LibraryResult>
   getSettings(): Promise<AppSettings>
   saveSettings(update: SettingsUpdate): Promise<SettingsSaveResult>
   validateCredential(name: CredentialName, value?: string): Promise<CredentialValidationResult>

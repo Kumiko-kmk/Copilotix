@@ -14,28 +14,9 @@ export default function ReaderFigureSnapshot(props: {
 }): React.JSX.Element {
   const hostRef = React.useRef<HTMLDivElement>(null)
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
-  const [visible, setVisible] = React.useState(false)
   const [failed, setFailed] = React.useState(false)
   const [ready, setReady] = React.useState(false)
   React.useEffect(() => {
-    const host = hostRef.current
-    if (!host) return
-    if (typeof IntersectionObserver === 'undefined') {
-      setVisible(true)
-      return
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        setVisible(true)
-        observer.disconnect()
-      }
-    }, { rootMargin: '600px 0px' })
-    observer.observe(host)
-    return () => observer.disconnect()
-  }, [])
-
-  React.useEffect(() => {
-    if (!visible) return
     let cancelled = false
     void renderCachedRegion(props.pdfUrl, props.group)
       .then((source) => {
@@ -49,9 +30,14 @@ export default function ReaderFigureSnapshot(props: {
         setReady(true)
         props.onRendered()
       })
-      .catch(() => { if (!cancelled) setFailed(true) })
+      .catch(() => {
+        if (!cancelled) {
+          setFailed(true)
+          props.onRendered()
+        }
+      })
     return () => { cancelled = true }
-  }, [props.group, props.onRendered, props.pdfUrl, visible])
+  }, [props.group, props.onRendered, props.pdfUrl])
 
   return (
     <div

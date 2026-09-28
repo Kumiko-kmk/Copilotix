@@ -13,6 +13,7 @@ import { TranslationJobRunner } from '../src/main/translationJobRunner'
 import { PathPolicy } from '../src/main/pathPolicy'
 import { SettingsService } from '../src/main/settingsService'
 import { TaskService } from '../src/main/taskService'
+import { DocumentCommandService } from '../src/main/documentCommandService'
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
 import type { CredentialAccount, CredentialVault } from '../src/main/credentialVault'
 import type { BatchResult, BatchSubmission, ParserClient } from '../src/main/parserClient'
@@ -31,6 +32,40 @@ afterEach(async () => {
 })
 
 describe('durable TaskService cutover', () => {
+  it('cancels the active translation before requeueing it and preserves its checkpoint', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-running-retry-'))
+    roots.push(root)
+    const outputDir = join(root, 'document')
+    await mkdir(outputDir, { recursive: true })
+    const database = new V2Database(join(root, 'db.sqlite3'))
+    const repository = new V2TaskRepositoryCompat(database)
+    const jobs = new SqliteJobRepository(database)
+    const task = makeTask(outputDir, join(outputDir, 'original.pdf'))
+    repository.insertTask(task)
+    const checkpoint = { stage: 'translating', totalBlocks: 100, completedBlocks: 45, failedBlocks: 2, failedBlockIds: ['failed-block'] }
+    const job = jobs.enqueue({ documentId: task.id, kind: 'translate', now })
+    jobs.claimBatch({ now, leaseOwner: 'runner', leaseExpiresAt: leaseExpiry, kind: 'translate' })
+    jobs.updateProgressAndCheckpoint({ jobId: job.id, leaseOwner: 'runner', progress: 71, checkpoint, now })
+    const calls: string[] = []
+    const scheduler = {
+      cancel: async (jobId: string) => {
+        calls.push('cancel')
+        jobs.cancel({ jobId, leaseOwner: 'runner', now })
+      },
+      wake: () => { calls.push('wake') }
+    } as unknown as JobScheduler
+    const commands = new DocumentCommandService(repository, {} as SettingsService, fixtureTaskCompute, new PathPolicy(),
+      { info: () => undefined, error: () => undefined }, { jobRepository: jobs, scheduler })
+    try {
+      await commands.retry(task.id)
+      expect(calls).toEqual(['cancel', 'wake'])
+      expect(jobs.get(job.id)).toMatchObject({ status: 'queued', progress: 0, checkpoint })
+      expect(jobs.list({ documentId: task.id, kind: 'translate' })).toHaveLength(1)
+    } finally {
+      database.close()
+    }
+  })
+
   it('forwards legacy document notifications only for parse and translate jobs', () => {
     const scheduler = new EventEmitter() as unknown as JobScheduler
     const service = new TaskService(

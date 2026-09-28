@@ -172,6 +172,7 @@ function translationLabel(status: DocumentWorkflowStatus): string {
   if (status === 'partial') return '部分翻译完成，可重试失败区块'
   if (status === 'failed') return '任务失败'
   if (status === 'translating') return '正在翻译'
+  if (status === 'queued') return '等待翻译，当前可阅读原文'
   return '等待解析完成'
 }
 

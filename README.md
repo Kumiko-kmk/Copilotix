@@ -1,5 +1,7 @@
 # 📚 Copilotix
 
+<img src="desktop/resources/icon.png" width="112" alt="Copilotix 软件图标：书本与知识树" />
+
 **把一篇 PDF，变成可以对照阅读、标注与保存的中文论文工作区。**
 
 读论文时，真正打断思路的往往是反复切换：看原文、查译文、找公式，再翻回表格所在的那一页。Copilotix 将这些步骤串在一个 Windows 桌面应用里：拖入 PDF，等待解析与翻译，在左侧原始版面和右侧结构化文本之间对照阅读。
@@ -22,7 +24,7 @@
 
 ## ✨ 项目介绍
 
-Copilotix 是面向论文处理与阅读的个人桌面客户端。**PDF 解析使用 MinerU 服务**，翻译由所选翻译服务完成，任务记录和文档产物保存到本地。桌面应用不需要启动仓库内的 Python 服务，也不包含本地解析模型。
+Copilotix 是面向论文处理与阅读的个人桌面客户端。**PDF 解析使用 MinerU 服务**，翻译由所选翻译服务完成，任务记录和文档产物保存到本地。桌面应用直接连接在线服务，不需要安装 Python 或本地解析模型。
 
 ### 你可以用它做什么？
 
@@ -124,7 +126,7 @@ Bing 和 TranSmart 的接入依赖第三方网页接口，可用性可能变化�
 
 在「设置 → 模型设置」启用所需翻译源，通过拖拽或键盘调整顺序，然后保存。默认顺序是 **Qwen → DeepSeek → Bing → TranSmart**；运行时会跳过未启用的服务，以及没有有效凭据的 Qwen、DeepSeek。
 
-在「设置 → 文件存储」选择文档保存位置。默认位置为 Windows 文档目录下的 `Copilotix`。**修改位置只影响新任务，不会搬移既有文档。** 页面还提供存储用量和打开目录入口。
+在「设置 → 文件存储」选择文档保存位置。默认位置为 Windows 文档目录下的 `Copilotix`。**修改位置只影响新任务，不会搬移既有文档。** 页面还提供存储用量、打开目录及文档库管理入口。
 
 ### 第二步：导入 PDF
 
@@ -172,7 +174,24 @@ Bing 和 TranSmart 的接入依赖第三方网页接口，可用性可能变化�
         └── … 图片与其他解析产物
 ```
 
-任务数据库默认位于 `%APPDATA%\Copilotix-Translation-v2\copilotix-desktop-v2.sqlite3`。结果 ZIP 用于分享文档产物，不是包含任务数据库、凭据和所有应用状态的完整备份。任务删除框中的「同时删除本地结果文件」会额外删除对应本地文件，请按需要选择。
+任务数据库默认位于 `%APPDATA%\Copilotix-Translation-v2\copilotix-desktop-v2.sqlite3`。结果 ZIP 用于分享文档产物，不是包含任务数据库、凭据和所有应用状态的完整备份。
+### 🗃️ 备份、恢复与迁移文档库
+
+在「设置 → 文件存储 → 文档库管理」操作：
+
+![文档库备份、恢复与迁移](docs/images/library-management.png)
+
+| 操作 | 用途 | 数据保护 |
+| --- | --- | --- |
+| 创建备份 | 保存原始 PDF、处理产物、批注与数据库 | 逐文件 SHA-256 校验；不包含系统凭据 |
+| 恢复备份 | 从包含 `manifest.json` 的备份目录恢复 | 先备份当前库，校验后整体替换；保留原文件 |
+| 迁移文档库 | 将已有文档移到另一个空目录 | 复制并校验后切换路径；保留旧目录 |
+
+请先等待排队和运行中的任务结束。恢复与迁移完成后应用会自动重启；跨电脑恢复需重新配置 API Key。恢复要求备份与当前应用的数据库结构一致。备份目录请完整保存，它不是单个 ZIP。
+
+详细范围、磁盘空间要求与失败处理见 [文档库管理指南](docs/LIBRARY_MANAGEMENT_ZH.md)。
+
+任务删除框中的「同时删除本地结果文件」会额外删除对应本地文件，请按需要选择。
 
 <a id="architecture"></a>
 
@@ -286,7 +305,6 @@ Copilotix/
 │   ├── tests/             # 单元与组件测试
 │   ├── e2e/               # Playwright 测试
 │   └── scripts/           # 构建及发布检查
-├── copilotix/             # 仓库内的 Python 文档处理包
 ├── docs/                  # 开发、架构及安全文档
 └── release/               # 本地构建生成的发行目录
 ```
@@ -349,4 +367,8 @@ PDF 会上传至解析服务提供的地址；待翻译文本会发往实际执�
 
 项目使用 MinerU 进行 PDF 解析，并依赖 Electron、React、PDF.js 等开源组件。
 
-许可文本见 [LICENSE.md](LICENSE.md)。当前根目录许可文本与 [desktop/package.json](desktop/package.json) 中的许可标识尚不一致，发布前需要维护者核对统一；本文不使用单一许可证徽章概括整个仓库，也不改写已有许可或第三方署名。
+Copilotix 自有代码采用 [MIT 许可证](LICENSE.md)，Copyright © 2026 Kumiko-kmk。允许使用、修改与商用分发，须保留版权及许可文本。依赖和外部服务保留各自条款，见 [第三方声明](THIRD_PARTY_NOTICES.md)。签名配置见 [许可证与签名指南](docs/LICENSE_AND_SIGNING_ZH.md)。
+
+### Code signing policy
+
+签名服务尚未获批；当前状态、审核角色与数据传输说明见 [Code signing policy](docs/CODE_SIGNING_POLICY.md)。

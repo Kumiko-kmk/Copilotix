@@ -3,13 +3,61 @@ import {
   MEBIBYTE,
   RELEASE_LIMITS,
   assertLocales,
+  assertDesktopReleaseLicenseMetadata,
   assertNoCanvasPaths,
+  assertReleaseAssetNames,
+  assertReleaseSigningConfiguration,
+  assertReleaseTagMatchesVersion,
   assertRequiredPackagedContent,
   assertReleaseMeasurements,
-  assertSafeBuildOutputPath
+  assertSafeBuildOutputPath,
+  assertValidAuthenticodeSignature
 } from '../scripts/release-policy.mjs'
 
 describe('release policy', () => {
+  it('requires desktop release tags to match the packaged version exactly', () => {
+    expect(assertReleaseTagMatchesVersion('desktop-v0.1.0', '0.1.0')).toBe('desktop-v0.1.0')
+    expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.1', '0.1.0')).toThrow(/does not match package version/)
+    expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.0', 'latest')).toThrow(/Invalid desktop release version/)
+  })
+
+  it('blocks public release while the desktop license declaration is unresolved', () => {
+    expect(assertDesktopReleaseLicenseMetadata({ license: 'MIT' })).toBe('MIT')
+    for (const license of [undefined, '', '  ', 'UNLICENSED', 'unlicensed', ' UnLicensed ']) {
+      expect(() => assertDesktopReleaseLicenseMetadata({ license })).toThrow(/UNLICENSED is not releasable/)
+    }
+  })
+
+  it('keeps local unsigned packaging available and fails closed for production without a certificate', () => {
+    expect(assertReleaseSigningConfiguration({})).toBe(false)
+    expect(assertReleaseSigningConfiguration({ COPILOTIX_RELEASE_MODE: 'development' })).toBe(false)
+    expect(assertReleaseSigningConfiguration({ COPILOTIX_RELEASE_MODE: 'production', WIN_CSC_LINK: 'base64-certificate' })).toBe(true)
+    expect(assertReleaseSigningConfiguration({ COPILOTIX_RELEASE_MODE: 'production', CSC_LINK: 'base64-certificate' })).toBe(true)
+    expect(() => assertReleaseSigningConfiguration({ COPILOTIX_RELEASE_MODE: 'production' })).toThrow(/refusing to build an unsigned release/)
+    expect(() => assertReleaseSigningConfiguration({ COPILOTIX_RELEASE_MODE: 'unexpected' })).toThrow(/Unsupported Copilotix release mode/)
+  })
+
+  it('only permits a complete, unique release asset set before publishing', () => {
+    expect(assertReleaseAssetNames([
+      'Copilotix-0.1.0-win-x64.zip',
+      'SHA256SUMS.txt',
+      'release-manifest.json'
+    ], 'Copilotix-0.1.0-win-x64')).toBe(true)
+    expect(() => assertReleaseAssetNames(['SHA256SUMS.txt', 'release-manifest.json'], 'Copilotix-0.1.0-win-x64')).toThrow(/Unexpected release assets/)
+    expect(() => assertReleaseAssetNames([
+      'Copilotix-0.1.0-win-x64.zip',
+      'Copilotix-0.1.0-win-x64.zip',
+      'SHA256SUMS.txt',
+      'release-manifest.json'
+    ], 'Copilotix-0.1.0-win-x64')).toThrow(/Unexpected release assets/)
+  })
+
+  it('requires a valid Authenticode result and a signer subject', () => {
+    expect(assertValidAuthenticodeSignature({ status: 'Valid', signerSubject: 'CN=Copilotix Release' })).toBe('CN=Copilotix Release')
+    expect(() => assertValidAuthenticodeSignature({ status: 'NotSigned' })).toThrow(/not valid/)
+    expect(() => assertValidAuthenticodeSignature({ status: 'Valid', signerSubject: '' })).toThrow(/no signer certificate subject/)
+  })
+
   it('only permits the exact desktop/out cleanup target', () => {
     const desktop = 'C:/workspace/desktop'
     expect(() => assertSafeBuildOutputPath(desktop, 'C:/workspace/desktop/out')).not.toThrow()

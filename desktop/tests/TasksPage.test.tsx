@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import TasksPage, { documentTypeLabel, formatTaskCreatedAt } from '../src/renderer/pages/TasksPage'
@@ -24,6 +24,25 @@ beforeEach(() => {
 })
 
 describe('TasksPage', () => {
+  it('uses the status cell as progress without showing block counts or a separate bar', () => {
+    const running = document('paper.pdf', 'Running paper', 'translating', '2026-09-20T22:19:16')
+    running.workflow.translationProgress = { totalBlocks: 1103, completedBlocks: 432, failedBlocks: 1 }
+    running.workflow.progress = 67
+    const queued = document('pending.pdf', 'Queued paper', 'queued', '2026-09-20T22:19:16')
+    queued.workflow.progress = 25
+    const completed = document('done.pdf', 'Completed paper', 'completed', '2026-09-20T22:19:16')
+    completed.workflow.translationProgress = { totalBlocks: 100, completedBlocks: 100, failedBlocks: 0 }
+    render(<TasksPage documents={[running, queued, completed]} onOpen={() => undefined} />)
+    expect(screen.queryByText(/区块/u)).toBeNull()
+    const progress = screen.getByRole('progressbar', { name: '翻译中' })
+    expect(progress.getAttribute('aria-valuenow')).toBe('67')
+    expect(progress.closest('td')!.style.getPropertyValue('--task-progress')).toBe('67%')
+    expect(progress.closest('td')!.querySelector('.ant-progress')).toBeNull()
+    expect(screen.getByRole('progressbar', { name: '排队中' }).closest('td')!.style.getPropertyValue('--task-progress')).toBe('25%')
+    expect(screen.getAllByRole('progressbar')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '重试' }).getAttribute('title')).toContain('保留已完成区块')
+  })
+
   it('shows PDF and Markdown labels and minute-precision creation times', () => {
     const documents = [
       document('paper.pdf', 'PDF paper', 'completed', '2026-09-20T22:19:16'),
@@ -62,6 +81,12 @@ describe('TasksPage', () => {
     expect(documentTypeLabel('paper.markdown')).toBe('Markdown')
     expect(documentTypeLabel('legacy-record')).toBe('PDF')
     expect(formatTaskCreatedAt('not-a-date')).toBe('not-a-date')
+  })
+
+  it('selects local file deletion by default when opening the delete dialog', () => {
+    render(<TasksPage documents={[document('paper.pdf', 'Paper', 'failed', '2026-09-20T22:19:16')]} onOpen={() => undefined} />)
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    expect(screen.getByRole('checkbox', { name: '同时删除本地结果文件（不可恢复）' })).toHaveProperty('checked', true)
   })
 })
 

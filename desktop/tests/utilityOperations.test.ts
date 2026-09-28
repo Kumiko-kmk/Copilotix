@@ -28,11 +28,11 @@ describe('utility persistence lifecycle', () => {
     expect(calls).toEqual(['PRAGMA wal_checkpoint(PASSIVE)', 'close'])
   })
 
-  it('imports a PDF with one utility-side read and leaves no partial file', async () => {
+  it('accepts PDFs within the 600-page limit and leaves no partial file', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-import-'))
     try {
       const sourcePath = join(root, 'paper.pdf')
-      const bytes = Buffer.from('%PDF-1.4\nfixture')
+      const bytes = createPdf(97)
       await writeFile(sourcePath, bytes)
       const outputRoot = join(root, 'output')
       const documentId = '11111111-1111-4111-8111-111111111111'
@@ -310,3 +310,23 @@ describe('utility persistence lifecycle', () => {
     }
   })
 })
+
+function createPdf(pageCount: number): Buffer {
+  const pageObjectNumbers = Array.from({ length: pageCount }, (_, index) => index + 3)
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Count ${pageCount} /Kids [${pageObjectNumbers.map((number) => `${number} 0 R`).join(' ')}] >>`,
+    ...pageObjectNumbers.map(() => '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>')
+  ]
+  let body = '%PDF-1.7\n'
+  const offsets = [0]
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(body, 'ascii'))
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`
+  })
+  const xrefOffset = Buffer.byteLength(body, 'ascii')
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  body += offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`
+  return Buffer.from(body, 'ascii')
+}

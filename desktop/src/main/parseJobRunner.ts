@@ -100,6 +100,7 @@ export class ParseJobRunner implements BatchJobRunner {
     const valid = loaded.filter((item): item is LoadedJob => 'task' in item)
     const results: JobBatchResult[] = loaded.filter((item): item is JobBatchResult => !('task' in item))
     if (valid.length === 0) return results
+    for (const { job } of valid) this.remoteSnapshots.delete(job.id)
 
     const settings = await this.options.settingsService.get()
     const token = await this.options.vault.get('parser-token')

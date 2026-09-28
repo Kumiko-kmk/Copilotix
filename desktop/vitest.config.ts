@@ -5,6 +5,8 @@ export default defineConfig({
   resolve: { alias: { '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@main': resolve(__dirname, 'src/main') } },
   test: {
     environment: 'node',
+    // Windows + coverage instrumentation can exceed the default 5 s for React views.
+    testTimeout: 15_000,
     exclude: ['e2e/**', 'node_modules/**', 'dist/**', 'out/**'],
     coverage: {
       provider: 'v8',

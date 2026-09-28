@@ -1,3 +1,6 @@
+import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
+import { LibraryAccessGate } from './libraryAccessGate'
+import { acquirePrimaryInstance } from './singleInstance'
 import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
@@ -79,6 +82,7 @@ let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
 let jobScheduler: JobScheduler | null = null
 let startupPhase = 'module-load'
+const libraryGate = new LibraryAccessGate()
 
 const packagedSmokeMode = shouldRunPackagedSmoke(process.argv, app.isPackaged)
 
@@ -137,10 +141,7 @@ async function bootstrap(): Promise<void> {
     scheduler: jobScheduler
   })
   startupPhase = 'documents-load'
-  documentSummaries = new Map((await tasks.list()).map((task) => {
-    const summary = projectDocumentSummary(task)
-    return [summary.id, summary] as const
-  }))
+  documentSummaries = new Map((await repository.listDocumentSummaries!()).map((summary) => [summary.id, summary] as const))
   documentRevision = 0
 
   startupPhase = 'protocol-register'
@@ -152,19 +153,17 @@ async function bootstrap(): Promise<void> {
   startupPhase = 'tray-create'
   createTray()
 
-  tasks.on('changed', (taskList) => {
-    const computation = computeDocumentChange(
-      documentSummaries,
-      taskList.map(projectDocumentSummary),
-      documentRevision
-    )
-    documentSummaries = computation.next
-    if (computation.event && mainWindow) {
-      documentRevision = computation.event.revision
-      sendValidatedEvent(mainWindow.webContents, 'documents:changed', documentChangeEventSchema, computation.event)
-    } else if (computation.event) {
-      documentRevision = computation.event.revision
-    }
+  let documentChangeTail = Promise.resolve()
+  tasks.on('changed', () => {
+    documentChangeTail = documentChangeTail.then(async () => {
+      const current = await repository!.listDocumentSummaries!()
+      const computation = computeDocumentChange(documentSummaries, current, documentRevision)
+      documentSummaries = computation.next
+      if (computation.event) {
+        documentRevision = computation.event.revision
+        if (mainWindow) sendValidatedEvent(mainWindow.webContents, 'documents:changed', documentChangeEventSchema, computation.event)
+      }
+    }).catch(() => logger.error('documents.refresh.failed', {}))
   })
   tasks.on('notification', async (taskId: string, status: 'completed' | 'partial' | 'failed') => {
     const task = await repository?.getTask(taskId)
@@ -307,6 +306,7 @@ function registerIpc(
   usageAnalytics: UsageAnalyticsService
 ): void {
   const validationOptions = {
+    gate: libraryGate,
     getMainWindow: () => mainWindow,
     rendererEntryPath: join(__dirname, '../renderer/index.html'),
     rendererOrigin: process.env.ELECTRON_RENDERER_URL
@@ -323,6 +323,35 @@ function registerIpc(
     else if (action === 'close') window.close()
     else throw new Error('不支持的窗口操作')
     return currentWindowState(window)
+  }, validationOptions)
+  registerValidatedHandler('library:manage', libraryRequestSchema, libraryResultSchema, async (_event, request) => {
+    if (!utilitySupervisor || !jobScheduler) throw new Error('文档库尚未初始化')
+    const title = request.action === 'backup' ? '选择备份保存目录' : request.action === 'restore' ? '选择包含 manifest.json 的备份目录' : '选择空目录迁移文档库'
+    const selected = await dialog.showOpenDialog(mainWindow!, { title, properties: ['openDirectory', 'createDirectory'] })
+    if (selected.canceled || !selected.filePaths[0]) return { status: 'cancelled' as const, restartRequired: false }
+    if (request.action !== 'backup') {
+      const confirmation = await dialog.showMessageBox(mainWindow!, {
+        type: 'warning', title,
+        message: request.action === 'restore' ? '用所选备份替换当前文档库？' : '将全部文档迁移到所选目录？',
+        detail: request.action === 'restore'
+          ? '恢复前会完整备份当前文档库。现有文件会保留，API 密钥不变；完成后自动重启。仅支持相同数据库版本的备份。'
+          : '全部文档复制并校验成功后才切换位置，原文件保留。完成后自动重启。',
+        buttons: ['取消', '继续'], defaultId: 0, cancelId: 0, noLink: true
+      })
+      if (confirmation.response !== 1) return { status: 'cancelled' as const, restartRequired: false }
+    }
+    await utilitySupervisor.request('library:check', {})
+    await jobScheduler.shutdown()
+    try {
+      const result = await utilitySupervisor.request('library:manage', { ...request, path: selected.filePaths[0] }, { timeoutMs: 2 * 60 * 60 * 1000 })
+      if (result.restartRequired) {
+        libraryGate.requireRestart()
+        setTimeout(() => { app.relaunch(); app.quit() }, 1200)
+      }
+      return result
+    } finally {
+      if (!libraryGate.restarting) await jobScheduler.start()
+    }
   }, validationOptions)
   registerValidatedHandler('settings:get', noRequestSchema, appSettingsSchema, () => settings.get(), validationOptions)
   registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, (_event, update) => settings.save(update), validationOptions)
@@ -373,7 +402,9 @@ function registerIpc(
     return tasks.delete(request.documentId, request.deleteFiles)
   }, validationOptions)
   registerValidatedHandler('documents:get', documentIdRequestSchema, documentDetailsSchema, async (_event, documentId) => {
-    return projectDocumentDetails(await tasks.getDocument(documentId))
+    const details = projectDocumentDetails(await tasks.getDocument(documentId))
+    const summary = await repository?.getDocumentSummary?.(documentId)
+    return summary ? { ...details, summary } : details
   }, validationOptions)
   registerValidatedHandler('documents:open-output', documentIdRequestSchema, voidResponseSchema, async (_event, documentId) => {
     const task = await repository?.getTask(documentId)
@@ -431,8 +462,10 @@ function startNormalApp(): void {
   app.setName('Copilotix')
   const isolatedUserData = process.env.NODE_ENV === 'test' ? process.env.COPILOTIX_E2E_USER_DATA : undefined
   app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'Copilotix-Translation-v2'))
+  if (!acquirePrimaryInstance(app, () => mainWindow)) return
 
   app.on('before-quit', (event) => {
+    if (libraryGate.busy) { event.preventDefault(); return }
     isQuitting = true
     if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
     event.preventDefault()
@@ -453,7 +486,12 @@ function startNormalApp(): void {
       console.error(error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error))
     }
     // Playwright and other headless checks must not wait on a native modal.
-    if (process.env.NODE_ENV !== 'test') dialog.showErrorBox('Copilotix 启动失败', '核心服务无法启动，请重试。')
+    if (process.env.NODE_ENV !== 'test') {
+      const message = (startupPhase === 'core-start' || startupPhase === 'repository-init')
+        ? '核心服务或文档数据库无法初始化。请勿删除原数据库或使用更旧版本反复尝试。升级前快照（如已生成）保存在下方目录，名称含 pre-migration；恢复方法见文档库管理指南。\n\n' + app.getPath('userData')
+        : '核心服务无法启动，请重试。'
+      dialog.showErrorBox('Copilotix 启动失败', message)
+    }
     app.quit()
   })
 }

@@ -4,13 +4,24 @@ import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 
 import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { promisify } from 'node:util'
 import archiver from 'archiver'
 import { listPackage } from '@electron/asar'
 import { build, createTargets, Platform } from 'electron-builder'
 import extract from 'extract-zip'
-import { applyDesktopFuses } from './electron-fuses.mjs'
-import { auditRelease, assertRequiredPackagedContent, collectRelativeFiles, formatMiB, RELEASE_LIMITS } from './release-policy.mjs'
+import { verifyDesktopFuses } from './electron-fuses.mjs'
+import { collectThirdPartyLicenses } from './collect-third-party-licenses.mjs'
+import {
+  auditRelease,
+  assertReleaseSigningConfiguration,
+  assertDesktopReleaseLicenseMetadata,
+  assertRequiredPackagedContent,
+  assertValidAuthenticodeSignature,
+  collectRelativeFiles,
+  formatMiB,
+  RELEASE_LIMITS
+} from './release-policy.mjs'
 import {
   PACKAGED_SMOKE_ARG,
   formatPackagedSmokeMarker,
@@ -29,6 +40,7 @@ import {
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const desktopDirectory = resolve(scriptDirectory, '..')
 const repositoryRoot = resolve(desktopDirectory, '..')
+const execFileAsync = promisify(execFile)
 
 export {
   PACKAGED_SMOKE_ARG,
@@ -43,8 +55,10 @@ export async function publishRelease({ fromBuilt = false } = {}) {
   assertDesktopDirectory(desktopDirectory, repositoryRoot)
   const workspacePackageJson = JSON.parse(await readFile(join(repositoryRoot, 'package.json'), 'utf8'))
   assertPnpmInvocation(process.env, workspacePackageJson.packageManager)
+  const productionRelease = assertReleaseSigningConfiguration(process.env)
   await assertLocalDependencyGraph(repositoryRoot, desktopDirectory)
   const packageJson = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
+  if (productionRelease) assertDesktopReleaseLicenseMetadata(packageJson)
   const packagedSmokeVersions = assertPackagedSmokeVersions(packageJson)
   const productName = packageJson.build?.productName ?? 'Copilotix'
   const executableName = `${packageJson.build?.executableName ?? productName}.exe`
@@ -63,7 +77,7 @@ export async function publishRelease({ fromBuilt = false } = {}) {
   let swapped = false
   try {
     if (fromBuilt) await assertBuiltBundles()
-    await runElectronBuilder(layout.builderOutput)
+    await runElectronBuilder(layout.builderOutput, { forceCodeSigning: productionRelease })
 
     const unpackedDirectory = join(layout.builderOutput, 'win-unpacked')
     const unpackedExecutable = join(unpackedDirectory, executableName)
@@ -77,14 +91,24 @@ export async function publishRelease({ fromBuilt = false } = {}) {
     const appAsarPath = join(layout.runtimeDirectory, 'resources', 'app.asar')
     await requireFile(executablePath)
     await requireFile(appAsarPath)
-    await applyDesktopFuses(executablePath)
+    await verifyDesktopFuses(executablePath)
+    const signerSubject = productionRelease ? await verifyWindowsAuthenticodeSignature(executablePath) : null
 
     const asarEntries = listAsarEntries(appAsarPath)
     const runtimeFiles = await collectRelativeFiles(layout.runtimeDirectory)
     assertRequiredPackagedContent({ asarEntries, runtimeFiles })
 
     await createReleaseZip(layout.runtimeDirectory, layout.zipPath, releaseName)
-    await verifyReleaseZip(layout.zipPath, layout.verificationDirectory, releaseName, executableName)
+    const archivedSignerSubject = await verifyReleaseZip(
+      layout.zipPath,
+      layout.verificationDirectory,
+      releaseName,
+      executableName,
+      productionRelease ? verifyWindowsAuthenticodeSignature : null
+    )
+    if (productionRelease && archivedSignerSubject !== signerSubject) {
+      throw new Error('The release archive executable signer does not match the verified runtime executable')
+    }
 
     const measurements = await auditRelease({
       runtimeDirectory: layout.runtimeDirectory,
@@ -98,8 +122,8 @@ export async function publishRelease({ fromBuilt = false } = {}) {
       appAsar: await sha256(appAsarPath),
       zip: await sha256(layout.zipPath)
     }
-    await writeReleaseMetadata(layout, packageJson, executableName, hashes)
-    await assertReleaseMetadata(layout, releaseName, executableName, hashes)
+    await writeReleaseMetadata(layout, packageJson, executableName, hashes, signerSubject)
+    await assertReleaseMetadata(layout, releaseName, executableName, hashes, signerSubject)
     await assertReleaseRootContents(layout.stagingRoot, releaseName)
 
     const swapResult = await swapRelease(layout)
@@ -181,8 +205,9 @@ export async function assertLocalDependencyGraph(repository, desktop) {
   await requireFile(nativeBinding)
 }
 
-export async function runElectronBuilder(outputDirectory) {
+export async function runElectronBuilder(outputDirectory, { forceCodeSigning = false } = {}) {
   if (typeof outputDirectory !== 'string' || !outputDirectory) throw new TypeError('Electron-builder output directory is required')
+  if (typeof forceCodeSigning !== 'boolean') throw new TypeError('forceCodeSigning must be a boolean')
   const resolvedOutput = resolve(outputDirectory)
   const stagingParent = dirname(resolvedOutput)
   if (
@@ -192,11 +217,15 @@ export async function runElectronBuilder(outputDirectory) {
   ) {
     throw new Error(`Refusing to build outside a release staging directory: ${outputDirectory}`)
   }
+  const licenseInventory = await collectThirdPartyLicenses({ repositoryRoot })
+  if (!licenseInventory.packageCount) throw new Error('No dependency license inventory could be generated')
+  process.stdout.write(`Dependency licenses: ${licenseInventory.packageCount} packages; ${licenseInventory.packagesWithoutLicenseText} without root license text (see inventory)\n`)
   await build({
     projectDir: desktopDirectory,
     targets: createTargets([Platform.WINDOWS], 'dir', 'x64'),
     config: {
-      directories: { output: resolvedOutput }
+      directories: { output: resolvedOutput },
+      forceCodeSigning
     }
   })
 }
@@ -216,7 +245,7 @@ function listAsarEntries(archivePath) {
   return listPackage(archivePath, { isPack: false })
 }
 
-async function writeReleaseMetadata(layout, packageJson, executableName, hashes) {
+async function writeReleaseMetadata(layout, packageJson, executableName, hashes, signerSubject = null) {
   const manifest = {
     schemaVersion: 1,
     productName: packageJson.build?.productName ?? 'Copilotix',
@@ -228,7 +257,8 @@ async function writeReleaseMetadata(layout, packageJson, executableName, hashes)
       directory: layout.releaseName,
       entryPoint: `${layout.releaseName}/${executableName}`,
       sha256: hashes.executable,
-      appAsarSha256: hashes.appAsar
+      appAsarSha256: hashes.appAsar,
+      ...(signerSubject ? { authenticodeSignerSubject: signerSubject } : {})
     },
     transport: {
       file: `${layout.releaseName}.zip`,
@@ -243,13 +273,14 @@ async function writeReleaseMetadata(layout, packageJson, executableName, hashes)
   )
 }
 
-async function assertReleaseMetadata(layout, releaseName, executableName, hashes) {
+async function assertReleaseMetadata(layout, releaseName, executableName, hashes, signerSubject = null) {
   const manifest = JSON.parse(await readFile(layout.manifestPath, 'utf8'))
   if (
     manifest?.runtime?.directory !== releaseName ||
     manifest?.runtime?.entryPoint !== `${releaseName}/${executableName}` ||
     manifest?.runtime?.sha256 !== hashes.executable ||
     manifest?.runtime?.appAsarSha256 !== hashes.appAsar ||
+    manifest?.runtime?.authenticodeSignerSubject !== (signerSubject ?? undefined) ||
     manifest?.transport?.file !== `${releaseName}.zip` ||
     manifest?.transport?.sha256 !== hashes.zip
   ) {
@@ -282,18 +313,52 @@ async function createReleaseZip(sourceDirectory, destination, rootName) {
   })
 }
 
-async function verifyReleaseZip(archivePath, verificationDirectory, rootName, mainExecutable) {
+async function verifyReleaseZip(archivePath, verificationDirectory, rootName, mainExecutable, verifySignature = null) {
   let verified = false
   try {
     await rm(verificationDirectory, { recursive: true, force: true })
     await mkdir(verificationDirectory, { recursive: true })
     await extract(archivePath, { dir: verificationDirectory })
-    await requireFile(join(verificationDirectory, rootName, mainExecutable))
+    const extractedExecutable = join(verificationDirectory, rootName, mainExecutable)
+    await requireFile(extractedExecutable)
     await requireFile(join(verificationDirectory, rootName, 'resources', 'app.asar'))
+    const signerSubject = verifySignature ? await verifySignature(extractedExecutable) : null
     verified = true
+    return signerSubject
   } finally {
     if (verified) await rm(verificationDirectory, { recursive: true, force: true })
   }
+}
+
+/** Fail if Windows cannot validate the executable's embedded Authenticode signature. */
+export async function verifyWindowsAuthenticodeSignature(executablePath) {
+  if (typeof executablePath !== 'string' || !executablePath) throw new TypeError('Executable path is required for signature verification')
+  const command = [
+    '$ErrorActionPreference = "Stop"',
+    '$signature = Get-AuthenticodeSignature -LiteralPath $env:COPILOTIX_SIGNED_EXECUTABLE',
+    '[pscustomobject]@{ status = [string]$signature.Status; signerSubject = [string]$signature.SignerCertificate.Subject } | ConvertTo-Json -Compress'
+  ].join('; ')
+  const { stdout } = await execFileAsync('powershell.exe', [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    command
+  ], {
+    env: { ...process.env, COPILOTIX_SIGNED_EXECUTABLE: executablePath },
+    windowsHide: true
+  })
+  let result
+  try {
+    result = JSON.parse(stdout.trim())
+  } catch {
+    throw new Error('Windows Authenticode verification returned invalid output')
+  }
+  const signerSubject = assertValidAuthenticodeSignature(result)
+  process.stdout.write(`Authenticode signature verified: ${signerSubject}\n`)
+  return signerSubject
 }
 
 export function assertPackagedSmokeVersions(packageJson) {

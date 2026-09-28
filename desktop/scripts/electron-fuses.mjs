@@ -23,6 +23,14 @@ export async function applyDesktopFuses(electronExecutable) {
     throw new TypeError('Electron executable path is required')
   }
   await flipFuses(electronExecutable, desktopFuseConfig)
+  return verifyDesktopFuses(electronExecutable)
+}
+
+/** Confirm the packaged executable still has the required fuse values. */
+export async function verifyDesktopFuses(electronExecutable) {
+  if (typeof electronExecutable !== 'string' || !electronExecutable) {
+    throw new TypeError('Electron executable path is required')
+  }
   const actual = await getCurrentFuseWire(electronExecutable)
   assertDesktopFuses(actual)
   return actual

@@ -110,7 +110,7 @@ export class SqliteJobRepository implements JobRepositoryPort {
           SELECT 1 FROM jobs active
           WHERE active.document_id=j.document_id AND active.status='running'
         )
-      ORDER BY j.priority DESC,j.created_at ASC,j.id ASC
+      ORDER BY j.priority DESC,j.available_at ASC,j.created_at ASC,j.id ASC
       LIMIT ?
     `)
     this.readyRetries = connection.prepare(`
@@ -438,7 +438,7 @@ export class SqliteJobRepository implements JobRepositoryPort {
       if (!toState) throw new SqliteJobRepositoryError('JOB_RETRY_NOT_ALLOWED', 'Only partial, failed, or cancelled jobs can be retried manually')
       assertTransition(current.status, toState, true)
       this.updateTransition.run(
-        'queued', current.progress, JSON.stringify(current.checkpoint), availableAt, null, null,
+        'queued', 0, JSON.stringify(current.checkpoint), availableAt, null, null,
         null, null, null, null, now, jobId
       )
       this.updateManualAttempt.run(jobId)
@@ -456,6 +456,12 @@ export class SqliteJobRepository implements JobRepositoryPort {
   recoverExpired(input: JobRecoverExpiredInput): Job[] {
     const now = validateTimestamp(input.now, 'recovery time')
     return this.database.transaction(() => {
+      // Older manual retries kept terminal 100% progress while queued. Preserve
+      // their checkpoint, but let the next attempt show its own progress.
+      this.database.connection.prepare(`
+        UPDATE jobs SET progress=0,updated_at=?
+        WHERE status='queued' AND progress=100 AND attempt>1
+      `).run(now)
       const expired = this.selectExpired.all(now) as unknown as JobRow[]
       const recovered: Job[] = []
       for (const row of expired) {

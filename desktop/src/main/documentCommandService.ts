@@ -167,8 +167,20 @@ export class DocumentCommandService {
     if (!task) throw new Error('任务不存在')
     if (this.jobRepository) {
       const jobs = await this.jobRepository.list({ documentId: taskId })
+      const activeTranslation = jobs.find((job) => job.kind === 'translate' && job.status === 'running')
+      if (activeTranslation && this.scheduler) {
+        await this.scheduler.cancel(activeTranslation.id)
+        const stopped = await this.jobRepository.get(activeTranslation.id)
+        if (stopped?.status === 'cancelled') {
+          await this.jobRepository.manualRetry({ jobId: stopped.id, now: new Date().toISOString() })
+          this.scheduler.wake()
+          return
+        }
+        throw new Error('翻译状态已变化，请刷新后重试')
+      }
       const candidates = jobs
-        .filter((job) => job.status === 'partial' || job.status === 'failed' || job.status === 'cancelled')
+        .filter((job) => (job.kind === 'parse' || job.kind === 'translate') &&
+          (job.status === 'partial' || job.status === 'failed' || job.status === 'cancelled'))
         .sort(compareJobs)
       const job = candidates.at(-1)
       if (!job) throw new Error('任务当前不可重试')

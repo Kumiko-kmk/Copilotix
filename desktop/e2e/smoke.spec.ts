@@ -1,10 +1,14 @@
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { PACKAGED_SMOKE_ARG, validatePackagedSmokeOutput } from '../src/shared/packagedSmoke.mjs'
 import { createE2EWorkspace, launchElectron } from './helpers'
 
 const desktopPackage = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as {
   version: string
+  devDependencies: { electron: string }
   build?: { productName?: string }
 }
 const releaseName = `${desktopPackage.build?.productName ?? 'Copilotix'}-${desktopPackage.version}-win-x64`
@@ -65,26 +69,17 @@ test('supports the custom traffic-light window controls', async () => {
   }
 })
 
-test('opens the packaged Windows executable', async () => {
+test('starts the hardened packaged Windows core without a Node inspector', async () => {
   test.skip(process.platform !== 'win32', 'Windows package only')
-  const workspace = await createE2EWorkspace()
   const executablePath = process.env.COPILOTIX_E2E_EXECUTABLE_PATH
     ?? join(__dirname, `../../release/${releaseName}/Copilotix.exe`)
-  const app = await launchElectron({ executablePath, args: [], env: workspace.env })
-  try {
-    const window = await app.firstWindow()
-    const settingsResult = await window.evaluate(async () => {
-      try {
-        return { ok: true, value: await window.copilotix.getSettings() }
-      } catch (error) {
-        return { ok: false, error: String(error) }
-      }
-    })
-    expect(settingsResult, JSON.stringify(settingsResult)).toMatchObject({ ok: true })
-    await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
-    await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
-  } finally {
-    await app.close()
-    await workspace.cleanup()
-  }
+  // Playwright Electron.launch requires a Node inspector, intentionally fused
+  // off in release binaries. Exercise the isolated packaged smoke entry instead.
+  const result = await promisify(execFile)(executablePath, [PACKAGED_SMOKE_ARG], {
+    cwd: dirname(executablePath), windowsHide: true, timeout: 30_000
+  })
+  expect(validatePackagedSmokeOutput(result, {
+    appVersion: desktopPackage.version,
+    electronVersion: desktopPackage.devDependencies.electron
+  })).toBe(true)
 })

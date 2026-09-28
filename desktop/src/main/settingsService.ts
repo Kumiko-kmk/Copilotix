@@ -15,7 +15,7 @@ import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { CredentialAccount, CredentialVault } from './credentialVault'
 
-export const TRANSLATION_CREDENTIAL_RESET_MIGRATION = 'translation-credentials-reset-v1'
+export const TRANSLATION_CREDENTIAL_RESET_MIGRATION = 'translation-credentials-preserved-v2'
 
 export interface CredentialProbe {
   parser(value: string): Promise<HealthResult>
@@ -61,27 +61,15 @@ export class SettingsService {
     this.probe = { ...DEFAULT_PROBE, ...probe }
   }
 
-  /** Run the one-time upgrade cleanup after the utility database is ready. */
+  /** Record the one-time, non-destructive credential migration after the utility database is ready. */
   async initialize(): Promise<void> {
     if (!this.repository.getMigrationMarker || !this.repository.markMigration) return
-    if (await this.repository.getMigrationMarker(TRANSLATION_CREDENTIAL_RESET_MIGRATION)) return
-
-    // The operation is deliberately idempotent. Do not mark the migration if
-    // either credential deletion fails; the next startup will retry safely.
     try {
-      await Promise.all([
-        this.vault.delete('qwen-api-key'),
-        this.vault.delete('deepseek-api-key'),
-        this.vault.delete('qwen-api-key-validation'),
-        this.vault.delete('deepseek-api-key-validation')
-      ])
-      this.validations.delete('qwen')
-      this.validations.delete('deepseek')
+      if (await this.repository.getMigrationMarker(TRANSLATION_CREDENTIAL_RESET_MIGRATION)) return
       await this.repository.markMigration(TRANSLATION_CREDENTIAL_RESET_MIGRATION)
     } catch {
-      // A transient credential-store failure must not prevent the application
-      // from starting. Leaving the marker absent makes the next startup retry
-      // the idempotent cleanup.
+      // A marker-store failure must not prevent startup. No credential values
+      // are changed, and the missing marker makes the next startup retry.
     }
   }
 

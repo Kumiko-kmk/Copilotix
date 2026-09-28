@@ -2,7 +2,9 @@
   "name": "copilotix-workspace",
   "private": true,
   "packageManager": "pnpm@11.19.0",
-  "engines": { "node": ">=24 <25" },
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "desktop:dev": "pnpm --dir desktop dev",
     "desktop:typecheck": "pnpm --dir desktop typecheck",
@@ -13,6 +15,11 @@
     "desktop:build": "pnpm --dir desktop build",
     "desktop:build:bundles": "pnpm --dir desktop build:bundles",
     "desktop:release": "pnpm --dir desktop package:directory",
-    "desktop:release:from-built": "pnpm --dir desktop package:directory:from-built"
-  }
+    "desktop:release:from-built": "pnpm --dir desktop package:directory:from-built",
+    "desktop:release:verify-tag": "pnpm --dir desktop verify:release-tag",
+    "desktop:release:verify-license": "pnpm --dir desktop verify:release-license",
+    "desktop:release:verify-signing": "pnpm --dir desktop verify:release-signing",
+    "desktop:release:verify-assets": "pnpm --dir desktop verify:release-assets"
+  },
+  "license": "MIT"
 }

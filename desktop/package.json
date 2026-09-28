@@ -1,10 +1,10 @@
 {
   "name": "copilotix-desktop",
   "version": "0.1.0",
-  "description": "Unofficial Copilotix desktop reader with Markdown translation",
+  "description": "Copilotix desktop PDF reader with Markdown translation",
   "main": "./out/main/index.js",
   "author": "Kumiko-kmk",
-  "license": "AGPL-3.0-only",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "pnpm build:utility && electron-vite dev",
@@ -18,7 +18,11 @@
     "build:bundles": "node scripts/clean-output.mjs && electron-vite build && pnpm build:utility",
     "build": "pnpm typecheck && pnpm build:bundles",
     "package:directory": "pnpm build && node scripts/package-directory.mjs",
-    "package:directory:from-built": "node scripts/package-directory.mjs --from-built"
+    "package:directory:from-built": "node scripts/package-directory.mjs --from-built",
+    "verify:release-tag": "node scripts/verify-release-tag.mjs",
+    "verify:release-license": "node scripts/verify-release-license.mjs",
+    "verify:release-signing": "node scripts/verify-release-signing.mjs",
+    "verify:release-assets": "node scripts/verify-release-assets.mjs"
   },
   "dependencies": {
     "@napi-rs/keyring": "^1.3.0",
@@ -26,6 +30,7 @@
     "archiver": "^7.0.1",
     "extract-zip": "^2.0.1",
     "parse5": "^7.3.0",
+    "pdfjs-dist": "^5.4.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
@@ -52,7 +57,6 @@
     "jsdom": "^27.0.0",
     "katex": "^0.18.4",
     "p-queue": "^8.1.0",
-    "pdfjs-dist": "^5.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
@@ -81,12 +85,25 @@
     "asarUnpack": [
       "out/utility/**",
       "node_modules/@napi-rs/keyring/**",
-      "node_modules/@napi-rs/keyring-win32-x64-msvc/**"
+      "node_modules/@napi-rs/keyring-win32-x64-msvc/**",
+      "node_modules/pdfjs-dist/**"
     ],
     "extraResources": [
       {
         "from": "resources/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "../LICENSE.md",
+        "to": "licenses/Copilotix-MIT.txt"
+      },
+      {
+        "from": "../THIRD_PARTY_NOTICES.md",
+        "to": "licenses/THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "out/licenses/THIRD_PARTY_LICENSES.txt",
+        "to": "licenses/THIRD_PARTY_LICENSES.txt"
       }
     ],
     "directories": {
@@ -94,13 +111,15 @@
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "!out/licenses/**"
     ],
     "win": {
       "target": [
         "dir"
       ],
       "icon": "resources/icon.png"
-    }
+    },
+    "afterPack": "./scripts/after-pack.mjs"
   }
 }

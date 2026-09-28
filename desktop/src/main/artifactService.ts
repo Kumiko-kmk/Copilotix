@@ -22,8 +22,15 @@ export class ArtifactService {
   async getDocument(taskId: string): Promise<DocumentPayload> {
     const task = await this.requireTask(taskId)
     const markdown = await this.readOptional(join(task.outputDir, 'full.md'))
-    const translatedMarkdown = await this.readOptional(join(task.outputDir, 'full.zh-CN.md'))
     const translatedBlocks = await this.loadTranslatedBlocks(task)
+    const storedTranslatedMarkdown = await this.readOptional(join(task.outputDir, 'full.zh-CN.md'))
+    // A succeeded translation job can outlive a missing/stale convenience
+    // projection. The manifest is task-bound and contains the durable ordered
+    // blocks, so prefer it when available instead of silently rendering blank
+    // (or content left by another projection) in the reader.
+    const translatedMarkdown = translatedBlocks && translatedBlocks.length > 0
+      ? joinTranslatedMarkdownBlocks(translatedBlocks)
+      : storedTranslatedMarkdown
     const layoutJson = await this.readOptional(join(task.outputDir, 'layout.json'), '{}')
     const mappings = await this.loadMappings(task)
     return {
@@ -160,6 +167,10 @@ function readMappings(path: string): Promise<BlockMapping[]> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function joinTranslatedMarkdownBlocks(blocks: readonly TranslatedMarkdownBlock[]): string {
+  return `${blocks.map((block) => block.markdown.trimEnd()).join('\n\n')}\n`
 }
 
 /** Keep durable plan request/response internals out of user-exported archives. */

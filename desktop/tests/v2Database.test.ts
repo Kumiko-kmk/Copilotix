@@ -1,9 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { V2Database, V2_MIGRATIONS, checksumFor, type V2Migration } from '../src/utility/core/persistence/v2Database'
+import { V2Database, V2MigrationError, V2_MIGRATIONS, checksumFor, type V2Migration } from '../src/utility/core/persistence/v2Database'
 
 const directories: string[] = []
 
@@ -216,10 +216,64 @@ describe('v2 migration ledger and strict persistence schema', () => {
     const first = new V2Database(path)
     first.close()
     const second = new V2Database(path)
-    expect(second.migrationRows()).toHaveLength(V2_MIGRATIONS.length)
-    second.close()
+    try {
+      expect(second.migrationRows()).toHaveLength(V2_MIGRATIONS.length)
+    } finally {
+      second.close()
+    }
     const drifted: V2Migration = { version: 1, name: 'create-v2-document-persistence', sql: 'SELECT 1;' }
-    expect(() => new V2Database(path, [drifted])).toThrow(/checksum mismatch/)
+    expect(() => new V2Database(path, [drifted, ...V2_MIGRATIONS.slice(1)])).toThrow(/checksum mismatch/)
+  })
+
+  it('refuses a newer schema version before changing the database or creating a snapshot', async () => {
+    const path = await databasePath()
+    const database = new V2Database(path)
+    try {
+      database.connection.prepare(`
+        INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES(5, 'future', ?, 'now')
+      `).run('f'.repeat(64))
+    } finally {
+      database.close()
+    }
+
+    const snapshotsBefore = (await readdir(dirname(path))).filter((name) => name.includes('.pre-migration-'))
+    expect(() => new V2Database(path)).toThrow(/schema version 5 is newer than supported version 4/)
+    const snapshotsAfter = (await readdir(dirname(path))).filter((name) => name.includes('.pre-migration-'))
+    expect(snapshotsAfter).toEqual(snapshotsBefore)
+
+    const unchanged = new DatabaseSync(path, { readOnly: true })
+    try {
+      expect(unchanged.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([
+        { version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }
+      ])
+    } finally {
+      unchanged.close()
+    }
+  })
+
+  it('retains a consistent snapshot of the committed schema and rows before a successful upgrade', async () => {
+    const path = await databasePath()
+    const prefix = new V2Database(path, V2_MIGRATIONS.slice(0, 3))
+    insertDocument(prefix, 'snapshot-document', 'C:/snapshot-document')
+    prefix.close()
+
+    const upgraded = new V2Database(path)
+    let snapshot: DatabaseSync | undefined
+    try {
+      const snapshotName = (await readdir(dirname(path))).find((name) =>
+        name.startsWith(`${basename(path)}.pre-migration-v4-`))
+      expect(snapshotName).toBeDefined()
+      snapshot = new DatabaseSync(join(dirname(path), snapshotName!), { readOnly: true })
+      expect(snapshot.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([
+        { version: 1 }, { version: 2 }, { version: 3 }
+      ])
+      expect(snapshot.prepare('SELECT id FROM documents').all()).toEqual([{ id: 'snapshot-document' }])
+      expect(snapshot.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+      expect(upgraded.migrationRows()).toHaveLength(V2_MIGRATIONS.length)
+    } finally {
+      snapshot?.close()
+      upgraded.close()
+    }
   })
 
   it('rolls back a failed migration while preserving previously committed versions', async () => {
@@ -228,41 +282,119 @@ describe('v2 migration ledger and strict persistence schema', () => {
       { version: 1, name: 'first', sql: 'CREATE TABLE first(value TEXT) STRICT;' },
       { version: 2, name: 'fails', sql: 'CREATE TABLE second(value TEXT) STRICT; INSERT INTO missing_table VALUES (1);' }
     ]
-    expect(() => new V2Database(path, migrations)).toThrow()
+    const prefix = new V2Database(path, migrations.slice(0, 1))
+    prefix.close()
+    let migrationFailure: unknown
+    try {
+      const failed = new V2Database(path, migrations)
+      failed.close()
+    } catch (error) {
+      migrationFailure = error
+    }
+    expect(migrationFailure).toBeInstanceOf(V2MigrationError)
     const database = new DatabaseSync(path)
-    expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='first'").get()).toBeTruthy()
-    expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='second'").get()).toBeUndefined()
-    expect(database.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }])
-    database.close()
+    try {
+      expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='first'").get()).toBeTruthy()
+      expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='second'").get()).toBeUndefined()
+      expect(database.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }])
+    } finally {
+      database.close()
+    }
+  })
+
+  it('rolls back the entire pending migration batch when v3 fails after v2 succeeds', async () => {
+    const path = await databasePath('batch-rollback.sqlite3')
+    const prefix = new V2Database(path, V2_MIGRATIONS.slice(0, 1))
+    try {
+      prefix.connection.prepare(`
+        INSERT INTO documents(
+          id,original_filename,display_title,storage_path,source_checksum,parser_model,
+          translation_provider,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?)
+      `).run('batch-document', 'paper.pdf', null, 'C:/batch-document', 'hash-batch-document', 'pipeline', 'qwen', 'now', 'now')
+      prefix.connection.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run('parserModel', JSON.stringify('legacy'))
+    } finally {
+      prefix.close()
+    }
+
+    const migrations: readonly V2Migration[] = [
+      ...V2_MIGRATIONS.slice(0, 2),
+      { version: 3, name: 'fails-after-v2', sql: 'CREATE TABLE batch_v3_probe(value TEXT) STRICT; INSERT INTO missing_v3_table VALUES (1);' }
+    ]
+    let migrationFailure: unknown
+    try {
+      const failed = new V2Database(path, migrations)
+      failed.close()
+    } catch (error) {
+      migrationFailure = error
+    }
+    expect(migrationFailure).toBeInstanceOf(V2MigrationError)
+    const recoverySnapshotPath = (migrationFailure as V2MigrationError).recoverySnapshotPath
+
+    const afterFailure = new DatabaseSync(path, { readOnly: true })
+    try {
+      expect(afterFailure.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }])
+      const documentColumns = (afterFailure.prepare('PRAGMA table_info(documents)').all() as Array<{ name: string }>).map((row) => row.name)
+      expect(documentColumns).toContain('parser_model')
+      expect(afterFailure.prepare('SELECT value FROM settings WHERE key=?').get('parserModel')).toEqual({ value: JSON.stringify('legacy') })
+      expect(afterFailure.prepare("SELECT name FROM sqlite_master WHERE name='batch_v3_probe'").get()).toBeUndefined()
+    } finally {
+      afterFailure.close()
+    }
+
+    const recoverySnapshot = new DatabaseSync(recoverySnapshotPath, { readOnly: true })
+    try {
+      expect(recoverySnapshot.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }])
+      expect(recoverySnapshot.prepare('SELECT id FROM documents').all()).toEqual([{ id: 'batch-document' }])
+      expect(recoverySnapshot.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+    } finally {
+      recoverySnapshot.close()
+    }
   })
 
   it('rolls back the complete RAG graph replacement when v4 fails midway', async () => {
     const path = await databasePath('v4-rollback.sqlite3')
     const prefix = new V2Database(path, V2_MIGRATIONS.slice(0, 3))
-    insertDocument(prefix, 'rollback-document', 'C:/rollback-document')
-    insertJob(prefix, 'rollback-job', 'rollback-document')
-    prefix.close()
+    try {
+      insertDocument(prefix, 'rollback-document', 'C:/rollback-document')
+      insertJob(prefix, 'rollback-job', 'rollback-document')
+    } finally {
+      prefix.close()
+    }
 
     const v4 = V2_MIGRATIONS[3]!
     const brokenMigrations: readonly V2Migration[] = [
       ...V2_MIGRATIONS.slice(0, 3),
       { ...v4, sql: `${v4.sql}\nINSERT INTO migration_failure_probe VALUES (1);` }
     ]
-    expect(() => new V2Database(path, brokenMigrations)).toThrow()
+    let migrationFailure: unknown
+    try {
+      const failed = new V2Database(path, brokenMigrations)
+      failed.close()
+    } catch (error) {
+      migrationFailure = error
+    }
+    expect(migrationFailure).toBeInstanceOf(V2MigrationError)
 
-    const afterFailure = new DatabaseSync(path)
-    expect(afterFailure.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([
-      { version: 1 }, { version: 2 }, { version: 3 }
-    ])
-    expect(afterFailure.prepare('SELECT kind FROM jobs WHERE id=?').get('rollback-job')).toEqual({ kind: 'parse' })
-    expect(afterFailure.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='jobs_v4_rebuild'").get()).toBeUndefined()
-    expect(afterFailure.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rag_documents'").get()).toBeUndefined()
-    afterFailure.close()
+    const afterFailure = new DatabaseSync(path, { readOnly: true })
+    try {
+      expect(afterFailure.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([
+        { version: 1 }, { version: 2 }, { version: 3 }
+      ])
+      expect(afterFailure.prepare('SELECT kind FROM jobs WHERE id=?').get('rollback-job')).toEqual({ kind: 'parse' })
+      expect(afterFailure.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='jobs_v4_rebuild'").get()).toBeUndefined()
+      expect(afterFailure.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rag_documents'").get()).toBeUndefined()
+    } finally {
+      afterFailure.close()
+    }
 
     const recovered = new V2Database(path)
-    expect(recovered.connection.prepare('SELECT kind FROM jobs WHERE id=?').get('rollback-job')).toEqual({ kind: 'parse' })
-    expect(recovered.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-    recovered.close()
+    try {
+      expect(recovered.connection.prepare('SELECT kind FROM jobs WHERE id=?').get('rollback-job')).toEqual({ kind: 'parse' })
+      expect(recovered.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      recovered.close()
+    }
   })
 
   it('does not inspect or mutate a separate v1 database', async () => {

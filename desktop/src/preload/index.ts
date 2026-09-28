@@ -1,3 +1,4 @@
+import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { z } from 'zod'
 import {
@@ -51,6 +52,7 @@ async function invokeValidated<Request, Response>(
 }
 
 const api: CopilotixDesktopApi = {
+  manageLibrary: (request) => invokeValidated('library:manage', libraryRequestSchema, libraryResultSchema, request),
   getSettings: () => invokeValidated('settings:get', noRequestSchema, appSettingsSchema, undefined),
   saveSettings: (update: SettingsUpdate) => invokeValidated('settings:save', settingsUpdateSchema, settingsSaveResultSchema, update),
   validateCredential: (name: CredentialName, value?: string) =>

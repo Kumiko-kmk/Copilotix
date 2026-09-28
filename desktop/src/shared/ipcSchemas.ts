@@ -323,6 +323,11 @@ export const documentWorkflowSchema = z.object({
   status: documentWorkflowStatusSchema,
   progress: documentProgress,
   activeJobKind: z.enum(['parse', 'translate']).nullable(),
+  translationProgress: z.object({
+    totalBlocks: z.number().int().nonnegative(),
+    completedBlocks: z.number().int().nonnegative(),
+    failedBlocks: z.number().int().nonnegative()
+  }).strict().optional(),
   error: z.string().max(32_768).refine(noNul, '错误信息不能包含 NUL 字符').nullable()
 }).strict()
 

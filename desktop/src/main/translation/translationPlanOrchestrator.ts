@@ -392,6 +392,7 @@ function isRetryableTranslationError(error: unknown): boolean {
   const status = (error as { status?: unknown }).status
   if (typeof status === 'number') return status === 408 || status === 429 || status >= 500
   const message = error instanceof Error ? error.message : ''
+  if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) return true
   return /(?:timeout|timed out|timedout|network|fetch failed|failed to fetch|econn|socket|temporar|不可达|超时)/iu.test(message)
 }
 
@@ -443,8 +444,9 @@ function abortError(): Error {
   return error
 }
 
-function isAbortError(error: unknown, signal: AbortSignal): boolean {
-  return signal.aborted || (error instanceof Error && error.name === 'AbortError')
+function isAbortError(_error: unknown, signal: AbortSignal): boolean {
+  // A request timeout can surface as AbortError while the job is still live.
+  return signal.aborted
 }
 
 function readableError(error: unknown): string {

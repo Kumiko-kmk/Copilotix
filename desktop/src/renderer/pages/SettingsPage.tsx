@@ -56,6 +56,8 @@ export default function SettingsPage(props: {
   const [storageInfo, setStorageInfo] = React.useState<StorageInfo | null>(null)
   const [usageAnalytics, setUsageAnalytics] = React.useState<UsageAnalytics | null>(null)
   const [storageLoading, setStorageLoading] = React.useState(false)
+  const [libraryAction, setLibraryAction] = React.useState<'backup' | 'restore' | 'migrate' | null>(null)
+  const libraryActionRef = React.useRef(false)
   const [draggingProvider, setDraggingProvider] = React.useState<TranslationProviderId | null>(null)
   const previousSettingsRef = React.useRef(props.settings)
   const [messageApi, contextHolder] = message.useMessage()
@@ -109,6 +111,27 @@ export default function SettingsPage(props: {
       setStorageLoading(false)
     }
   }, [messageApi])
+
+  const runLibraryAction = React.useCallback(async (action: 'backup' | 'restore' | 'migrate') => {
+    if (libraryActionRef.current) return
+    libraryActionRef.current = true
+    setLibraryAction(action)
+    try {
+      const result = await window.copilotix.manageLibrary({ action })
+      if (result.status === 'cancelled') { messageApi.info('文档库操作已取消'); return }
+      if (result.restartRequired) {
+        messageApi.success('文档库操作完成，应用即将重启')
+        return
+      }
+      messageApi.success('备份完成：' + result.path)
+      await refreshStorageInfo()
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      libraryActionRef.current = false
+      setLibraryAction(null)
+    }
+  }, [messageApi, refreshStorageInfo])
 
   const openStorageLocation = React.useCallback(async () => {
     try {
@@ -405,15 +428,27 @@ export default function SettingsPage(props: {
                 </label>
                 {draft.outputRoot !== props.settings.outputRoot ? <Typography.Text type="warning">新位置将在保存全部更改后生效</Typography.Text> : null}
                 <div className="storage-location-actions">
-                  <Button onClick={() => void chooseOutput()}>修改位置</Button>
-                  <Button icon={<FolderOpenOutlined />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
+                  <Button disabled={libraryAction !== null} onClick={() => void chooseOutput()}>修改位置</Button>
+                  <Button disabled={libraryAction !== null} icon={<FolderOpenOutlined aria-hidden="true" />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
                 </div>
               </div>
 
+              <section className="storage-library-card" aria-label="文档库管理" aria-busy={libraryAction !== null}>
+                <strong>文档库管理</strong>
+                <p>备份包含全部文档、标注和设置，不包含 API 密钥。请等待排队和执行中的任务全部结束后再操作。</p>
+                <div className="storage-library-actions">
+                  <div><strong>备份文档库</strong><small>生成带完整性校验的备份文件夹，请完整保存。</small>
+                    <Button loading={libraryAction === 'backup'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('backup')}>备份文档库</Button></div>
+                  <div><strong>恢复文档库</strong><small>校验并保留旧库后替换当前文档库，完成后重启。</small>
+                    <Button danger loading={libraryAction === 'restore'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('restore')}>恢复文档库</Button></div>
+                  <div><strong>迁移文档库</strong><small>复制校验后切换到空目录，原文件保留，完成后重启。</small>
+                    <Button loading={libraryAction === 'migrate'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('migrate')}>迁移文档库</Button></div>
+                </div>
+              </section>
               <div className="storage-usage-card" aria-busy={storageLoading}>
                 <div className="storage-usage-heading">
                   <span><strong>存储用量</strong><small>{storageInfo?.exists === false ? '文档目录尚未建立' : '当前已保存内容'}</small></span>
-                  <Button icon={<ReloadOutlined />} loading={storageLoading} onClick={() => void refreshStorageInfo()}>刷新用量</Button>
+                  <Button disabled={libraryAction !== null} icon={<ReloadOutlined />} loading={storageLoading} onClick={() => void refreshStorageInfo()}>刷新用量</Button>
                 </div>
                 <div className="storage-usage-grid">
                   <StorageMetric icon={<FileTextOutlined />} label="文档" value={storageInfo ? String(storageInfo.documentCount) : '—'} />
@@ -425,15 +460,15 @@ export default function SettingsPage(props: {
                 <StorageComposition info={storageInfo} />
                 <StorageGrowth info={storageInfo} />
               </div>
-              <Typography.Text className="storage-note" type="secondary">修改位置不会移动既有文档；既有任务仍保留原位置，新任务使用保存后的目录。</Typography.Text>
+              <Typography.Text className="storage-note" type="secondary">修改位置只影响新任务；搬迁已有文档请使用“迁移文档库”。未保存的设置不会进入备份。</Typography.Text>
             </section>
           ) : null}
           </div>
           <div className="settings-actions">
             <Typography.Text type={hasUnsavedChanges ? 'warning' : 'secondary'}>{hasUnsavedChanges ? '有未保存的更改' : '所有更改均已保存'}</Typography.Text>
             <div className="settings-action-buttons">
-              <Button size="large" disabled={!hasUnsavedChanges || saving} onClick={discard}>放弃更改</Button>
-              <Button type="primary" size="large" loading={saving} disabled={!hasUnsavedChanges} onClick={() => void save()}>保存全部更改</Button>
+              <Button size="large" disabled={!hasUnsavedChanges || saving || libraryAction !== null} onClick={discard}>放弃更改</Button>
+              <Button type="primary" size="large" loading={saving} disabled={!hasUnsavedChanges || libraryAction !== null} onClick={() => void save()}>保存全部更改</Button>
             </div>
           </div>
         </div>

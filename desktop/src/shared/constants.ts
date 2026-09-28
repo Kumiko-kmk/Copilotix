@@ -4,6 +4,7 @@ import { TRANSLATION_PROVIDER_IDS } from './providerPolicy'
 export const PARSER_API_ORIGIN = 'https://mineru.net'
 export const PARSER_BATCH_SIZE = 50
 export const MAX_PDF_BYTES = 200 * 1024 * 1024
+export const MAX_PDF_PAGES = 600
 export const CREDENTIAL_SERVICE = 'Copilotix-Translation'
 
 export const DEFAULT_SETTINGS: AppSettings = {

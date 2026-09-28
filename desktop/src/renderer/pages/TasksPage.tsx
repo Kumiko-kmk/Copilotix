@@ -1,6 +1,6 @@
 import React from 'react'
 import { DeleteOutlined, FolderOpenOutlined, RedoOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Checkbox, Input, Modal, Progress, Select, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Checkbox, Input, Modal, Select, Space, Table, Tag, Typography, message } from 'antd'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 
 const statusLabels: Record<DocumentSummary['workflow']['status'], string> = {
@@ -12,8 +12,16 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
   const [query, setQuery] = React.useState('')
   const [status, setStatus] = React.useState<DocumentSummary['workflow']['status'] | 'all'>('all')
   const [deleting, setDeleting] = React.useState<DocumentSummary | null>(null)
-  const [deleteFiles, setDeleteFiles] = React.useState(false)
+  const [deleteFiles, setDeleteFiles] = React.useState(true)
   const [messageApi, contextHolder] = message.useMessage()
+  const retry = React.useCallback(async (documentId: string) => {
+    try {
+      await window.copilotix.retryDocument(documentId)
+      messageApi.success('已重新排队，将保留已完成的译文')
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : String(error))
+    }
+  }, [messageApi])
 
   const filtered = React.useMemo(
     () => props.documents.filter((document) => document.displayName.toLowerCase().includes(query.toLowerCase()) && (status === 'all' || document.workflow.status === status)),
@@ -25,7 +33,7 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
     try {
       await window.copilotix.deleteDocument({ documentId: deleting.id, deleteFiles })
       setDeleting(null)
-      setDeleteFiles(false)
+      setDeleteFiles(true)
       messageApi.success('任务已删除')
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : String(error))
@@ -55,9 +63,15 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
           },
           {
             title: '状态', width: '15%', align: 'center',
-            render: (_: unknown, document: DocumentSummary) => (
-              <div className="task-status"><Tag color={statusColor(document.workflow.status)}>{statusLabels[document.workflow.status]}</Tag>{['queued', 'uploading', 'parsing', 'translating'].includes(document.workflow.status) ? <Progress percent={document.workflow.progress} size="small" showInfo={false} /> : null}</div>
-            )
+            onCell: (document: DocumentSummary) => isFilledStatus(document.workflow.status) ? {
+              className: 'task-progress-cell',
+              style: { '--task-progress': `${Math.max(0, Math.min(100, document.workflow.progress))}%` } as React.CSSProperties
+            } : {},
+            render: (_: unknown, document: DocumentSummary) => isFilledStatus(document.workflow.status) ? (
+              <div className="task-status task-status-active" role="progressbar" aria-label={statusLabels[document.workflow.status]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={document.workflow.progress}>
+                {statusLabels[document.workflow.status]}
+              </div>
+            ) : <div className="task-status"><Tag color={statusColor(document.workflow.status)}>{statusLabels[document.workflow.status]}</Tag></div>
           },
           {
             title: '类型', width: '10%', align: 'center',
@@ -72,10 +86,10 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
             render: (_: unknown, document: DocumentSummary) => (
               <div className="task-actions">
                 <Button type="text" aria-label="打开输出目录" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.id)} />
-                {document.workflow.status === 'failed' || document.workflow.status === 'partial'
-                  ? <Button type="text" aria-label="重试" icon={<RedoOutlined />} onClick={() => void window.copilotix.retryDocument(document.id)} />
+                {document.workflow.status === 'failed' || document.workflow.status === 'partial' || document.workflow.status === 'translating'
+                  ? <Button type="text" aria-label="重试" title={document.workflow.status === 'translating' ? '中断当前翻译并保留已完成区块后重试' : '重试失败区块'} icon={<RedoOutlined />} onClick={() => void retry(document.id)} />
                   : <span className="task-action-placeholder" aria-hidden="true" />}
-                <Button danger type="text" aria-label="删除" icon={<DeleteOutlined />} onClick={() => setDeleting(document)} />
+                <Button danger type="text" aria-label="删除" icon={<DeleteOutlined />} onClick={() => { setDeleteFiles(true); setDeleting(document) }} />
               </div>
             )
           }
@@ -87,6 +101,10 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
       </Modal>
     </section>
   )
+}
+
+function isFilledStatus(status: DocumentSummary['workflow']['status']): boolean {
+  return status === 'queued' || status === 'translating'
 }
 
 function statusColor(status: DocumentSummary['workflow']['status']): string {

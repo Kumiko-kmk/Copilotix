@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { chromium, expect, test, type Locator, type Page } from '@playwright/test'
+import { execFileSync, spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
 import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
@@ -543,4 +544,114 @@ async function openPaper(window: Page, taskId: string): Promise<void> {
   const item = window.locator(`[data-paper-task-id="${taskId}"]`)
   await expect(item).toBeVisible()
   await item.click()
+}
+
+test('keeps the complete minimap static across long-document jumps', async () => {
+  const workspace = await createE2EWorkspace()
+  const markdown = Array.from({ length: 180 }, (_, index) =>
+    `## Section ${index}\n\n${'A long paragraph with varying wrapped lines and document geometry. '.repeat(8 + index % 12)}`
+  ).join('\n\n')
+  const sourceTaskDir = process.env.COPILOTIX_E2E_REAL_TASK_DIR
+  const taskId = await seedReaderTask(workspace, sourceTaskDir
+    ? { sourceTaskDir }
+    : { sourceMarkdown: markdown, translatedMarkdown: markdown })
+  const app = await launchStaticReaderAcceptance(workspace.env)
+  try {
+    const window = await app.firstWindow()
+    await window.evaluate(() => {
+      const state = window as Window & { minimapPaintCount: number }
+      state.minimapPaintCount = 0
+      const clear = CanvasRenderingContext2D.prototype.clearRect
+      CanvasRenderingContext2D.prototype.clearRect = function (...args) {
+        if (this.canvas.classList.contains('markdown-minimap-canvas')) state.minimapPaintCount += 1
+        return clear.apply(this, args)
+      }
+    })
+    await openPaper(window, taskId)
+    const panel = window.locator('.reader-tab-panel.active')
+    await expect.poll(() => panel.locator('.markdown-minimap-heading').count()).toBeGreaterThan(0)
+    if (!sourceTaskDir) await expect(panel.locator('.markdown-minimap-heading')).toHaveCount(180)
+    await panel.locator('.markdown-scroll').hover({ position: { x: 50, y: 50 } })
+    await window.waitForTimeout(600)
+    const readSnapshot = async () => ({
+      pixels: (await panel.locator('.markdown-minimap-canvas').screenshot({
+        style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; }'
+      })).toString('base64'),
+      ...await panel.evaluate((element) => ({
+        formulas: element.querySelector('.markdown-minimap-formulas')!.innerHTML,
+        headings: Array.from(element.querySelectorAll<HTMLElement>('.markdown-minimap-heading')).map((heading) => heading.style.cssText),
+        paintCount: (window as Window & { minimapPaintCount: number }).minimapPaintCount
+      }))
+    })
+    const original = await readSnapshot()
+    const rail = panel.locator('.markdown-minimap')
+    const bounds = (await rail.boundingBox())!
+    const frame = panel.locator('.markdown-minimap-frame')
+    const originalFrame = await frame.getAttribute('style')
+    const headings = panel.locator('.markdown-minimap-heading')
+    await expect(headings.first()).not.toHaveAttribute('title')
+    await headings.nth(Math.floor(await headings.count() / 2)).hover()
+    await window.waitForTimeout(300)
+    expect(await frame.getAttribute('style')).toBe(originalFrame)
+    expect(await readSnapshot()).toEqual(original)
+    for (const fraction of [0.75, 0.25, 0.95, 0.1]) {
+      await rail.click({ position: { x: bounds.width - 2, y: bounds.height * fraction } })
+      await expect.poll(() => panel.locator('.markdown-scroll').evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      await window.waitForTimeout(300)
+      expect(await readSnapshot()).toEqual(original)
+    }
+    const headingIndex = Math.floor(await headings.count() / 2)
+    await headings.nth(headingIndex).click()
+    await window.waitForTimeout(600)
+    expect(await readSnapshot()).toEqual(original)
+    const split = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
+    const initialWidth = await panel.locator('article').evaluate((element) => element.clientWidth)
+    await split.focus()
+    await split.press('End')
+    await expect.poll(() => panel.locator('article').evaluate((element) => element.clientWidth)).not.toBe(initialWidth)
+    await window.waitForTimeout(700)
+    expect(await readSnapshot()).toEqual(original)
+    await headings.nth(headingIndex).click()
+    const target = panel.locator('article h1, article h2, article h3, article h4, article h5, article h6').nth(headingIndex)
+    await expect.poll(() => isCentered(target, '.markdown-scroll')).toBe(true)
+    const sourcePosition = await headings.nth(headingIndex).evaluate((element) =>
+      Number.parseFloat((element as HTMLElement).style.top) / Number.parseFloat((element.parentElement as HTMLElement).style.height)
+    )
+    const resizedBounds = (await rail.boundingBox())!
+    await rail.click({ position: { x: resizedBounds.width - 2, y: resizedBounds.height * sourcePosition } })
+    await expect.poll(() => isCentered(target, '.markdown-scroll')).toBe(true)
+    expect(await readSnapshot()).toEqual(original)
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
+async function launchStaticReaderAcceptance(env: NodeJS.ProcessEnv) {
+  const executablePath = process.env.COPILOTIX_E2E_PACKAGED_EXE
+  if (!executablePath) return launchElectron({ args: [join(__dirname, '../out/main/index.js')], env })
+  const child = spawn(executablePath, ['--remote-debugging-port=0'], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
+  try {
+    const endpoint = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Packaged reader debugging endpoint timed out')), 30_000)
+      child.stderr.on('data', (data: Buffer) => {
+        const match = /DevTools listening on (ws:\/\/[^\s]+)/u.exec(data.toString())
+        if (match) { clearTimeout(timer); resolve(match[1]!) }
+      })
+      child.once('error', (error) => { clearTimeout(timer); reject(error) })
+      child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`Packaged reader exited: ${code}`)) })
+    })
+    const browser = await chromium.connectOverCDP(endpoint)
+    return {
+      firstWindow: async () => browser.contexts()[0]!.pages()[0] ?? await browser.contexts()[0]!.waitForEvent('page'),
+      close: async () => {
+        await browser.close()
+        if (child.exitCode === null && child.pid) execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      }
+    }
+  } catch (error) {
+    if (child.exitCode === null && child.pid) execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    throw error
+  }
 }

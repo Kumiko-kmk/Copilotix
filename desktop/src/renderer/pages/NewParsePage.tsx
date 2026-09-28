@@ -1,7 +1,7 @@
 import React from 'react'
 import { FileOutlined, FilePdfOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Modal, Tag, message } from 'antd'
-import { MAX_PDF_BYTES } from '@shared/constants'
+import { MAX_PDF_BYTES, MAX_PDF_PAGES } from '@shared/constants'
 import type { AppSettings } from '@shared/types'
 
 interface PendingPdf {
@@ -139,7 +139,7 @@ export default function NewParsePage(props: {
             <FileOutlined className="upload-icon" aria-hidden="true" />
             <div className="upload-entry-text">
               <span className="upload-prompt">拖入文档</span>
-              <small>当前支持 PDF</small>
+              <small>当前支持 PDF，单篇最多 {MAX_PDF_PAGES} 页</small>
             </div>
           </div>
           <Button type="primary" size="large" loading={submitting} onClick={chooseFiles}>

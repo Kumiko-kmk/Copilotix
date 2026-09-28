@@ -636,6 +636,18 @@ export class MarkdownTranslationPlanManager {
   private async restorePersistedBlocks(state: PlanState, records: TranslationBlockRecord[], attemptChanged = false): Promise<void> {
     const byBlockId = new Map(records.filter((record) => record.jobId === undefined || record.jobId === state.jobId).map((record) => [record.blockId, record]))
     for (const unit of state.units) {
+      // References, protected content and tables without text are local results.
+      // They must remain complete even when no DB record exists yet, or an older
+      // run incorrectly persisted them as failed.
+      if (isAutomaticUnit(unit)) {
+        await this.writeUnitResults(state, unit, new Map(unit.blockIds.map((id, index) => [id, unit.initialResults[index] ?? ''])))
+        unit.status = 'completed'
+        unit.descriptor.status = 'completed'
+        unit.provider = null
+        unit.model = null
+        unit.error = null
+        continue
+      }
       const members = unit.blockIds.map((blockId, index) => ({ blockId, index, record: byBlockId.get(blockId) }))
       const completed = members.every(({ record, index }) => Boolean(record && record.status === 'completed' && record.sourceHash === sha256(unit.sourceMarkdowns[index] ?? '') && record.translatedMarkdown))
       const failed = members.every(({ record, index }) => Boolean(record && record.status === 'failed' && record.sourceHash === sha256(unit.sourceMarkdowns[index] ?? '')))
@@ -663,12 +675,14 @@ export class MarkdownTranslationPlanManager {
   }
 
   private async persistAutoCompleted(state: PlanState, records: TranslationBlockRecord[]): Promise<void> {
-    const persisted = new Set(records.map((record) => record.blockId))
+    const persisted = new Map(records.map((record) => [record.blockId, record]))
     for (const unit of state.units) {
-      const plainWithoutSegments = unit.descriptor.kind === 'plain' &&
-        unit.request.protocol === 'copilotix-translation-plain-v1' && unit.request.segments.length === 0
-      if (unit.status !== 'completed' || !plainWithoutSegments) continue
-      if (unit.blockIds.every((blockId) => persisted.has(blockId))) continue
+      if (unit.status !== 'completed' || !isAutomaticUnit(unit)) continue
+      if (unit.blockIds.every((blockId, index) => {
+        const record = persisted.get(blockId)
+        return record?.status === 'completed' && record.sourceHash === sha256(unit.sourceMarkdowns[index] ?? '') &&
+          record.translatedMarkdown === unit.initialResults[index]
+      })) continue
       await this.commitUnit(state, unit)
     }
   }
@@ -1035,6 +1049,12 @@ export class MarkdownTranslationPlanManager {
     const candidate = this.pathPolicy.resolveChild(this.outputRoot, binding.outputDir)
     if (candidate !== expected) throw new Error('翻译作业输出目录不在配置的文档根目录内')
   }
+}
+
+function isAutomaticUnit(unit: UnitState): boolean {
+  return unit.request.protocol === 'copilotix-translation-plain-v1'
+    ? unit.request.segments.length === 0
+    : unit.tablePlan?.hasTranslatableText === false
 }
 
 function countsFor(state: PlanState): { total: number; completed: number; failed: number } {
