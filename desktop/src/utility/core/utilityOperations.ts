@@ -40,7 +40,7 @@ import {
 import type { CopilotixTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
 import { MAX_PDF_BYTES } from '@shared/constants'
-import { extractPaperTitle, sanitizeTitleStem } from '@shared/titleNaming'
+import { displayPaperTitle, extractPaperTitle } from '@shared/titleNaming'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '@core/blockMapping'
 import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../coreUtilityRuntime'
 import { V2Database } from './persistence/v2Database'
@@ -537,7 +537,7 @@ async function normalizeParserOutput(
     const pageCount = mappings.reduce((maximum, mapping) => Math.max(maximum, ...mapping.boxes.map((box) => box.pageIndex + 1), 0), 0)
     const markdownText = await readFile(markdownStaged, 'utf8')
     const extractedTitle = extractPaperTitle(markdownText, mappings)
-    const displayTitle = extractedTitle ? sanitizeTitleStem(extractedTitle) : null
+    const displayTitle = extractedTitle ? displayPaperTitle(extractedTitle) : null
     const blockStaged = pathPolicy.resolveChild(stagingRoot, 'block_list.json')
     await writeFile(blockStaged, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }, null, 2), 'utf8')
     artifactSources.push({ kind: 'block_mappings', relativePath: 'block_list.json', stagedPath: blockStaged })

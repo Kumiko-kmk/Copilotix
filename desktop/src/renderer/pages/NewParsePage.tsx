@@ -10,6 +10,8 @@ interface PendingPdf {
   size: number
 }
 
+const TUTORIAL_ENTRY_USED_KEY = 'copilotix:tutorial:entry-used:v1'
+
 const WORDMARK_GLYPHS = [
   ['..#####', '.######', '###....', '##.....', '##.....', '##.....', '##.....', '###....', '.######', '..#####'],
   ['..####..', '.##..##.', '##....##', '##....##', '##....##', '##....##', '##....##', '##....##', '.##..##.', '..####..'],
@@ -43,8 +45,10 @@ export default function NewParsePage(props: {
   settings: AppSettings
   onCreated(): void
   onOpenSettings(): void
+  onOpenTutorial(): void
 }): React.JSX.Element {
   const [files, setFiles] = React.useState<PendingPdf[]>([])
+  const [tutorialEntryUsed, setTutorialEntryUsed] = React.useState(() => window.localStorage.getItem(TUTORIAL_ENTRY_USED_KEY) === '1')
   const [useOriginalFilename, setUseOriginalFilename] = React.useState(false)
   const [skipDuplicates, setSkipDuplicates] = React.useState(true)
   const [submitting, setSubmitting] = React.useState(false)
@@ -158,6 +162,11 @@ export default function NewParsePage(props: {
         </div>
 
         </div>
+        {!tutorialEntryUsed ? <button type="button" className="tutorial-entry" onClick={() => {
+          window.localStorage.setItem(TUTORIAL_ENTRY_USED_KEY, '1')
+          setTutorialEntryUsed(true)
+          props.onOpenTutorial()
+        }}>第一次使用？从内置论文开始新手教程 →</button> : null}
       </div>
 
       <Modal

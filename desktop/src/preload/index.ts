@@ -11,6 +11,7 @@ import {
   documentDetailsSchema,
   documentIdRequestSchema,
   documentSummarySchema,
+  tutorialImportRequestSchema,
   type DeleteDocumentRequest,
   type DocumentChangeEvent,
   type ImportDocumentsRequest,
@@ -76,6 +77,7 @@ const api: CopilotixDesktopApi = {
       internalRequest
     )
   },
+  importTutorialPaper: (createDuplicate = false) => invokeValidated('tutorial:import-paper', tutorialImportRequestSchema, documentSummarySchema.nullable(), { createDuplicate }),
   listDocuments: () => invokeValidated('documents:list', noRequestSchema, documentSummarySchema.array(), undefined),
   retryDocument: (documentId: string) => invokeValidated('documents:retry', documentIdRequestSchema, voidResponseSchema, documentId),
   deleteDocument: (request: DeleteDocumentRequest) =>

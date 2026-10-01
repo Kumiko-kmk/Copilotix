@@ -25,10 +25,10 @@ export default function WindowControls(): React.JSX.Element {
   return (
     <div className="window-controls" role="group" aria-label="窗口控制">
       <button type="button" className="window-control close" data-window-control="close" aria-label="关闭窗口" onClick={() => perform('close')}>
-        <span aria-hidden="true">×</span>
+        <span aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3L3 9" /></svg></span>
       </button>
       <button type="button" className="window-control minimize" data-window-control="minimize" aria-label="最小化窗口" onClick={() => perform('minimize')}>
-        <span aria-hidden="true">−</span>
+        <span aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M2.8 6h6.4" /></svg></span>
       </button>
       <button
         type="button"
@@ -38,7 +38,7 @@ export default function WindowControls(): React.JSX.Element {
         aria-pressed={maximized}
         onClick={() => perform('toggle-maximize')}
       >
-        <span aria-hidden="true">{maximized ? '↙' : '↗'}</span>
+        <span aria-hidden="true"><svg viewBox="0 0 12 12"><path d={maximized ? 'M5 2.5V5H2.5M7 9.5V7h2.5' : 'M2.5 5V2.5H5M9.5 7v2.5H7'} /></svg></span>
       </button>
     </div>
   )

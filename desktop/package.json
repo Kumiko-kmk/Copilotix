@@ -94,6 +94,10 @@
         "to": "icon.png"
       },
       {
+        "from": "resources/tutorial/Attention Is All You Need.pdf",
+        "to": "tutorial/Attention Is All You Need.pdf"
+      },
+      {
         "from": "../LICENSE.md",
         "to": "licenses/Copilotix-MIT.txt"
       },

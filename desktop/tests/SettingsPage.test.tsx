@@ -166,7 +166,7 @@ describe('SettingsPage credential editor', () => {
     expect((screen.getByRole('checkbox', { name: '启用千问 / Qwen' }) as HTMLInputElement).checked).toBe(true)
   })
 
-  it('loads real storage usage and changes or opens the persisted location', async () => {
+  it('loads storage usage and offers library migration beside export and import', async () => {
     const settings = configuredSettings()
     const saveSettings = vi.fn(async (update: Parameters<CopilotixDesktopApi['saveSettings']>[0]) => ({
       settings: { ...settings, ...update, credentials: settings.credentials },
@@ -187,6 +187,7 @@ describe('SettingsPage credential editor', () => {
       growth: Array.from({ length: 14 }, (_, index) => ({ date: `2026-09-${String(index + 10).padStart(2, '0')}`, totalBytes: (index + 1) * 112_347 }))
     }))
     const openStorageLocation = vi.fn(async () => undefined)
+    const manageLibrary = vi.fn(async () => ({ status: 'cancelled' as const, restartRequired: false }))
     Object.defineProperty(window, 'copilotix', {
       configurable: true,
       value: {
@@ -195,7 +196,8 @@ describe('SettingsPage credential editor', () => {
         chooseOutputDirectory: vi.fn(async () => 'D:\\Copilotix'),
         getStorageInfo,
         getUsageAnalytics: vi.fn(async () => ({ days: [] })),
-        openStorageLocation
+        openStorageLocation,
+        manageLibrary
       } as unknown as CopilotixDesktopApi
     })
 
@@ -213,13 +215,14 @@ describe('SettingsPage credential editor', () => {
     expect(screen.getByRole('region', { name: '近期存储增长' })).toBeTruthy()
     expect(screen.getByRole('img', { name: '近 14 日存储增长曲线' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /修改位置/u }))
-    await vi.waitFor(() => expect((screen.getByLabelText('文档保存位置') as HTMLInputElement).value).toBe('D:\\Copilotix'))
+    expect(screen.queryByRole('region', { name: '文档库管理' })).toBeNull()
+    expect((screen.getByLabelText('文档保存位置') as HTMLInputElement).value).toBe(settings.outputRoot)
+    fireEvent.click(screen.getByRole('button', { name: '迁移文库' }))
+    await vi.waitFor(() => expect(manageLibrary).toHaveBeenCalledWith({ action: 'migrate' }))
+    await vi.waitFor(() => expect((screen.getByRole('button', { name: '打开当前目录' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: '打开当前目录' }))
     await vi.waitFor(() => expect(openStorageLocation).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: '保存全部更改' }))
-    await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
-    expect(saveSettings.mock.calls[0]![0]).toMatchObject({ outputRoot: 'D:\\Copilotix', formulaEnabled: true, tableEnabled: true })
+    expect(saveSettings).not.toHaveBeenCalled()
   })
 })
 
