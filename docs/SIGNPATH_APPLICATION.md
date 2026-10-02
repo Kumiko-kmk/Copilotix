@@ -31,15 +31,20 @@ components retain their original licenses.
 ## Build and verification
 
 Windows CI uses pnpm, builds Main/Preload/Renderer/Utility bundles, applies Electron
-fuses before signing, and packages the complete Windows runtime. The current local
+fuses before signing, and packages the complete Windows runtime, portable ZIP and
+guided NSIS Setup. Setup is the primary download and the ZIP is an alternative.
+The previously recorded local
 checks passed type checking, lint (49 existing warnings), 75 test files and 389 tests
 with 3 skipped tests. A public signing integration is not active yet.
 
 The current production workflow accepts file-based signing credentials. SignPath
 requires its own CI artifact submission and approval flow; do not claim that adding
 a SignPath token alone enables this existing workflow. After onboarding, integrate
-signing after fuses/resource changes and before final ZIP hashes, and verify the
-returned executable's signature before publishing.
+signing after fuses/resource changes and before final ZIP/Setup hashes. Sign and
+verify the application, generated uninstaller and final Setup in the provider's
+supported packaging flow; verify the returned application and Setup signatures
+before publishing. The current four public assets are Setup, ZIP, release manifest
+and SHA-256 checksums. Installer support does not activate SignPath integration.
 
 ## Information still required
 

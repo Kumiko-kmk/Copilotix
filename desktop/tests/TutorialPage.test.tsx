@@ -36,6 +36,7 @@ describe('TutorialPage', () => {
   })
 
   it('imports the fixed sample once and follows its task into the reader', async () => {
+    window.localStorage.setItem('copilotix:tutorial:api-verified:v1', '1')
     const importTutorialPaper = vi.fn(async () => sample)
     Object.defineProperty(window, 'copilotix', { configurable: true, value: { importTutorialPaper } as unknown as CopilotixDesktopApi })
     const onImported = vi.fn()
@@ -59,6 +60,7 @@ describe('TutorialPage', () => {
   })
 
   it('does not create a task when the file picker is cancelled', async () => {
+    window.localStorage.setItem('copilotix:tutorial:api-verified:v1', '1')
     const importTutorialPaper = vi.fn(async () => null)
     Object.defineProperty(window, 'copilotix', { configurable: true, value: { importTutorialPaper } as unknown as CopilotixDesktopApi })
     const onImported = vi.fn()
@@ -70,16 +72,27 @@ describe('TutorialPage', () => {
   })
 
   it('restarts with a new task while preserving the previous sample', async () => {
+    window.localStorage.setItem('copilotix:tutorial:api-verified:v1', '1')
     const previous = { ...sample, workflow: { ...sample.workflow, status: 'completed' as const, progress: 100, activeJobKind: null } }
     const next = { ...sample, id: '86f3f3e6-44cd-43f9-8886-77f6376a619a' }
     const importTutorialPaper = vi.fn(async () => next)
-    Object.defineProperty(window, 'copilotix', { configurable: true, value: { importTutorialPaper } as unknown as CopilotixDesktopApi })
     const settings = { ...DEFAULT_SETTINGS, credentials: { ...DEFAULT_SETTINGS.credentials, parser: { state: 'valid' as const } } }
+    Object.defineProperty(window, 'copilotix', { configurable: true, value: {
+      importTutorialPaper,
+      validateCredential: vi.fn(async () => ({ state: 'valid' as const })),
+      saveSettings: vi.fn(async () => ({ settings, fieldErrors: {} }))
+    } as unknown as CopilotixDesktopApi })
     const onImported = vi.fn()
     render(<TutorialPage settings={settings} documents={[previous]} onSettingsSaved={vi.fn()} onOpenReader={vi.fn()} onImported={onImported} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: '重新体验教程' }))
     expect(window.localStorage.getItem('copilotix:tutorial:replay')).toBe('1')
-    expect((screen.getByRole('button', { name: '选择文档' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: '选择文档' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(window.localStorage.getItem('copilotix:tutorial:api-verified:v1')).toBeNull()
+    expect(previous.workflow.status).toBe('completed')
+    fireEvent.click(screen.getByRole('button', { name: '输入申领到的 API' }))
+    fireEvent.change(screen.getByLabelText('MinerU Token'), { target: { value: 'test-token' } })
+    fireEvent.click(screen.getByRole('button', { name: '验证并保存' }))
+    await waitFor(() => expect((screen.getByRole('button', { name: '选择文档' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: '选择文档' }))
     await waitFor(() => expect(importTutorialPaper).toHaveBeenCalledWith(true))
     await waitFor(() => expect(onImported).toHaveBeenCalledWith(next))
@@ -102,6 +115,7 @@ describe('TutorialPage', () => {
   })
 
   it('uses the same completion mark on all four finished steps', async () => {
+    window.localStorage.setItem('copilotix:tutorial:api-verified:v1', '1')
     window.localStorage.setItem(`copilotix:tutorial:read:${sample.id}`, '1')
     Object.defineProperty(window, 'copilotix', { configurable: true, value: {} as CopilotixDesktopApi })
     const settings = { ...DEFAULT_SETTINGS, credentials: { ...DEFAULT_SETTINGS.credentials, parser: { state: 'valid' as const } } }

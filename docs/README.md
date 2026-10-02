@@ -13,4 +13,6 @@
 
 - [许可证与签名配置](LICENSE_AND_SIGNING_ZH.md)
 - [Windows 桌面发布](DESKTOP_RELEASE_ZH.md)
+- [Windows 安装、升级与卸载](WINDOWS_INSTALLATION_ZH.md)
+- [Setup 安裝器開發計劃](SETUP_INSTALLER_DEVELOPMENT_PLAN_ZH.md)
 - [文档库备份、恢复与迁移](LIBRARY_MANAGEMENT_ZH.md)

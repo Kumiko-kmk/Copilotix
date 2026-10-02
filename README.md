@@ -18,7 +18,7 @@
   <a href="#faq">常见问题</a>
 </p>
 
-> 本文介绍本地 `master` 已实现的桌面功能，核验基线为 [`4c96a29`](https://github.com/Kumiko-kmk/Copilotix/commit/4c96a29e94a3f9588ef62eee007233b7ac512f5a)。图示用于解释功能与架构，不是应用截图。
+> 本文介绍当前桌面实现与 Windows Setup 安装方式。图示用于解释功能与架构，不是应用截图。
 
 <a id="introduction"></a>
 
@@ -44,15 +44,17 @@ Copilotix 是面向论文处理与阅读的个人桌面客户端。**PDF 解析�
 
 ## 🚀 快速开始
 
-### 方式一：运行桌面发行包
+### 方式一：使用 Setup 安装（推荐）
 
-1. 查看仓库的 [Releases](https://github.com/Kumiko-kmk/Copilotix/releases)。**若已发布**对应版本，下载完整的 Windows x64 ZIP。
-2. 将 ZIP 完整解压到可写目录，再运行其中的 `Copilotix.exe`。
+1. 查看仓库的 [Releases](https://github.com/Kumiko-kmk/Copilotix/releases)。**若已发布**对应版本，下载 `Copilotix-<版本>-win-x64.zip`，完整解压后运行其中的 `Copilotix-Setup-<版本>-x64.exe`。也提供较小的独立 Setup 下载。
+2. 运行安装精灵，选择当前用户可写的安装位置，并按需要创建桌面快捷方式。完成后从桌面或开始菜单启动 Copilotix。
 3. 打开「设置 → 服务连接」，配置并保存 MinerU Token。
 4. 返回「新解析」，选择一篇 PDF，点击「开始解析」。
 5. 在「任务管理」查看进度，点击任务名称进入阅读器。
 
-> 必须保留 EXE 同目录下的 DLL、PAK 和 `resources/` 等文件。仅复制 EXE 无法组成完整运行包。若 Releases 暂无安装包，可使用下方源码启动方式。
+更新前先等待任务完成，并通过托盘菜单退出 Copilotix；关闭窗口可能仍在后台运行。再次运行新版 Setup 可覆盖升级。安装目录和文档保存目录独立：设置、凭据与数据库继续使用 `%APPDATA%\Copilotix-Translation-v2` 及原有文档库。运行安装目录中的 `uninstall.exe` 或通过 Windows「设置 → 应用」卸载，默认保留个人数据；也可勾选清除文库、设置与凭据并再次确认。详细步骤见 [安装、升级与卸载指南](docs/WINDOWS_INSTALLATION_ZH.md)。
+
+精简 ZIP 包含 Setup、`uninstall.exe`、安装说明及校验文件；完整程序已嵌入 Setup，安装后即可运行，无需另外下载运行目录。升级无需搬移文档库，请先退出正在运行的应用。若 Releases 暂无安装包，可使用下方源码启动方式。
 
 ### 方式二：从源码启动
 
@@ -325,14 +327,17 @@ pnpm desktop:test:coverage
 pnpm desktop:test:e2e
 ```
 
-Windows 目录版由发布脚本生成，当前版本的典型路径为：
+发布脚本同时生成 Setup、完整运行目录与 ZIP，当前版本的典型路径为：
 
 ```text
-release/Copilotix-0.1.0-win-x64/Copilotix.exe
-release/Copilotix-0.1.0-win-x64.zip
+release/Copilotix-Setup-0.1.0-x64.exe
+release/安装说明.txt
+release-artifacts/<build-id>/program/Copilotix.exe
+release/uninstall.exe
+release-artifacts/<build-id>/Copilotix-0.1.0-win-x64.zip
 ```
 
-发布流程包含 bundle、ASAR、资源、哈希、目录体积与 packaged CLI smoke 检查。**CLI smoke 不等于 GUI 端到端测试通过**，正式发布仍需在能运行 Electron 界面的环境中验证导入、阅读和导出。
+发布流程包含 bundle、ASAR、资源、Setup/ZIP 哈希、独立体积门槛与 packaged CLI smoke 检查。**CLI smoke 不等于 GUI 端到端测试通过**，正式发布仍需验证安装、升级、卸载，以及导入、阅读和导出。正式签名与完整发布门禁见 [Windows 桌面发布](docs/DESKTOP_RELEASE_ZH.md)。
 
 贡献前请阅读 [AGENTS.md](AGENTS.md)。更多技术背景见 [桌面开发说明](docs/DESKTOP_DEVELOPMENT_ZH.md)、[架构文档](docs/ARCHITECTURE_ZH.md) 和 [安全策略](docs/SECURITY.md)。
 

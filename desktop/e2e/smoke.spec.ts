@@ -5,19 +5,21 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { PACKAGED_SMOKE_ARG, validatePackagedSmokeOutput } from '../src/shared/packagedSmoke.mjs'
 import { createE2EWorkspace, launchElectron } from './helpers'
+import { MAX_PDF_PAGES } from '../src/shared/constants'
 
 const desktopPackage = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as {
   version: string
   devDependencies: { electron: string }
-  build?: { productName?: string }
 }
-const releaseName = `${desktopPackage.build?.productName ?? 'Copilotix'}-${desktopPackage.version}-win-x64`
 
 test('opens the minimal new parse page', async () => {
   const workspace = await createE2EWorkspace()
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
+    await expect(window.locator('.tutorial-page')).toBeVisible()
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.locator('.top-navigation-item').filter({ hasText: '新解析' }).click()
     await expect(window.locator('aside[aria-label="主导航"]')).toHaveCount(0)
     await expect(window.getByRole('group', { name: '窗口控制' })).toBeVisible()
     await expect(window.locator('.titlebar-brand')).toHaveCount(0)
@@ -26,7 +28,7 @@ test('opens the minimal new parse page', async () => {
     await expect(window.getByRole('button', { name: '任务管理' })).toBeVisible()
     await expect(window.getByText('智能解析')).toHaveCount(0)
     await expect(window.getByText('拖入文档')).toBeVisible()
-    await expect(window.getByText('当前支持 PDF')).toBeVisible()
+    await expect(window.getByText(`当前支持 PDF，单篇最多 ${MAX_PDF_PAGES} 页`)).toBeVisible()
     await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
     const uploadEntry = window.getByTestId('pdf-upload-entry')
     await expect(uploadEntry).toBeVisible()
@@ -71,8 +73,22 @@ test('supports the custom traffic-light window controls', async () => {
 
 test('starts the hardened packaged Windows core without a Node inspector', async () => {
   test.skip(process.platform !== 'win32', 'Windows package only')
-  const executablePath = process.env.COPILOTIX_E2E_EXECUTABLE_PATH
-    ?? join(__dirname, `../../release/${releaseName}/Copilotix.exe`)
+  const advancedDirectory = join(__dirname, '../../release/advanced')
+  const executablePath = process.env.COPILOTIX_E2E_EXECUTABLE_PATH ?? (() => {
+    const manifest = JSON.parse(readFileSync(join(advancedDirectory, 'release-manifest.json'), 'utf8')) as {
+      schemaVersion: number
+      artifactDirectory?: string
+      runtimeArtifactDirectory?: string
+      runtime: { entryPoint: string }
+    }
+    if (manifest.schemaVersion >= 5 && manifest.runtimeArtifactDirectory) {
+      return join(advancedDirectory, '..', manifest.runtimeArtifactDirectory, 'Copilotix.exe')
+    }
+    const runtimeBase = manifest.schemaVersion >= 4
+      ? join(advancedDirectory, '..')
+      : manifest.artifactDirectory ? join(advancedDirectory, '..', manifest.artifactDirectory) : advancedDirectory
+    return join(runtimeBase, manifest.runtime.entryPoint)
+  })()
   // Playwright Electron.launch requires a Node inspector, intentionally fused
   // off in release binaries. Exercise the isolated packaged smoke entry instead.
   const result = await promisify(execFile)(executablePath, [PACKAGED_SMOKE_ARG], {

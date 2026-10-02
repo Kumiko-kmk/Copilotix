@@ -76,6 +76,7 @@ import { formatPackagedSmokeMarker, shouldRunPackagedSmoke } from '@shared/packa
 import { inspectStorage } from './storageService'
 import { resolveUtilityEntryPath } from './utilityEntryPath'
 import { UsageAnalyticsService } from './usageAnalyticsService'
+import { runUninstallCleanup, UNINSTALL_CLEANUP_ARG } from './uninstallCleanup'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -91,7 +92,9 @@ const libraryGate = new LibraryAccessGate()
 
 const packagedSmokeMode = shouldRunPackagedSmoke(process.argv, app.isPackaged)
 
-if (packagedSmokeMode) {
+if (app.isPackaged && process.argv.includes(UNINSTALL_CLEANUP_ARG)) {
+  void runUninstallCleanup()
+} else if (packagedSmokeMode) {
   void runPackagedSmoke()
 } else {
   startNormalApp()

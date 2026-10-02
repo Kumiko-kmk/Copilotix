@@ -2,7 +2,7 @@
 
 日期：2026-10-01  
 規劃分支：`setup`  
-狀態：設計與排期；尚未實作安裝器
+狀態：已實作並通過本地驗收；正式公開發布仍需受信任簽章。
 
 ## 目標與結論
 
@@ -17,9 +17,12 @@
 ```text
 release/
 ├─ Copilotix-Setup-<version>-x64.exe       # 新手主要下載入口
-├─ Copilotix-<version>-win-x64.zip         # 免安裝備選
-├─ release-manifest.json
-└─ SHA256SUMS.txt
+├─ 安装说明.txt                           # 新手安裝步驟
+└─ advanced/                              # 進階及開發者檔案
+   ├─ Copilotix-<version>-win-x64.zip      # 免安裝備選
+   ├─ Copilotix-<version>-win-x64/         # 完整運行目錄
+   ├─ release-manifest.json
+   └─ SHA256SUMS.txt
 ```
 
 安裝位置預設使用目前用戶可寫的程式目錄，安裝精靈允許改到其他位置；安裝後的 `Copilotix.exe`、DLL、PAK 與 `resources/` 仍需維持 Electron 的完整運行結構。桌面和開始菜單只放指向該 EXE 的捷徑，不複製單獨 EXE。
@@ -56,4 +59,37 @@ release/
 
 ## 暫不納入本輪
 
-自動更新、MSIX／Microsoft Store、跨平台安裝器、靜默企業部署，以及卸載時刪除用戶資料。這些功能會引入額外的服務、憑證或資料安全決策，可在 Setup 主流程穩定後另立里程碑。
+自動更新、MSIX／Microsoft Store、跨平台安裝器與靜默企業部署。卸載時選擇刪除用戶資料已按 2026-10-02 後續需求納入，詳見下方結果。
+
+## 本輪完成結果
+
+- Setup 實測 **93.98 MiB**，相較初版 104.22 MiB 減少 **9.82%**。採最大壓縮、取消增量更新資料，保留完整 Electron 執行期。
+- `release/` 頂層只有 Setup、`安装说明.txt`、`advanced/`；新手直接雙擊 Setup。後續精簡後，`advanced/` 只含校驗資料，ZIP 與完整執行目錄存於 `release-artifacts/<build-id>/`，不需隨安裝包交付。
+- 保持原有 appId、四個 bundle 與使用者資料路徑。使用現有圖標及奶油色背景；支援目前使用者安裝、自訂目錄、桌面與開始菜單捷徑。安裝與卸載不強制終止背景程式。
+- 型別檢查、lint（無錯誤）、完整 build、發布驗證與 packaged smoke 通過；408 項單元／整合測試通過（3 項既有略過），相關發布及閱讀器回歸測試亦通過。
+- 最終安裝包的原生精靈、自訂中文與空格路徑、覆蓋安裝、運行中保護、卸載保留資料／憑證及重裝驗收通過；測試安裝已清理。
+- 本地包為未簽名測試包。正式主程式、Setup 與內嵌卸載器的簽章門禁保留；未執行公開發布。
+
+驗收證據保存在本工作樹的 `desktop/test-artifacts/installer-wizard/` 及測試／打包日誌，發布與使用方式見 [Windows 安裝指南](WINDOWS_INSTALLATION_ZH.md) 與 [桌面發布文檔](DESKTOP_RELEASE_ZH.md)。
+
+## 2026-10-02 後續需求結果
+
+- 整個 `release/` 交付目錄由約 599.33 MiB 精簡為 **93.99 MiB**，減少 **84.32%**。Setup 是完整離線安裝包，不依賴外部 `release-artifacts/`；開發產物與可選便攜 ZIP 分開保留，成功構建後清理前次成功產物。
+- 安裝目錄提供 `uninstall.exe`。預設保留資料，可勾選同步移除文庫、設定與 API 憑證；Main 顯示實際位置與文檔數量二次確認，Utility 唯讀列出已登記目錄。只刪除受限 `documents-v2/<id>` 與固定應用資料目錄，保護外部來源、其他共用檔案與外部備份。取消／錯誤停止卸載；自動升級及靜默卸載不執行此清理。
+- 本次針對變更執行 **38 項測試**，全部通過；型別、針對性 lint、完整 build、NSIS 編譯、發布大小／雜湊與 packaged smoke 通過。SQLite 清理使用臨時文庫實際驗證，不刪除本機日常資料。
+- 確認最終 Setup 內嵌 `uninstall.exe`。本機已有日常安裝，未覆蓋或卸載；新選項的實際原生 UI 驗收未完成（安全取消測試在啟動安裝／卸載程序前停滯，已停止自有測試程序）。先前初版 Setup 的安裝驗收不能替代本次新卸載 UI 驗收；本輪證據限於上述測試、編譯與包內容檢查。
+- Setup 是現有 Electron runtime 的封裝與部署層，功能開發仍沿用 Main／Preload／Renderer／Utility 架構。新增 native 依賴、資源、憑證種類或資料儲存結構時，同步維護打包與卸載清單；資料庫 migration 保持舊資料兼容。
+
+## 統一 Release 推送范本
+
+後續依使用者要求，把 Setup、獨立卸載入口與完整 `program/` 放進同一個版本 ZIP，作為 Release 主下載；不再內嵌另一份便攜 ZIP。ZIP **244.86 MiB**；Setup 仍為 **93.99 MiB**，新增卸載入口約 **103 KiB**。CI 的資產上傳、下載回驗、路徑與校驗清單同步更新。清單 schema 4 區分 ZIP 內 payload 資料與外層 ZIP 哈希，避免自引用。
+
+本次 **50 項相關測試**與型別／打包驗證通過；最終 ZIP 本機 HTTP 下載、SHA 校驗、完整解壓及刪除均通過。使用與最終包相同 EXE／ASAR 的獨立 GUID 安裝，實際透過卸載入口移除測試程式及登記，且原有使用者安裝與 SQLite 未改動，測試安裝已清理。測試不公開推送，正式發布仍需受信任簽章。
+
+## 最终精简范本（schema 5）
+
+原统一 ZIP 的 244.86 MiB 来自两份相同程序：Setup 内的压缩程序与额外 `program/`。现改为只交付 Setup、独立 `uninstall.exe`、安装说明和小型校验资料；完整程序仍在 Setup 内，开发运行副本保留于 `release-artifacts/<build-id>/program`，不随主 ZIP 下载。
+
+最终 ZIP **94.08 MiB**（约 **98.65 MB**），Setup **93.99 MiB**；相较 244.86 MiB 减少约 **61.6%**。用户提到的旧包约 200 MB 未取得同版本原件，按十进制 200 MB 比较约减半；不是完全同源基准。进一步优化应集中于 Electron 版本升级的实际大小、依赖和资源审计；不宜直接裁剪必需 DLL、PAK、凭据 native binding 或教程。改为在线安装器虽可减小下载入口，但需另行联网下载 runtime，并不降低完整安装内容。
+
+50 项针对性测试、类型检查、lint（0 错误／49 项既有警告）、精简打包发布门禁及 packaged core E2E 均通过。本地包仍为开发测试包，正式发布的许可证与受信任签名门禁保持启用。
