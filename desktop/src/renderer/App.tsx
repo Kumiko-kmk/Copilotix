@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileAddOutlined, FileTextOutlined, GithubOutlined, SettingOutlined } from '@ant-design/icons'
+import { FileAddOutlined, FileTextOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
 import type { AppSettings } from '@shared/types'
 import type { DocumentDetails } from '@shared/ipcSchemas'
 import EdgeDock from './components/EdgeDock'
@@ -9,6 +9,7 @@ import WindowControls from './components/WindowControls'
 import NewParsePage from './pages/NewParsePage'
 import TasksPage from './pages/TasksPage'
 import SettingsPage from './pages/SettingsPage'
+import TutorialPage from './pages/TutorialPage'
 import {
   applyDocumentChange,
   getDocumentRefreshPlan,
@@ -18,7 +19,7 @@ import {
 
 const ReaderPage = React.lazy(() => import('./pages/ReaderPage'))
 
-type View = { name: 'new' | 'tasks' | 'settings' } | { name: 'reader'; documentId: string }
+type View = { name: 'new' | 'tasks' | 'settings' | 'tutorial' } | { name: 'reader'; documentId: string }
 
 export default function App(): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -33,6 +34,14 @@ export default function App(): React.JSX.Element {
   })
   const settings = settingsQuery.data
   const documents = documentsQuery.data?.documents ?? []
+
+  React.useEffect(() => {
+    if (!settingsQuery.isSuccess || !documentsQuery.isSuccess || documents.length > 0) return
+    const key = 'copilotix:tutorial:seen:v1'
+    if (window.localStorage.getItem(key)) return
+    window.localStorage.setItem(key, '1')
+    setView({ name: 'tutorial' })
+  }, [settingsQuery.isSuccess, documentsQuery.isSuccess, documents.length])
 
   React.useEffect(() => {
     const stop = window.copilotix.onDocumentsChanged((change) => {
@@ -81,6 +90,7 @@ export default function App(): React.JSX.Element {
           <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => setView({ name: 'new' })} />
           <NavigationButton active={view.name === 'tasks'} icon={<FileTextOutlined />} label="任务管理" onClick={() => setView({ name: 'tasks' })} />
           <NavigationButton active={view.name === 'settings'} icon={<SettingOutlined />} label="设置" onClick={() => setView({ name: 'settings' })} />
+          <NavigationButton active={view.name === 'tutorial'} icon={<ReadOutlined />} label="新手教程" onClick={() => setView({ name: 'tutorial' })} />
           <a className="top-navigation-item" href="https://github.com/Kumiko-kmk/Copilotix" target="_blank" rel="noreferrer" aria-label="打开 GitHub">
             <GithubOutlined /><span>GitHub</span>
           </a>
@@ -95,9 +105,23 @@ export default function App(): React.JSX.Element {
               setView({ name: 'tasks' })
             }}
             onOpenSettings={() => setView({ name: 'settings' })}
+            onOpenTutorial={() => setView({ name: 'tutorial' })}
           />
         ) : null}
         {view.name === 'tasks' ? <TasksPage documents={documents} onOpen={openDocument} /> : null}
+        {view.name === 'tutorial' && settings ? <TutorialPage
+          settings={settings}
+          documents={documents}
+          onSettingsSaved={onSettingsSaved}
+          onOpenReader={openDocument}
+          onImported={(document) => {
+            queryClient.setQueryData<DocumentListCache>(['documents'], (current) => ({
+              revision: current?.revision ?? 0,
+              documents: [document, ...(current?.documents ?? []).filter((item) => item.id !== document.id)]
+            }))
+          }}
+          onClose={() => setView({ name: 'new' })}
+        /> : null}
         {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} /> : null}
         {view.name === 'reader' ? (
           <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>

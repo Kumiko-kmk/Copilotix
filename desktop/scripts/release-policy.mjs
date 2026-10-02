@@ -81,6 +81,7 @@ const REQUIRED_ASAR_ENTRIES = Object.freeze([
   'package.json'
 ])
 const REQUIRED_RUNTIME_ENTRIES = Object.freeze([
+  'resources/tutorial/Attention Is All You Need.pdf',
   'resources/app.asar.unpacked/out/utility/index.js',
   'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js',
   'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/package.json',

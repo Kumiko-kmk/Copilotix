@@ -24,7 +24,7 @@ beforeEach(() => {
 })
 
 describe('TasksPage', () => {
-  it('uses the status cell as progress without showing block counts or a separate bar', () => {
+  it('shows queued as a plain badge and progress only inside the translating badge', () => {
     const running = document('paper.pdf', 'Running paper', 'translating', '2026-09-20T22:19:16')
     running.workflow.translationProgress = { totalBlocks: 1103, completedBlocks: 432, failedBlocks: 1 }
     running.workflow.progress = 67
@@ -36,10 +36,12 @@ describe('TasksPage', () => {
     expect(screen.queryByText(/区块/u)).toBeNull()
     const progress = screen.getByRole('progressbar', { name: '翻译中' })
     expect(progress.getAttribute('aria-valuenow')).toBe('67')
-    expect(progress.closest('td')!.style.getPropertyValue('--task-progress')).toBe('67%')
+    expect(progress.style.getPropertyValue('--task-progress')).toBe('67%')
     expect(progress.closest('td')!.querySelector('.ant-progress')).toBeNull()
-    expect(screen.getByRole('progressbar', { name: '排队中' }).closest('td')!.style.getPropertyValue('--task-progress')).toBe('25%')
-    expect(screen.getAllByRole('progressbar')).toHaveLength(2)
+    expect(screen.queryByRole('progressbar', { name: '排队中' })).toBeNull()
+    expect(screen.getByText('排队中').closest('.ant-tag')).toBeTruthy()
+    expect(progress.closest('td')!.classList.contains('task-progress-cell')).toBe(false)
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
     expect(screen.getByRole('button', { name: '重试' }).getAttribute('title')).toContain('保留已完成区块')
   })
 

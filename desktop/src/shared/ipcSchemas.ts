@@ -347,6 +347,8 @@ export const documentSummarySchema = z.object({
 }).strict()
 export type DocumentSummary = z.infer<typeof documentSummarySchema>
 
+export const tutorialImportRequestSchema = z.object({ createDuplicate: z.boolean() }).strict()
+
 export const documentChangeEventSchema = z.object({
   revision: z.number().int().positive(),
   upserted: z.array(documentSummarySchema).max(1_000),

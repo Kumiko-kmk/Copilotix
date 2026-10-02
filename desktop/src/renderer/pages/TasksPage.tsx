@@ -63,13 +63,19 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
           },
           {
             title: '状态', width: '15%', align: 'center',
-            onCell: (document: DocumentSummary) => isFilledStatus(document.workflow.status) ? {
-              className: 'task-progress-cell',
-              style: { '--task-progress': `${Math.max(0, Math.min(100, document.workflow.progress))}%` } as React.CSSProperties
-            } : {},
-            render: (_: unknown, document: DocumentSummary) => isFilledStatus(document.workflow.status) ? (
-              <div className="task-status task-status-active" role="progressbar" aria-label={statusLabels[document.workflow.status]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={document.workflow.progress}>
-                {statusLabels[document.workflow.status]}
+            render: (_: unknown, document: DocumentSummary) => document.workflow.status === 'translating' ? (
+              <div className="task-status">
+                <div
+                  className="task-status-active"
+                  style={{ '--task-progress': `${Math.max(0, Math.min(100, document.workflow.progress))}%` } as React.CSSProperties}
+                  role="progressbar"
+                  aria-label={statusLabels[document.workflow.status]}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={document.workflow.progress}
+                >
+                  <span>{statusLabels[document.workflow.status]}</span>
+                </div>
               </div>
             ) : <div className="task-status"><Tag color={statusColor(document.workflow.status)}>{statusLabels[document.workflow.status]}</Tag></div>
           },
@@ -103,9 +109,6 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
   )
 }
 
-function isFilledStatus(status: DocumentSummary['workflow']['status']): boolean {
-  return status === 'queued' || status === 'translating'
-}
 
 function statusColor(status: DocumentSummary['workflow']['status']): string {
   if (status === 'completed') return 'success'

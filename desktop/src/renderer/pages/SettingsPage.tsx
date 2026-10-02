@@ -87,19 +87,10 @@ export default function SettingsPage(props: {
     previousSettingsRef.current = props.settings
   }, [props.settings])
 
-  const update = React.useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    setDraft((current) => ({ ...current, [key]: value }))
-  }, [])
-
   const updateCredentialDraft = React.useCallback((name: CredentialName, patch: Partial<DraftCredential>) => {
     setCredentialErrors((current) => ({ ...current, [name]: undefined }))
     setCredentials((current) => ({ ...current, [name]: { ...current[name], ...patch } }))
   }, [])
-
-  const chooseOutput = React.useCallback(async () => {
-    const path = await window.copilotix.chooseOutputDirectory()
-    if (path) update('outputRoot', path)
-  }, [update])
 
   const refreshStorageInfo = React.useCallback(async () => {
     setStorageLoading(true)
@@ -426,25 +417,13 @@ export default function SettingsPage(props: {
                   <span>目录位置</span>
                   <Input aria-label="文档保存位置" readOnly value={draft.outputRoot} />
                 </label>
-                {draft.outputRoot !== props.settings.outputRoot ? <Typography.Text type="warning">新位置将在保存全部更改后生效</Typography.Text> : null}
-                <div className="storage-location-actions">
-                  <Button disabled={libraryAction !== null} onClick={() => void chooseOutput()}>修改位置</Button>
+                <div className="storage-location-actions" aria-busy={libraryAction !== null}>
+                  <Button loading={libraryAction === 'backup'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('backup')}>导出文库</Button>
+                  <Button loading={libraryAction === 'restore'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('restore')}>导入文库</Button>
+                  <Button loading={libraryAction === 'migrate'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('migrate')}>迁移文库</Button>
                   <Button disabled={libraryAction !== null} icon={<FolderOpenOutlined aria-hidden="true" />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
                 </div>
               </div>
-
-              <section className="storage-library-card" aria-label="文档库管理" aria-busy={libraryAction !== null}>
-                <strong>文档库管理</strong>
-                <p>备份包含全部文档、标注和设置，不包含 API 密钥。请等待排队和执行中的任务全部结束后再操作。</p>
-                <div className="storage-library-actions">
-                  <div><strong>备份文档库</strong><small>生成带完整性校验的备份文件夹，请完整保存。</small>
-                    <Button loading={libraryAction === 'backup'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('backup')}>备份文档库</Button></div>
-                  <div><strong>恢复文档库</strong><small>校验并保留旧库后替换当前文档库，完成后重启。</small>
-                    <Button danger loading={libraryAction === 'restore'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('restore')}>恢复文档库</Button></div>
-                  <div><strong>迁移文档库</strong><small>复制校验后切换到空目录，原文件保留，完成后重启。</small>
-                    <Button loading={libraryAction === 'migrate'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('migrate')}>迁移文档库</Button></div>
-                </div>
-              </section>
               <div className="storage-usage-card" aria-busy={storageLoading}>
                 <div className="storage-usage-heading">
                   <span><strong>存储用量</strong><small>{storageInfo?.exists === false ? '文档目录尚未建立' : '当前已保存内容'}</small></span>
@@ -460,7 +439,7 @@ export default function SettingsPage(props: {
                 <StorageComposition info={storageInfo} />
                 <StorageGrowth info={storageInfo} />
               </div>
-              <Typography.Text className="storage-note" type="secondary">修改位置只影响新任务；搬迁已有文档请使用“迁移文档库”。未保存的设置不会进入备份。</Typography.Text>
+              <Typography.Text className="storage-note" type="secondary">导出文库包含文档、标注和设置，不包含 API 密钥；导入或迁移会保留旧库并在完成后重启。</Typography.Text>
             </section>
           ) : null}
           </div>

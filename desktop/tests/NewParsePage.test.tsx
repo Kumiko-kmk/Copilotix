@@ -22,7 +22,7 @@ describe('NewParsePage', () => {
       ...DEFAULT_SETTINGS,
       credentials: { ...DEFAULT_SETTINGS.credentials, parser: { state: 'valid' as const } }
     }
-    render(<NewParsePage settings={settings} onCreated={vi.fn()} onOpenSettings={vi.fn()} />)
+    render(<NewParsePage settings={settings} onCreated={vi.fn()} onOpenSettings={vi.fn()} onOpenTutorial={vi.fn()} />)
     const uploadEntry = screen.getByTestId('pdf-upload-entry')
     const file = new File(['%PDF-1.4'], 'window-drop.pdf', { type: 'application/pdf' })
     const dataTransfer = { types: ['Files'], files: [file], dropEffect: 'none' }
@@ -31,6 +31,7 @@ describe('NewParsePage', () => {
     expect(screen.getByText('拖入文档')).toBeTruthy()
     expect(screen.getByText('当前支持 PDF，单篇最多 600 页')).toBeTruthy()
     expect(screen.getByRole('button', { name: '选择文档' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /新手教程/u })).toBeTruthy()
     expect(screen.queryByText('or')).toBeNull()
     fireEvent.dragEnter(window, { dataTransfer })
     expect(uploadEntry.classList.contains('dragging')).toBe(true)
