@@ -6,7 +6,8 @@ export const MEBIBYTE = 1024 * 1024
 export const RELEASE_LIMITS = Object.freeze({
   appAsarBytes: 40 * MEBIBYTE,
   runtimeBytes: 360 * MEBIBYTE,
-  zipBytes: 155 * MEBIBYTE
+  zipBytes: 155 * MEBIBYTE,
+  setupBytes: 180 * MEBIBYTE
 })
 
 const RELEASE_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
@@ -45,11 +46,17 @@ export function assertReleaseSigningConfiguration(environment = process.env) {
 }
 
 /** Require the exact release asset set before a draft can be published. */
+export function setupNameForRelease(releaseName) {
+  const match = /^(.+?)-((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)-win-x64$/u.exec(String(releaseName))
+  if (!match) throw new Error(`Invalid Windows release name: ${String(releaseName)}`)
+  return `${match[1]}-Setup-${match[2]}-x64.exe`
+}
+
 export function assertReleaseAssetNames(assetNames, releaseName) {
   if (!Array.isArray(assetNames) || typeof releaseName !== 'string' || !releaseName) {
     throw new TypeError('Release asset names and release name are required')
   }
-  const expected = [`${releaseName}.zip`, 'SHA256SUMS.txt', 'release-manifest.json'].sort()
+  const expected = [setupNameForRelease(releaseName), `${releaseName}.zip`, 'SHA256SUMS.txt', 'release-manifest.json'].sort()
   const actual = assetNames.map((name) => String(name)).sort()
   if (
     actual.length !== expected.length ||
@@ -83,6 +90,7 @@ const REQUIRED_ASAR_ENTRIES = Object.freeze([
 const REQUIRED_RUNTIME_ENTRIES = Object.freeze([
   'resources/tutorial/Attention Is All You Need.pdf',
   'resources/app.asar.unpacked/out/utility/index.js',
+  'resources/app.asar.unpacked/out/utility/uninstall-cleanup.js',
   'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js',
   'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/package.json',
   'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/keyring.win32-x64-msvc.node'
@@ -98,7 +106,7 @@ export function assertSafeBuildOutputPath(desktopDirectory, targetDirectory) {
 }
 
 export function assertReleaseMeasurements(measurements, limits = RELEASE_LIMITS) {
-  for (const key of ['appAsarBytes', 'runtimeBytes', 'zipBytes']) {
+  for (const key of ['appAsarBytes', 'runtimeBytes', 'zipBytes', 'setupBytes']) {
     const actual = measurements[key]
     const limit = limits[key]
     if (!Number.isFinite(actual) || actual < 0) throw new Error(`Invalid release measurement ${key}: ${String(actual)}`)
@@ -148,19 +156,21 @@ export function assertRequiredRuntimeEntries(files, requiredEntries = REQUIRED_R
   if (empty.length > 0) throw new Error(`Empty required unpacked runtime dependencies: ${empty.join(', ')}`)
 }
 
-export async function auditRelease({ runtimeDirectory, zipPath, asarEntries = [] }) {
+export async function auditRelease({ runtimeDirectory, zipPath, setupPath, asarEntries = [] }) {
   const appAsarPath = join(runtimeDirectory, 'resources', 'app.asar')
   const localeDirectory = join(runtimeDirectory, 'locales')
-  const [appAsarDetails, zipDetails, runtimeFiles, localeEntries] = await Promise.all([
+  const [appAsarDetails, zipDetails, setupDetails, runtimeFiles, localeEntries] = await Promise.all([
     stat(appAsarPath),
     stat(zipPath),
+    stat(setupPath),
     collectRelativeFiles(runtimeDirectory),
     readdir(localeDirectory, { withFileTypes: true })
   ])
   const measurements = {
     appAsarBytes: appAsarDetails.size,
     runtimeBytes: runtimeFiles.reduce((total, file) => total + file.size, 0),
-    zipBytes: zipDetails.size
+    zipBytes: zipDetails.size,
+    setupBytes: setupDetails.size
   }
   assertReleaseMeasurements(measurements)
   assertLocales(localeEntries.map((entry) => entry.name))

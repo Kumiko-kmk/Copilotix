@@ -31,8 +31,13 @@ before uploading documents. See the service links and data-flow description in
 
 ## Removal
 
-The Windows distribution is a portable directory. Exit Copilotix before deleting
-its extracted runtime directory. This does not delete the document library or user
-settings. Back up the library first if removing those separately; use the documented
+The primary Windows distribution is a guided Setup installer for the current user;
+the complete portable ZIP remains an alternative. Production signing covers both
+the application executable and Setup executable before final hashes and publication.
+Exit Copilotix through the tray menu after tasks finish before upgrading or removing
+the program. Uninstall through Windows installed applications; portable users may
+delete the complete extracted runtime directory. Removal preserves the document
+library, settings and stored credentials. See the [installation guide](WINDOWS_INSTALLATION_ZH.md).
+Back up the library first if removing personal data separately; use the documented
 [backup and migration controls](LIBRARY_MANAGEMENT_ZH.md). Stored provider keys can
 be removed from the service settings before removing the application.

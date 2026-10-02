@@ -25,9 +25,6 @@ importers:
       parse5:
         specifier: ^7.3.0
         version: 7.3.0
-      pdfjs-dist:
-        specifier: ^5.4.0
-        version: 5.7.284
       zod:
         specifier: ^4.0.0
         version: 4.5.4
@@ -101,6 +98,9 @@ importers:
       p-queue:
         specifier: ^8.1.0
         version: 8.1.1
+      pdfjs-dist:
+        specifier: ^5.4.0
+        version: 5.7.284
       react:
         specifier: ^19.1.0
         version: 19.2.8

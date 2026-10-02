@@ -2,7 +2,8 @@ import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'n
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { _electron as electron } from '@playwright/test'
-import { buildBlockMappings } from '../src/core/blockMapping'
+import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/core/blockMapping'
+import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/shared/translationPlanProtocol'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { ArtifactKind } from '../src/core/types'
@@ -116,7 +117,10 @@ export async function seedReaderTask(
       await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
         version: 2,
         ...(options?.legacyTranslationManifest ? {} : {
-          mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION
+          mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
+          blockMappingVersion: BLOCK_MAPPING_VERSION,
+          translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
+          tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL
         }),
         taskId,
         targetLanguage: 'zh-CN',

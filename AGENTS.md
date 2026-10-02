@@ -10,7 +10,7 @@
 - 不得修改、清理、stash 或重置其他 Agent 的 worktree。
 - 動手前和交付前均執行 `git status --short --branch`，避免覆蓋他人尚未提交的工作。
 - 涉及共享契約、資料庫 migration、IPC、Core RPC、JobRepository、Artifact/PathPolicy 或發布腳本時，記錄兼容策略、測試證據和恢復語義。
-- 發布目錄是完整運行包；不得只交付或單獨複製 `Copilotix.exe`。
+- Setup 交付目錄可獨立安裝；便攜版必須完整交付運行目錄或 ZIP，不得單獨複製 `Copilotix.exe`。
 
 ## 1. 最快捷生成供人工測試的 Windows EXE
 
@@ -32,13 +32,13 @@ pnpm desktop:release:from-built
 可供測試的入口為：
 
 ```text
-release/Copilotix-0.1.0-win-x64/Copilotix.exe
+release-artifacts/<build-id>/program/Copilotix.exe
 ```
 
 同目錄的 DLL、PAK、`resources/` 等文件是運行所必需的，不要把 EXE 單獨移出。完整 ZIP 位於：
 
 ```text
-release/Copilotix-0.1.0-win-x64.zip
+release-artifacts/<build-id>/Copilotix-0.1.0-win-x64.zip
 ```
 
 ### 僅重新打包
@@ -94,3 +94,9 @@ pnpm desktop:release
 - 当前 master 自有代码使用根 LICENSE.md 的 MIT 许可；不可用其覆盖第三方或历史上游代码。
 - package-directory 在打包前生成第三方许可汇总，并把 MIT 与声明复制到 resources/licenses。清单包括开发依赖，缺少根许可文本的包须如实列出，不能宣称其覆盖完整。
 - 本机自签证书仅用于测试；不得自动加入系统信任或替代正式发布签名。SignPath 申请与代码签名政策见 docs/SIGNPATH_APPLICATION.md、docs/CODE_SIGNING_POLICY.md。
+
+## 6. Setup 交付入口
+
+- 同一發布命令產生精簡 ZIP，解壓後根目錄含 Setup、`uninstall.exe`、安裝說明及小型 advanced 校驗文件。完整 runtime 已嵌入 Setup，開發副本只存 `release-artifacts/<build-id>/program/`；ZIP 存同一產物目錄，不得再把 runtime 放入 ZIP 重複交付。schema 5 標記 distribution compact-setup、runtime.embeddedIn；外層 runtimeArtifactDirectory 指向開發副本，artifactDirectory 指向 ZIP 所在目錄。ZIP 內 bundle-manifest 不含外部產物路徑或 ZIP 自身哈希；外層 release-manifest 在 ZIP 完成後加入 transport.sha256，且不進 ZIP。發布成功只清理上一成功版本的已驗證 artifact 路徑，失敗暫存保留。
+- Setup 強制目前使用者範圍，允許選擇安裝位置。安裝或卸載發現 Copilotix 仍在運行時須提示退出；不得強制結束背景佇列。預設卸載保留應用資料、系統憑證及獨立文檔庫；只有使用者明確勾選清除資料並經 Main 第二次原生確認，才由獨立 Utility 唯讀清單驗證並安全清理。覆蓋升級與靜默卸載不得觸發清理。程序目錄提供 uninstall.exe。新增憑證種類或文檔儲存結構時，須同步更新卸載清單與路徑驗證。
+- 正式發布仍須受信任簽章；Setup、主程式和內嵌卸載器皆受簽章門禁約束。必要安裝驗收可執行 `pnpm desktop:test:installer:wizard` 和 `pnpm desktop:test:installer`，腳本會拒絕覆蓋既有安裝。

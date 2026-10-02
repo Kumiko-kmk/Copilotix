@@ -145,8 +145,7 @@ async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<vo
 test('renders a local PDF with range requests before parsing succeeds', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
-    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
-    legacyTranslationManifest: true
+    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN
   })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -263,8 +262,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
 test('persists original and translated Markdown annotations with color and underline isolation', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
-    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
-    legacyTranslationManifest: true
+    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN
   })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -312,6 +310,7 @@ test('persists original and translated Markdown annotations with color and under
 
     await window.getByText('Markdown', { exact: true }).click()
     activeTextPanel = window.locator('.reader-tab-panel.active')
+    await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await selectText(activeTextPanel.locator('.markdown-block', { hasText: 'Second paragraph with' }), 0, 6)
     await window.getByRole('button', { name: '荧光笔高亮' }).click({ button: 'right' })
     await window.getByRole('option', { name: '选择蓝色' }).click()
@@ -333,8 +332,7 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
     supplementalBlocks: true,
-    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
-    legacyTranslationManifest: true
+    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN
   })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -575,7 +573,7 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     await window.waitForTimeout(600)
     const readSnapshot = async () => ({
       pixels: (await panel.locator('.markdown-minimap-canvas').screenshot({
-        style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; }'
+        style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; } .markdown-minimap-heading:focus-visible { background: transparent !important; box-shadow: none !important; } .markdown-minimap:focus-visible { box-shadow: none !important; }'
       })).toString('base64'),
       ...await panel.evaluate((element) => ({
         formulas: element.querySelector('.markdown-minimap-formulas')!.innerHTML,
@@ -590,7 +588,13 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     const originalFrame = await frame.getAttribute('style')
     const headings = panel.locator('.markdown-minimap-heading')
     await expect(headings.first()).not.toHaveAttribute('title')
-    await headings.nth(Math.floor(await headings.count() / 2)).hover()
+    // Dense documents can have overlapping heading hit areas. Hover at the
+    // actual rail coordinate and use keyboard navigation for an exact heading.
+    const middleHeadingBounds = (await headings.nth(Math.floor(await headings.count() / 2)).boundingBox())!
+    await rail.hover({ position: {
+      x: middleHeadingBounds.x + middleHeadingBounds.width / 2 - bounds.x,
+      y: middleHeadingBounds.y + middleHeadingBounds.height / 2 - bounds.y
+    } })
     await window.waitForTimeout(300)
     expect(await frame.getAttribute('style')).toBe(originalFrame)
     expect(await readSnapshot()).toEqual(original)
@@ -601,7 +605,8 @@ test('keeps the complete minimap static across long-document jumps', async () =>
       expect(await readSnapshot()).toEqual(original)
     }
     const headingIndex = Math.floor(await headings.count() / 2)
-    await headings.nth(headingIndex).click()
+    await headings.nth(headingIndex).focus()
+    await headings.nth(headingIndex).press('Enter')
     await window.waitForTimeout(600)
     expect(await readSnapshot()).toEqual(original)
     const split = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
@@ -611,9 +616,13 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     await expect.poll(() => panel.locator('article').evaluate((element) => element.clientWidth)).not.toBe(initialWidth)
     await window.waitForTimeout(700)
     expect(await readSnapshot()).toEqual(original)
-    await headings.nth(headingIndex).click()
+    await headings.nth(headingIndex).focus()
+    await headings.nth(headingIndex).press('Enter')
     const target = panel.locator('article h1, article h2, article h3, article h4, article h5, article h6').nth(headingIndex)
-    await expect.poll(() => isCentered(target, '.markdown-scroll')).toBe(true)
+    await expect.poll(() => target.evaluate((element) => {
+      const scroller = element.closest('.markdown-scroll')!
+      return element.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+    })).toBeCloseTo(16, 0)
     const sourcePosition = await headings.nth(headingIndex).evaluate((element) =>
       Number.parseFloat((element as HTMLElement).style.top) / Number.parseFloat((element.parentElement as HTMLElement).style.height)
     )

@@ -17,14 +17,17 @@ export default defineConfig({
     outDir: resolve(__dirname, 'out/utility'),
     emptyOutDir: false,
     lib: {
-      entry: resolve(__dirname, 'src/utility/index.ts'),
+      entry: {
+        index: resolve(__dirname, 'src/utility/index.ts'),
+        'uninstall-cleanup': resolve(__dirname, 'src/utility/uninstallCleanupEntry.ts')
+      },
       formats: ['cjs'],
-      fileName: () => 'index.js'
+      fileName: (_format, entryName) => `${entryName}.js`
     },
     rollupOptions: {
       // The utility is a Node process. Keep every Node builtin external so
       // runtime-only modules such as node:sqlite are not browser-shimmed.
-      external: [/^node:/u, /^pdfjs-dist(?:\/|$)/u, 'electron']
+      external: [/^node:/u, 'electron']
     }
   }
 })

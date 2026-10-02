@@ -11,7 +11,7 @@
 | Electron | `44.1.1` |
 | Node.js | `24.19.0`（`.node-version` 与 CI 一致） |
 | pnpm | `11.19.0` |
-| 支持目标 | Windows x64 目录版；其他平台只复用纯 TypeScript 契约，未接入发布验收 |
+| 支持目标 | Windows x64 Setup 安装版与 ZIP 免安装版；其他平台未接入发布验收 |
 | 本地应用数据目录 | `%APPDATA%\Copilotix-Translation-v2`（Electron `userData`） |
 | 数据库文件 | `copilotix-desktop-v2.sqlite3`，位于上述 `userData` 目录 |
 | 结果目录 | `<outputRoot>\documents-v2\{documentId}`；`documentId` 为 UUID |
@@ -55,7 +55,7 @@ Utility Process（受监督；SQLite 与 compute 的唯一拥有者）
 | `desktop/src/preload` | `contextBridge` API、IPC 编解码 | 只能暴露显式领域方法 |
 | `desktop/src/main/index.ts` | Electron 生命周期、窗口、组装、IPC 注册、托盘 | 不直接持有数据库连接 |
 | `desktop/src/main/ipc.ts` | sender/frame/URL 校验、IPC envelope 和 schema 驱动 handler | 所有新增 IPC 必须经过此层 |
-| `desktop/src/main/utilitySupervisor.ts` | Utility 启动、ready、超时、重启、drain/shutdown | Main 的唯一 Utility 生命周期入口 |
+| `desktop/src/main/utilitySupervisor.ts` | Utility 启动、ready、超时、重启、drain/shutdown | 正常应用的 Utility 生命周期入口 |
 | `desktop/src/main/*Runner.ts`、`jobScheduler.ts` | parse/translate 作业执行与调度 | 只能通过 JobRepository/Compute port 改状态 |
 | `desktop/src/main/parserClient.ts`、`translation/` | 官方 API、翻译 Provider、网络重试 | Token/Key 只在 Main/Vault 侧 |
 | `desktop/src/utility` | Utility 进程入口、RPC loop、SQLite 与 compute handler | 不导入 renderer、credential 或网络 adapter |
@@ -137,6 +137,10 @@ Main 先验证 sender，再解析请求；handler 结果再次验证，schema �
 Supervisor 启动 Utility 后等待 `ready`，再以 `database:init` 初始化 v2 数据库和 output root；Utility 异常退出会拒绝所有 in-flight RPC 并按 `[250ms, 1s, 4s]` 退避重启，连续失败最多三次，随后进入 failed。请求超时/取消只影响对应请求，并向 Utility 发 cancel；不会复用已结算的 requestId。关闭时执行 scheduler shutdown、drain、database flush/close，超时后才终止子进程。
 
 Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close、restart 或 stale response 都不能让旧连接与新连接并存。重启后所有 repository/plan proxy 必须重新绑定，作业状态以 SQLite 为准。
+
+### 5.4 卸载维护模式
+
+安装目录中的 NSIS `uninstall.exe` 默认保留个人数据；只有交互卸载勾选清除选项时，才调用已安装程序的 `--copilotix-uninstall-cleanup` 模式。该模式取得相同 userData 的单实例锁，不启动 Renderer、任务队列、网络服务或数据库 migration。Main 负责第二次原生确认与 Credential Vault；独立 Utility 入口 `uninstall-cleanup.js` 只读数据库生成文档目录清单，并在确认后验证清单未变、执行受限删除。SQLite 仍只属于 Utility。取消或清理失败使卸载停止并保留程序；自动升级／静默卸载不触发清理。外部原始文件、共享根目录其他文件、外部备份与迁移保留的旧库不属于删除范围。详见 [安装、升级与卸载](WINDOWS_INSTALLATION_ZH.md)。
 
 ## 6. v2 持久化与路径
 
@@ -262,12 +266,12 @@ P0/P1 **没有实现 RAG**。当前代码中没有 chunk 生成、chunk 持久�
 Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 bundle 一起进入打包输入。`desktop/scripts/package-directory.mjs` 负责 Windows x64 目录版，发布顺序必须保持：
 
 1. 只在仓库根目录精确的 `.release-next-{buildId}` staging 中构建；不得把 `desktop/out/` 当正式发布目录。
-2. 校验 `main/preload/renderer/utility` bundle、`app.asar` 必需 entry、`@napi-rs/keyring` unpack 路径、Electron locale、fuses、运行时文件以及体积上限（当前 `app.asar < 40 MiB`、运行目录 `< 360 MiB`、ZIP `< 155 MiB`）。
-3. 生成 Windows x64 目录、ZIP、`release-manifest.json` 和 `SHA256SUMS.txt`，并重新解压 ZIP 校验入口/ASAR/资源/哈希。
+2. 校验 `main/preload/renderer/utility` bundle、独立 `uninstall-cleanup.js`、`app.asar` 必需 entry、`@napi-rs/keyring` unpack 路径、Electron locale、fuses、运行时文件以及体积上限（当前 `app.asar < 40 MiB`、运行目录 `< 360 MiB`、精简 ZIP `< 155 MiB`、Setup `< 180 MiB`）。
+3. 以同一已验证运行目录生成 NSIS Setup 与 ZIP、`release-manifest.json` 和 `SHA256SUMS.txt`，并重新解压 ZIP 校验入口/ASAR/资源/哈希。正式构建验证主程序、Setup 与内嵌卸载器签章。
 4. 启动已打包的 `Copilotix.exe --copilotix-packaged-smoke`，只接受精确 `COPILOTIX_PACKAGED_SMOKE_OK app=0.1.0 electron=44.1.1` marker 和空 stderr；该 smoke 是 CLI 启动检查，不创建 Renderer 窗口。
 5. 所有审计、哈希和 smoke 成功后，才把现有 `release/` 原子换到 `.release-previous-{buildId}`，再把 next rename 为 `release/`；失败时恢复旧 release，并保留 staging 供诊断。
 
-发布包是完整目录，不支持只复制 exe，也不宣称 setup/portable。更新时关闭程序后整体替换目录；`userData` 和 Credential Manager 不属于发布目录。
+精简 Release ZIP 包含 Setup、注册安装卸载入口、安装说明及小型 payload 校验元数据。完整程序已嵌入 Setup；开发运行目录仅存在 `release-artifacts/<build-id>/program/`，不进入下载 ZIP。schema 5 的 distribution 为 compact-setup，runtime.embeddedIn 指明安装器；外层 runtimeArtifactDirectory 定位开发副本，runtime 内的目录与入口相对开发产物目录。外层 release-manifest 含 ZIP 哈希且不进 ZIP，内层 bundle-manifest 不含外部产物路径或自引用 ZIP 哈希。卸载入口仅交给已注册安装的卸载器。更新前退出托盘程序；userData 和 Credential Manager 不属于发布目录。
 
 ## 12. 测试、覆盖率与验证边界
 
