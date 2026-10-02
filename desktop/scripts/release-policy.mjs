@@ -49,7 +49,7 @@ export function assertReleaseSigningConfiguration(environment = process.env) {
 export function setupNameForRelease(releaseName) {
   const match = /^(.+?)-((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)-win-x64$/u.exec(String(releaseName))
   if (!match) throw new Error(`Invalid Windows release name: ${String(releaseName)}`)
-  return `${match[1]}-Setup-${match[2]}-x64.exe`
+  return 'setup.exe'
 }
 
 export function assertReleaseAssetNames(assetNames, releaseName) {

@@ -95,3 +95,7 @@ release/
 50 项针对性测试、类型检查、lint（0 错误／49 项既有警告）、精简打包发布门禁及 packaged core E2E 均通过。本地包仍为开发测试包，正式发布的许可证与受信任签名门禁保持启用。
 
 最终 schema 5 包的 HTTP 下载、SHA256、四个交付入口、下载及解压目录删除、独立 GUID 实际安装／Core 启动／卸载均通过（6 项验收，exit 0）。现有用户程序、安装登记及 SQLite 哈希前后相同。测试安装与临时文件已清理，证据 `desktop/test-artifacts/release-download-acceptance.json` 的 `completed: true`。
+
+## 1.0.0 安装入口修订
+
+版本更新为 `1.0.0`，安装器统一命名 `setup.exe`；版本 ZIP 和 manifest 继续携带版本信息。新增安装目录页后的桌面图标选项，默认勾选，允许取消，升级及静默安装沿用原有策略。安装器策略测试统一换行，修复 GitHub Windows CRLF checkout 导致的失败；29 项安装／发布策略测试通过。独立 GUID 验收脚本新增原生桌面选项检查，先切换勾选并取消，再执行隔离安装／卸载，避免影响日常安装。

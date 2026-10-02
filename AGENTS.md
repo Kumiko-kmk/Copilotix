@@ -38,7 +38,7 @@ release-artifacts/<build-id>/program/Copilotix.exe
 同目錄的 DLL、PAK、`resources/` 等文件是運行所必需的，不要把 EXE 單獨移出。完整 ZIP 位於：
 
 ```text
-release-artifacts/<build-id>/Copilotix-0.1.0-win-x64.zip
+release-artifacts/<build-id>/Copilotix-1.0.0-win-x64.zip
 ```
 
 ### 僅重新打包

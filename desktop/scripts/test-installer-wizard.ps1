@@ -143,8 +143,18 @@ try {
     $directory.Controls=@(Get-Controls $directory.Window)
     Save-Page $directory '03-directory'
     Assert-That (@($directory.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text.Replace('&','') -match 'Browse|浏览|瀏覽' }).Count -eq 1) 'Browse control missing'
+    Click-Control $directory 1
+    $shortcutPattern=switch($Language) { 'English' {'Create a desktop shortcut'} 'SimplifiedChinese' {'创建桌面图标'} 'TraditionalChinese' {'建立桌面圖標'} }
+    $options=Wait-Page { param($c) @($c | Where-Object { $_.Class -eq 'Button' -and $_.Text -eq $shortcutPattern }).Count -eq 1 } 'desktop shortcut option'
+    Save-Page $options '04-desktop-shortcut'
+    $shortcut=($options.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text -eq $shortcutPattern }).Handle
+    Assert-That ([WizardNative]::SendMessage($shortcut,0x00F0,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 1) 'Desktop shortcut option is not selected by default'
+    [WizardNative]::SendMessage($shortcut,0x00F1,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
+    Assert-That ([WizardNative]::SendMessage($shortcut,0x00F0,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 0) 'Desktop shortcut option cannot be unchecked'
+    [WizardNative]::SendMessage($shortcut,0x00F1,[IntPtr]1,[IntPtr]::Zero) | Out-Null
+    Assert-That ([WizardNative]::SendMessage($shortcut,0x00F0,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 1) 'Desktop shortcut option cannot be reselected'
     if ($Install) {
-        Click-Control $directory 1
+        Click-Control $options 1
         $finish=Wait-Page { param($c) @($c | Where-Object { $_.Class -eq 'Button' -and $_.Text -like '*Run Copilotix*' }).Count -eq 1 } 'finish controls' 180
         $installed=$true
         Save-Page $finish '04-finish'
@@ -165,7 +175,7 @@ try {
         Assert-That (@(Get-Process -Name Copilotix -ErrorAction SilentlyContinue).Count -eq 0) 'Unchecked launch still started app'
         Write-Host 'PASS: GUI custom directory install and optional launch finish control'
     } else {
-        Click-Control $directory 2
+        Click-Control $options 2
         # NSIS displays a cancellation confirmation in some builds.
         $deadline=[DateTime]::UtcNow.AddSeconds(10)
         while (-not $process.HasExited -and [DateTime]::UtcNow -lt $deadline) {
@@ -176,8 +186,9 @@ try {
             Start-Sleep -Milliseconds 200; $process.Refresh()
         }
         Assert-That ($process.HasExited) 'Cancel did not close Setup'
+        Assert-That (-not (Test-Path -LiteralPath (Join-Path $destination 'Copilotix.exe'))) 'Cancelling options page unexpectedly installed program'
     }
-    Write-Host 'PASS: language selector, branded welcome, editable Unicode directory, Browse and cancellation/finish'
+    Write-Host 'PASS: language selector, branded welcome, editable Unicode directory, default checked desktop shortcut and cancellation/finish'
 } finally {
     $process.Refresh()
     if (-not $process.HasExited) {

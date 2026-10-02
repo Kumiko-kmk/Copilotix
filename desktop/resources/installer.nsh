@@ -14,6 +14,9 @@
 !ifdef BUILD_UNINSTALLER
   Var copilotixRemoveData
   Var copilotixRemoveDataCheckbox
+!else
+  Var copilotixDesktopShortcut
+  Var copilotixDesktopShortcutCheckbox
 !endif
 
 LangString copilotixRunning 2052 "Copilotix 仍在运行（可能在系统托盘中）。请从托盘菜单选择“退出”，等待后台任务安全停止后，再点击“重试”。安装器不会强制关闭程序。"
@@ -49,6 +52,7 @@ LangString copilotixWelcome 1033 "This wizard installs Copilotix for your curren
 !macroend
 
 !macro customInit
+  StrCpy $copilotixDesktopShortcut ${BST_CHECKED}
   StrCpy $hasPerMachineInstallation "0"
   StrCpy $hasPerUserInstallation "1"
   !insertmacro setInstallModePerUser
@@ -63,6 +67,52 @@ LangString copilotixWelcome 1033 "This wizard installs Copilotix for your curren
   ; or default path; after registration removal a retry would leave files.
   StrCpy $installMode CurrentUser
   SetShellVarContext current
+!macroend
+
+LangString copilotixInstallOptionsTitle 2052 "安装选项"
+LangString copilotixInstallOptionsTitle 1028 "安裝選項"
+LangString copilotixInstallOptionsTitle 1033 "Installation options"
+LangString copilotixInstallOptionsSubtitle 2052 "选择常用启动入口。"
+LangString copilotixInstallOptionsSubtitle 1028 "選擇常用啟動入口。"
+LangString copilotixInstallOptionsSubtitle 1033 "Choose how to open Copilotix."
+LangString copilotixDesktopShortcutLabel 2052 "创建桌面图标"
+LangString copilotixDesktopShortcutLabel 1028 "建立桌面圖標"
+LangString copilotixDesktopShortcutLabel 1033 "Create a desktop shortcut"
+
+!macro customPageAfterChangeDir
+  Page custom copilotixInstallOptions copilotixInstallOptionsLeave
+
+  Function copilotixInstallOptions
+    ${If} ${isUpdated}
+      Abort
+    ${EndIf}
+    !insertmacro MUI_HEADER_TEXT "$(copilotixInstallOptionsTitle)" "$(copilotixInstallOptionsSubtitle)"
+    nsDialogs::Create 1018
+    Pop $0
+    ${If} $0 == error
+      Abort
+    ${EndIf}
+    ${NSD_CreateCheckbox} 0 12u 100% 28u "$(copilotixDesktopShortcutLabel)"
+    Pop $copilotixDesktopShortcutCheckbox
+    ${NSD_SetState} $copilotixDesktopShortcutCheckbox $copilotixDesktopShortcut
+    nsDialogs::Show
+  FunctionEnd
+
+  Function copilotixInstallOptionsLeave
+    ${NSD_GetState} $copilotixDesktopShortcutCheckbox $copilotixDesktopShortcut
+  FunctionEnd
+!macroend
+
+; Builder creates links before this supported hook. Honor an explicit choice
+; only in a normal interactive installation; retain silent/upgrade semantics.
+!macro customInstall
+  !ifndef DO_NOT_CREATE_DESKTOP_SHORTCUT
+    ${IfNot} ${Silent}
+    ${AndIfNot} ${isUpdated}
+    ${AndIf} $copilotixDesktopShortcut == ${BST_UNCHECKED}
+      Delete "$newDesktopLink"
+    ${EndIf}
+  !endif
 !macroend
 
 LangString copilotixUninstallTitle 2052 "文档库与资料"

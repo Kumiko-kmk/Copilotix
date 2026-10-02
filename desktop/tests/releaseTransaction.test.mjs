@@ -23,12 +23,12 @@ describe('release transaction boundaries', () => {
   it('creates a unique sibling staging layout and rejects non-Windows targets', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-release-layout-'))
     roots.push(root)
-    const layout = createReleaseLayout({ repositoryRoot: root, buildId: createBuildId(123, 7, 'fixture'), releaseName: 'Copilotix-0.1.0-win-x64' })
+    const layout = createReleaseLayout({ repositoryRoot: root, buildId: createBuildId(123, 7, 'fixture'), releaseName: 'Copilotix-1.0.0-win-x64' })
 
     expect(layout.stagingRoot).toBe(join(root, '.release-next-3f-7-fixture'))
     expect(layout.previousRoot).toBe(join(root, '.release-previous-3f-7-fixture'))
     expect(layout.releaseRoot).toBe(join(root, 'release'))
-    expect(layout.setupPath).toBe(join(layout.stagingRoot, 'Copilotix-Setup-0.1.0-x64.exe'))
+    expect(layout.setupPath).toBe(join(layout.stagingRoot, 'setup.exe'))
     expect(layout.artifactsDirectory).toBe(join(root, 'release-artifacts', '3f-7-fixture'))
     expect(layout.runtimeDirectory).toBe(join(layout.stagedArtifactsDirectory, 'program'))
     expect(() => assertReleaseLayout({ ...layout, artifactsDirectory: join(root, 'outside') })).toThrow(/Unexpected/)
@@ -41,7 +41,7 @@ describe('release transaction boundaries', () => {
   it('describes publish and rollback renames without deleting the live release', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-release-swap-'))
     roots.push(root)
-    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'fixture-swap', releaseName: 'Copilotix-0.1.0-win-x64' })
+    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'fixture-swap', releaseName: 'Copilotix-1.0.0-win-x64' })
     await mkdir(layout.releaseRoot, { recursive: true })
     await mkdir(layout.stagingRoot, { recursive: true })
     await writeFile(join(layout.releaseRoot, 'marker.txt'), 'old', 'utf8')
@@ -62,7 +62,7 @@ describe('release transaction boundaries', () => {
   it('restores the old release when publishing the next directory fails', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-release-rollback-'))
     roots.push(root)
-    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'fixture-rollback', releaseName: 'Copilotix-0.1.0-win-x64' })
+    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'fixture-rollback', releaseName: 'Copilotix-1.0.0-win-x64' })
     await mkdir(layout.releaseRoot, { recursive: true })
     await mkdir(layout.stagingRoot, { recursive: true })
     await writeFile(join(layout.releaseRoot, 'marker.txt'), 'old', 'utf8')
@@ -104,9 +104,9 @@ describe('Setup release metadata gates', () => {
   it('requires Setup hashes and signer metadata alongside the embedded program payload', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-setup-metadata-'))
     roots.push(root)
-    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'metadata', releaseName: 'Copilotix-0.1.0-win-x64' })
+    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'metadata', releaseName: 'Copilotix-1.0.0-win-x64' })
     await mkdir(layout.advancedDirectory, { recursive: true })
-    const packageJson = { version: '0.1.0', build: { productName: 'Copilotix' } }
+    const packageJson = { version: '1.0.0', build: { productName: 'Copilotix' } }
     const hashes = { executable: 'A'.repeat(64), appAsar: 'B'.repeat(64), zip: 'C'.repeat(64), setup: 'D'.repeat(64), launcher: 'F'.repeat(64) }
     await expect(writeReleaseMetadata(layout, packageJson, 'Copilotix.exe', { ...hashes, setup: undefined })).rejects.toThrow(/SHA-256: setup/)
     await writeReleaseMetadata(layout, packageJson, 'Copilotix.exe', hashes, 'CN=Release', 'CN=Release')
@@ -139,7 +139,7 @@ describe('Setup release metadata gates', () => {
   it('prevents publishing staging with missing Setup or stray builder files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-setup-contents-'))
     roots.push(root)
-    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'contents', releaseName: 'Copilotix-0.1.0-win-x64' })
+    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'contents', releaseName: 'Copilotix-1.0.0-win-x64' })
     await mkdir(layout.advancedDirectory, { recursive: true })
     await writeFile(layout.instructionsPath, 'fixture')
     for (const file of [layout.manifestPath, layout.bundleManifestPath, layout.checksumsPath]) await writeFile(file, 'fixture')
@@ -160,7 +160,7 @@ describe('Setup release metadata gates', () => {
   it('cleans only the previous successful build artifacts and rejects escaped references', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-artifact-cleanup-'))
     roots.push(root)
-    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'current', releaseName: 'Copilotix-0.1.0-win-x64' })
+    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'current', releaseName: 'Copilotix-1.0.0-win-x64' })
     const previousMetadata = join(layout.previousRoot, 'advanced', 'release-manifest.json')
     await mkdir(join(layout.previousRoot, 'advanced'), { recursive: true })
     await mkdir(join(layout.artifactsRoot, 'old-build'), { recursive: true })

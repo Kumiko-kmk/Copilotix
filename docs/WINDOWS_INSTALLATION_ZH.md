@@ -2,13 +2,13 @@
 
 ## 首次安装
 
-在 [GitHub Releases](https://github.com/Kumiko-kmk/Copilotix/releases) 下载对应版本的 `Copilotix-<版本>-win-x64.zip`，完整解压后双击顶层 `Copilotix-Setup-<版本>-x64.exe`，运行引导式安装精灵。也可单独下载同名 Setup。安装范围为当前 Windows 用户，默认放入用户的程序目录，也可选择其他可写目录。需要管理员权限的系统目录不适合此安装范围。
+在 [GitHub Releases](https://github.com/Kumiko-kmk/Copilotix/releases) 下载对应版本的 `Copilotix-<版本>-win-x64.zip`，完整解压后双击顶层 `setup.exe`，运行引导式安装精灵。也可单独下载同名 Setup。安装范围为当前 Windows 用户，默认放入用户的程序目录，也可选择其他可写目录。需要管理员权限的系统目录不适合此安装范围。
 
 统一 ZIP 是发布交付范本，解压后所有入口集中在同一个目录：
 
 ```text
 Copilotix-<版本>-win-x64/
-  Copilotix-Setup-<版本>-x64.exe  ← 安装入口
+  setup.exe  ← 安装入口
   uninstall.exe                 ← 找到实际安装位置并启动卸载
   安装说明.txt
   advanced/                     ← 小型清单与校验文件
@@ -16,7 +16,7 @@ Copilotix-<版本>-win-x64/
 
 完整程序已压缩在 Setup 内，离线安装即可解压到所选目录。交付 ZIP 不再重复附带未安装程序或便携 ZIP，体积约 94 MiB。
 
-安装精灵允许选择安装位置，并创建桌面和开始菜单的 Copilotix 启动入口。安装后使用这些入口启动。安装目录包含完整 Electron 运行文件，不要单独搬走 `Copilotix.exe`。
+安装精灵允许选择安装位置。“创建桌面图标”默认勾选，可取消；开始菜单也提供 Copilotix 启动入口。安装后使用这些入口启动。安装目录包含完整 Electron 运行文件，不要单独搬走 `Copilotix.exe`。
 
 首次启动后在「设置 → 服务连接」配置 MinerU Token，测试连接并保存。解析与翻译服务的配置和使用教程见 [README](../README.md#api-keys)。
 

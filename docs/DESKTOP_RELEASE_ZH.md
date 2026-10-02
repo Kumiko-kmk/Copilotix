@@ -13,18 +13,20 @@ pnpm desktop:release:from-built
 
 ```text
 release/
-  Copilotix-Setup-0.1.0-x64.exe
+  setup.exe
   uninstall.exe
   安装说明.txt
   advanced/bundle-manifest.json
   advanced/SHA256SUMS.txt
   advanced/release-manifest.json  # 外层发布元数据，不放入 ZIP
 release-artifacts/<build-id>/
-  Copilotix-0.1.0-win-x64.zip
+  Copilotix-1.0.0-win-x64.zip
   program/Copilotix.exe           # 仅开发验收，不进入下载 ZIP
 ```
 
 下载 ZIP 内仅有一个版本根目录，包含 Setup、卸载入口、说明和校验文件。完整程序已嵌入 Setup；开发运行副本只存于 `release-artifacts/<build-id>/program/`，不进入 ZIP，避免重复交付约 150 MiB 的运行时压缩数据。无需下载开发副本即可离线安装。
+
+当前版本为 **1.0.0**，安装入口固定为 `setup.exe`；版本仍写入 ZIP 名、程序和安装登记。安装目录页后提供默认勾选的“创建桌面图标”，可自行取消。以下体积记录来自前次 0.1.0 构建，重新打包后的实际数值以最终 manifest 为准。
 
 manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`。外层 `artifactDirectory` 定位 ZIP 所在目录，`runtimeArtifactDirectory` 定位开发运行副本。runtime EXE/ASAR 哈希描述 Setup 内已验证的程序，不表示 ZIP 中存在独立 program。内层 bundle-manifest 保存程序、Setup 和卸载入口的哈希／签名，不含外部产物路径或 ZIP 自引用哈希；内层 SHA256SUMS 仅校验实际存在的 Setup、卸载入口。GitHub 平面清单校验独立 Setup、ZIP 及解压后的两个入口。
 
@@ -46,7 +48,7 @@ manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`�
 
 ## GitHub 正式发布
 
-正式发布 tag 必须严格等于 `desktop-v<desktop/package.json version>`，例如 package version 为 `0.1.0` 时只能推送 `desktop-v0.1.0`。CI 会先核对 tag 与包版本，再构建并验证 Electron fuses、签名、运行包和哈希。
+正式发布 tag 必须严格等于 `desktop-v<desktop/package.json version>`，例如 package version 为 `1.0.0` 时只能推送 `desktop-v1.0.0`。CI 会先核对 tag 与包版本，再构建并验证 Electron fuses、签名、运行包和哈希。
 
 当前实现只直接接入文件式证书；以下 Secrets 仅适用于已有适用 PFX/P12 的情况。新购公开受信任证书通常使用 Token/HSM/云签名，需按所选服务改造预检查和签名步骤，详见 [许可证选择与签名配置](LICENSE_AND_SIGNING_ZH.md)。
 

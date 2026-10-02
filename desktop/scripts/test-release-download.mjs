@@ -94,7 +94,7 @@ try {
       assert(!entries.includes('program'), 'Compact ZIP must not duplicate the program already inside Setup')
       assert.equal(entries.length, 4, 'Compact ZIP should only contain Setup, uninstall.exe, instructions and advanced')
     } else assert(entries.includes('program'))
-    const setup = entries.find((entry) => /^Copilotix-Setup-.*\.exe$/u.test(entry))
+    const setup = entries.find((entry) => entry === 'setup.exe')
     assert(setup && entries.some((entry) => entry.endsWith('.txt')))
     assert.equal(await hash(join(bundle, setup)), manifest.installer.sha256.toUpperCase())
     if (!compact) {
@@ -134,6 +134,17 @@ try {
           shortcutName: name, include: join(desktop, 'resources/installer.nsh') }
       }
     })
+    // Observe the real controls using the unique acceptance GUID, then cancel
+    // before installation. This cannot alter the user's registered install.
+    await mkdir(join(output, 'advanced'), { recursive: true })
+    await writeFile(join(output, 'advanced/release-manifest.json'), JSON.stringify({
+      ...manifest,
+      installer: { ...manifest.installer, file: 'acceptance-setup.exe', sha256: (await hash(join(output, 'acceptance-setup.exe'))).toLowerCase() }
+    }))
+    run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      join(desktop, 'scripts/test-installer-wizard.ps1'), '-ReleaseDirectory', output,
+      '-EvidenceDirectory', join(desktop, 'test-artifacts/isolated-desktop-shortcut'), '-Language', 'English'])
+    pass('isolated native wizard defaults desktop shortcut checkbox to checked, allows toggling and cancels without installation')
     const destination = join(ownedRoot, '實際安裝 path', 'Copilotix')
     run(join(output, 'acceptance-setup.exe'), ['/S', `/D=${destination}`])
     assert.equal(await hash(join(destination, 'Copilotix.exe')), manifest.runtime.sha256.toUpperCase())

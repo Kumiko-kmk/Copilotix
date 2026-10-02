@@ -46,7 +46,7 @@ Copilotix 是面向论文处理与阅读的个人桌面客户端。**PDF 解析�
 
 ### 方式一：使用 Setup 安装（推荐）
 
-1. 查看仓库的 [Releases](https://github.com/Kumiko-kmk/Copilotix/releases)。**若已发布**对应版本，下载 `Copilotix-<版本>-win-x64.zip`，完整解压后运行其中的 `Copilotix-Setup-<版本>-x64.exe`。也提供较小的独立 Setup 下载。
+1. 查看仓库的 [Releases](https://github.com/Kumiko-kmk/Copilotix/releases)。**若已发布**对应版本，下载 `Copilotix-<版本>-win-x64.zip`，完整解压后运行其中的 `setup.exe`。也提供较小的独立 Setup 下载。
 2. 运行安装精灵，选择当前用户可写的安装位置，并按需要创建桌面快捷方式。完成后从桌面或开始菜单启动 Copilotix。
 3. 打开「设置 → 服务连接」，配置并保存 MinerU Token。
 4. 返回「新解析」，选择一篇 PDF，点击「开始解析」。
@@ -330,11 +330,11 @@ pnpm desktop:test:e2e
 发布脚本同时生成 Setup、完整运行目录与 ZIP，当前版本的典型路径为：
 
 ```text
-release/Copilotix-Setup-0.1.0-x64.exe
+release/setup.exe
 release/安装说明.txt
 release-artifacts/<build-id>/program/Copilotix.exe
 release/uninstall.exe
-release-artifacts/<build-id>/Copilotix-0.1.0-win-x64.zip
+release-artifacts/<build-id>/Copilotix-1.0.0-win-x64.zip
 ```
 
 发布流程包含 bundle、ASAR、资源、Setup/ZIP 哈希、独立体积门槛与 packaged CLI smoke 检查。**CLI smoke 不等于 GUI 端到端测试通过**，正式发布仍需验证安装、升级、卸载，以及导入、阅读和导出。正式签名与完整发布门禁见 [Windows 桌面发布](docs/DESKTOP_RELEASE_ZH.md)。

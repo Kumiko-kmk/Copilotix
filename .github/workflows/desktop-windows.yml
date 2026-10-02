@@ -73,7 +73,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: |
-            release/Copilotix-Setup-*-x64.exe
+            release/setup.exe
             release/uninstall.exe
             release/安装说明.txt
             release/advanced/SHA256SUMS.txt
@@ -122,7 +122,7 @@ jobs:
             $version = $tag.Substring('desktop-v'.Length)
             $notesPath = Join-Path $env:RUNNER_TEMP 'copilotix-release-notes.md'
             $notes = @(
-              "Windows x64: download **Copilotix-$version-win-x64.zip**, extract the entire folder, then run **Copilotix-Setup-$version-x64.exe**.",
+              "Windows x64: download **Copilotix-$version-win-x64.zip**, extract the entire folder, then run **setup.exe**.",
               '',
               "The compact ZIP contains Setup, uninstall.exe and installation instructions. The complete program is already embedded in Setup. Setup is also available separately.",
               '',
@@ -142,7 +142,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $archives = @(Get-ChildItem -LiteralPath 'release-bundle' -Recurse -File -Filter 'Copilotix-*-win-x64.zip')
           if ($archives.Count -ne 1) { throw "Expected exactly one Windows x64 ZIP; found $($archives.Count)." }
-          $installers = @(Get-ChildItem -LiteralPath 'release' -File -Filter 'Copilotix-Setup-*-x64.exe')
+          $installers = @(Get-ChildItem -LiteralPath 'release' -File -Filter 'setup.exe')
           if ($installers.Count -ne 1) { throw "Expected exactly one Windows x64 Setup; found $($installers.Count)." }
           # Compact ZIP is the primary download; standalone Setup remains available.
           $publicChecksums = Join-Path $env:RUNNER_TEMP 'SHA256SUMS.txt'
@@ -186,7 +186,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $remoteFiles = @(Get-ChildItem -LiteralPath $remoteAssetDirectory -File)
           if ($remoteFiles.Count -ne 4) { throw "Expected exactly four downloaded release assets; found $($remoteFiles.Count)." }
-          $files = @((Get-ChildItem -LiteralPath 'release' -File -Filter 'Copilotix-Setup-*-x64.exe').FullName, (Get-ChildItem -LiteralPath 'release-bundle' -Recurse -File -Filter 'Copilotix-*-win-x64.zip').FullName, (Join-Path $env:RUNNER_TEMP 'SHA256SUMS.txt'), (Join-Path 'release/advanced' 'release-manifest.json'))
+          $files = @((Get-ChildItem -LiteralPath 'release' -File -Filter 'setup.exe').FullName, (Get-ChildItem -LiteralPath 'release-bundle' -Recurse -File -Filter 'Copilotix-*-win-x64.zip').FullName, (Join-Path $env:RUNNER_TEMP 'SHA256SUMS.txt'), (Join-Path 'release/advanced' 'release-manifest.json'))
           if ($files.Count -ne 4) { throw 'Local release asset set must contain exactly four files.' }
           foreach ($file in $files) {
             $assetName = Split-Path -Leaf $file
@@ -195,7 +195,7 @@ jobs:
             $localHash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
             $remoteHash = (Get-FileHash -LiteralPath $remotePath -Algorithm SHA256).Hash
             if ($localHash -ne $remoteHash) { throw "Uploaded release asset hash mismatch: $assetName" }
-            if ($assetName -like 'Copilotix-Setup-*-x64.exe') {
+            if ($assetName -like 'setup.exe') {
               $signature = Get-AuthenticodeSignature -LiteralPath $remotePath
               if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Downloaded Setup Authenticode signature is not valid: $($signature.Status)" }
             }

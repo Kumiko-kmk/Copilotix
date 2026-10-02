@@ -1,6 +1,6 @@
 {
   "name": "copilotix-desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Copilotix desktop PDF reader with Markdown translation",
   "main": "./out/main/index.js",
   "author": "Kumiko-kmk",
@@ -132,7 +132,7 @@
     },
     "nsis": {
       "differentialPackage": false,
-      "artifactName": "Copilotix-Setup-${version}-${arch}.exe",
+      "artifactName": "setup.exe",
       "oneClick": false,
       "perMachine": false,
       "selectPerMachineByDefault": false,

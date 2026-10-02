@@ -17,9 +17,9 @@ import {
 
 describe('release policy', () => {
   it('requires desktop release tags to match the packaged version exactly', () => {
-    expect(assertReleaseTagMatchesVersion('desktop-v0.1.0', '0.1.0')).toBe('desktop-v0.1.0')
-    expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.1', '0.1.0')).toThrow(/does not match package version/)
-    expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.0', 'latest')).toThrow(/Invalid desktop release version/)
+    expect(assertReleaseTagMatchesVersion('desktop-v1.0.0', '1.0.0')).toBe('desktop-v1.0.0')
+    expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.1', '1.0.0')).toThrow(/does not match package version/)
+    expect(() => assertReleaseTagMatchesVersion('desktop-v1.0.0', 'latest')).toThrow(/Invalid desktop release version/)
   })
 
   it('blocks public release while the desktop license declaration is unresolved', () => {
@@ -40,25 +40,25 @@ describe('release policy', () => {
 
   it('only permits a complete, unique release asset set before publishing', () => {
     expect(assertReleaseAssetNames([
-      'Copilotix-Setup-0.1.0-x64.exe',
-      'Copilotix-0.1.0-win-x64.zip',
+      'setup.exe',
+      'Copilotix-1.0.0-win-x64.zip',
       'SHA256SUMS.txt',
       'release-manifest.json'
-    ], 'Copilotix-0.1.0-win-x64')).toBe(true)
-    expect(() => assertReleaseAssetNames(['SHA256SUMS.txt', 'release-manifest.json'], 'Copilotix-0.1.0-win-x64')).toThrow(/Unexpected release assets/)
+    ], 'Copilotix-1.0.0-win-x64')).toBe(true)
+    expect(() => assertReleaseAssetNames(['SHA256SUMS.txt', 'release-manifest.json'], 'Copilotix-1.0.0-win-x64')).toThrow(/Unexpected release assets/)
     expect(() => assertReleaseAssetNames([
-      'Copilotix-Setup-0.1.0-x64.exe',
-      'Copilotix-0.1.0-win-x64.zip',
-      'Copilotix-Setup-0.1.0-x64.exe',
-      'Copilotix-0.1.0-win-x64.zip',
+      'setup.exe',
+      'Copilotix-1.0.0-win-x64.zip',
+      'setup.exe',
+      'Copilotix-1.0.0-win-x64.zip',
       'SHA256SUMS.txt',
       'release-manifest.json'
-    ], 'Copilotix-0.1.0-win-x64')).toThrow(/Unexpected release assets/)
+    ], 'Copilotix-1.0.0-win-x64')).toThrow(/Unexpected release assets/)
   })
 
   it('derives Setup filenames for hyphenated products and prerelease versions', () => {
-    expect(setupNameForRelease('Copilotix-0.1.0-win-x64')).toBe('Copilotix-Setup-0.1.0-x64.exe')
-    expect(setupNameForRelease('My-App-1.2.3-beta.1-win-x64')).toBe('My-App-Setup-1.2.3-beta.1-x64.exe')
+    expect(setupNameForRelease('Copilotix-1.0.0-win-x64')).toBe('setup.exe')
+    expect(setupNameForRelease('My-App-1.2.3-beta.1-win-x64')).toBe('setup.exe')
     expect(() => setupNameForRelease('../bad')).toThrow(/Invalid Windows release name/)
   })
 

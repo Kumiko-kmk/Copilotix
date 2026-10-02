@@ -58,7 +58,7 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 
 上传 Secret 后清空剪贴板。密钥、密码、Token 只放受控的 Secret 存储，不提交到仓库。
 
-确定授权后，tag 与桌面包版本严格一致，例如 `desktop-v0.1.0`。现有工作流会读取 Secret、启用 production、验证签名、上传 draft 并校验完整资产后公开。
+确定授权后，tag 与桌面包版本严格一致，例如 `desktop-v1.0.0`。现有工作流会读取 Secret、启用 production、验证签名、上传 draft 并校验完整资产后公开。
 
 ### B. USB Token / Windows 证书存储
 

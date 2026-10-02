@@ -5,13 +5,25 @@ import { describe, expect, it } from 'vitest'
 
 const desktopRoot = resolve(import.meta.dirname, '..')
 const packageJson = JSON.parse(readFileSync(resolve(desktopRoot, 'package.json'), 'utf8'))
-const installer = readFileSync(resolve(desktopRoot, packageJson.build.nsis.include), 'utf8')
+const installer = readFileSync(resolve(desktopRoot, packageJson.build.nsis.include), 'utf8').replace(/\r\n/g, '\n')
 const require = createRequire(import.meta.url)
 const builderRoot = dirname(require.resolve('app-builder-lib/package.json', {
   paths: [dirname(require.resolve('electron-builder/package.json'))]
 }))
 
 describe('Windows installer safety policy', () => {
+  it('offers a desktop shortcut checkbox selected by default and honors opting out', () => {
+    expect(packageJson.version).toBe('1.0.0')
+    expect(installer).toContain('StrCpy $copilotixDesktopShortcut ${BST_CHECKED}')
+    expect(installer).toContain('Page custom copilotixInstallOptions copilotixInstallOptionsLeave')
+    expect(installer).toContain('${NSD_SetState} $copilotixDesktopShortcutCheckbox $copilotixDesktopShortcut')
+    expect(installer).toContain('${NSD_GetState} $copilotixDesktopShortcutCheckbox $copilotixDesktopShortcut')
+    const install = installer.match(/!macro customInstall\n([\s\S]*?)!macroend/u)?.[1]
+    expect(install).toContain('${IfNot} ${Silent}')
+    expect(install).toContain('${AndIfNot} ${isUpdated}')
+    expect(install).toContain('${AndIf} $copilotixDesktopShortcut == ${BST_UNCHECKED}')
+    expect(install).toContain('Delete "$newDesktopLink"')
+  })
   it('offers explicit data cleanup only for interactive removal before binaries are deleted', () => {
     expect(installer).toContain('!define UNINSTALL_FILENAME "uninstall.exe"')
     expect(installer).toContain('UninstPage custom un.copilotixDataOptions un.copilotixDataOptionsLeave')
@@ -33,7 +45,7 @@ describe('Windows installer safety policy', () => {
       allowToChangeInstallationDirectory: true, deleteAppDataOnUninstall: false,
       createDesktopShortcut: true, createStartMenuShortcut: true
     })
-    expect(packageJson.build.nsis.artifactName).toBe('Copilotix-Setup-${version}-${arch}.exe')
+    expect(packageJson.build.nsis.artifactName).toBe('setup.exe')
     expect(installer).toMatch(/!macro customInstallMode\s+StrCpy \$isForceCurrentInstall "1"/u)
     expect(installer).toMatch(/!macro customInit[\s\S]*?!insertmacro setInstallModePerUser/u)
     const uninit = installer.match(/!macro customUnInit([\s\S]*?)!macroend/u)?.[1]
