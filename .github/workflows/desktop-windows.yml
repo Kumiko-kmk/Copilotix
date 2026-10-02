@@ -57,9 +57,10 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_KEY_PASSWORD || '' }}
       - run: pnpm desktop:test:e2e
       - name: Verify install, upgrade, uninstall and reinstall with isolated data
-        run: pnpm desktop:test:installer
+        shell: pwsh
+        run: ./desktop/scripts/test-installer-lifecycle.ps1
       - name: Verify bundle download, integrity, extraction and deletion
-        run: pnpm desktop:test:release-download
+        run: pnpm desktop:test:release-download:install
       - name: Select the verified compact release archive
         shell: pwsh
         run: |

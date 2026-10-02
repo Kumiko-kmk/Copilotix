@@ -35,7 +35,14 @@ const hash = async (path) => {
   return digest.digest('hex').toUpperCase()
 }
 function run(file, argv, timeout = 120_000) {
-  const result = spawnSync(file, argv, { windowsHide: true, encoding: 'utf8', timeout })
+  const env = { ...process.env }
+  // Windows PowerShell must resolve its own modules, not inherit a pwsh 7 module path.
+  if (basename(file).toLowerCase() === 'powershell.exe') {
+    for (const key of Object.keys(env)) {
+      if (key.toLowerCase() === 'psmodulepath') delete env[key]
+    }
+  }
+  const result = spawnSync(file, argv, { windowsHide: true, encoding: 'utf8', timeout, env })
   if (result.error) throw result.error
   assert.equal(result.status, 0, `${basename(file)} failed: ${result.stdout} ${result.stderr}`)
   return result.stdout
