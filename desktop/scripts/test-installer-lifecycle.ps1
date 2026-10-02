@@ -30,6 +30,44 @@ public static class InstallerFilePath {
         } finally { CloseHandle(file); }
     }
 }
+[
+    ComImport,
+    Guid("000214F9-0000-0000-C000-000000000046"),
+    InterfaceType(ComInterfaceType.InterfaceIsIUnknown)
+]
+interface IShellLinkW {
+    [PreserveSig]
+    int GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int length, IntPtr findData, uint flags);
+}
+[
+    ComImport,
+    Guid("0000010b-0000-0000-C000-000000000046"),
+    InterfaceType(ComInterfaceType.InterfaceIsIUnknown)
+]
+interface IPersistFile {
+    [PreserveSig] int GetClassID(out Guid classId);
+    [PreserveSig] int IsDirty();
+    [PreserveSig] int Load([MarshalAs(UnmanagedType.LPWStr)] string fileName, uint mode);
+    [PreserveSig] int Save([MarshalAs(UnmanagedType.LPWStr)] string fileName, bool remember);
+    [PreserveSig] int SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string fileName);
+    [PreserveSig] int GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string fileName);
+}
+public static class InstallerShortcut {
+    static readonly Guid ShellLinkClass = new Guid("00021401-0000-0000-C000-000000000046");
+    public static string GetTarget(string shortcutPath) {
+        object link = Activator.CreateInstance(Type.GetTypeFromCLSID(ShellLinkClass, true));
+        try {
+            int loadResult = ((IPersistFile)link).Load(shortcutPath, 0);
+            if (loadResult < 0) Marshal.ThrowExceptionForHR(loadResult);
+            var target = new StringBuilder(32768);
+            int pathResult = ((IShellLinkW)link).GetPath(target, target.Capacity, IntPtr.Zero, 0);
+            if (pathResult < 0) Marshal.ThrowExceptionForHR(pathResult);
+            return target.ToString();
+        } finally {
+            Marshal.ReleaseComObject(link);
+        }
+    }
+}
 '@
 function Get-CopilotixRegistration {
     foreach ($root in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall')) {
@@ -106,10 +144,9 @@ function Assert-Installed {
     Assert-That ($registration[0].PSPath -like '*HKEY_CURRENT_USER*') 'Install must register only for current user'
     $installationRecord = Get-ItemProperty -LiteralPath ("HKCU:\Software\" + $registration[0].PSChildName)
     Assert-That ($installationRecord.InstallLocation.TrimEnd('\') -eq $installDirectory) 'Registered install path differs'
-    $shell = New-Object -ComObject WScript.Shell
     foreach ($shortcut in @($desktopShortcut, $menuShortcut)) {
         Assert-That (Test-Path -LiteralPath $shortcut) "Shortcut is missing: $shortcut"
-        $target = $shell.CreateShortcut($shortcut).TargetPath
+        $target = [InstallerShortcut]::GetTarget($shortcut)
         Write-Host "Shortcut target: $target; expected: $application"
         Assert-That ([InstallerFilePath]::Canonical($target) -eq [InstallerFilePath]::Canonical($application)) 'Shortcut targets incorrect executable'
     }
