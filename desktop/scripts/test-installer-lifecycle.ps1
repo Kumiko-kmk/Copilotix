@@ -8,6 +8,29 @@ if (-not $ReleaseDirectory) { $ReleaseDirectory = Join-Path $PSScriptRoot '../..
 function Assert-That([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
+# Shell links may expose a DOS short path; compare the actual filesystem target.
+Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class InstallerFilePath {
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern IntPtr CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern uint GetFinalPathNameByHandle(IntPtr file, StringBuilder path, uint length, uint flags);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr file);
+    public static string Canonical(string path) {
+        IntPtr file=CreateFile(path,0,7,IntPtr.Zero,3,0,IntPtr.Zero);
+        if(file==new IntPtr(-1)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        try {
+            var result=new StringBuilder(32768);
+            uint length=GetFinalPathNameByHandle(file,result,(uint)result.Capacity,0);
+            if(length==0 || length>=result.Capacity) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            return result.ToString();
+        } finally { CloseHandle(file); }
+    }
+}
+'@
 function Get-CopilotixRegistration {
     foreach ($root in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall')) {
         if (Test-Path -LiteralPath $root) {
@@ -86,7 +109,9 @@ function Assert-Installed {
     $shell = New-Object -ComObject WScript.Shell
     foreach ($shortcut in @($desktopShortcut, $menuShortcut)) {
         Assert-That (Test-Path -LiteralPath $shortcut) "Shortcut is missing: $shortcut"
-        Assert-That ($shell.CreateShortcut($shortcut).TargetPath -eq $application) 'Shortcut targets incorrect executable'
+        $target = $shell.CreateShortcut($shortcut).TargetPath
+        Write-Host "Shortcut target: $target; expected: $application"
+        Assert-That ([InstallerFilePath]::Canonical($target) -eq [InstallerFilePath]::Canonical($application)) 'Shortcut targets incorrect executable'
     }
     $desktopPackage = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../package.json') -Raw | ConvertFrom-Json
     # Windows PowerShell does not reliably capture a GUI executable's output.
