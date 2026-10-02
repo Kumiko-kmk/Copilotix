@@ -93,3 +93,5 @@ release/
 最终 ZIP **94.08 MiB**（约 **98.65 MB**），Setup **93.99 MiB**；相较 244.86 MiB 减少约 **61.6%**。用户提到的旧包约 200 MB 未取得同版本原件，按十进制 200 MB 比较约减半；不是完全同源基准。进一步优化应集中于 Electron 版本升级的实际大小、依赖和资源审计；不宜直接裁剪必需 DLL、PAK、凭据 native binding 或教程。改为在线安装器虽可减小下载入口，但需另行联网下载 runtime，并不降低完整安装内容。
 
 50 项针对性测试、类型检查、lint（0 错误／49 项既有警告）、精简打包发布门禁及 packaged core E2E 均通过。本地包仍为开发测试包，正式发布的许可证与受信任签名门禁保持启用。
+
+最终 schema 5 包的 HTTP 下载、SHA256、四个交付入口、下载及解压目录删除、独立 GUID 实际安装／Core 启动／卸载均通过（6 项验收，exit 0）。现有用户程序、安装登记及 SQLite 哈希前后相同。测试安装与临时文件已清理，证据 `desktop/test-artifacts/release-download-acceptance.json` 的 `completed: true`。
