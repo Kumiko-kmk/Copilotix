@@ -1,3 +1,6 @@
+; The requested setup.exe name is intentional. Keep all other NSIS warnings fatal.
+!pragma warning disable 9000
+
 ; Extend electron-builder's guided installer; retain its upgrade/rollback logic.
 ; The default CHECK_APP_RUNNING eventually force-kills the app. Copilotix has a
 ; durable background queue, so installation and removal must wait for tray Exit.

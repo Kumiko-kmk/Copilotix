@@ -46,6 +46,8 @@ describe('Windows installer safety policy', () => {
       createDesktopShortcut: true, createStartMenuShortcut: true
     })
     expect(packageJson.build.nsis.artifactName).toBe('setup.exe')
+    expect(installer).toContain('!pragma warning disable 9000')
+    expect(packageJson.build.nsis.warningsAsErrors).not.toBe(false)
     expect(installer).toMatch(/!macro customInstallMode\s+StrCpy \$isForceCurrentInstall "1"/u)
     expect(installer).toMatch(/!macro customInit[\s\S]*?!insertmacro setInstallModePerUser/u)
     const uninit = installer.match(/!macro customUnInit([\s\S]*?)!macroend/u)?.[1]
