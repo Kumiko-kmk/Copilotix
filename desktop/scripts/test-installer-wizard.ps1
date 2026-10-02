@@ -11,6 +11,11 @@ Set-StrictMode -Version Latest
 if (-not $ReleaseDirectory) { $ReleaseDirectory = Join-Path $PSScriptRoot '../../release' }
 if (-not $EvidenceDirectory) { $EvidenceDirectory = Join-Path $PSScriptRoot '../test-artifacts/installer-wizard' }
 Add-Type -AssemblyName System.Drawing
+$drawingReferences = if ($PSVersionTable.PSEdition -eq 'Core') {
+    @((Get-ChildItem -LiteralPath (Join-Path $PSHOME 'ref') -Filter '*.dll').FullName) +
+        @([System.Drawing.Bitmap].Assembly.Location) +
+        @((Get-ChildItem -LiteralPath $PSHOME -Filter 'System.Private.Windows.*.dll').FullName)
+} else { @('System.Drawing') }
 Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
@@ -65,7 +70,7 @@ public static class WizardNative {
         }
     }
 }
-'@ -ReferencedAssemblies System.Drawing
+'@ -ReferencedAssemblies $drawingReferences
 function Assert-That([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Get-Controls([IntPtr]$Window) {
     foreach ($handle in [WizardNative]::Children($Window)) {

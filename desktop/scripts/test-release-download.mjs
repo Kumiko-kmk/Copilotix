@@ -16,6 +16,9 @@ import { buildStandaloneUninstaller } from './build-uninstall-launcher.mjs'
 
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repo = dirname(desktop)
+const powershellHost = process.platform === 'win32' &&
+  spawnSync('where.exe', ['pwsh.exe'], { windowsHide: true }).status === 0
+  ? 'pwsh.exe' : 'powershell.exe'
 const args = process.argv.slice(2)
 const release = resolve(args.find((arg) => !arg.startsWith('--')) ?? join(repo, 'release'))
 const install = args.includes('--install') || args.includes('--install-only')
@@ -49,7 +52,7 @@ function run(file, argv, timeout = 120_000) {
 }
 function protectedState() {
   // Read-only: never touch a real install, credential or application database.
-  return run('powershell.exe', ['-NoProfile', '-Command', String.raw`
+  return run(powershellHost, ['-NoProfile', '-Command', String.raw`
 $ErrorActionPreference='Stop'
 $roots=@('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall')
 $registrations=@(foreach($root in $roots){if(Test-Path -LiteralPath $root){Get-ChildItem -LiteralPath $root | Get-ItemProperty | Where-Object {$_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like 'Copilotix*' -and $_.DisplayName -notlike '*Acceptance*'} | Select-Object PSChildName,DisplayName,InstallLocation,UninstallString}})
@@ -148,7 +151,7 @@ try {
       ...manifest,
       installer: { ...manifest.installer, file: 'acceptance-setup.exe', sha256: (await hash(join(output, 'acceptance-setup.exe'))).toLowerCase() }
     }))
-    run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    run(powershellHost, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
       join(desktop, 'scripts/test-installer-wizard.ps1'), '-ReleaseDirectory', output,
       '-EvidenceDirectory', join(desktop, 'test-artifacts/isolated-desktop-shortcut'), '-Language', 'English'])
     pass('isolated native wizard defaults desktop shortcut checkbox to checked, allows toggling and cancels without installation')
