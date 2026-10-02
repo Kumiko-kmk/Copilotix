@@ -51,32 +51,39 @@ async function isCentered(locator: Locator, containerSelector: string): Promise<
 }
 
 async function selectText(locator: Locator, startOffset: number, endOffset: number): Promise<void> {
-  await locator.evaluate((element, offsets) => {
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-    const nodes: Text[] = []
-    let node = walker.nextNode()
-    while (node) {
-      nodes.push(node as Text)
-      node = walker.nextNode()
-    }
-    const locate = (target: number): { node: Text; offset: number } => {
-      let consumed = 0
-      for (const textNode of nodes) {
-        if (target <= consumed + textNode.data.length) return { node: textNode, offset: target - consumed }
-        consumed += textNode.data.length
+  await locator.scrollIntoViewIfNeeded()
+  // Tab activation commits before its passive selection listener. Recreate the
+  // user selection until that listener has accepted it, rather than racing the
+  // inactive pane's pending selection cleanup on a slower CI desktop.
+  await expect(async () => {
+    await locator.evaluate((element, offsets) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      const nodes: Text[] = []
+      let node = walker.nextNode()
+      while (node) {
+        nodes.push(node as Text)
+        node = walker.nextNode()
       }
-      throw new Error('Selection offset exceeds rendered text')
-    }
-    const start = locate(offsets.startOffset)
-    const end = locate(offsets.endOffset)
-    const range = document.createRange()
-    range.setStart(start.node, start.offset)
-    range.setEnd(end.node, end.offset)
-    const selection = window.getSelection()!
-    selection.removeAllRanges()
-    selection.addRange(range)
-    document.dispatchEvent(new Event('selectionchange'))
-  }, { startOffset, endOffset })
+      const locate = (target: number): { node: Text; offset: number } => {
+        let consumed = 0
+        for (const textNode of nodes) {
+          if (target <= consumed + textNode.data.length) return { node: textNode, offset: target - consumed }
+          consumed += textNode.data.length
+        }
+        throw new Error('Selection offset exceeds rendered text')
+      }
+      const start = locate(offsets.startOffset)
+      const end = locate(offsets.endOffset)
+      const range = document.createRange()
+      range.setStart(start.node, start.offset)
+      range.setEnd(end.node, end.offset)
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+      document.dispatchEvent(new Event('selectionchange'))
+    }, { startOffset, endOffset })
+    await expect(locator.page().getByRole('toolbar', { name: '文本标注' })).toBeVisible({ timeout: 500 })
+  }).toPass({ timeout: 5_000 })
 }
 
 test('renders compact scrollable tables and independent real formula minimaps', async () => {
@@ -576,6 +583,7 @@ test('keeps the complete minimap static across long-document jumps', async () =>
         style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; } .markdown-minimap-heading:focus-visible { background: transparent !important; box-shadow: none !important; } .markdown-minimap:focus-visible { box-shadow: none !important; }'
       })).toString('base64'),
       ...await panel.evaluate((element) => ({
+        canvasPixels: element.querySelector<HTMLCanvasElement>('.markdown-minimap-canvas')!.toDataURL(),
         formulas: element.querySelector('.markdown-minimap-formulas')!.innerHTML,
         headings: Array.from(element.querySelectorAll<HTMLElement>('.markdown-minimap-heading')).map((heading) => heading.style.cssText),
         paintCount: (window as Window & { minimapPaintCount: number }).minimapPaintCount
@@ -614,8 +622,20 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     await split.focus()
     await split.press('End')
     await expect.poll(() => panel.locator('article').evaluate((element) => element.clientWidth)).not.toBe(initialWidth)
-    await window.waitForTimeout(700)
-    expect(await readSnapshot()).toEqual(original)
+    // The retained canvas and indexed overview stay fixed, while resizing can
+    // resample its CSS display to a different PNG. Capture the settled display
+    // at the new size and require subsequent navigation to preserve it too.
+    let resized = await readSnapshot()
+    await expect.poll(async () => {
+      const next = await readSnapshot()
+      const unchanged = JSON.stringify(next) === JSON.stringify(resized)
+      resized = next
+      return unchanged
+    }, { intervals: [200, 300, 500], timeout: 5_000 }).toBe(true)
+    expect(resized.canvasPixels).toBe(original.canvasPixels)
+    expect(resized.formulas).toBe(original.formulas)
+    expect(resized.headings).toEqual(original.headings)
+    expect(resized.paintCount).toBe(original.paintCount)
     await headings.nth(headingIndex).focus()
     await headings.nth(headingIndex).press('Enter')
     const target = panel.locator('article h1, article h2, article h3, article h4, article h5, article h6').nth(headingIndex)
@@ -629,7 +649,7 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     const resizedBounds = (await rail.boundingBox())!
     await rail.click({ position: { x: resizedBounds.width - 2, y: resizedBounds.height * sourcePosition } })
     await expect.poll(() => isCentered(target, '.markdown-scroll')).toBe(true)
-    expect(await readSnapshot()).toEqual(original)
+    expect(await readSnapshot()).toEqual(resized)
   } finally {
     await app.close()
     await workspace.cleanup()

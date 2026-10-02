@@ -85,6 +85,17 @@ jobs:
           retention-days: 14
           path: ${{ env.COPILOTIX_RELEASE_ZIP }}
 
+      - name: Preserve failed Windows verification evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Copilotix-Windows-verification-failure
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            desktop/test-results/
+            desktop/coverage/coverage-summary.json
+
   publish:
     needs: build
     if: startsWith(github.ref, 'refs/tags/desktop-v')
