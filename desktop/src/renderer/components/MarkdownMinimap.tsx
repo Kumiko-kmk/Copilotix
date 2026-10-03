@@ -119,6 +119,15 @@ export default function MarkdownMinimap(props: {
     const frame = frameRef.current
     const scroller = props.scrollerRef.current
     if (!rail || !frame || !scroller) return
+    const snapshot = snapshotRef.current
+    if (snapshot && snapshot.width !== snapshot.article.getBoundingClientRect().width) {
+      // Resize indexing can be deferred while scrolling. Refresh the live
+      // navigation coordinates before using the retained overview geometry.
+      resolveMarkdownLayout(snapshot.article, () => {
+        refreshNavigationAnchors(navigationRef.current, scroller)
+      })
+      snapshot.width = snapshot.article.getBoundingClientRect().width
+    }
     const source = geometryRef.current
     const scale = rail.clientHeight / Math.max(1, source.documentHeight)
     const top = mapMinimapOffset(scroller.scrollTop, navigationRef.current, 'live') * scale
@@ -232,12 +241,13 @@ export default function MarkdownMinimap(props: {
     const rail = railRef.current
     const scroller = props.scrollerRef.current
     if (!rail || !scroller) return null
+    updateFrame()
     const bounds = rail.getBoundingClientRect()
     return {
       railTop: bounds.top,
       railHeight: rail.clientHeight
     }
-  }, [props.scrollerRef])
+  }, [props.scrollerRef, updateFrame])
 
   const scrollToPointer = React.useCallback((clientY: number, cached = dragMetricsRef.current) => {
     const scroller = props.scrollerRef.current
@@ -329,12 +339,13 @@ export default function MarkdownMinimap(props: {
   const jumpToHeading = React.useCallback((heading: MarkdownMinimapHeading) => {
     const scroller = props.scrollerRef.current
     if (!scroller) return
+    updateFrame()
     const top = heading.element
       ? heading.element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
       : mapMinimapOffset(heading.documentTop, navigationRef.current, 'source')
     scrollScrollerTo(scroller, top - 16)
     scheduleFrameUpdate()
-  }, [props.scrollerRef, scheduleFrameUpdate])
+  }, [props.scrollerRef, scheduleFrameUpdate, updateFrame])
 
   return (
     <div

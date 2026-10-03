@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockMapping } from '@shared/types'
-import { extractPaperTitle, MAX_TITLE_STEM_LENGTH, sanitizeTitleStem, titleFileName } from '@main/titleNaming'
+import { displayPaperTitle, extractPaperTitle, MAX_TITLE_STEM_LENGTH, sanitizeTitleStem, titleFileName } from '@main/titleNaming'
 
 function mapping(
   sourceText: string,
@@ -35,6 +35,12 @@ describe('paper title naming', () => {
     expect(extractPaperTitle('## **Attention** [Is All You Need](https://example.test)\n\n# Later heading\n', [])).toBe('Attention Is All You Need')
     expect(extractPaperTitle('# Some_Title\n', [])).toBe('Some_Title')
     expect(extractPaperTitle('Attention Is All You Need\n=========================\n', [])).toBe('Attention Is All You Need')
+  })
+
+  it('keeps punctuation in display titles while making export filenames Windows-safe', () => {
+    expect(displayPaperTitle('DeepONet: Learning nonlinear operators')).toBe('DeepONet: Learning nonlinear operators')
+    expect(displayPaperTitle('Transolver: A Fast Transformer Solver for PDEs')).toBe('Transolver: A Fast Transformer Solver for PDEs')
+    expect(displayPaperTitle('DeepONet: Learning nonlinear operators\0')).toBe('DeepONet: Learning nonlinear operators')
   })
 
   it('sanitizes Windows path characters and trailing whitespace', () => {

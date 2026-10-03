@@ -22,6 +22,7 @@ desktop/test-results/
 desktop/test-artifacts/
 desktop/playwright-report/
 release/
+release-artifacts/
 release-latest/
 release-*/
 .release-*/

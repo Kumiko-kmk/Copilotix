@@ -70,7 +70,7 @@ pnpm desktop:release:from-built
 Copilotix.exe --copilotix-packaged-smoke
 ```
 
-只有精确的 `COPILOTIX_PACKAGED_SMOKE_OK app=0.1.0 electron=44.1.1` marker、空 stderr、哈希/manifest 审计全部成功后，才会把新目录原子发布到根目录 `release/`；失败时恢复旧目录并保留 staging。发布包是完整目录，不要只复制 `Copilotix.exe`；`userData` 和 Credential Manager 不在发布包内。
+只有精确的 `COPILOTIX_PACKAGED_SMOKE_OK app=1.0.0 electron=44.1.1` marker、空 stderr、哈希/manifest 审计全部成功后，才会把新目录原子发布到根目录 `release/`；失败时恢复旧目录并保留 staging。发布包是完整目录，不要只复制 `Copilotix.exe`；`userData` 和 Credential Manager 不在发布包内。
 
 ## 功能与隐私
 

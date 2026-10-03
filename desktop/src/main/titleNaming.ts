@@ -1,5 +1,6 @@
 /** Main compatibility surface; title parsing and sanitization are shared pure functions. */
 export {
+  displayPaperTitle,
   extractPaperTitle,
   cleanTitleText,
   sanitizeTitleStem,

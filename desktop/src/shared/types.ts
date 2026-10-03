@@ -251,6 +251,7 @@ export interface CopilotixDesktopApi {
   getUsageAnalytics(): Promise<UsageAnalytics>
   openStorageLocation(): Promise<void>
   importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[]): Promise<DocumentSummary[]>
+  importTutorialPaper(createDuplicate?: boolean): Promise<DocumentSummary | null>
   listDocuments(): Promise<DocumentSummary[]>
   retryDocument(documentId: string): Promise<void>
   deleteDocument(request: DeleteDocumentRequest): Promise<void>

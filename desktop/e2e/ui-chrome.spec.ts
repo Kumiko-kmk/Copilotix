@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { MAX_PDF_PAGES } from '../src/shared/constants'
 
 const MINIMAP_TRANSLATED_MARKDOWN = [
   '# 测试文档',
@@ -33,20 +34,21 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
     const mainBounds = await window.locator('.main-surface').boundingBox()
     expect(mainBounds).not.toBeNull()
     expect(mainBounds!.x).toBeCloseTo(1, 0)
-    expect(mainBounds!.y).toBeCloseTo(40, 0)
+    expect(mainBounds!.y).toBeCloseTo(32, 0)
     expect(mainBounds!.x + mainBounds!.width).toBeCloseTo(viewport[0] - 1, 0)
     expect(mainBounds!.y + mainBounds!.height).toBeCloseTo(viewport[1] - 1, 0)
     await expect(window.locator('.app-shell')).toHaveCSS('border-radius', '16px')
-    await expect(window.locator('.app-shell')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await expect(window.locator('.app-shell')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     await expect(window.locator('.main-surface')).toHaveCSS('border-radius', '0px')
     await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     const closeControl = window.locator('[data-window-control="close"]')
-    await expect(closeControl).toHaveCSS('width', '12px')
-    await expect(closeControl).toHaveCSS('height', '12px')
+    await expect(closeControl).toHaveCSS('width', '20px')
+    await expect(closeControl).toHaveCSS('height', '28px')
+    expect(await closeControl.evaluate((element) => getComputedStyle(element, '::before').width)).toBe('14px')
     const closeBounds = await closeControl.boundingBox()
     expect(closeBounds).not.toBeNull()
-    expect(closeBounds!.y).toBeGreaterThanOrEqual(14)
-    expect(closeBounds!.y + closeBounds!.height).toBeLessThanOrEqual(27)
+    expect(closeBounds!.y).toBeGreaterThanOrEqual(1)
+    expect(closeBounds!.y + closeBounds!.height).toBeLessThanOrEqual(32)
 
     await window.locator('[data-edge-dock="top"]').hover()
     await window.waitForTimeout(300)
@@ -63,7 +65,7 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
     expect(bottomBounds!.y + bottomBounds!.height).toBeLessThanOrEqual(viewport[1])
     await window.emulateMedia({ colorScheme: 'dark' })
     await expect.poll(() => window.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(true)
-    await expect(window.locator('.app-shell')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await expect(window.locator('.app-shell')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     await capture(window, 'chrome-1100x700-fixed-light-bottom.png')
   } finally {
@@ -78,6 +80,9 @@ test('keeps the new parse page static across supported sizes and themes', async 
   try {
     const window = await app.firstWindow()
     const uploadEntry = window.getByTestId('pdf-upload-entry')
+    await expect(window.locator('.tutorial-page')).toBeVisible()
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.locator('.top-navigation-item').filter({ hasText: '新解析' }).click()
 
     await app.evaluate(({ BrowserWindow, nativeTheme }) => {
       nativeTheme.themeSource = 'light'
@@ -99,7 +104,7 @@ test('keeps the new parse page static across supported sizes and themes', async 
     })).toEqual({ C: 36, O: 80, P: 36, I: 80, L: 32, T: 30, X: 36 })
     await expect(window.getByText('今天想读些什么？')).toBeVisible()
     await expect(window.getByText('拖入文档')).toBeVisible()
-    await expect(window.getByText('当前支持 PDF')).toBeVisible()
+    await expect(window.getByText(`当前支持 PDF，单篇最多 ${MAX_PDF_PAGES} 页`)).toBeVisible()
     await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
     await expect(window.getByText('需要先配置解析 API Token')).toHaveCount(0)
     await expect(uploadEntry).toHaveCSS('min-height', '94px')
@@ -173,8 +178,9 @@ test('lays out service credentials as compact connection cards', async () => {
     await expect(window.getByRole('button', { name: /更多/u })).toHaveCount(0)
     await expect(window.getByText('服务地址')).toHaveCount(0)
     await expect(window.getByText('高级设置')).toHaveCount(0)
-    const tokenInput = window.getByLabel('APIKEY')
-    const testButton = window.getByRole('button', { name: '测试连接' })
+    const parserCard = window.locator('.service-card').filter({ has: window.locator('#credential-parser') })
+    const tokenInput = parserCard.getByLabel('APIKey', { exact: true })
+    const testButton = parserCard.getByRole('button', { name: '测试连接' })
     const [inputBounds, buttonBounds] = await Promise.all([tokenInput.boundingBox(), testButton.boundingBox()])
     expect(inputBounds).not.toBeNull()
     expect(buttonBounds).not.toBeNull()
@@ -182,9 +188,12 @@ test('lays out service credentials as compact connection cards', async () => {
     const buttonCenter = buttonBounds!.y + buttonBounds!.height / 2
     expect(Math.abs(inputCenter - buttonCenter)).toBeLessThanOrEqual(1)
 
-    await expect(window.getByLabel('APIKey', { exact: true })).toHaveCount(0)
-    await window.getByRole('button', { name: /千问.*配置服务/u }).click()
-    await expect(window.getByLabel('APIKey', { exact: true })).toBeVisible()
+    await expect(window.getByLabel('APIKey', { exact: true })).toHaveCount(3)
+    const qwenInput = window.locator('#credential-qwen')
+    await expect(qwenInput).toBeVisible()
+    await qwenInput.focus()
+    await expect(window.locator('#credential-qwen')).toHaveAttribute('type', 'password')
+    await expect(window.getByRole('region', { name: 'APIKey 用量分析' })).toBeVisible()
     await expect(window.locator('.settings-page')).toHaveCSS('overflow', 'hidden')
     expect(await window.locator('.settings-page').evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true)
     await capture(window, 'settings-services-reference.png')
@@ -268,7 +277,9 @@ test('shows live file storage usage and location controls', async () => {
     await expect(window.getByRole('region', { name: '文件存储' })).toBeVisible()
     await expect(window.getByRole('heading', { name: '文件管理' })).toHaveCount(0)
     await expect(window.getByLabel('文档保存位置')).not.toHaveValue('')
-    await expect(window.getByRole('button', { name: /修改位置/u })).toBeVisible()
+    await expect(window.getByRole('button', { name: '导出文库' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '导入文库' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '迁移文库' })).toBeVisible()
     await expect(window.getByRole('button', { name: '打开当前目录' })).toBeVisible()
     await expect(window.getByRole('button', { name: /刷新用量/u })).toBeVisible()
     await expect(window.getByText('占用空间')).toBeVisible()
@@ -276,8 +287,8 @@ test('shows live file storage usage and location controls', async () => {
     await expect(window.getByRole('img', { name: /存储构成，总计/u })).toBeVisible()
     await expect(window.getByRole('region', { name: '近期存储增长' })).toBeVisible()
     await expect(window.getByRole('img', { name: '近 14 日存储增长曲线' })).toBeVisible()
-    await expect(window.getByText(/修改位置不会移动既有文档/u)).toBeVisible()
-    const changeLocationBounds = await window.getByRole('button', { name: '修改位置' }).boundingBox()
+    await expect(window.getByText(/导入或迁移会保留旧库并在完成后重启/u)).toBeVisible()
+    const changeLocationBounds = await window.getByRole('button', { name: '迁移文库' }).boundingBox()
     const openLocationBounds = await window.getByRole('button', { name: '打开当前目录' }).boundingBox()
     expect(changeLocationBounds).not.toBeNull()
     expect(openLocationBounds).not.toBeNull()
@@ -305,7 +316,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
     const minimap = activePanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
     const separator = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
     await expect(scroller).toHaveAttribute('data-render-state', 'ready')
-    await expect(window.locator('.reader-header')).toHaveCSS('height', '52px')
+    await expect(window.locator('.reader-header')).toHaveCSS('height', '44px')
     await expect(window.locator('.pdf-toolbar')).toHaveCSS('height', '48px')
     await expect(window.locator('.text-toolbar')).toHaveCSS('height', '48px')
     await expect(separator).toHaveAttribute('aria-valuemin', '40')
@@ -327,29 +338,30 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await window.mouse.up()
     await expect(separator).toHaveAttribute('aria-valuenow', '60')
     await expect(minimap).toHaveCSS('width', '60px')
-    await expect.poll(() => minimap.locator('canvas').evaluate((canvas: HTMLCanvasElement) => {
-      const context = canvas.getContext('2d')
-      return context ? context.getImageData(0, 0, canvas.width, canvas.height).data.some((channel) => channel !== 0) : false
-    })).toBe(true)
+    // The fixture includes a custom-protocol image, so Chromium correctly
+    // prevents getImageData on this canvas. Compare rendered pixels instead.
+    const canvas = minimap.locator('canvas')
+    const overlayStyle = '.markdown-minimap-heading, .markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; }'
+    const blankCanvas = await canvas.screenshot({ style: `${overlayStyle} .markdown-minimap-canvas { opacity: 0 !important; }` })
+    await expect.poll(async () => (await canvas.screenshot({ style: overlayStyle })).equals(blankCanvas)).toBe(false)
     const originalHeading = minimap.getByRole('button', { name: '跳转到Fixture document' })
     await expect(originalHeading).toBeVisible()
     await expect(originalHeading).toHaveCSS('left', '4px')
 
-    await scroller.evaluate((element) => {
-      const article = element.querySelector<HTMLElement>('.markdown-body')
-      if (article) article.style.minHeight = '2400px'
-    })
-    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(2_000)
+    const maxScroll = await scroller.evaluate((element) => element.scrollHeight - element.clientHeight)
+    expect(maxScroll).toBeGreaterThan(0)
     const minimapBounds = await minimap.boundingBox()
     if (!minimapBounds) throw new Error('Markdown minimap is not visible')
+    const frameBeforeHover = await minimap.locator('.markdown-minimap-frame').getAttribute('style')
     await window.mouse.move(minimapBounds.x + minimapBounds.width / 2, minimapBounds.y + minimapBounds.height * 0.75)
-    await expect(minimap.locator('.markdown-minimap-frame')).toHaveAttribute('data-preview', 'true')
+    await expect(minimap.locator('.markdown-minimap-frame')).toHaveAttribute('data-preview', 'false')
+    await expect(minimap.locator('.markdown-minimap-frame')).toHaveAttribute('style', frameBeforeHover!)
     expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
 
     await window.mouse.down()
-    await window.mouse.move(minimapBounds.x + minimapBounds.width / 2, minimapBounds.y + minimapBounds.height * 0.4)
+    await window.mouse.move(minimapBounds.x + minimapBounds.width / 2, minimapBounds.y + minimapBounds.height * 0.9)
     await window.mouse.up()
-    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(200)
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(maxScroll * 0.5)
     await originalHeading.click()
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThan(80)
     await capture(window, 'reader-minimap-1100x700-original.png')

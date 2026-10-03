@@ -58,7 +58,7 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 
 上传 Secret 后清空剪贴板。密钥、密码、Token 只放受控的 Secret 存储，不提交到仓库。
 
-确定授权后，tag 与桌面包版本严格一致，例如 `desktop-v0.1.0`。现有工作流会读取 Secret、启用 production、验证签名、上传 draft 并校验完整资产后公开。
+确定授权后，tag 与桌面包版本严格一致，例如 `desktop-v1.0.0`。现有工作流会读取 Secret、启用 production、验证签名、上传 draft 并校验完整资产后公开。
 
 ### B. USB Token / Windows 证书存储
 
@@ -84,7 +84,9 @@ CA 云签名则按厂商 CLI/API 或 Windows KSP/CKA 集成，可使用 v26 的�
 
 无论选择哪一种方案，保持顺序：
 
-`构建 → 写入 fuses → 签名与时间戳 → 验证 EXE → 打 ZIP → 再验证 ZIP 内 EXE → 生成最终哈希 → 发布`
+`构建运行目录 → 写入 fuses → 程序签名与时间戳 → 验证 EXE → 以已验证目录打 ZIP 和 Setup（含卸载程序签名）→ 验证 ZIP 内 EXE 和 Setup 签名 → 生成最终哈希 → 发布`
+
+Setup 与程序 EXE 都必须通过有效的 Authenticode 验证；manifest 分别记录签名主体。CI 上传四项资产（Setup、ZIP、manifest、校验文件），回读比对每个文件的哈希并再次检查 Setup 签名后才发布。SignPath 或云签名若引入新的签名产物，必须同步满足这些门禁。
 
 不要在签名后再替换图标、修改 fuses 或改写 EXE 资源，否则需要重新签名并重新生成 ZIP 和校验文件。本次图标更新已重新打包本地开发产物，但没有购买、申请或配置真实签名服务。
 ## 5. 已生成的本机测试证书
@@ -112,4 +114,4 @@ powershell -NoProfile -File desktop/scripts/create-test-certificate.ps1
 - **SSL.com IV + 云签名**：官方明确证书展示经核验的个人姓名，并要求政府签发证件。GitHub 昵称不能直接替代真实姓名。官方页面未提供足以确认台湾和中国大陆个人申请均获受理的地区清单，付款前须向厂商确认身份文件、地区和云服务适用性。证书之外可能另收云签名订阅费或硬件费用。参考 [IV 产品说明](https://www.ssl.com/products/software-integrity/code-signing/iv/)。
 - **SignPath Foundation**：面向符合条件的开源项目，发行者显示 SignPath Foundation，不显示个人 GitHub 昵称；需要已发布项目、可核验的项目声誉和其他审核要求，MIT 并不保证批准。参考 [申请](https://signpath.org/apply.html) 与 [条件](https://signpath.org/terms.html)。
 
-目前未提交申请、购买服务或上传身份材料。维护者已选择 SignPath Foundation 免费开源路线并接受基金会发行者名称。仓库已公开，申请资料已准备；正式提交仍待必选条款确认。生产签名须待审核获批后接入，本地测试证书不代表申请已获批。
+已尝试提交申请，但页面停在“Form is submitting”，尚未收到成功回执。没有购买服务或上传身份证件。维护者已选择 SignPath Foundation 免费开源路线并接受基金会发行者名称。仓库已公开，申请资料已准备；维护者已确认必选条款；已打开填好的页面供手动完成网站验证。生产签名须待审核获批后接入，本地测试证书不代表申请已获批。

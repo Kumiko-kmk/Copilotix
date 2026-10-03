@@ -51,32 +51,39 @@ async function isCentered(locator: Locator, containerSelector: string): Promise<
 }
 
 async function selectText(locator: Locator, startOffset: number, endOffset: number): Promise<void> {
-  await locator.evaluate((element, offsets) => {
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-    const nodes: Text[] = []
-    let node = walker.nextNode()
-    while (node) {
-      nodes.push(node as Text)
-      node = walker.nextNode()
-    }
-    const locate = (target: number): { node: Text; offset: number } => {
-      let consumed = 0
-      for (const textNode of nodes) {
-        if (target <= consumed + textNode.data.length) return { node: textNode, offset: target - consumed }
-        consumed += textNode.data.length
+  await locator.scrollIntoViewIfNeeded()
+  // Tab activation commits before its passive selection listener. Recreate the
+  // user selection until that listener has accepted it, rather than racing the
+  // inactive pane's pending selection cleanup on a slower CI desktop.
+  await expect(async () => {
+    await locator.evaluate((element, offsets) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      const nodes: Text[] = []
+      let node = walker.nextNode()
+      while (node) {
+        nodes.push(node as Text)
+        node = walker.nextNode()
       }
-      throw new Error('Selection offset exceeds rendered text')
-    }
-    const start = locate(offsets.startOffset)
-    const end = locate(offsets.endOffset)
-    const range = document.createRange()
-    range.setStart(start.node, start.offset)
-    range.setEnd(end.node, end.offset)
-    const selection = window.getSelection()!
-    selection.removeAllRanges()
-    selection.addRange(range)
-    document.dispatchEvent(new Event('selectionchange'))
-  }, { startOffset, endOffset })
+      const locate = (target: number): { node: Text; offset: number } => {
+        let consumed = 0
+        for (const textNode of nodes) {
+          if (target <= consumed + textNode.data.length) return { node: textNode, offset: target - consumed }
+          consumed += textNode.data.length
+        }
+        throw new Error('Selection offset exceeds rendered text')
+      }
+      const start = locate(offsets.startOffset)
+      const end = locate(offsets.endOffset)
+      const range = document.createRange()
+      range.setStart(start.node, start.offset)
+      range.setEnd(end.node, end.offset)
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+      document.dispatchEvent(new Event('selectionchange'))
+    }, { startOffset, endOffset })
+    await expect(locator.page().getByRole('toolbar', { name: '文本标注' })).toBeVisible({ timeout: 500 })
+  }).toPass({ timeout: 5_000 })
 }
 
 test('renders compact scrollable tables and independent real formula minimaps', async () => {
@@ -145,8 +152,7 @@ async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<vo
 test('renders a local PDF with range requests before parsing succeeds', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
-    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
-    legacyTranslationManifest: true
+    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN
   })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -263,8 +269,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
 test('persists original and translated Markdown annotations with color and underline isolation', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
-    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
-    legacyTranslationManifest: true
+    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN
   })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -312,6 +317,7 @@ test('persists original and translated Markdown annotations with color and under
 
     await window.getByText('Markdown', { exact: true }).click()
     activeTextPanel = window.locator('.reader-tab-panel.active')
+    await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await selectText(activeTextPanel.locator('.markdown-block', { hasText: 'Second paragraph with' }), 0, 6)
     await window.getByRole('button', { name: '荧光笔高亮' }).click({ button: 'right' })
     await window.getByRole('option', { name: '选择蓝色' }).click()
@@ -333,8 +339,7 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
     supplementalBlocks: true,
-    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN,
-    legacyTranslationManifest: true
+    translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN
   })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -575,14 +580,57 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     await window.waitForTimeout(600)
     const readSnapshot = async () => ({
       pixels: (await panel.locator('.markdown-minimap-canvas').screenshot({
-        style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; }'
+        style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; } .markdown-minimap-heading:focus-visible { background: transparent !important; box-shadow: none !important; } .markdown-minimap:focus-visible { box-shadow: none !important; }'
       })).toString('base64'),
       ...await panel.evaluate((element) => ({
+        canvasPixels: element.querySelector<HTMLCanvasElement>('.markdown-minimap-canvas')!.toDataURL(),
         formulas: element.querySelector('.markdown-minimap-formulas')!.innerHTML,
         headings: Array.from(element.querySelectorAll<HTMLElement>('.markdown-minimap-heading')).map((heading) => heading.style.cssText),
         paintCount: (window as Window & { minimapPaintCount: number }).minimapPaintCount
       }))
     })
+    const expectSnapshot = async (baseline: Awaited<ReturnType<typeof readSnapshot>>) => {
+      const current = await readSnapshot()
+      const { pixels: expectedPixels, ...expectedContent } = baseline
+      const { pixels: currentPixels, ...currentContent } = current
+      // Canvas bytes, indexing and repaint count must remain exactly equal.
+      expect(currentContent).toEqual(expectedContent)
+      if (currentPixels === expectedPixels) return
+      // Chromium can round CSS-scaled clip-edge colors by one channel level.
+      // The CI trace differed at just 11/35,105 pixels, all in the bottom corner.
+      // Decode the PNGs so this narrowly bounded rasterization difference never
+      // hides an actual content shift, repaint or missing minimap element.
+      const difference = await window.evaluate(async ({ expected, actual }) => {
+        const decode = async (pixels: string) => {
+          const image = new Image()
+          image.src = `data:image/png;base64,${pixels}`
+          await image.decode()
+          const canvas = document.createElement('canvas')
+          canvas.width = image.naturalWidth
+          canvas.height = image.naturalHeight
+          const context = canvas.getContext('2d')!
+          context.drawImage(image, 0, 0)
+          return { width: canvas.width, height: canvas.height, values: context.getImageData(0, 0, canvas.width, canvas.height).data }
+        }
+        const [left, right] = await Promise.all([decode(expected), decode(actual)])
+        if (left.width !== right.width || left.height !== right.height) return { sameDimensions: false, maxChannelDelta: 255, changedRatio: 1 }
+        let maxChannelDelta = 0
+        let changedPixels = 0
+        for (let offset = 0; offset < left.values.length; offset += 4) {
+          let changed = false
+          for (let channel = 0; channel < 4; channel += 1) {
+            const delta = Math.abs(left.values[offset + channel]! - right.values[offset + channel]!)
+            maxChannelDelta = Math.max(maxChannelDelta, delta)
+            if (delta > 0) changed = true
+          }
+          if (changed) changedPixels += 1
+        }
+        return { sameDimensions: true, maxChannelDelta, changedRatio: changedPixels / (left.width * left.height) }
+      }, { expected: expectedPixels, actual: currentPixels })
+      expect(difference.sameDimensions).toBe(true)
+      expect(difference.maxChannelDelta).toBeLessThanOrEqual(1)
+      expect(difference.changedRatio).toBeLessThanOrEqual(0.001)
+    }
     const original = await readSnapshot()
     const rail = panel.locator('.markdown-minimap')
     const bounds = (await rail.boundingBox())!
@@ -590,37 +638,60 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     const originalFrame = await frame.getAttribute('style')
     const headings = panel.locator('.markdown-minimap-heading')
     await expect(headings.first()).not.toHaveAttribute('title')
-    await headings.nth(Math.floor(await headings.count() / 2)).hover()
+    // Dense documents can have overlapping heading hit areas. Hover at the
+    // actual rail coordinate and use keyboard navigation for an exact heading.
+    const middleHeadingBounds = (await headings.nth(Math.floor(await headings.count() / 2)).boundingBox())!
+    await rail.hover({ position: {
+      x: middleHeadingBounds.x + middleHeadingBounds.width / 2 - bounds.x,
+      y: middleHeadingBounds.y + middleHeadingBounds.height / 2 - bounds.y
+    } })
     await window.waitForTimeout(300)
     expect(await frame.getAttribute('style')).toBe(originalFrame)
-    expect(await readSnapshot()).toEqual(original)
+    await expectSnapshot(original)
     for (const fraction of [0.75, 0.25, 0.95, 0.1]) {
       await rail.click({ position: { x: bounds.width - 2, y: bounds.height * fraction } })
       await expect.poll(() => panel.locator('.markdown-scroll').evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
       await window.waitForTimeout(300)
-      expect(await readSnapshot()).toEqual(original)
+      await expectSnapshot(original)
     }
     const headingIndex = Math.floor(await headings.count() / 2)
-    await headings.nth(headingIndex).click()
+    await headings.nth(headingIndex).focus()
+    await headings.nth(headingIndex).press('Enter')
     await window.waitForTimeout(600)
-    expect(await readSnapshot()).toEqual(original)
+    await expectSnapshot(original)
     const split = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
     const initialWidth = await panel.locator('article').evaluate((element) => element.clientWidth)
     await split.focus()
     await split.press('End')
     await expect.poll(() => panel.locator('article').evaluate((element) => element.clientWidth)).not.toBe(initialWidth)
-    await window.waitForTimeout(700)
-    expect(await readSnapshot()).toEqual(original)
-    await headings.nth(headingIndex).click()
+    // The retained canvas and indexed overview stay fixed, while resizing can
+    // resample its CSS display to a different PNG. Capture the settled display
+    // at the new size and require subsequent navigation to preserve it too.
+    let resized = await readSnapshot()
+    await expect.poll(async () => {
+      const next = await readSnapshot()
+      const unchanged = JSON.stringify(next) === JSON.stringify(resized)
+      resized = next
+      return unchanged
+    }, { intervals: [200, 300, 500], timeout: 5_000 }).toBe(true)
+    expect(resized.canvasPixels).toBe(original.canvasPixels)
+    expect(resized.formulas).toBe(original.formulas)
+    expect(resized.headings).toEqual(original.headings)
+    expect(resized.paintCount).toBe(original.paintCount)
+    await headings.nth(headingIndex).focus()
+    await headings.nth(headingIndex).press('Enter')
     const target = panel.locator('article h1, article h2, article h3, article h4, article h5, article h6').nth(headingIndex)
-    await expect.poll(() => isCentered(target, '.markdown-scroll')).toBe(true)
+    await expect.poll(() => target.evaluate((element) => {
+      const scroller = element.closest('.markdown-scroll')!
+      return element.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+    })).toBeCloseTo(16, 0)
     const sourcePosition = await headings.nth(headingIndex).evaluate((element) =>
       Number.parseFloat((element as HTMLElement).style.top) / Number.parseFloat((element.parentElement as HTMLElement).style.height)
     )
     const resizedBounds = (await rail.boundingBox())!
     await rail.click({ position: { x: resizedBounds.width - 2, y: resizedBounds.height * sourcePosition } })
     await expect.poll(() => isCentered(target, '.markdown-scroll')).toBe(true)
-    expect(await readSnapshot()).toEqual(original)
+    await expectSnapshot(resized)
   } finally {
     await app.close()
     await workspace.cleanup()

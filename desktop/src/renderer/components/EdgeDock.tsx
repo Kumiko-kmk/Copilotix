@@ -72,30 +72,32 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
   }, [cancelHide])
 
   return (
-    <section
-      className={`edge-dock edge-dock-${props.edge}${open ? ' open' : ''}`}
-      data-edge-dock={props.edge}
-      onPointerEnter={show}
-      onPointerLeave={handlePointerLeave}
-      onFocusCapture={() => { if (!suppressFocusOpen.current) show() }}
-      onBlurCapture={handleBlur}
-      onKeyDown={handleEscape}
-    >
+    <>
       {props.edge === 'top' ? <div className="window-drag-region" aria-hidden="true" /> : null}
       {props.persistent ? <div className="edge-dock-persistent">{props.persistent}</div> : null}
-      <button
-        ref={triggerRef}
-        type="button"
-        className="edge-dock-trigger"
-        aria-label={props.label}
-        aria-expanded={open}
-        onClick={handleTriggerClick}
+      <section
+        className={`edge-dock edge-dock-${props.edge}${open ? ' open' : ''}`}
+        data-edge-dock={props.edge}
+        onPointerEnter={show}
+        onPointerLeave={handlePointerLeave}
+        onFocusCapture={() => { if (!suppressFocusOpen.current) show() }}
+        onBlurCapture={handleBlur}
+        onKeyDown={handleEscape}
       >
-        {props.edge === 'bottom' ? <span aria-hidden="true" /> : null}
-      </button>
-      <div className="edge-dock-panel" aria-hidden={!open} inert={open ? undefined : true} onPointerEnter={show}>
-        {props.children}
-      </div>
-    </section>
+        <button
+          ref={triggerRef}
+          type="button"
+          className="edge-dock-trigger"
+          aria-label={props.label}
+          aria-expanded={open}
+          onClick={handleTriggerClick}
+        >
+          {props.edge === 'bottom' ? <span aria-hidden="true" /> : null}
+        </button>
+        <div className="edge-dock-panel" aria-hidden={!open} inert={open ? undefined : true} onPointerEnter={show}>
+          {props.children}
+        </div>
+      </section>
+    </>
   )
 }

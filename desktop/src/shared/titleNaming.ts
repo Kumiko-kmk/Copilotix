@@ -37,6 +37,17 @@ export function extractPaperTitle(markdown: string, mappings: readonly BlockMapp
   return extractMarkdownHeading(markdown)
 }
 
+/** A display title is metadata, not a filesystem path. Keep punctuation such as ':' intact. */
+export function displayPaperTitle(value: string): string | null {
+  const title = cleanTitleText(value)
+    .replace(/[\p{Cc}]+/gu, ' ')
+    .trim()
+    .replace(/\.pdf$/iu, '')
+    .trim()
+  const bounded = Array.from(title).slice(0, 1_020).join('').trim()
+  return bounded || null
+}
+
 /** Removes presentation markup while retaining the human-readable title. */
 export function cleanTitleText(value: string): string {
   return value

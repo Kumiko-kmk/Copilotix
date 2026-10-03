@@ -13,7 +13,7 @@ async function mount(manageLibrary: CopilotixDesktopApi['manageLibrary']) {
   } as unknown as CopilotixDesktopApi })
   render(<SettingsPage settings={{ ...DEFAULT_SETTINGS, outputRoot: 'C:/output' }} onSaved={vi.fn()} />)
   fireEvent.click(screen.getByRole('button', { name: /文件存储/u }))
-  await waitFor(() => expect((screen.getByRole('button', { name: '备份文档库' }) as HTMLButtonElement).disabled).toBe(false))
+  await waitFor(() => expect((screen.getByRole('button', { name: '导出文库' }) as HTMLButtonElement).disabled).toBe(false))
   return { getStorageInfo }
 }
 describe('library management settings', () => {
@@ -26,10 +26,12 @@ describe('library management settings', () => {
     expect(document.querySelector('.settings-content-body > .settings-section.storage-management')).toBe(storage)
     expect(storage.firstElementChild?.classList.contains('storage-location-card')).toBe(true)
     expect(screen.queryByRole('heading', { name: '文件存储' })).toBeNull()
-    const library = within(storage).getByRole('region', { name: '文档库管理' })
-    expect(within(library).getByText(/不包含 API 密钥/u)).toBeTruthy()
-    const backup = within(library).getByRole('button', { name: '备份文档库' }) as HTMLButtonElement
-    const migrate = within(library).getByRole('button', { name: '迁移文档库' }) as HTMLButtonElement
+    expect(within(storage).queryByRole('region', { name: '文档库管理' })).toBeNull()
+    expect(within(storage).getByText(/不包含 API 密钥/u)).toBeTruthy()
+    const backup = within(storage).getByRole('button', { name: '导出文库' }) as HTMLButtonElement
+    const migrate = within(storage).getByRole('button', { name: '迁移文库' }) as HTMLButtonElement
+    const actions = storage.querySelector('.storage-location-actions')!
+    expect(Array.from(actions.querySelectorAll('button'), button => button.textContent)).toEqual(['导出文库', '导入文库', '迁移文库', '打开当前目录'])
     fireEvent.click(backup)
     expect(backup.disabled).toBe(true)
     expect(migrate.disabled).toBe(true)
@@ -44,7 +46,7 @@ describe('library management settings', () => {
     const manage = vi.fn(async () => ({ status: 'cancelled' as const, restartRequired: false }))
     const { getStorageInfo } = await mount(manage)
     await vi.waitFor(() => expect(getStorageInfo).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: '恢复文档库' }))
+    fireEvent.click(screen.getByRole('button', { name: '导入文库' }))
     await screen.findByText('文档库操作已取消')
     expect(getStorageInfo).toHaveBeenCalledOnce()
     expect(screen.queryByText(/操作完成/u)).toBeNull()
@@ -53,16 +55,16 @@ describe('library management settings', () => {
     const manage = vi.fn(async () => { throw new Error('备份校验失败') })
     const { getStorageInfo } = await mount(manage)
     await vi.waitFor(() => expect(getStorageInfo).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: '恢复文档库' }))
+    fireEvent.click(screen.getByRole('button', { name: '导入文库' }))
     await screen.findByText('备份校验失败')
     expect(getStorageInfo).toHaveBeenCalledOnce()
-    await vi.waitFor(() => expect((screen.getByRole('button', { name: '恢复文档库' }) as HTMLButtonElement).disabled).toBe(false))
+    await vi.waitFor(() => expect((screen.getByRole('button', { name: '导入文库' }) as HTMLButtonElement).disabled).toBe(false))
   })
   it('announces restart without requesting a stale library after a successful switch', async () => {
     const manage = vi.fn(async () => ({ status: 'completed' as const, path: 'D:/library', restartRequired: true }))
     const { getStorageInfo } = await mount(manage)
     await vi.waitFor(() => expect(getStorageInfo).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: '迁移文档库' }))
+    fireEvent.click(screen.getByRole('button', { name: '迁移文库' }))
     await screen.findByText('文档库操作完成，应用即将重启')
     expect(getStorageInfo).toHaveBeenCalledOnce()
   })

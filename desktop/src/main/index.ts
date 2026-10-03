@@ -1,7 +1,11 @@
+import { sanitizeTitleStem } from '@shared/titleNaming'
+import { TUTORIAL_PAPER_BYTES, TUTORIAL_PAPER_SHA256, TUTORIAL_PAPER_SOURCE_URL, MINERU_API_TOKEN_URL } from '@shared/tutorialSample'
+import { verifiedTutorialPaperPath } from './tutorialSample'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
 import { LibraryAccessGate } from './libraryAccessGate'
 import { acquirePrimaryInstance } from './singleInstance'
-import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import {
   app,
@@ -48,6 +52,7 @@ import {
   documentDetailsSchema,
   documentIdRequestSchema,
   documentSummarySchema,
+  tutorialImportRequestSchema,
   importDocumentsIpcRequestSchema,
   listReaderAnnotationsRequestSchema,
   mutateReaderAnnotationsRequestSchema,
@@ -71,6 +76,7 @@ import { formatPackagedSmokeMarker, shouldRunPackagedSmoke } from '@shared/packa
 import { inspectStorage } from './storageService'
 import { resolveUtilityEntryPath } from './utilityEntryPath'
 import { UsageAnalyticsService } from './usageAnalyticsService'
+import { runUninstallCleanup, UNINSTALL_CLEANUP_ARG } from './uninstallCleanup'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -86,7 +92,9 @@ const libraryGate = new LibraryAccessGate()
 
 const packagedSmokeMode = shouldRunPackagedSmoke(process.argv, app.isPackaged)
 
-if (packagedSmokeMode) {
+if (app.isPackaged && process.argv.includes(UNINSTALL_CLEANUP_ARG)) {
+  void runUninstallCleanup()
+} else if (packagedSmokeMode) {
   void runPackagedSmoke()
 } else {
   startNormalApp()
@@ -238,7 +246,7 @@ function createMainWindow(): void {
   })
   mainWindow.webContents.on('page-title-updated', (event) => event.preventDefault())
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url === 'https://github.com/Kumiko-kmk/Copilotix') void shell.openExternal(url)
+    if (url === 'https://github.com/Kumiko-kmk/Copilotix' || url === TUTORIAL_PAPER_SOURCE_URL || url === MINERU_API_TOKEN_URL) void shell.openExternal(url)
     return { action: 'deny' }
   })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
@@ -386,6 +394,28 @@ function registerIpc(
     const created = await tasks.importPaths(paths.filter((path) => path.toLowerCase().endsWith('.pdf')), request.options)
     return created.map(projectDocumentSummary)
   }, validationOptions)
+  registerValidatedHandler('tutorial:import-paper', tutorialImportRequestSchema, documentSummarySchema.nullable(), async (_event, request) => {
+    const samplePath = await verifiedTutorialPaperPath({
+      isPackaged: app.isPackaged,
+      bundleDirectory: __dirname,
+      resourcesPath: process.resourcesPath
+    })
+    const selection = await dialog.showOpenDialog(mainWindow!, {
+      defaultPath: samplePath,
+      properties: ['openFile'],
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+    if (selection.canceled || !selection.filePaths[0]) return null
+    const selectedPath = selection.filePaths[0]
+    if ((await stat(selectedPath)).size !== TUTORIAL_PAPER_BYTES) throw new Error('新手教程请选择窗口中预选的内置论文 Attention Is All You Need')
+    const selectedHash = createHash('sha256').update(await readFile(selectedPath)).digest('hex')
+    if (selectedHash !== TUTORIAL_PAPER_SHA256) throw new Error('新手教程请选择窗口中预选的内置论文 Attention Is All You Need')
+    const created = await tasks.importPaths([selectedPath], { createDuplicates: request.createDuplicate, useOriginalFilename: false })
+    if (created[0]) return projectDocumentSummary(created[0])
+    const existing = (await tasks.list()).find((task) => task.sourceHash === TUTORIAL_PAPER_SHA256)
+    if (!existing) throw new Error('内置教程论文导入失败')
+    return projectDocumentSummary(existing)
+  }, validationOptions)
   registerValidatedHandler('documents:list', noRequestSchema, documentSummarySchema.array(), async () => {
     if (documentSummaries.size === 0) {
       const current = repository?.listDocumentSummaries
@@ -422,7 +452,7 @@ function registerIpc(
           ? join(task.outputDir, 'full.zh-CN.md')
           : null
     const extension = request.kind === 'result-zip' ? 'zip' : 'md'
-    const exportStem = task.title?.trim() || task.name.replace(/\.pdf$/i, '')
+    const exportStem = sanitizeTitleStem(task.title?.trim() || task.name.replace(/\.pdf$/i, '')) ?? `paper-${task.id.slice(0, 8)}`
     const result = await dialog.showSaveDialog(mainWindow!, {
       defaultPath: join(app.getPath('downloads'), `${exportStem}${request.kind === 'translated-markdown' ? '.zh-CN' : ''}.${extension}`),
       filters: [{ name: extension.toUpperCase(), extensions: [extension] }]

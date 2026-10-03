@@ -6,6 +6,7 @@ import {
   assertDesktopReleaseLicenseMetadata,
   assertNoCanvasPaths,
   assertReleaseAssetNames,
+  setupNameForRelease,
   assertReleaseSigningConfiguration,
   assertReleaseTagMatchesVersion,
   assertRequiredPackagedContent,
@@ -16,9 +17,9 @@ import {
 
 describe('release policy', () => {
   it('requires desktop release tags to match the packaged version exactly', () => {
-    expect(assertReleaseTagMatchesVersion('desktop-v0.1.0', '0.1.0')).toBe('desktop-v0.1.0')
-    expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.1', '0.1.0')).toThrow(/does not match package version/)
-    expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.0', 'latest')).toThrow(/Invalid desktop release version/)
+    expect(assertReleaseTagMatchesVersion('desktop-v1.0.0', '1.0.0')).toBe('desktop-v1.0.0')
+    expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.1', '1.0.0')).toThrow(/does not match package version/)
+    expect(() => assertReleaseTagMatchesVersion('desktop-v1.0.0', 'latest')).toThrow(/Invalid desktop release version/)
   })
 
   it('blocks public release while the desktop license declaration is unresolved', () => {
@@ -39,17 +40,26 @@ describe('release policy', () => {
 
   it('only permits a complete, unique release asset set before publishing', () => {
     expect(assertReleaseAssetNames([
-      'Copilotix-0.1.0-win-x64.zip',
+      'setup.exe',
+      'Copilotix-1.0.0-win-x64.zip',
       'SHA256SUMS.txt',
       'release-manifest.json'
-    ], 'Copilotix-0.1.0-win-x64')).toBe(true)
-    expect(() => assertReleaseAssetNames(['SHA256SUMS.txt', 'release-manifest.json'], 'Copilotix-0.1.0-win-x64')).toThrow(/Unexpected release assets/)
+    ], 'Copilotix-1.0.0-win-x64')).toBe(true)
+    expect(() => assertReleaseAssetNames(['SHA256SUMS.txt', 'release-manifest.json'], 'Copilotix-1.0.0-win-x64')).toThrow(/Unexpected release assets/)
     expect(() => assertReleaseAssetNames([
-      'Copilotix-0.1.0-win-x64.zip',
-      'Copilotix-0.1.0-win-x64.zip',
+      'setup.exe',
+      'Copilotix-1.0.0-win-x64.zip',
+      'setup.exe',
+      'Copilotix-1.0.0-win-x64.zip',
       'SHA256SUMS.txt',
       'release-manifest.json'
-    ], 'Copilotix-0.1.0-win-x64')).toThrow(/Unexpected release assets/)
+    ], 'Copilotix-1.0.0-win-x64')).toThrow(/Unexpected release assets/)
+  })
+
+  it('derives Setup filenames for hyphenated products and prerelease versions', () => {
+    expect(setupNameForRelease('Copilotix-1.0.0-win-x64')).toBe('setup.exe')
+    expect(setupNameForRelease('My-App-1.2.3-beta.1-win-x64')).toBe('setup.exe')
+    expect(() => setupNameForRelease('../bad')).toThrow(/Invalid Windows release name/)
   })
 
   it('requires a valid Authenticode result and a signer subject', () => {
@@ -73,13 +83,18 @@ describe('release policy', () => {
     expect(() => assertReleaseMeasurements({
       appAsarBytes: 29.22 * MEBIBYTE,
       runtimeBytes: 349.88 * MEBIBYTE,
-      zipBytes: 148.78 * MEBIBYTE
+      zipBytes: 148.78 * MEBIBYTE,
+      setupBytes: 150 * MEBIBYTE
     })).not.toThrow()
   })
 
-  it.each(['appAsarBytes', 'runtimeBytes', 'zipBytes'])('rejects an oversized %s measurement', (key) => {
+  it.each(['appAsarBytes', 'runtimeBytes', 'zipBytes', 'setupBytes'])('rejects an oversized %s measurement', (key) => {
     const measurements = { ...RELEASE_LIMITS, [key]: RELEASE_LIMITS[key] + 1 }
     expect(() => assertReleaseMeasurements(measurements)).toThrow(key)
+  })
+
+  it('rejects duplicate-runtime archives rather than expanding the ZIP budget', () => {
+    expect(() => assertReleaseMeasurements({ ...RELEASE_LIMITS, zipBytes: 245 * MEBIBYTE })).toThrow(/zipBytes/)
   })
 
   it('only accepts the simplified Chinese Electron locale', () => {
@@ -96,7 +111,9 @@ describe('release policy', () => {
 
   it('requires the application entry points, unpacked utility, and keyring dependency', () => {
     const runtimeFiles = [
+      { path: 'resources/tutorial/Attention Is All You Need.pdf', size: 1 },
       { path: 'resources/app.asar.unpacked/out/utility/index.js', size: 1 },
+      { path: 'resources/app.asar.unpacked/out/utility/uninstall-cleanup.js', size: 1 },
       { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring/index.js', size: 1 },
       { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/package.json', size: 1 },
       { path: 'resources/app.asar.unpacked/node_modules/@napi-rs/keyring-win32-x64-msvc/keyring.win32-x64-msvc.node', size: 1 }
