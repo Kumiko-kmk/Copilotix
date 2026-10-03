@@ -48,6 +48,8 @@ manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`�
 
 ## GitHub 正式发布
 
+首次 `desktop-v1.0.0` 可先发布未签章版本，以供后续申请签章服务。此例外要求仓库 Actions variable `COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE` 精确等于 `desktop-v1.0.0`；仅此 tag 使用未签章构建，Release 说明明确标注 unsigned。完整构建、安装／卸载、下载删除、资产数量和远端哈希校验仍执行。发布完成后移除此 variable；其他版本继续要求受信任签章，不以自签证书代替。
+
 正式发布 tag 必须严格等于 `desktop-v<desktop/package.json version>`，例如 package version 为 `1.0.0` 时只能推送 `desktop-v1.0.0`。CI 会先核对 tag 与包版本，再构建并验证 Electron fuses、签名、运行包和哈希。
 
 当前实现只直接接入文件式证书；以下 Secrets 仅适用于已有适用 PFX/P12 的情况。新购公开受信任证书通常使用 Token/HSM/云签名，需按所选服务改造预检查和签名步骤，详见 [许可证选择与签名配置](LICENSE_AND_SIGNING_ZH.md)。

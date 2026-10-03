@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # One explicit first-release exception; all other public tags require signing.
+  COPILOTIX_INITIAL_UNSIGNED_RELEASE: ${{ github.ref == 'refs/tags/desktop-v1.0.0' && vars.COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE == 'desktop-v1.0.0' }}
+
 jobs:
   build:
     runs-on: windows-latest
@@ -31,7 +35,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/desktop-v')
         run: node desktop/scripts/verify-release-license.mjs
       - name: Require a signing certificate for a production release
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        if: startsWith(github.ref, 'refs/tags/desktop-v') && env.COPILOTIX_INITIAL_UNSIGNED_RELEASE != 'true'
         run: node desktop/scripts/verify-release-signing.mjs
         env:
           COPILOTIX_RELEASE_MODE: production
@@ -45,7 +49,7 @@ jobs:
       - name: Package verified compact Windows installation bundle
         run: pnpm desktop:release:from-built
         env:
-          COPILOTIX_RELEASE_MODE: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && 'production' || 'development' }}
+          COPILOTIX_RELEASE_MODE: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && env.COPILOTIX_INITIAL_UNSIGNED_RELEASE != 'true' && 'production' || 'development' }}
           WIN_CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_LINK || '' }}
           WIN_CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_KEY_PASSWORD || '' }}
       - run: pnpm desktop:test:e2e
@@ -135,6 +139,9 @@ jobs:
               '',
               'See docs/WINDOWS_INSTALLATION_ZH.md in the release source for installation and removal details. Verify downloads against SHA256SUMS.txt.'
             ) -join "`n"
+            if ($env:COPILOTIX_INITIAL_UNSIGNED_RELEASE -eq 'true') {
+              $notes = "**Unsigned initial release:** Copilotix 1.0.0 is published before trusted Windows code signing is available. These binaries are not signed. Later releases require trusted signing.`n`n" + $notes
+            }
             [IO.File]::WriteAllText($notesPath, $notes, [Text.UTF8Encoding]::new($false))
             & gh release create $tag --repo $repo --draft --verify-tag --generate-notes --notes-file $notesPath --title "Copilotix $tag"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -163,9 +170,11 @@ jobs:
           [IO.File]::WriteAllText($publicChecksums, $checksums + "`n", [Text.UTF8Encoding]::new($false))
           $files = @($installers[0].FullName, $archives[0].FullName, $publicChecksums, (Join-Path 'release/advanced' 'release-manifest.json'))
           foreach ($file in $files) { if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Required release asset missing: $file" } }
-          foreach ($installer in $installers) {
-            $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
-            if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Setup Authenticode signature is not valid: $($signature.Status)" }
+          if ($env:COPILOTIX_INITIAL_UNSIGNED_RELEASE -ne 'true') {
+            foreach ($installer in $installers) {
+              $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+              if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Setup Authenticode signature is not valid: $($signature.Status)" }
+            }
           }
           $arguments = @('release', 'upload', $env:GITHUB_REF_NAME) + $files + @('--repo', $env:GITHUB_REPOSITORY, '--clobber')
           & gh @arguments
@@ -200,7 +209,7 @@ jobs:
             $localHash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
             $remoteHash = (Get-FileHash -LiteralPath $remotePath -Algorithm SHA256).Hash
             if ($localHash -ne $remoteHash) { throw "Uploaded release asset hash mismatch: $assetName" }
-            if ($assetName -like 'setup.exe') {
+            if ($assetName -like 'setup.exe' -and $env:COPILOTIX_INITIAL_UNSIGNED_RELEASE -ne 'true') {
               $signature = Get-AuthenticodeSignature -LiteralPath $remotePath
               if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Downloaded Setup Authenticode signature is not valid: $($signature.Status)" }
             }
