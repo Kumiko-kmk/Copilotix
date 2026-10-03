@@ -30,6 +30,7 @@ public static class WizardNative {
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int max);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd, StringBuilder text, int max);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr hwnd);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wparam, string lparam);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wparam, StringBuilder lparam);
@@ -74,7 +75,9 @@ public static class WizardNative {
 function Assert-That([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Get-Controls([IntPtr]$Window) {
     foreach ($handle in [WizardNative]::Children($Window)) {
-        [pscustomobject]@{ Handle=$handle; Id=[WizardNative]::GetDlgCtrlID($handle); Class=[WizardNative]::Class($handle); Text=[WizardNative]::Text($handle) }
+        if ([WizardNative]::IsWindowVisible($handle)) {
+            [pscustomobject]@{ Handle=$handle; Id=[WizardNative]::GetDlgCtrlID($handle); Class=[WizardNative]::Class($handle); Text=[WizardNative]::Text($handle) }
+        }
     }
 }
 function Wait-Page([scriptblock]$Predicate, [string]$Description, [int]$Seconds=30) {
@@ -83,6 +86,7 @@ function Wait-Page([scriptblock]$Predicate, [string]$Description, [int]$Seconds=
         $process.Refresh()
         Assert-That (-not $process.HasExited) "Setup exited while waiting for $Description"
         foreach ($window in [WizardNative]::Windows($process.Id)) {
+            if (-not [WizardNative]::IsWindowVisible($window)) { continue }
             $controls=@(Get-Controls $window)
             if (& $Predicate $controls) { return [pscustomobject]@{ Window=$window; Controls=$controls } }
         }
@@ -95,9 +99,11 @@ function Save-Page($Page, [string]$Name) {
     [WizardNative]::Capture($Page.Window, (Join-Path $evidence "$Name.png"))
 }
 function Click-Control($Page, [int]$Id) {
-    $control=@($Page.Controls | Where-Object { $_.Id -eq $Id -and $_.Class -eq 'Button' })
-    Assert-That ($control.Count -eq 1) "Expected wizard button $Id"
-    [WizardNative]::PostMessage($control[0].Handle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
+    $controls=@(Get-Controls $Page.Window)
+    $control=@($controls | Where-Object { $_.Id -eq $Id -and $_.Class -eq 'Button' })
+    $visibleButtons=($controls | Where-Object Class -eq 'Button' | ForEach-Object { "$($_.Id): $($_.Text)" }) -join '; '
+    Assert-That ($control.Count -eq 1) "Expected visible wizard button $Id; visible buttons: $visibleButtons"
+    Assert-That ([WizardNative]::PostMessage($control[0].Handle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)) "Could not click visible wizard button $Id"
 }
 $release=[IO.Path]::GetFullPath($ReleaseDirectory)
 $evidence=Join-Path ([IO.Path]::GetFullPath($EvidenceDirectory)) $Language
