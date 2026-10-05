@@ -85,6 +85,44 @@ describe('TasksPage', () => {
     expect(formatTaskCreatedAt('not-a-date')).toBe('not-a-date')
   })
 
+  it('counts tasks per status group and filters by the overview chips', () => {
+    const onCreate = vi.fn()
+    render(<TasksPage
+      documents={[
+        document('a.pdf', 'Running', 'translating', '2026-09-20T22:19:16'),
+        document('b.pdf', 'Waiting', 'queued', '2026-09-20T22:19:16'),
+        document('c.pdf', 'Done', 'completed', '2026-09-20T22:19:16'),
+        document('d.pdf', 'Broken', 'failed', '2026-09-20T22:19:16')
+      ]}
+      onOpen={() => undefined}
+      onCreate={onCreate}
+    />)
+    const chip = (name: RegExp): HTMLElement => screen.getByRole('button', { name })
+    expect(chip(/^全部 4$/u).getAttribute('aria-pressed')).toBe('true')
+    expect(chip(/^处理中 2$/u)).toBeTruthy()
+    expect(chip(/^完成 1$/u)).toBeTruthy()
+
+    fireEvent.click(chip(/^需处理 1$/u))
+    expect(screen.getByRole('button', { name: 'Broken' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Running' })).toBeNull()
+
+    fireEvent.click(chip(/^处理中 2$/u))
+    expect(screen.getByRole('button', { name: 'Running' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Waiting' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
+
+    fireEvent.change(screen.getByPlaceholderText('请输入任务名称'), { target: { value: 'zzz' } })
+    fireEvent.click(screen.getByRole('button', { name: '清除筛选' }))
+    expect(screen.getAllByRole('button', { name: /^(Running|Waiting|Done|Broken)$/u })).toHaveLength(4)
+  })
+
+  it('offers a shortcut to create the first task when the list is empty', () => {
+    const onCreate = vi.fn()
+    render(<TasksPage documents={[]} onOpen={() => undefined} onCreate={onCreate} />)
+    fireEvent.click(screen.getByRole('button', { name: '去新解析' }))
+    expect(onCreate).toHaveBeenCalled()
+  })
+
   it('selects local file deletion by default when opening the delete dialog', () => {
     render(<TasksPage documents={[document('paper.pdf', 'Paper', 'failed', '2026-09-20T22:19:16')]} onOpen={() => undefined} />)
     fireEvent.click(screen.getByRole('button', { name: '删除' }))

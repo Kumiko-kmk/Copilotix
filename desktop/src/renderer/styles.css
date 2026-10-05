@@ -21,15 +21,17 @@ button, input, select { font: inherit; }
   --ink: #2f2a24;
   --ease-out: cubic-bezier(.2, .8, .2, 1);
   --ease-spring: cubic-bezier(.3, 1.4, .5, 1);
-  --shell-radius: 16px;
+  --shell-radius: 8px;
   --titlebar-height: 32px;
   --page-top: 24px;
-  --window-control-size: 14px;
+  --window-control-size: 12px;
   --new-parse-bg: #f1ede3;
   --upload-accent: #4a9d84;
 }
 
-.app-shell { position: relative; width: 100%; height: 100%; padding: calc(var(--titlebar-height) - 1px) 0 0; overflow: hidden; border: 1px solid var(--chrome-bg); border-radius: var(--shell-radius); background: var(--surface); color: var(--text); }
+.app-shell { position: relative; width: 100%; height: 100%; padding: calc(var(--titlebar-height) - 1px) 0 0; overflow: hidden; border: 1px solid rgba(255, 255, 255, .72); border-radius: var(--shell-radius); background: var(--surface); color: var(--text); transition: border-radius .2s ease; }
+/* Windows 11 rounds frameless windows at 8px; keep the inner highlight on the same curve, and square it off when maximized. */
+:root[data-window-maximized="true"] { --shell-radius: 0px; }
 .main-surface { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; border: 0; border-radius: 0; background: var(--surface); box-shadow: none; }
 .titlebar-brand { position: absolute; top: 0; left: 50%; z-index: 1002; display: grid; height: var(--titlebar-height); place-items: center; color: #756f66; font-size: 13px; font-weight: 500; letter-spacing: .04em; line-height: 1; pointer-events: none; transform: translateX(-50%); }
 
@@ -51,17 +53,20 @@ button, input, select { font: inherit; }
 .edge-dock-top.open .edge-dock-panel { transform: translate(-50%, 0); }
 .edge-dock-bottom.open .edge-dock-panel { transform: translateY(0); }
 
-.window-controls { display: flex; align-items: center; height: calc(var(--titlebar-height) - 1px); padding: 0 13px; }
-.window-control { position: relative; display: grid; width: 20px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
-.window-control::before { position: absolute; width: var(--window-control-size); height: var(--window-control-size); border: 1px solid var(--control-border); border-radius: 50%; background: var(--control-color); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .24), 0 1px 1px rgba(0, 0, 0, .08); content: ""; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; }
-.window-control.close { --control-color: #ed6a5f; --control-border: #e24b41; --control-symbol: #460804; --control-pressed: #b15048; --control-pressed-border: #a14239; }
-.window-control.minimize { --control-color: #f6be50; --control-border: #e1a73e; --control-symbol: #90591d; --control-pressed: #b8923b; --control-pressed-border: #a67f36; }
-.window-control.maximize { --control-color: #61c555; --control-border: #2dac2f; --control-symbol: #2a6218; --control-pressed: #4a9741; --control-pressed-border: #428234; }
-.window-control:active::before { background: var(--control-pressed); border-color: var(--control-pressed-border); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .12); }
-.window-control span { position: relative; display: grid; width: var(--window-control-size); height: var(--window-control-size); place-items: center; color: var(--control-symbol); opacity: 0; pointer-events: none; transition: opacity .12s ease; }
-.window-control svg { width: 9px; height: 9px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.window-controls:hover .window-control span, .window-controls:focus-within .window-control span { opacity: 1; }
-.window-control:focus-visible { outline: 2px solid color-mix(in srgb, var(--primary) 60%, white); outline-offset: 2px; }
+/* macOS-style traffic lights: 12px buttons on a 20px pitch, glyphs on group hover, grey when the window is inactive. */
+.window-controls { display: flex; align-items: center; height: calc(var(--titlebar-height) - 1px); padding: 0 10px; }
+.window-control { position: relative; display: grid; width: 20px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: 50%; background: transparent; cursor: default; -webkit-tap-highlight-color: transparent; }
+.window-control::before { position: absolute; width: var(--window-control-size); height: var(--window-control-size); box-sizing: border-box; border: .5px solid var(--control-border); border-radius: 50%; background: var(--control-color); box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .28); content: ""; transition: background-color .15s ease, border-color .15s ease, filter .1s ease; }
+.window-control.close { --control-color: #ff5f57; --control-border: #e0443e; --control-symbol: #4d0000; }
+.window-control.minimize { --control-color: #febc2e; --control-border: #dea123; --control-symbol: #995700; }
+.window-control.maximize { --control-color: #28c840; --control-border: #1aab29; --control-symbol: #006500; }
+.window-control:active::before { filter: brightness(.82); }
+:root[data-window-focused="false"] .window-controls:not(:hover) .window-control::before { border-color: #c9c4bb; background: #dcd7cf; box-shadow: none; }
+.window-control span { position: relative; display: grid; width: var(--window-control-size); height: var(--window-control-size); place-items: center; color: var(--control-symbol); opacity: 0; pointer-events: none; transition: opacity .1s ease; }
+.window-control svg { width: 8px; height: 8px; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
+.window-control svg .filled { fill: currentColor; stroke: none; }
+.window-controls:hover .window-control span, .window-controls:focus-within .window-control span { opacity: .9; }
+.window-control:focus-visible { outline: 2px solid color-mix(in srgb, var(--primary) 60%, white); outline-offset: 1px; }
 
 .top-navigation { display: flex; align-items: center; gap: 4px; }
 .top-navigation-item { display: flex; min-width: 112px; height: 40px; padding: 0 16px; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: 12px; color: #5c554b; background: transparent; cursor: pointer; text-decoration: none; font-size: 14px; letter-spacing: .02em; transition: color .18s ease, background .18s ease, box-shadow .18s ease; }
@@ -305,6 +310,33 @@ button, input, select { font: inherit; }
 .tasks-page .ant-table-wrapper .ant-table-placeholder > td { background: #fffdf8 !important; }
 .task-status .ant-tag, .task-type { padding-inline: 9px; border-radius: 999px; font-weight: 500; }
 .task-actions .ant-btn { border-radius: 10px; }
+.tasks-page .page-header { margin-bottom: 16px; }
+.task-search-hint { display: inline-grid; min-width: 18px; height: 18px; padding: 0 4px; place-items: center; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); background: #fbf8f2; font: 11px/1 "Cascadia Mono", Consolas, monospace; }
+.task-header .ant-select { width: 196px; }
+.task-overview { display: flex; margin-bottom: 14px; align-items: center; flex-wrap: wrap; gap: 8px; }
+.task-chip { --chip-color: var(--muted); display: inline-flex; height: 34px; padding: 0 12px 0 11px; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 999px; color: #5c554b; background: #fffdf8; cursor: pointer; font-size: 13px; transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
+.task-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--chip-color); }
+.task-chip strong { min-width: 20px; padding: 1px 7px; border-radius: 999px; color: var(--text); background: var(--muted-surface); font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.task-chip:hover { border-color: color-mix(in srgb, var(--chip-color) 45%, var(--border)); }
+.task-chip.active { border-color: color-mix(in srgb, var(--chip-color) 60%, var(--border)); color: var(--text); background: color-mix(in srgb, var(--chip-color) 9%, #fffdf8); box-shadow: 0 0 0 3px color-mix(in srgb, var(--chip-color) 12%, transparent); font-weight: 600; }
+.task-chip.active strong { color: #fff; background: var(--chip-color); }
+.task-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.task-chip.tone-all { --chip-color: var(--primary); }
+.task-chip.tone-active { --chip-color: #3b82c4; }
+.task-chip.tone-completed { --chip-color: #3aa76d; }
+.task-chip.tone-attention { --chip-color: #e0782b; }
+.task-overview-hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+.task-name { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.task-file-icon { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 8px; color: #d4574f; background: #fbeeea; font-size: 15px; }
+.task-row:has(.task-type.ant-tag-blue) .task-file-icon { color: #3b74c4; background: #e9f0fa; }
+.task-name .task-link { min-width: 0; flex: 1 1 auto; }
+.task-time { color: #6f675b; font-variant-numeric: tabular-nums; }
+.tasks-page .ant-table-tbody > tr.task-row.status-failed > td:first-child { box-shadow: inset 3px 0 0 #e5484d; }
+.tasks-page .ant-table-tbody > tr.task-row.status-partial > td:first-child { box-shadow: inset 3px 0 0 #e3962b; }
+.tasks-page .ant-table-tbody > tr.task-row.status-translating > td:first-child,
+.tasks-page .ant-table-tbody > tr.task-row.status-parsing > td:first-child,
+.tasks-page .ant-table-tbody > tr.task-row.status-uploading > td:first-child { box-shadow: inset 3px 0 0 #3b82c4; }
+.tasks-page .ant-empty { margin-block: 28px; }
 .settings-page, .tutorial-page { animation: page-enter .45s var(--ease-out) both; }
 @keyframes page-enter { from { opacity: 0; } }
 
