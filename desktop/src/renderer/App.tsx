@@ -100,6 +100,9 @@ export default function App(): React.JSX.Element {
         {view.name === 'new' && settings ? (
           <NewParsePage
             settings={settings}
+            documents={documents}
+            onOpenDocument={openDocument}
+            onOpenTasks={() => setView({ name: 'tasks' })}
             onCreated={() => {
               void queryClient.invalidateQueries({ queryKey: ['documents'] })
               setView({ name: 'tasks' })

@@ -1,8 +1,12 @@
 import React from 'react'
-import { FileOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { FilePdfOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Modal, Tag, message } from 'antd'
 import { MAX_PDF_BYTES, MAX_PDF_PAGES } from '@shared/constants'
 import type { AppSettings } from '@shared/types'
+import type { DocumentSummary } from '@shared/ipcSchemas'
+import CopilotixWordmark from '../components/CopilotixWordmark'
+import { HomeBackdrop, UploadGlyph } from '../components/HomeScene'
+import { HomeGreeting, HomePipeline, RecentShelf } from '../components/HomeWidgets'
 
 interface PendingPdf {
   file: File
@@ -12,40 +16,14 @@ interface PendingPdf {
 
 const TUTORIAL_ENTRY_USED_KEY = 'copilotix:tutorial:entry-used:v1'
 
-const WORDMARK_GLYPHS = [
-  ['..#####', '.######', '###....', '##.....', '##.....', '##.....', '##.....', '###....', '.######', '..#####'],
-  ['..####..', '.##..##.', '##....##', '##....##', '##....##', '##....##', '##....##', '##....##', '.##..##.', '..####..'],
-  ['######..', '##...##.', '##....##', '##....##', '##...##.', '######..', '##......', '##......', '##......', '##......'],
-  ['########', '.######.', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...', '.######.', '########'],
-  ['##......', '##......', '##......', '##......', '##......', '##......', '##......', '##......', '########', '########'],
-  ['..####..', '.##..##.', '##....##', '##....##', '##....##', '##....##', '##....##', '##....##', '.##..##.', '..####..'],
-  ['########', '.######.', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...'],
-  ['########', '.######.', '...##...', '...##...', '...##...', '...##...', '...##...', '...##...', '.######.', '########'],
-  ['##....##', '##....##', '.##..##.', '..####..', '...##...', '...##...', '..####..', '.##..##.', '##....##', '##....##']
-] as const
-
-const WORDMARK_LETTERS = 'COPILOTIX'
-
-function CopilotixWordmark(): React.JSX.Element {
-  const rows = Array.from({ length: 10 }, (_, row) => WORDMARK_GLYPHS
-    .map((glyph, index) => {
-      const cells = glyph[row]!.replaceAll('#', WORDMARK_LETTERS[index]!).replaceAll('.', ' ')
-      return index === 0 ? `${cells} ` : cells
-    })
-    .join('  '))
-
-  return (
-    <div className="copilotix-wordmark" role="img" aria-label="COPILOTIX">
-      {rows.map((row, index) => <span aria-hidden="true" key={index}>{row}</span>)}
-    </div>
-  )
-}
-
 export default function NewParsePage(props: {
   settings: AppSettings
+  documents?: DocumentSummary[]
   onCreated(): void
   onOpenSettings(): void
   onOpenTutorial(): void
+  onOpenDocument?(documentId: string): void
+  onOpenTasks?(): void
 }): React.JSX.Element {
   const [files, setFiles] = React.useState<PendingPdf[]>([])
   const [tutorialEntryUsed, setTutorialEntryUsed] = React.useState(() => window.localStorage.getItem(TUTORIAL_ENTRY_USED_KEY) === '1')
@@ -53,6 +31,7 @@ export default function NewParsePage(props: {
   const [skipDuplicates, setSkipDuplicates] = React.useState(true)
   const [submitting, setSubmitting] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
+  const pageRef = React.useRef<HTMLElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const dragDepthRef = React.useRef(0)
   const [messageApi, contextHolder] = message.useMessage()
@@ -102,6 +81,25 @@ export default function NewParsePage(props: {
     }
   }, [setPdfFiles])
 
+  React.useEffect(() => {
+    const page = pageRef.current
+    if (!page || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    let frame = 0
+    const onPointerMove = (event: PointerEvent): void => {
+      if (frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        page.style.setProperty('--px', (event.clientX / window.innerWidth * 2 - 1).toFixed(3))
+        page.style.setProperty('--py', (event.clientY / window.innerHeight * 2 - 1).toFixed(3))
+      })
+    }
+    window.addEventListener('pointermove', onPointerMove)
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      if (frame) window.cancelAnimationFrame(frame)
+    }
+  }, [])
+
   const start = React.useCallback(async () => {
     setSubmitting(true)
     try {
@@ -126,11 +124,16 @@ export default function NewParsePage(props: {
   const oversizedFiles = files.filter((file) => file.size > MAX_PDF_BYTES)
 
   return (
-    <section className="page new-parse-page">
+    <section ref={pageRef} className={`page new-parse-page${dragging ? ' is-dragging' : ''}`}>
       {contextHolder}
+      <HomeBackdrop />
       <div className="new-parse-hero">
         <CopilotixWordmark />
-        <h1>今天想读些什么？</h1>
+        <div className="new-parse-heading">
+          <HomeGreeting />
+          <h1>今天想读些什么？</h1>
+          <HomePipeline />
+        </div>
         <div className="new-parse-content">
         <div
           className={dragging ? 'upload-entry dragging' : 'upload-entry'}
@@ -140,7 +143,7 @@ export default function NewParsePage(props: {
         >
           <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此窗口</span>
           <div className="upload-entry-copy">
-            <FileOutlined className="upload-icon" aria-hidden="true" />
+            <UploadGlyph />
             <div className="upload-entry-text">
               <span className="upload-prompt">拖入文档</span>
               <small>当前支持 PDF，单篇最多 {MAX_PDF_PAGES} 页</small>
@@ -166,7 +169,21 @@ export default function NewParsePage(props: {
           window.localStorage.setItem(TUTORIAL_ENTRY_USED_KEY, '1')
           setTutorialEntryUsed(true)
           props.onOpenTutorial()
-        }}>第一次使用？从内置论文开始新手教程 →</button> : null}
+        }}>第一次使用？从内置论文开始新手教程 <span aria-hidden="true">→</span></button> : null}
+        {props.documents && props.onOpenDocument ? (
+          <RecentShelf documents={props.documents} onOpen={props.onOpenDocument} onViewAll={() => props.onOpenTasks?.()} />
+        ) : null}
+      </div>
+
+      <div className="drop-veil" aria-hidden="true">
+        <svg className="drop-veil-frame" preserveAspectRatio="none">
+          <rect x="1.5" y="1.5" rx="22" ry="22" />
+        </svg>
+        <div className="drop-veil-message">
+          <UploadGlyph />
+          <strong>松手，开始导入</strong>
+          <small>仅接收 PDF 文件</small>
+        </div>
       </div>
 
       <Modal

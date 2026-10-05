@@ -13,7 +13,7 @@ function Root(): React.JSX.Element {
       theme={{
         algorithm: theme.defaultAlgorithm,
         token: {
-          colorPrimary: '#5b6cff',
+          colorPrimary: '#5b58d6',
           borderRadius: 10,
           fontFamily: 'Inter, "Microsoft YaHei UI", "PingFang SC", sans-serif',
           colorBgBase: '#f7f2e8',
