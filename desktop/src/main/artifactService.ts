@@ -59,22 +59,37 @@ export class ArtifactService {
     const original = await this.readOptional(join(task.outputDir, 'full.md'))
     const blocks = await this.loadTranslatedBlocks(task)
     const translated = blocks?.length ? joinTranslatedMarkdownBlocks(blocks) : await this.readOptional(join(task.outputDir, 'full.zh-CN.md'))
+    const images = new Set<string>()
+    const normalize = (markdown: string): string => normalizeMarkdown(markdown, (url) => {
+      if (!isLocalMarkdownImage(url)) return url
+      const path = this.pathPolicy.resolveChild(task.outputDir, decodeURIComponent(url.split(/[?#]/u)[0]!).replace(/^\/+/, ''))
+      images.add(path)
+      return relative(task.outputDir, path).split(/[\\/]/u).map(encodeURIComponent).join('/')
+    }).markdown
+    // Validate everything before opening an archive stream; a formatting error
+    // must not leave an unfinished stream or overwrite the previous export.
+    const normalizedOriginal = original ? normalize(original) : ''
+    const normalizedTranslated = translated ? normalize(translated) : ''
+    await Promise.all([...images].map(async (path) => {
+      if (!(await lstat(path)).isFile()) throw new Error(`图片资源不是普通文件：${basename(path)}`)
+    }))
     const partial = `${destination}.partial-${randomUUID()}`
     try {
       await new Promise<void>((resolvePromise, reject) => {
-      const output = createWriteStream(partial, { flags: 'wx' })
-      const archive = archiver('zip', { zlib: { level: 9 } })
-      output.on('close', () => resolvePromise())
-      const fail = (error: Error): void => { archive.abort(); output.destroy(); reject(error) }
-      output.on('error', fail)
-      archive.on('error', fail)
-      archive.on('warning', fail)
-      archive.pipe(output)
-      archive.directory(task.outputDir, false, (entry) => shouldIncludeResultZipEntry(entry.name) &&
-        !['full.md', 'full.zh-CN.md'].includes(entry.name) ? entry : false)
-      if (original) archive.append(normalizeMarkdown(original).markdown, { name: 'full.md' })
-      if (translated) archive.append(normalizeMarkdown(translated).markdown, { name: 'full.zh-CN.md' })
-      void archive.finalize().catch(fail)
+        const output = createWriteStream(partial, { flags: 'wx' })
+        const archive = archiver('zip', { zlib: { level: 9 } })
+        let failure: Error | undefined
+        output.on('close', () => failure ? reject(failure) : resolvePromise())
+        const fail = (error: Error): void => { failure ??= error; archive.abort(); output.destroy() }
+        output.on('error', fail)
+        archive.on('error', fail)
+        archive.on('warning', fail)
+        archive.pipe(output)
+        archive.directory(task.outputDir, false, (entry) => shouldIncludeResultZipEntry(entry.name) &&
+          !['full.md', 'full.zh-CN.md'].includes(entry.name) ? entry : false)
+        if (normalizedOriginal) archive.append(normalizedOriginal, { name: 'full.md' })
+        if (normalizedTranslated) archive.append(normalizedTranslated, { name: 'full.zh-CN.md' })
+        void archive.finalize().catch(fail)
       })
       await rename(partial, destination)
     } finally {
@@ -95,7 +110,7 @@ export class ArtifactService {
     const assets = new Map<string, string>()
     const normalized = normalizeMarkdown(source, (url) => {
       if (!isLocalMarkdownImage(url)) return url
-      const path = this.pathPolicy.resolveChild(task.outputDir, decodeURIComponent(url.split(/[?#]/u)[0]!))
+      const path = this.pathPolicy.resolveChild(task.outputDir, decodeURIComponent(url.split(/[?#]/u)[0]!).replace(/^\/+/, ''))
       let name = assets.get(path)
       if (!name) { name = `${assets.size + 1}-${basename(path)}`; assets.set(path, name) }
       return `${encodeURIComponent(folder)}/${encodeURIComponent(name)}`

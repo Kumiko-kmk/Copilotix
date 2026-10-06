@@ -107,4 +107,18 @@ describe('standard Markdown export and transfer', () => {
       expect((await readdir(f.exports)).some((name) => name.includes('.partial'))).toBe(false)
     } finally { await rm(f.root, { recursive: true, force: true }) }
   })
+
+  it('rejects incomplete or malformed result ZIPs before opening a stream, preserving the existing archive', async () => {
+    const f = await fixture()
+    try {
+      const destination = join(f.exports, 'result.zip')
+      await writeFile(destination, 'existing archive')
+      await writeFile(join(f.outputDir, 'full.md'), '![missing](images/missing.png)')
+      await expect(f.service.createResultZip(f.task.id, destination)).rejects.toThrow()
+      await writeFile(join(f.outputDir, 'full.md'), '<table><tr><td colspan="999999">Invalid</td></tr></table>')
+      await expect(f.service.createResultZip(f.task.id, destination)).rejects.toThrow('超出支持上限')
+      expect(await readFile(destination, 'utf8')).toBe('existing archive')
+      expect(await readdir(f.exports)).toEqual(['result.zip'])
+    } finally { await rm(f.root, { recursive: true, force: true }) }
+  })
 })
