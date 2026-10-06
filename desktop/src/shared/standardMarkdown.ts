@@ -125,11 +125,12 @@ function htmlTable(table: Html, stats: MarkdownNormalization): Node[] {
       // Bound expansion; never silently truncate a malformed parser table.
       if (r + rowSpan > 4096 || c + colSpan > 256) throw new Error('表格合并范围超出支持上限，请核对解析结果')
       const content = htmlInline(cell)
+      const repeatRowLabel = markdownText({ type: 'root', children: content }).trim().length <= 32
       for (let rr = r; rr < r + rowSpan; rr += 1) {
         grid[rr] ??= []
         for (let cc = c; cc < c + colSpan; cc += 1) {
           grid[rr]![cc] = { type: 'tableCell', children: rr === r && cc === c
-            ? structuredClone(content) : withoutImages(content) }
+            ? structuredClone(content) : cc === c && repeatRowLabel ? withoutImages(content) : [] }
         }
       }
       c += colSpan

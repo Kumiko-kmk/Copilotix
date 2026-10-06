@@ -28,7 +28,15 @@ describe('public Markdown format', () => {
     expect(nodes(result.markdown).filter((node) => node.type === 'html')).toHaveLength(0)
     expect(result.tablesConverted).toBe(1)
     expect(result.markdown).toContain('Results')
+    expect(table.children[0].children[2].children).toEqual([])
     expect(normalizeMarkdown(result.markdown).markdown).toBe(result.markdown)
+  })
+
+  it('preserves a long merged caption once rather than duplicating it across rows and columns', () => {
+    const caption = 'Table caption with a sufficiently long explanation of all experimental results.'
+    const result = normalizeMarkdown(`<table><tr><td>A</td><td>B</td><td>C</td></tr><tr><td rowspan="2" colspan="2">${caption}</td><td>1</td></tr><tr><td>2</td></tr></table>`).markdown
+    expect(result.split(caption)).toHaveLength(2)
+    expect(nodes(result).find((node) => node.type === 'table').children.map((row: any) => row.children.length)).toEqual([3, 3, 3])
   })
 
   it('preserves math as math, including norm operators inside generated tables', () => {
