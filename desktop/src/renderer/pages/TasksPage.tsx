@@ -1,11 +1,11 @@
 import React from 'react'
 import { DeleteOutlined, FileMarkdownOutlined, FilePdfOutlined, FolderOpenOutlined, RedoOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Checkbox, Empty, Input, Modal, Select, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Checkbox, Empty, Input, Modal, Table, Tag, Typography, message } from 'antd'
 import type { InputRef } from 'antd'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 
 type WorkflowStatus = DocumentSummary['workflow']['status']
-type StatusFilter = WorkflowStatus | 'all' | 'active' | 'attention'
+type StatusFilter = 'all' | 'active' | 'completed' | 'attention'
 
 const statusLabels: Record<WorkflowStatus, string> = {
   queued: '排队中', uploading: '上传中', parsing: '解析中', translating: '翻译中',
@@ -84,26 +84,15 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
       {contextHolder}
       <header className="page-header task-header">
         <Typography.Title level={2}>全部任务</Typography.Title>
-        <Space>
-          <Input ref={searchRef} allowClear prefix={<SearchOutlined />} suffix={query ? null : <kbd className="task-search-hint">/</kbd>} placeholder="请输入任务名称" value={query} onChange={(event) => setQuery(event.target.value)} />
-          <Select
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: 'all', label: '全部状态' },
-              { value: 'active', label: '处理中（全部）' },
-              { value: 'attention', label: '需处理（失败/部分完成）' },
-              ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))
-            ]}
-          />
-        </Space>
       </header>
-      <div className="task-overview" role="group" aria-label="按状态筛选">
-        <OverviewChip tone="all" label="全部" count={counts.all} active={status === 'all'} onClick={() => setStatus('all')} />
-        <OverviewChip tone="active" label="处理中" count={counts.active} active={status === 'active'} onClick={() => setStatus('active')} />
-        <OverviewChip tone="completed" label="完成" count={counts.completed} active={status === 'completed'} onClick={() => setStatus('completed')} />
-        <OverviewChip tone="attention" label="需处理" count={counts.attention} active={status === 'attention'} onClick={() => setStatus('attention')} />
-        <span className="task-overview-hint">双击行可直接打开阅读器</span>
+      <div className="task-toolbar">
+        <div className="task-overview" role="group" aria-label="按状态筛选">
+          <OverviewChip tone="all" label="全部" count={counts.all} active={status === 'all'} onClick={() => setStatus('all')} />
+          <OverviewChip tone="active" label="处理中" count={counts.active} active={status === 'active'} onClick={() => setStatus('active')} />
+          <OverviewChip tone="completed" label="完成" count={counts.completed} active={status === 'completed'} onClick={() => setStatus('completed')} />
+          <OverviewChip tone="attention" label="需处理" count={counts.attention} active={status === 'attention'} onClick={() => setStatus('attention')} />
+        </div>
+        <Input ref={searchRef} className="task-search" allowClear prefix={<SearchOutlined />} suffix={query ? null : <kbd className="task-search-hint">/</kbd>} placeholder="请输入任务名称" value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>
       <Table
         rowKey="id"

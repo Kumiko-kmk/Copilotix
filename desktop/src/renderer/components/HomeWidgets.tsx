@@ -1,5 +1,5 @@
 import React from 'react'
-import { CheckOutlined, CloseOutlined, ExclamationOutlined, FileSearchOutlined, ReadOutlined, TranslationOutlined } from '@ant-design/icons'
+import { CheckOutlined, CloseOutlined, ExclamationOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 
 type WorkflowStatus = DocumentSummary['workflow']['status']
@@ -20,29 +20,6 @@ export function greetingFor(date: Date): string {
 export function HomeGreeting(): React.JSX.Element {
   const [text] = React.useState(() => greetingFor(new Date()))
   return <p className="home-greeting"><i aria-hidden="true" />{text}</p>
-}
-
-const PIPELINE_STEPS = [
-  { label: '解析版面', icon: <FileSearchOutlined /> },
-  { label: '逐段翻译', icon: <TranslationOutlined /> },
-  { label: '原文译文对照阅读', icon: <ReadOutlined /> }
-] as const
-
-/** Three-stage workflow strip; a spark travels between stages and lights each one in turn. */
-export function HomePipeline(): React.JSX.Element {
-  return (
-    <div className="home-pipeline" role="list" aria-label="Copilotix 工作流程">
-      {PIPELINE_STEPS.map((step, index) => (
-        <React.Fragment key={step.label}>
-          {index > 0 ? <span className="pipeline-link" aria-hidden="true" style={{ '--i': index - 1 } as React.CSSProperties}><i /></span> : null}
-          <span className="pipeline-step" role="listitem" style={{ '--i': index } as React.CSSProperties}>
-            <span className="pipeline-node" aria-hidden="true">{step.icon}</span>
-            <span>{step.label}</span>
-          </span>
-        </React.Fragment>
-      ))}
-    </div>
-  )
 }
 
 export function relativeTime(value: string, now = Date.now()): string {

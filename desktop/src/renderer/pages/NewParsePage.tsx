@@ -6,7 +6,7 @@ import type { AppSettings } from '@shared/types'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import CopilotixWordmark from '../components/CopilotixWordmark'
 import { HomeBackdrop, UploadGlyph } from '../components/HomeScene'
-import { HomeGreeting, HomePipeline, RecentShelf } from '../components/HomeWidgets'
+import { HomeGreeting, RecentShelf } from '../components/HomeWidgets'
 
 interface PendingPdf {
   file: File
@@ -32,6 +32,7 @@ export default function NewParsePage(props: {
   const [submitting, setSubmitting] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
   const pageRef = React.useRef<HTMLElement>(null)
+  const uploadRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const dragDepthRef = React.useRef(0)
   const [messageApi, contextHolder] = message.useMessage()
@@ -132,15 +133,23 @@ export default function NewParsePage(props: {
         <div className="new-parse-heading">
           <HomeGreeting />
           <h1>今天想读些什么？</h1>
-          <HomePipeline />
         </div>
         <div className="new-parse-content">
         <div
+          ref={uploadRef}
           className={dragging ? 'upload-entry dragging' : 'upload-entry'}
+          onPointerMove={(event) => {
+            const entry = uploadRef.current
+            if (!entry) return
+            const bounds = entry.getBoundingClientRect()
+            entry.style.setProperty('--mx', `${event.clientX - bounds.left}px`)
+            entry.style.setProperty('--my', `${event.clientY - bounds.top}px`)
+          }}
           data-testid="pdf-upload-entry"
           role="region"
           aria-label="文档导入区，当前支持 PDF"
         >
+          <span className="upload-halo" aria-hidden="true" />
           <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此窗口</span>
           <div className="upload-entry-copy">
             <UploadGlyph />
