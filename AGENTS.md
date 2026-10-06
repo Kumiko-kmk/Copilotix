@@ -114,3 +114,14 @@ pnpm desktop:release:from-built
 - 保持主分支必需檢查名稱 `build`。CI 包含 frozen-lockfile 安裝、lint、typecheck、覆蓋率、四個 bundle、真實打包 smoke、Electron E2E、安装／升级／卸载／重装及下载解压验收；tag 發布另受版本、許可與簽章門禁約束。
 - 在 Actions 下載 `Copilotix-Windows-x64-Bundle` 供真人安裝驗收；`Copilotix-Windows-verification-reports` 保存單元 JUnit、覆蓋率摘要及 E2E 失敗證據。不要將 CI 未通過的包稱為已驗證版本。
 - 此規則只改變自動化驗證的執行位置；真實 API、視覺效果、硬體／系統差異仍按需求由使用者驗收。CI 不持有個人 API 憑據，不能聲稱付費模型或每台機器都已驗證。
+
+## 9. CI 工作流與測試夾具變更記錄（2026-10-06）
+
+- **觸發與並發**：`desktop-windows.yml` 在所有分支 push、PR、`desktop-v*` tag 及手動觸發時執行；同一工作分支的舊運行會被新 push 取消，master 與 tag 的運行不會取消。
+- **測試資源**：CI 中 Vitest 最多 2 個 worker（`vitest.config.ts`），Windows 上 Playwright 為單 worker。單元測試的 JUnit 輸出到 `desktop/unit-test-results/`，避免被 Playwright 清除。
+- **打包失敗即停**：Windows 原子 rename 遇到 EPERM／EACCES／EBUSY 這類臨時鎖時，最多有界重試約 6.3 秒；永久錯誤照常失敗，不改用 copy／delete 替代。打包 CLI 出現致命錯誤時必須以 exit 1 退出。CI 在跑 E2E 前會先確認 `release/setup.exe`、`release/uninstall.exe`、`release/advanced/release-manifest.json` 和 ZIP 都存在。
+- **E2E 憑據隔離**：只有在「未打包 + `NODE_ENV=test` + 有 `COPILOTIX_E2E_USER_DATA`」時，`credentialServiceForRuntime` 才為每個夾具派生獨立的系統憑據 service；打包版本一律使用正式 service。測試不得讀寫真人憑據，也不得依賴本機已保存的 Key。問答 E2E 透過真實的設定 IPC 保存假 Key，只模擬 Main 端 provider 的 HTTP 回應。
+- **閱讀器 E2E 就緒等待**：打開論文後，先等 `.reader-header` 可見（最長 30 秒），再斷言 Markdown 的 `data-render-state` 為 ready。不加全局 timeout 或 retry，也不放寬原有斷言、截圖閾值和覆蓋率門檻。論文一律從「任務管理」列表進入（底部論文切換已刪除）。
+- **縮略圖截圖**：截圖期間把外層 app-shell 暫時設為直角，並截取完整 CSS 像素，以消除窗口圓角的抗鋸齒差異。保持 channel delta ≤ 1、changedRatio ≤ 0.001 的閾值；失敗時保存 expected／actual PNG。
+- **問答面板與索引**：問答頁籤在第一次被打開時才掛載。掛載時會請 Utility 建立內容索引，而建索引是吃 CPU 的同步計算；只打開論文不得觸發它，否則會拖慢 PDF 和圖片資源的加載。
+- **驗收邊界**：CI 綠燈只代表已推送的那個 SHA。歷史紅燈要對照最新運行再判斷，不能直接當作當前缺陷；CI 不持有付費 API，真實問答質量仍需人工驗收。完整的失敗分析記錄在 `docs/READER_AI_CHAT_PLAN_ZH.md` 第 13 節。
