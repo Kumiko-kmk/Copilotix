@@ -181,7 +181,7 @@ describe('utility persistence lifecycle', () => {
       expect(markdown).toContain('![plot](paper/images/a%20b.png)')
       expect(markdown).not.toContain('<table')
       expect(await readFile(join(outputDir, 'paper/images/a b.png'), 'utf8')).toBe('image bytes')
-      expect(revisions.find((item) => item.kind === 'parsed_markdown')?.checksum).toBe(hash(markdown))
+      expect(revisions.find((item) => item.kind === 'parsed_markdown')?.checksum).toBe(createHash('sha256').update(markdown).digest('hex'))
     } finally { await rm(root, { recursive: true, force: true }) }
   })
 
