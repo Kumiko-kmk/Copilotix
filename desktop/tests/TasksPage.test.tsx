@@ -114,7 +114,7 @@ describe('TasksPage', () => {
     expect(screen.queryByText('Done', { selector: 'button' })).toBeNull()
 
     fireEvent.change(screen.getByPlaceholderText('请输入任务名称'), { target: { value: 'zzz' } })
-    fireEvent.click(screen.getByText('清除筛选', { selector: 'button' }))
+    fireEvent.click(screen.getByRole('button', { name: '清除筛选' }))
     expect(screen.getAllByText(/^(Running|Waiting|Done|Broken)$/u, { selector: 'button' })).toHaveLength(4)
   })
 
