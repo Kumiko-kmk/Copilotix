@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import TasksPage, { documentTypeLabel, formatTaskCreatedAt } from '../src/renderer/pages/TasksPage'
@@ -97,23 +97,25 @@ describe('TasksPage', () => {
       onOpen={() => undefined}
       onCreate={onCreate}
     />)
-    const chip = (name: RegExp): HTMLElement => screen.getByRole('button', { name })
+    // Scope role queries to four chips instead of repeatedly walking Ant Design's table.
+    const overview = within(screen.getByRole('group', { name: '按状态筛选' }))
+    const chip = (name: RegExp): HTMLElement => overview.getByRole('button', { name })
     expect(chip(/^全部 4$/u).getAttribute('aria-pressed')).toBe('true')
     expect(chip(/^处理中 2$/u)).toBeTruthy()
     expect(chip(/^完成 1$/u)).toBeTruthy()
 
     fireEvent.click(chip(/^需处理 1$/u))
-    expect(screen.getByRole('button', { name: 'Broken' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Running' })).toBeNull()
+    expect(screen.getByText('Broken', { selector: 'button' })).toBeTruthy()
+    expect(screen.queryByText('Running', { selector: 'button' })).toBeNull()
 
     fireEvent.click(chip(/^处理中 2$/u))
-    expect(screen.getByRole('button', { name: 'Running' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Waiting' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
+    expect(screen.getByText('Running', { selector: 'button' })).toBeTruthy()
+    expect(screen.getByText('Waiting', { selector: 'button' })).toBeTruthy()
+    expect(screen.queryByText('Done', { selector: 'button' })).toBeNull()
 
     fireEvent.change(screen.getByPlaceholderText('请输入任务名称'), { target: { value: 'zzz' } })
-    fireEvent.click(screen.getByRole('button', { name: '清除筛选' }))
-    expect(screen.getAllByRole('button', { name: /^(Running|Waiting|Done|Broken)$/u })).toHaveLength(4)
+    fireEvent.click(screen.getByText('清除筛选', { selector: 'button' }))
+    expect(screen.getAllByText(/^(Running|Waiting|Done|Broken)$/u, { selector: 'button' })).toHaveLength(4)
   })
 
   it('offers a shortcut to create the first task when the list is empty', () => {
