@@ -97,6 +97,7 @@ describe('public Markdown format', () => {
 
   it('preserves TeX annotations from MathML and refuses unbounded table spans', () => {
     expect(normalizeMarkdown('<math><annotation encoding="application/x-tex">x^2</annotation></math>').markdown).toContain('$x^2$')
+    expect(normalizeMarkdown('<math><mfrac><mi>x</mi><mi>y</mi></mfrac><msup><mi>z</mi><mn>2</mn></msup></math>').markdown).toContain(String.raw`$\frac{x}{y}{z}^{2}$`)
     expect(normalizeMarkdown('<table><caption>Empty</caption></table>').markdown).toContain('Empty')
     expect(() => normalizeMarkdown('<table><tr><td colspan="999999">X</td></tr></table>')).toThrow('超出支持上限')
   })

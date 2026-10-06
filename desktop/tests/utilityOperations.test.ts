@@ -160,6 +160,31 @@ describe('utility persistence lifecycle', () => {
     }
   })
 
+  it('publishes standard Markdown and rebases nested parser images before recording checksums', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-parser-format-'))
+    try {
+      const outputDir = join(root, 'document')
+      const extractedDir = join(outputDir, '.parsed.partial-format')
+      const nested = join(extractedDir, 'paper')
+      await mkdir(join(nested, 'images'), { recursive: true })
+      await writeFile(join(nested, 'paper.md'), '# Paper\n\n<table><tr><td>Model</td></tr><tr><td>$x^2$</td></tr></table>\n\n![plot](images/a%20b.png)')
+      await writeFile(join(nested, 'images/a b.png'), 'image bytes')
+      await writeFile(join(nested, 'layout.json'), JSON.stringify({ pdf_info: [] }))
+      const revisions: Array<{ kind: string; checksum: string }> = []
+      const operations = createUtilityOperationHandlers({ repository: {
+        recordArtifactRevisions: (items: ReadonlyArray<{ kind: string; checksum: string }>) => revisions.push(...items)
+      } } as never)
+      await operations.handlers['compute:normalize-parser']!({ payload: { task: { id: 'paper', outputDir }, extractedDir, jobId: 'format' } } as never, new AbortController().signal)
+      const markdown = await readFile(join(outputDir, 'full.md'), 'utf8')
+      expect(markdown).toContain('| Model')
+      expect(markdown).toContain('$x^2$')
+      expect(markdown).toContain('![plot](paper/images/a%20b.png)')
+      expect(markdown).not.toContain('<table')
+      expect(await readFile(join(outputDir, 'paper/images/a b.png'), 'utf8')).toBe('image bytes')
+      expect(revisions.find((item) => item.kind === 'parsed_markdown')?.checksum).toBe(hash(markdown))
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
   it('atomically upgrades a legacy mapping projection and preserves it when rebuild input is invalid', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-rebuild-mapping-'))
     try {

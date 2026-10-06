@@ -37,6 +37,18 @@ const tag = (node: Html): string => 'tagName' in node ? node.tagName : ''
 const attribute = (node: Html, name: string): string | undefined => 'attrs' in node
   ? node.attrs.find((attr) => attr.name === name)?.value : undefined
 const plain = (node: Html): string => 'value' in node ? node.value : children(node).map(plain).join('')
+const markdownText = (node: Node): string => node.value ?? node.children?.map(markdownText).join('') ?? ''
+const mathMlText = (node: Html, placeholders: Node[]): string => {
+  if ('value' in node) return node.value
+  if (tag(node) === 'copilotix-md') return markdownText(placeholders[Number(attribute(node, 'data-index'))] ?? text(''))
+  const parts = children(node).filter((child) => child.nodeName !== '#comment').map((child) => mathMlText(child, placeholders))
+  if (tag(node) === 'mfrac') return `\\frac{${parts[0] ?? ''}}{${parts[1] ?? ''}}`
+  if (tag(node) === 'msqrt') return `\\sqrt{${parts.join('')}}`
+  if (tag(node) === 'msup') return `{${parts[0] ?? ''}}^{${parts[1] ?? ''}}`
+  if (tag(node) === 'msub') return `{${parts[0] ?? ''}}_{${parts[1] ?? ''}}`
+  if (tag(node) === 'msubsup') return `{${parts[0] ?? ''}}_{${parts[1] ?? ''}}^{${parts[2] ?? ''}}`
+  return parts.join('')
+}
 
 export interface MarkdownNormalization {
   markdown: string
@@ -77,7 +89,7 @@ function htmlInline(node: Html, placeholders: Node[] = []): Node[] {
   if (name === 'code' || name === 'pre') return [{ type: 'inlineCode', value: plain(node) }]
   if (name === 'math') {
     const annotation = findHtml(node, 'annotation').find((item) => attribute(item, 'encoding') === 'application/x-tex')
-    return annotation ? [{ type: 'inlineMath', value: plain(annotation) }] : [text(plain(node))]
+    return [{ type: 'inlineMath', value: mathMlText(annotation ?? node, placeholders) }]
   }
   const content = children(node).flatMap((child) => htmlInline(child, placeholders))
   if (name === 'sup' || name === 'sub') return content.every((child) => child.type === 'text') && /^[A-Za-z0-9+.,-]{1,12}$/u.test(content.map((child) => child.value).join(''))
