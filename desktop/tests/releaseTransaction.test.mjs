@@ -1,19 +1,60 @@
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { assertReleaseMetadata, assertReleaseRootContents, assertWindowsX64, createBuildId, createProductionInstallerInclude, writeReleaseMetadata } from '../scripts/package-directory.mjs'
 import { verifyUninstallerSignature } from '../scripts/verify-uninstaller-signature.mjs'
 import {
   assertReleaseLayout,
   createReleaseLayout,
   createSwapPlan,
+  renameReleasePath,
   removePreviousRelease,
   removePreviousArtifacts,
   swapRelease
 } from '../scripts/release-transaction.mjs'
 
 const roots = []
+
+describe('Windows release rename locks', () => {
+  it('returns a nonzero CLI status for a fatal packaging invocation', () => {
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/package-directory.mjs', import.meta.url)), '--invalid-option'], {
+      encoding: 'utf8', timeout: 30_000, windowsHide: true
+    })
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('Unknown package-directory option')
+  })
+
+  it('recovers a temporary file lock using the same atomic rename and bounded backoff', async () => {
+    const lock = Object.assign(new Error('scanner has the artifact open'), { code: 'EPERM' })
+    const rename = vi.fn().mockRejectedValueOnce(lock).mockRejectedValueOnce(lock).mockResolvedValue(undefined)
+    const sleep = vi.fn().mockResolvedValue(undefined)
+    await renameReleasePath('owned-staging', 'owned-artifact', { rename, sleep, platform: 'win32' })
+    expect(rename.mock.calls).toEqual(Array(3).fill(['owned-staging', 'owned-artifact']))
+    expect(sleep.mock.calls).toEqual([[100], [200]])
+  })
+
+  it('propagates a persistent lock instead of publishing or removing either directory', async () => {
+    const lock = Object.assign(new Error('permanent lock'), { code: 'EACCES' })
+    const rename = vi.fn().mockRejectedValue(lock)
+    const sleep = vi.fn().mockResolvedValue(undefined)
+    await expect(renameReleasePath('owned-staging', 'owned-artifact', { rename, sleep, platform: 'win32' })).rejects.toBe(lock)
+    expect(rename).toHaveBeenCalledTimes(7)
+    expect(sleep.mock.calls).toEqual([[100], [200], [400], [800], [1600], [3200]])
+  })
+
+  it.each([['win32', 'ENOENT'], ['win32', 'EEXIST'], ['linux', 'EPERM']])('does not retry %s %s failures', async (platform, code) => {
+    const failure = Object.assign(new Error('not a transient Windows lock'), { code })
+    const rename = vi.fn().mockRejectedValue(failure)
+    const sleep = vi.fn()
+    await expect(renameReleasePath('owned-staging', 'owned-artifact', { rename, sleep, platform })).rejects.toBe(failure)
+    expect(rename).toHaveBeenCalledTimes(1)
+    expect(sleep).not.toHaveBeenCalled()
+  })
+})
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
