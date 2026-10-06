@@ -47,6 +47,8 @@ export default function ReaderTextPane(props: {
   chat?: ReaderChatOptions
 }): React.JSX.Element {
   const [highlightColor, setHighlightColor] = React.useState<HighlightColor>('yellow')
+  const [chatVisited, setChatVisited] = React.useState(props.tab === 'chat')
+  if (props.tab === 'chat' && !chatVisited) setChatVisited(true)
   const scrollPositionsRef = React.useRef<Record<ReaderAnnotationView, number>>({ original: 0, translated: 0 })
   const originalAnnotations = React.useMemo(
     () => props.annotations.filter((annotation) => annotation.view === 'original'),
@@ -159,15 +161,18 @@ export default function ReaderTextPane(props: {
         {props.tab === 'json' ? <JsonPane json={props.layoutJson} query={props.jsonQuery} active /> : null}
       </ReaderPanel>
       {props.chat ? (
-        // Stays mounted while hidden so scroll position and streaming output survive tab switches.
+        // Mounts on first visit only: the panel asks the Utility to build the
+        // content index, which is CPU-heavy and must not run merely because a
+        // paper was opened. Afterwards it stays mounted so scroll position and
+        // streaming output survive tab switches.
         <ReaderPanel tab="chat" activeTab={props.tab}>
-          <ReaderChatPanel
+          {chatVisited ? <ReaderChatPanel
             documentId={props.taskId}
             chat={props.chat.controller}
             active={props.tab === 'chat'}
             onSelect={props.chat.onCitation}
             onOpenSettings={props.chat.onOpenSettings}
-          />
+          /> : null}
         </ReaderPanel>
       ) : null}
     </div>

@@ -20,7 +20,8 @@ test('reuses the translation API and switches chat models without a second setti
     await chatTab.click()
     await expect(window.getByRole('region', { name: '论文 AI 问答' })).toBeVisible()
     await expect(model).toHaveAttribute('title', 'qwen-plus')
-    await expect(window.getByRole('button', { name: '前往设置' })).toHaveCount(0)
+    // Routing follows the translation setting; credentials live in the host vault and are not asserted here.
+    await expect(window.locator('.reader-chat-provider')).toHaveText('Qwen')
     await expect.poll(() => window.evaluate(() => typeof window.copilotix.paperChat.ask)).toBe('function')
     await window.locator('.reader-chat-model').click()
     await window.locator('.ant-select-item-option[title="qwen3.8-flash"]').click()

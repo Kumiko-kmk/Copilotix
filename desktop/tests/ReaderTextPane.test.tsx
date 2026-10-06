@@ -73,6 +73,8 @@ describe('ReaderTextPane', () => {
     expect(view.queryByText('问答工具栏')).toBeNull()
     const chatPanel = view.container.querySelector('[data-reader-tab-panel="chat"]')!
     expect(chatPanel.classList.contains('inactive')).toBe(true)
+    // Opening a paper must not mount chat (and so must not trigger indexing).
+    expect(view.queryByLabelText('问答草稿')).toBeNull()
 
     fireEvent.click(tab)
     expect(chatPanel.classList.contains('active')).toBe(true)
