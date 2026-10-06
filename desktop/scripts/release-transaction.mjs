@@ -1,9 +1,26 @@
 import { setupNameForRelease } from './release-policy.mjs'
 import { lstat, readFile, rename, rm } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const BUILD_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u
 const RELEASE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u
+
+/** Retry only transient Windows locks; never replace rename with copy/delete. */
+export async function renameReleasePath(from, to, fileSystem = {}) {
+  const renamePath = fileSystem.rename ?? rename
+  const sleep = fileSystem.sleep ?? delay
+  const platform = fileSystem.platform ?? process.platform
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await renamePath(from, to)
+      return
+    } catch (error) {
+      if (platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error?.code) || attempt >= 6) throw error
+      await sleep(100 * 2 ** attempt)
+    }
+  }
+}
 
 /**
  * Build every release path once.  The caller only receives paths whose lexical
@@ -92,7 +109,7 @@ export function createSwapPlan(layout, hasExistingRelease) {
 export async function swapRelease(layout, fileSystem = {}) {
   assertReleaseLayout(layout)
   const exists = fileSystem.exists ?? pathExists
-  const renamePath = fileSystem.rename ?? rename
+  const renamePath = fileSystem.rename ?? renameReleasePath
   if (await exists(layout.previousRoot)) throw new Error(`Previous release path already exists: ${layout.previousRoot}`)
   if (!(await isDirectory(layout.stagingRoot))) throw new Error(`Release staging directory is missing: ${layout.stagingRoot}`)
 
@@ -125,7 +142,7 @@ export async function swapRelease(layout, fileSystem = {}) {
 export async function rollbackReleaseSwap(layout, fileSystem = {}) {
   assertReleaseLayout(layout)
   const exists = fileSystem.exists ?? pathExists
-  const renamePath = fileSystem.rename ?? rename
+  const renamePath = fileSystem.rename ?? renameReleasePath
   if (await exists(layout.releaseRoot)) return false
   if (!(await exists(layout.previousRoot))) return false
   await renamePath(layout.previousRoot, layout.releaseRoot)
