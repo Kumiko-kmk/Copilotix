@@ -1,6 +1,8 @@
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { assertReleaseMetadata, assertReleaseRootContents, assertWindowsX64, createBuildId, createProductionInstallerInclude, writeReleaseMetadata } from '../scripts/package-directory.mjs'
 import { verifyUninstallerSignature } from '../scripts/verify-uninstaller-signature.mjs'
@@ -17,6 +19,15 @@ import {
 const roots = []
 
 describe('Windows release rename locks', () => {
+  it('returns a nonzero CLI status for a fatal packaging invocation', () => {
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/package-directory.mjs', import.meta.url)), '--invalid-option'], {
+      encoding: 'utf8', timeout: 30_000, windowsHide: true
+    })
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('Unknown package-directory option')
+  })
+
   it('recovers a temporary file lock using the same atomic rename and bounded backoff', async () => {
     const lock = Object.assign(new Error('scanner has the artifact open'), { code: 'EPERM' })
     const rename = vi.fn().mockRejectedValueOnce(lock).mockRejectedValueOnce(lock).mockResolvedValue(undefined)
