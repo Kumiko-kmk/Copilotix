@@ -120,14 +120,16 @@ export function buildTableTranslationPlan(
   const tableBlock = blocks.find((block) => containsTableMarkup(block.markdown))
   if (!tableBlock) return null
 
+  const tree = markdownProcessor.parse(tableBlock.markdown) as any
+  const markdownTables = tree.children.filter((node: any) => node.type === 'table')
   const fragment = parseFragment(tableBlock.markdown) as any
   const bindings: SegmentBinding[] = []
   const tables = findElements(fragment, 'table')
-  if (tables.length === 0) return null
+  if (tables.length === 0 && markdownTables.length === 0) return null
 
-  const tablePayloads = tables.map((table, tableIndex) =>
-    buildTablePayload(table, `table-${tableOrdinal}-${tableIndex}`, bindings)
-  )
+  const tablePayloads = markdownTables.length
+    ? markdownTables.map((table: any, tableIndex: number) => buildMarkdownTablePayload(table, `table-${tableOrdinal}-${tableIndex}`, bindings))
+    : tables.map((table, tableIndex) => buildTablePayload(table, `table-${tableOrdinal}-${tableIndex}`, bindings))
   const captionPlans = blocks
     .filter((block) => block.sourceIndex < tableBlock.sourceIndex)
     .map((block, attachmentIndex) => buildAttachment(block, `table-${tableOrdinal}-caption-${attachmentIndex}`, bindings))
@@ -139,7 +141,7 @@ export function buildTableTranslationPlan(
     if (block.sourceIndex === tableBlock.sourceIndex) {
       return {
         ...block,
-        render: () => serialize(fragment).trimEnd()
+        render: () => markdownTables.length ? String(markdownProcessor.stringify(tree)).trimEnd() : serialize(fragment).trimEnd()
       }
     }
     const attachment = [...captionPlans, ...footnotePlans].find((candidate) => candidate.sourceIndex === block.sourceIndex)
@@ -154,7 +156,7 @@ export function buildTableTranslationPlan(
     request: {
       protocol: TABLE_TRANSLATION_PROTOCOL,
       targetLanguage: 'zh-CN',
-      tables: tablePayloads.map((table, index) => ({
+      tables: tablePayloads.map((table: TablePayload, index: number) => ({
         ...table,
         captions: index === 0 ? captionPlans.map(({ payload }) => payload) : [],
         footnotes: index === 0 ? footnotePlans.map(({ payload }) => payload) : []
@@ -190,6 +192,15 @@ export function parseTableTranslationResponse(
     throw new Error('表格翻译源返回的内容不是有效 JSON')
   }
   return validateTableTranslationResponse(parsed, request)
+}
+
+function buildMarkdownTablePayload(table: any, tableId: string, bindings: SegmentBinding[]): TablePayload {
+  const rows = table.children.map((row: any, rowIndex: number) => row.children.map((cell: any, column: number): TableCellPayload => {
+    const id = `${tableId}-cell-r${rowIndex}-c${column}`
+    return { id, row: rowIndex, column, tag: rowIndex === 0 ? 'th' : 'td', rowspan: 1, colspan: 1,
+      segments: collectMarkdownSegments(cell, id, bindings) }
+  }))
+  return { id: tableId, rows, captions: [], footnotes: [] }
 }
 
 function buildTablePayload(table: any, tableId: string, bindings: SegmentBinding[]): TablePayload {
@@ -361,7 +372,9 @@ function isMappingType(
 }
 
 function containsTableMarkup(markdown: string): boolean {
-  return /<table(?:\s|>)/i.test(markdown)
+  if (!markdown.includes('|') && !/<table(?:\s|>)/iu.test(markdown)) return false
+  const tree = markdownProcessor.parse(markdown) as any
+  return tree.children.some((node: any) => node.type === 'table' || (node.type === 'html' && /<table(?:\s|>)/iu.test(node.value)))
 }
 
 function isTranslatableTableText(value: string): boolean {

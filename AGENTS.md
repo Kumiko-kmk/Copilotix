@@ -125,3 +125,9 @@ pnpm desktop:release:from-built
 - **縮略圖截圖**：截圖期間把外層 app-shell 暫時設為直角，並截取完整 CSS 像素，以消除窗口圓角的抗鋸齒差異。保持 channel delta ≤ 1、changedRatio ≤ 0.001 的閾值；失敗時保存 expected／actual PNG。
 - **問答面板與索引**：問答頁籤在第一次被打開時才掛載。掛載時會請 Utility 建立內容索引，而建索引是吃 CPU 的同步計算；只打開論文不得觸發它，否則會拖慢 PDF 和圖片資源的加載。
 - **驗收邊界**：CI 綠燈只代表已推送的那個 SHA。歷史紅燈要對照最新運行再判斷，不能直接當作當前缺陷；CI 不持有付費 API，真實問答質量仍需人工驗收。完整的失敗分析記錄在 `docs/READER_AI_CHAT_PLAN_ZH.md` 第 13 節。
+
+## 10. Markdown 公共格式修复（2026-10-06）
+
+- 格式、v4/v5 翻译计划兼容、旧文档映射、原子导出和真实论文验证边界见 `docs/MARKDOWN_FORMAT_ZH.md`。共享规范化入口为 `standardMarkdown.ts`，格式是 CommonMark + GFM + 明确数学扩展；不得把公式降级为代码来冒充修复。
+- Markdown 导出须带相邻图片目录并使用相对链接；图片复制失败时不得覆盖已有导出。任务目录里的原始资料不可作为导出目标。结果 ZIP 也须规范化两份 Markdown。
+- 对比交付只保留用户要求的两份 Markdown；Notion 桌面验收不能用浏览器或 CI 成功替代。

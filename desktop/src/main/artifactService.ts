@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
-import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { copyFile, lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import archiver from 'archiver'
 import type { BlockMapping, DocumentPayload, CopilotixTask, TranslatedMarkdownBlock } from '@shared/types'
-import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
+import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
+import { normalizeMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdown'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
@@ -54,16 +55,84 @@ export class ArtifactService {
 
   async createResultZip(taskId: string, destination: string): Promise<void> {
     const task = await this.requireTask(taskId)
-    await new Promise<void>((resolvePromise, reject) => {
-      const output = createWriteStream(destination)
+    await this.assertExportDestination(task, destination)
+    const original = await this.readOptional(join(task.outputDir, 'full.md'))
+    const blocks = await this.loadTranslatedBlocks(task)
+    const translated = blocks?.length ? joinTranslatedMarkdownBlocks(blocks) : await this.readOptional(join(task.outputDir, 'full.zh-CN.md'))
+    const partial = `${destination}.partial-${randomUUID()}`
+    try {
+      await new Promise<void>((resolvePromise, reject) => {
+      const output = createWriteStream(partial, { flags: 'wx' })
       const archive = archiver('zip', { zlib: { level: 9 } })
       output.on('close', () => resolvePromise())
-      output.on('error', reject)
-      archive.on('error', reject)
+      const fail = (error: Error): void => { archive.abort(); output.destroy(); reject(error) }
+      output.on('error', fail)
+      archive.on('error', fail)
+      archive.on('warning', fail)
       archive.pipe(output)
-      archive.directory(task.outputDir, false, (entry) => shouldIncludeResultZipEntry(entry.name) ? entry : false)
-      void archive.finalize()
-    })
+      archive.directory(task.outputDir, false, (entry) => shouldIncludeResultZipEntry(entry.name) &&
+        !['full.md', 'full.zh-CN.md'].includes(entry.name) ? entry : false)
+      if (original) archive.append(normalizeMarkdown(original).markdown, { name: 'full.md' })
+      if (translated) archive.append(normalizeMarkdown(translated).markdown, { name: 'full.zh-CN.md' })
+      void archive.finalize().catch(fail)
+      })
+      await rename(partial, destination)
+    } finally {
+      await rm(partial, { force: true }).catch(() => undefined)
+    }
+  }
+
+  /** Publish Markdown last, after all referenced local resources have been copied. */
+  async exportMarkdown(taskId: string, kind: 'original-markdown' | 'translated-markdown', destination: string): Promise<void> {
+    const task = await this.requireTask(taskId)
+    await this.assertExportDestination(task, destination)
+    const blocks = kind === 'translated-markdown' ? await this.loadTranslatedBlocks(task) : null
+    const source = blocks?.length ? joinTranslatedMarkdownBlocks(blocks)
+      : await readFile(join(task.outputDir, kind === 'original-markdown' ? 'full.md' : 'full.zh-CN.md'), 'utf8')
+    const folder = `${basename(destination, extname(destination))}.assets-${randomUUID()}`
+    const assetDir = join(dirname(destination), folder)
+    const partialAssets = `${assetDir}.partial`
+    const assets = new Map<string, string>()
+    const normalized = normalizeMarkdown(source, (url) => {
+      if (!isLocalMarkdownImage(url)) return url
+      const path = this.pathPolicy.resolveChild(task.outputDir, decodeURIComponent(url.split(/[?#]/u)[0]!))
+      let name = assets.get(path)
+      if (!name) { name = `${assets.size + 1}-${basename(path)}`; assets.set(path, name) }
+      return `${encodeURIComponent(folder)}/${encodeURIComponent(name)}`
+    }).markdown
+    let publishedAssets = false
+    try {
+      if (assets.size) {
+        await mkdir(partialAssets)
+        const copies = await Promise.allSettled([...assets].map(async ([sourcePath, name]) => {
+          if (!(await lstat(sourcePath)).isFile()) throw new Error(`图片资源不是普通文件：${basename(sourcePath)}`)
+          await copyFile(sourcePath, join(partialAssets, name))
+        }))
+        const failed = copies.find((result) => result.status === 'rejected')
+        if (failed?.status === 'rejected') throw failed.reason
+        await rename(partialAssets, assetDir)
+        publishedAssets = true
+      }
+      await this.atomicWriteFile(destination, normalized)
+    } catch (error) {
+      if (publishedAssets) await rm(assetDir, { recursive: true, force: true }).catch(() => undefined)
+      throw error
+    } finally {
+      await rm(partialAssets, { recursive: true, force: true }).catch(() => undefined)
+    }
+  }
+
+  private async assertExportDestination(task: CopilotixTask, destination: string): Promise<void> {
+    const taskRoot = await realpath(task.outputDir)
+    const target = resolve(await realpath(dirname(destination)), basename(destination))
+    const fromTask = relative(taskRoot, target)
+    if (!fromTask || (fromTask !== '..' && !fromTask.startsWith(`..${sep}`) && !isAbsolute(fromTask))) throw new Error('请将导出文件保存到文档库以外，避免覆盖原始数据')
+    try {
+      const info = await lstat(destination)
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('导出目标必须是普通文件')
+    } catch (error) {
+      if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) throw error
+    }
   }
 
   async atomicWriteFile(path: string, content: string): Promise<void> {
@@ -104,7 +173,7 @@ export class ArtifactService {
     try {
       const manifest = JSON.parse(await readFile(join(task.outputDir, 'translation.manifest.json'), 'utf8')) as unknown
       if (!isRecord(manifest) || manifest.version !== 2 || manifest.taskId !== task.id ||
-        manifest.translationPipelineVersion !== TRANSLATION_PIPELINE_VERSION ||
+        ![TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION].includes(manifest.translationPipelineVersion as typeof TRANSLATION_PIPELINE_VERSION) ||
         manifest.tableTranslationProtocol !== TABLE_TRANSLATION_PROTOCOL ||
         !Array.isArray(manifest.blocks)) return null
       const blocks = manifest.blocks.map((block) => {

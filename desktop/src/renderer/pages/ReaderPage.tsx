@@ -273,5 +273,5 @@ async function saveDocument(
     documentId,
     kind: key === 'zip' ? 'result-zip' : tab === 'translated' ? 'translated-markdown' : 'original-markdown'
   })
-  if (result.saved) messageApi.success('已保存')
+  if (result.saved) messageApi.success(key === 'zip' ? '已保存' : '已保存；含图片时，请将文档与旁边的图片文件夹一同传递')
 }

@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkStringify from 'remark-stringify'
 import type { BlockMapping } from './types'
+import { resolveMarkdownReferences } from './standardMarkdown'
 
 const processor = unified()
   .use(remarkParse)
@@ -33,6 +34,7 @@ interface ParsedMarkdownBlock {
   markdown: string
   text: string
   containsMedia: boolean
+  containsTable: boolean
   mediaSources: string[]
 }
 
@@ -116,6 +118,11 @@ export function alignMarkdownBlocks(markdown: string, mappings: BlockMapping[]):
       if (lastInterval) sourceCursor = Math.max(sourceCursor, lastInterval.end)
     }
 
+    if (mappingIds.length === 0 && block.containsTable) {
+      const table = orderedMappings.find((mapping) => mapping.type === 'table' &&
+        mapping.order >= mappingOrderCursor && !usedMappingIds.has(mapping.id))
+      if (table) mappingIds = [table.id]
+    }
     if (mappingIds.length === 0 && block.containsMedia) {
       const media = orderedMappings.find((mapping) =>
         mapping.order >= mappingOrderCursor &&
@@ -187,10 +194,12 @@ function findAnchor(source: string, target: string, cursor: number, fromEnd: boo
 
 function parseMarkdownBlocks(markdown: string): ParsedMarkdownBlock[] {
   const root = processor.parse(markdown) as any
+  resolveMarkdownReferences(root)
   return (root.children ?? []).map((node: any) => ({
     markdown: String(processor.stringify({ type: 'root', children: [node] } as any)).trimEnd(),
     text: extractVisibleText(node),
     containsMedia: containsNodeType(node, new Set(['image', 'imageReference'])),
+    containsTable: containsNodeType(node, new Set(['table'])),
     mediaSources: extractMediaSources(node)
   }))
 }

@@ -81,6 +81,9 @@ export class TaskService extends EventEmitter {
   async createResultZip(taskId: string, destination: string): Promise<void> {
     await this.artifacts.createResultZip(taskId, destination)
   }
+  async exportMarkdown(taskId: string, kind: 'original-markdown' | 'translated-markdown', destination: string): Promise<void> {
+    await this.artifacts.exportMarkdown(taskId, kind, destination)
+  }
 }
 
 function documentNotificationStatus(job: Job): 'completed' | 'partial' | 'failed' | null {
