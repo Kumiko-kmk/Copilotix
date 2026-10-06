@@ -8,6 +8,7 @@ import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { ArtifactKind } from '../src/core/types'
 import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from '../src/shared/e2eLaunchPolicy'
+import { credentialServiceForRuntime, WindowsCredentialVault, type CredentialAccount } from '../src/main/credentialVault'
 import {
   alignMarkdownBlocks,
   MARKDOWN_MAPPING_ALGORITHM_VERSION,
@@ -49,7 +50,20 @@ export async function createE2EWorkspace(): Promise<E2EWorkspace> {
     root,
     userData,
     env: { ...process.env, NODE_ENV: 'test', COPILOTIX_E2E_USER_DATA: userData },
-    cleanup: () => rm(root, { recursive: true, force: true })
+    cleanup: async () => {
+      const vault = new WindowsCredentialVault(credentialServiceForRuntime({
+        isPackaged: false, nodeEnv: 'test', e2eUserData: userData
+      }))
+      const accounts: CredentialAccount[] = [
+        'parser-token', 'qwen-api-key', 'deepseek-api-key',
+        'parser-token-validation', 'qwen-api-key-validation', 'deepseek-api-key-validation'
+      ]
+      try {
+        await Promise.all(accounts.map((account) => vault.delete(account)))
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    }
   }
 }
 

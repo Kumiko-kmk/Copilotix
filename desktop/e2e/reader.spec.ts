@@ -554,6 +554,12 @@ async function openPaper(window: Page, taskId: string): Promise<void> {
   const item = window.locator(`tr[data-row-key="${taskId}"] .task-link`)
   await expect(item).toBeVisible()
   await item.click()
+  await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
+  // Image/font readiness has a production 30 s deadline. Wait for the actual
+  // ready/error state, failing promptly on errors rather than operating during loading.
+  const scroller = window.locator('.reader-tab-panel.active .markdown-scroll')
+  await expect(scroller).toHaveAttribute('data-render-state', /^(ready|error)$/, { timeout: 31_000 })
+  await expect(scroller).toHaveAttribute('data-render-state', 'ready')
 }
 
 test('keeps the complete minimap static across long-document jumps', async () => {
