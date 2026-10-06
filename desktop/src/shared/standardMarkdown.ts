@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkStringify from 'remark-stringify'
 import { splitMarkdownMath } from './mathDelimiters'
+import { renderToString } from 'katex'
 
 /** Public artifacts use CommonMark + GFM tables and the explicit $ / $$ math extension. */
 export const MARKDOWN_FORMAT_VERSION = 'commonmark-gfm-math-v1'
@@ -41,6 +42,7 @@ export interface MarkdownNormalization {
   markdown: string
   controlsReplaced: number
   tablesConverted: number
+  mathSizingRepairs: number
 }
 
 /** Code is opaque. Normalize alternate TeX delimiters before Markdown consumes their escapes. */
@@ -220,8 +222,24 @@ function walk(node: Node, visit: (node: Node) => void): void {
   node.children?.forEach((child) => walk(child, visit))
 }
 
+/** Automatic delimiter sizing is typography, not a mathematical operator. */
+function repairMathSizing(value: string): string {
+  if (!/\\(?:left|right)\b/u.test(value)) return value
+  try {
+    renderToString(value, { trust: false, throwOnError: true, strict: 'ignore' })
+    return value
+  } catch (error) {
+    if (!/Expected '\\right'|Extra \\right/u.test(String(error))) return value
+    const candidate = value.replace(/\\(?:left|right)\s*\./gu, '').replace(/\\(?:left|right)\b/gu, '')
+    try {
+      renderToString(candidate, { trust: false, throwOnError: true, strict: 'ignore' })
+      return candidate
+    } catch { return value }
+  }
+}
+
 export function normalizeMarkdown(source: string, rewriteImage?: (url: string) => string): MarkdownNormalization {
-  const stats: MarkdownNormalization = { markdown: '', controlsReplaced: 0, tablesConverted: 0 }
+  const stats: MarkdownNormalization = { markdown: '', controlsReplaced: 0, tablesConverted: 0, mathSizingRepairs: 0 }
   const clean = source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
     .replace(/\p{Cc}/gu, (character) => {
       if (character === '\t' || character === '\n') return character
@@ -232,6 +250,11 @@ export function normalizeMarkdown(source: string, rewriteImage?: (url: string) =
   walk(root, (node) => {
     trimInlineEdges(node)
     if (node.type === 'tableCell') tableMath(node)
+    if ((node.type === 'math' || node.type === 'inlineMath') && node.value) {
+      const repaired = repairMathSizing(node.value)
+      if (repaired !== node.value) stats.mathSizingRepairs += 1
+      node.value = repaired
+    }
   })
   resolveMarkdownReferences(root)
   if (rewriteImage) walk(root, (node) => { if (node.type === 'image') node.url = rewriteImage(node.url ?? '') })

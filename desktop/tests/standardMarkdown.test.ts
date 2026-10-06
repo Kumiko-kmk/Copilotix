@@ -10,6 +10,14 @@ const flatten = (node: any): any[] => [node, ...(node.children ?? []).flatMap(fl
 const nodes = (markdown: string): any[] => flatten(parser.parse(markdown))
 
 describe('public Markdown format', () => {
+  it('repairs invalid delimiter sizing only when removing sizing produces valid TeX', () => {
+    const result = normalizeMarkdown(String.raw`$\left({x}\right)$ and $\left({x}\right)}$ and $\left.{x}$`)
+    expect(result.mathSizingRepairs).toBe(1)
+    expect(result.markdown).toContain(String.raw`$\left({x}\right)$`)
+    expect(result.markdown).toContain(String.raw`$\left({x}\right)}$`)
+    expect(result.markdown).toContain('${x}$')
+    expect(normalizeMarkdown(result.markdown).markdown).toBe(result.markdown)
+  })
   it('expands parser HTML spans into a rectangular GFM table without duplicating images', () => {
     const source = '<table><caption>Results</caption><tr><th rowspan="2">Model</th><th colspan="2">Score</th></tr><tr><td>A</td><td>B</td></tr><tr><td colspan="2"><img src="images/figure.png" alt="plot">DDPM</td><td>3.17</td></tr></table>'
     const result = normalizeMarkdown(source)
