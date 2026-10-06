@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,6 +35,7 @@ import {
   assertReleaseLayout,
   createReleaseLayout,
   pathExists,
+  renameReleasePath,
   removePreviousArtifacts,
   removePreviousRelease,
   rollbackReleaseSwap,
@@ -90,7 +91,7 @@ export async function publishRelease({ fromBuilt = false } = {}) {
     const unpackedAsar = join(unpackedDirectory, 'resources', 'app.asar')
     await requireFile(unpackedExecutable)
     await requireFile(unpackedAsar)
-    await rename(unpackedDirectory, layout.runtimeDirectory)
+    await renameReleasePath(unpackedDirectory, layout.runtimeDirectory)
     await rm(layout.builderOutput, { recursive: true, force: true })
 
     const executablePath = join(layout.runtimeDirectory, executableName)
@@ -143,7 +144,7 @@ export async function publishRelease({ fromBuilt = false } = {}) {
     // The unique destination cannot replace a prior successful build's files.
     await mkdir(layout.artifactsRoot, { recursive: true })
     if (await pathExists(layout.artifactsDirectory)) throw new Error('Build artifacts destination already exists')
-    await rename(layout.stagedArtifactsDirectory, layout.artifactsDirectory)
+    await renameReleasePath(layout.stagedArtifactsDirectory, layout.artifactsDirectory)
     await assertReleaseRootContents(layout.stagingRoot, releaseName, layout.setupName)
 
     const swapResult = await swapRelease(layout)
@@ -289,7 +290,7 @@ export async function runSetupBuilder(layout, { forceCodeSigning = false, signer
     if (verified.signerSubject !== signerSubject) throw new Error('Production Setup did not verify its embedded uninstaller signer')
   }
   await requireFile(join(layout.builderOutput, layout.setupName))
-  await rename(join(layout.builderOutput, layout.setupName), layout.setupPath)
+  await renameReleasePath(join(layout.builderOutput, layout.setupName), layout.setupPath)
   await rm(layout.builderOutput, { recursive: true, force: true })
 }
 
@@ -543,7 +544,7 @@ if (isMainModule()) {
     if (args.some((arg) => arg !== '--from-built')) throw new Error('Unknown package-directory option: ' + args.join(' '))
     await publishRelease({ fromBuilt })
   } catch (error) {
-    process.stderr.write(`${readableError(error)}\n`)
-    process.exitCode = 1
+    // Builder shutdown hooks must not turn a failed publication into exit 0.
+    process.stderr.write(`${readableError(error)}\n`, () => process.exit(1))
   }
 }

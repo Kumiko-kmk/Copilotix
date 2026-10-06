@@ -59,19 +59,23 @@ jobs:
           COPILOTIX_RELEASE_MODE: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && env.COPILOTIX_INITIAL_UNSIGNED_RELEASE != 'true' && 'production' || 'development' }}
           WIN_CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_LINK || '' }}
           WIN_CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+      - name: Verify published release and select compact archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($required in @('release/setup.exe', 'release/uninstall.exe', 'release/advanced/release-manifest.json')) {
+            if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Release publication failed: missing $required" }
+          }
+          $manifest = Get-Content -LiteralPath 'release/advanced/release-manifest.json' -Raw | ConvertFrom-Json
+          $archive = [IO.Path]::GetFullPath((Join-Path (Join-Path 'release' $manifest.artifactDirectory) $manifest.transport.file))
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Verified compact archive is missing.' }
+          "COPILOTIX_RELEASE_ZIP=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: pnpm desktop:test:e2e
       - name: Verify install, upgrade, uninstall and reinstall with isolated data
         shell: pwsh
         run: ./desktop/scripts/test-installer-lifecycle.ps1
       - name: Verify bundle download, integrity, extraction and deletion
         run: pnpm desktop:test:release-download:install
-      - name: Select the verified compact release archive
-        shell: pwsh
-        run: |
-          $manifest = Get-Content -LiteralPath 'release/advanced/release-manifest.json' -Raw | ConvertFrom-Json
-          $archive = [IO.Path]::GetFullPath((Join-Path (Join-Path 'release' $manifest.artifactDirectory) $manifest.transport.file))
-          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Verified compact archive is missing.' }
-          "COPILOTIX_RELEASE_ZIP=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
           name: Copilotix-Windows-x64
