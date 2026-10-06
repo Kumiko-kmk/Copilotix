@@ -7,6 +7,11 @@ export default defineConfig({
     environment: 'node',
     // Windows + coverage instrumentation can exceed the default 5 s for React views.
     testTimeout: 15_000,
+    // Bound CPU/memory contention from jsdom + Ant Design on hosted Windows runners.
+    maxWorkers: process.env.CI ? 2 : undefined,
+    reporters: process.env.CI ? ['default', 'junit'] : ['default'],
+    // Playwright clears test-results, so unit reports use a separate directory.
+    outputFile: { junit: './unit-test-results/junit.xml' },
     exclude: ['e2e/**', 'node_modules/**', 'dist/**', 'out/**'],
     coverage: {
       provider: 'v8',

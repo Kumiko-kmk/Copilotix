@@ -19,6 +19,7 @@ desktop/out/
 desktop/dist/
 desktop/coverage/
 desktop/test-results/
+desktop/unit-test-results/
 desktop/test-artifacts/
 desktop/playwright-report/
 release/
