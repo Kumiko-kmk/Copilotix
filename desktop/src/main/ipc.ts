@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import { resolve } from 'node:path'
 import { BrowserWindow, ipcMain } from 'electron'
 import type { WebContents } from 'electron'
 import { z } from 'zod'
@@ -147,14 +146,3 @@ export function sendValidatedEvent<T>(
   contents.send(channel, ipcEnvelopeSchema(schema).parse(ipcSuccess(value)))
 }
 
-export function rendererValidationOptions(getMainWindow: () => WindowLike | null): IpcValidationOptions {
-  return {
-    getMainWindow,
-    rendererEntryPath: requireRendererEntryPath(),
-    rendererOrigin: process.env.ELECTRON_RENDERER_URL
-  }
-}
-
-function requireRendererEntryPath(): string {
-  return resolve(__dirname, '../renderer/index.html')
-}

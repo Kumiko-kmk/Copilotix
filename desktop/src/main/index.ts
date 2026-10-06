@@ -1,3 +1,6 @@
+import { ChatProvider } from './chat/chatProvider'
+import { PaperChatService } from './chat/paperChatService'
+import { registerPaperChatHandlers } from './chat/paperChatIpc'
 import { sanitizeTitleStem } from '@shared/titleNaming'
 import { TUTORIAL_PAPER_BYTES, TUTORIAL_PAPER_SHA256, TUTORIAL_PAPER_SOURCE_URL, MINERU_API_TOKEN_URL } from '@shared/tutorialSample'
 import { verifiedTutorialPaperPath } from './tutorialSample'
@@ -54,6 +57,7 @@ import {
   documentSummarySchema,
   tutorialImportRequestSchema,
   importDocumentsIpcRequestSchema,
+  importDocumentsResultSchema,
   listReaderAnnotationsRequestSchema,
   mutateReaderAnnotationsRequestSchema,
   readerAnnotationSnapshotSchema,
@@ -63,6 +67,7 @@ import {
 } from '@shared/ipcSchemas'
 import type { WindowState } from '@shared/types'
 import { computeDocumentChange, projectDocumentDetails, projectDocumentSummary } from './documentProjection'
+import { createCoalescedRefresh } from './coalescedRefresh'
 import { UtilitySupervisor } from './utilitySupervisor'
 import { forkUtilityProcess } from './electronUtilityFork'
 import { RpcJobRepository } from './rpcJobRepository'
@@ -86,6 +91,7 @@ let documentRevision = 0
 let documentSummaries = new Map<string, DocumentSummary>()
 let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
+let paperChat: PaperChatService | null = null
 let jobScheduler: JobScheduler | null = null
 let startupPhase = 'module-load'
 const libraryGate = new LibraryAccessGate()
@@ -142,14 +148,24 @@ async function bootstrap(): Promise<void> {
   await settings.initialize()
   const logger = new JsonLineLogger(join(userData, 'copilotix-desktop.log'))
   const usageAnalytics = new UsageAnalyticsService(join(userData, 'usage-analytics-v1.json'))
+  const chatProvider = new ChatProvider(fetcher, { invalidate: (provider) => settings.invalidateCredential(provider) })
+  paperChat = new PaperChatService({
+    settings: () => settings.get(),
+    key: (provider) => vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    buildContext: (request, signal) => utilitySupervisor!.request('chat:build-context', request, { signal, timeoutMs: 10_000 }),
+    stream: (input) => chatProvider.stream(input),
+    recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
+    log: (details) => logger.info('paper-chat', details)
+  })
   const compute = new RpcTaskCompute(utilitySupervisor)
   const pathPolicy = new PathPolicy()
-  const tasks = new TaskService(repository, settings, vault, parserClient, fetcher, logger, compute, pathPolicy, {
+  const tasks = new TaskService(repository, settings, compute, pathPolicy, {
+    logger,
     jobRepository,
     scheduler: jobScheduler
   })
   startupPhase = 'documents-load'
-  documentSummaries = new Map((await repository.listDocumentSummaries!()).map((summary) => [summary.id, summary] as const))
+  documentSummaries = new Map((await repository.listDocumentSummaries()).map((summary) => [summary.id, summary] as const))
   documentRevision = 0
 
   startupPhase = 'protocol-register'
@@ -161,18 +177,18 @@ async function bootstrap(): Promise<void> {
   startupPhase = 'tray-create'
   createTray()
 
-  let documentChangeTail = Promise.resolve()
-  tasks.on('changed', () => {
-    documentChangeTail = documentChangeTail.then(async () => {
-      const current = await repository!.listDocumentSummaries!()
-      const computation = computeDocumentChange(documentSummaries, current, documentRevision)
-      documentSummaries = computation.next
-      if (computation.event) {
-        documentRevision = computation.event.revision
-        if (mainWindow) sendValidatedEvent(mainWindow.webContents, 'documents:changed', documentChangeEventSchema, computation.event)
-      }
-    }).catch(() => logger.error('documents.refresh.failed', {}))
-  })
+  // Job progress can fire many changes per second; collapse them into at most
+  // one in-flight and one trailing summary refresh.
+  const refreshDocuments = createCoalescedRefresh(async () => {
+    const current = await repository!.listDocumentSummaries()
+    const computation = computeDocumentChange(documentSummaries, current, documentRevision)
+    documentSummaries = computation.next
+    if (computation.event) {
+      documentRevision = computation.event.revision
+      if (mainWindow) sendValidatedEvent(mainWindow.webContents, 'documents:changed', documentChangeEventSchema, computation.event)
+    }
+  }, () => logger.error('documents.refresh.failed', {}))
+  tasks.on('changed', refreshDocuments)
   tasks.on('notification', async (taskId: string, status: 'completed' | 'partial' | 'failed') => {
     const task = await repository?.getTask(taskId)
     if (!task || !Notification.isSupported()) return
@@ -244,6 +260,8 @@ function createMainWindow(): void {
       webSecurity: true
     }
   })
+  mainWindow.webContents.on('destroyed', () => paperChat?.cancelAll())
+  mainWindow.webContents.on('render-process-gone', () => paperChat?.cancelAll())
   mainWindow.webContents.on('page-title-updated', (event) => event.preventDefault())
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url === 'https://github.com/Kumiko-kmk/Copilotix' || url === TUTORIAL_PAPER_SOURCE_URL || url === MINERU_API_TOKEN_URL) void shell.openExternal(url)
@@ -320,6 +338,12 @@ function registerIpc(
     rendererOrigin: process.env.ELECTRON_RENDERER_URL
   }
 
+  registerPaperChatHandlers(paperChat!, async (documentId) => {
+    const status = await utilitySupervisor!.request('chat:ensure-index', { documentId })
+    jobScheduler?.wake()
+    return status
+  }, validationOptions)
+
   registerValidatedHandler('window:state', noRequestSchema, windowStateSchema, (event) => currentWindowState(requestWindow(event)), validationOptions)
   registerValidatedHandler('window:action', windowActionSchema, windowStateSchema, (event, action) => {
     const window = requestWindow(event)
@@ -362,7 +386,12 @@ function registerIpc(
     }
   }, validationOptions)
   registerValidatedHandler('settings:get', noRequestSchema, appSettingsSchema, () => settings.get(), validationOptions)
-  registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, (_event, update) => settings.save(update), validationOptions)
+  registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, async (_event, update) => {
+    const before = await settings.get()
+    const result = await settings.save(update)
+    if (before.translationProvider !== result.settings.translationProvider || before.chatConsentVersion !== result.settings.chatConsentVersion || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
+    return result
+  }, validationOptions)
   registerValidatedHandler('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, (_event, request) => settings.validateCredential(request.name, request.value), validationOptions)
   registerValidatedHandler('dialog:output-directory', noRequestSchema, outputDirectorySchema, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] })
@@ -381,18 +410,18 @@ function registerIpc(
     const result = await shell.openPath(current.outputRoot)
     if (result) throw new Error(result)
   }, validationOptions)
-  registerValidatedHandler('documents:import', importDocumentsIpcRequestSchema, documentSummarySchema.array(), async (_event, request) => {
+  registerValidatedHandler('documents:import', importDocumentsIpcRequestSchema, importDocumentsResultSchema, async (_event, request) => {
     let paths = request.paths
     if (paths === undefined) {
       const result = await dialog.showOpenDialog(mainWindow!, {
         properties: ['openFile', 'multiSelections'],
         filters: [{ name: 'PDF', extensions: ['pdf'] }]
       })
-      if (result.canceled) return []
+      if (result.canceled) return { created: [], failed: [] }
       paths = result.filePaths
     }
-    const created = await tasks.importPaths(paths.filter((path) => path.toLowerCase().endsWith('.pdf')), request.options)
-    return created.map(projectDocumentSummary)
+    const imported = await tasks.importPaths(paths.filter((path) => path.toLowerCase().endsWith('.pdf')), request.options)
+    return { created: imported.created.map(projectDocumentSummary), failed: imported.failed }
   }, validationOptions)
   registerValidatedHandler('tutorial:import-paper', tutorialImportRequestSchema, documentSummarySchema.nullable(), async (_event, request) => {
     const samplePath = await verifiedTutorialPaperPath({
@@ -410,17 +439,17 @@ function registerIpc(
     if ((await stat(selectedPath)).size !== TUTORIAL_PAPER_BYTES) throw new Error('新手教程请选择窗口中预选的内置论文 Attention Is All You Need')
     const selectedHash = createHash('sha256').update(await readFile(selectedPath)).digest('hex')
     if (selectedHash !== TUTORIAL_PAPER_SHA256) throw new Error('新手教程请选择窗口中预选的内置论文 Attention Is All You Need')
-    const created = await tasks.importPaths([selectedPath], { createDuplicates: request.createDuplicate, useOriginalFilename: false })
+    const { created, failed } = await tasks.importPaths([selectedPath], { createDuplicates: request.createDuplicate, useOriginalFilename: false })
+    if (failed[0]) throw new Error(failed[0].message)
     if (created[0]) return projectDocumentSummary(created[0])
-    const existing = (await tasks.list()).find((task) => task.sourceHash === TUTORIAL_PAPER_SHA256)
+    const existing = await repository!.findByHash(TUTORIAL_PAPER_SHA256)
     if (!existing) throw new Error('内置教程论文导入失败')
     return projectDocumentSummary(existing)
   }, validationOptions)
   registerValidatedHandler('documents:list', noRequestSchema, documentSummarySchema.array(), async () => {
     if (documentSummaries.size === 0) {
-      const current = repository?.listDocumentSummaries
-        ? await repository.listDocumentSummaries()
-        : (await tasks.list()).map(projectDocumentSummary)
+      if (!repository) throw new Error('数据库尚未初始化')
+      const current = await repository.listDocumentSummaries()
       documentSummaries = new Map(current.map((summary) => [summary.id, summary] as const))
     }
     return [...documentSummaries.values()]
@@ -433,7 +462,7 @@ function registerIpc(
   }, validationOptions)
   registerValidatedHandler('documents:get', documentIdRequestSchema, documentDetailsSchema, async (_event, documentId) => {
     const details = projectDocumentDetails(await tasks.getDocument(documentId))
-    const summary = await repository?.getDocumentSummary?.(documentId)
+    const summary = await repository?.getDocumentSummary(documentId)
     return summary ? { ...details, summary } : details
   }, validationOptions)
   registerValidatedHandler('documents:open-output', documentIdRequestSchema, voidResponseSchema, async (_event, documentId) => {
@@ -463,11 +492,11 @@ function registerIpc(
     return { saved: true }
   }, validationOptions)
   registerValidatedHandler('reader-annotations:list', listReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, async (_event, request) => {
-    if (!repository?.listDocumentAnnotations) throw new Error('数据库尚未初始化')
+    if (!repository) throw new Error('数据库尚未初始化')
     return repository.listDocumentAnnotations(request)
   }, validationOptions)
   registerValidatedHandler('reader-annotations:mutate', mutateReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, async (_event, request) => {
-    if (!repository?.mutateDocumentAnnotations) throw new Error('数据库尚未初始化')
+    if (!repository) throw new Error('数据库尚未初始化')
     return repository.mutateDocumentAnnotations(request)
   }, validationOptions)
 }
@@ -505,6 +534,7 @@ function startNormalApp(): void {
   })
 
   app.on('window-all-closed', () => {
+    paperChat?.dispose()
     // Keep the background queue alive in the tray on Windows.
   })
 

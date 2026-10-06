@@ -37,21 +37,15 @@ button, input, select { font: inherit; }
 
 .edge-dock { position: fixed; right: 1px; left: 1px; z-index: 1000; color: var(--text); }
 .edge-dock-top { top: 1px; right: 25%; left: 25%; height: calc(var(--titlebar-height) - 1px); background: transparent; }
-.edge-dock-bottom { bottom: 1px; height: 8px; }
 .window-drag-region { position: fixed; z-index: 999; top: 1px; right: 1px; left: 1px; height: calc(var(--titlebar-height) - 1px); -webkit-app-region: drag; }
 .edge-dock-persistent, .edge-dock-trigger, .edge-dock-panel { -webkit-app-region: no-drag; }
 .edge-dock-persistent { position: fixed; z-index: 1001; top: 1px; left: 1px; height: calc(var(--titlebar-height) - 1px); }
 .edge-dock-trigger { position: absolute; z-index: 3; left: 50%; display: grid; width: 58px; padding: 0; place-items: center; border: 0; outline: 0; background: transparent; cursor: pointer; transform: translateX(-50%); }
 .edge-dock-top .edge-dock-trigger { top: 8px; height: 24px; }
-.edge-dock-bottom .edge-dock-trigger { bottom: 0; height: 8px; }
-.edge-dock-trigger span { display: block; width: 28px; height: 3px; border-radius: 999px; background: var(--muted); opacity: .42; transition: width .18s ease, opacity .18s ease; }
-.edge-dock.open .edge-dock-trigger span, .edge-dock-trigger:focus-visible span { width: 38px; opacity: .72; }
 .edge-dock-panel { position: absolute; visibility: hidden; border: 1px solid color-mix(in srgb, var(--border) 82%, transparent); border-radius: 18px; background: color-mix(in srgb, #fbf8f1 86%, transparent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 24px 56px -18px rgba(48, 36, 18, .34), 0 2px 8px rgba(48, 36, 18, .06); opacity: 0; pointer-events: none; backdrop-filter: blur(18px) saturate(1.25); transition: opacity .2s ease, transform .28s var(--ease-out), visibility 0s linear .2s; }
 .edge-dock-top .edge-dock-panel { top: calc(var(--titlebar-height) - 6px); left: 50%; width: max-content; max-width: calc(100vw - 32px); padding: 7px; transform: translate(-50%, -10px); }
-.edge-dock-bottom .edge-dock-panel { right: 14px; bottom: 7px; left: 14px; padding: 10px; transform: translateY(12px); }
 .edge-dock.open .edge-dock-panel { visibility: visible; opacity: 1; pointer-events: auto; transition-delay: 0s; }
 .edge-dock-top.open .edge-dock-panel { transform: translate(-50%, 0); }
-.edge-dock-bottom.open .edge-dock-panel { transform: translateY(0); }
 
 /* macOS-style traffic lights: 12px buttons on a 20px pitch, glyphs on group hover, grey when the window is inactive. */
 .window-controls { display: flex; align-items: center; height: calc(var(--titlebar-height) - 1px); padding: 0 10px; }
@@ -77,22 +71,6 @@ button, input, select { font: inherit; }
 .top-navigation-item.active { color: var(--primary); background: #fff; box-shadow: 0 1px 3px rgba(48, 36, 18, .1), inset 0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent); font-weight: 600; }
 .top-navigation-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 
-.paper-switcher { display: flex; width: 100%; gap: 8px; padding: 2px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
-.paper-switcher-item { position: relative; display: grid; min-width: 190px; max-width: 260px; height: 58px; padding: 9px 13px 9px 18px; align-content: center; gap: 5px; flex: 0 0 auto; border: 1px solid transparent; border-radius: 13px; color: var(--text); background: color-mix(in srgb, var(--muted-surface) 70%, transparent); cursor: pointer; text-align: left; content-visibility: auto; contain-intrinsic-size: 190px 58px; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .22s var(--ease-out); }
-.paper-switcher-item::before { position: absolute; top: 14px; bottom: 14px; left: 8px; width: 3px; border-radius: 3px; background: color-mix(in srgb, var(--muted) 35%, transparent); content: ""; transition: background .18s ease; }
-.paper-switcher-item:has(.status-completed)::before { background: #3aa76d; }
-.paper-switcher-item:has(.status-failed)::before { background: #e5484d; }
-.paper-switcher-item:has(.status-partial)::before { background: #e3962b; }
-.paper-switcher-item:has(.status-translating, .status-parsing, .status-uploading)::before { background: var(--primary); }
-.paper-switcher-item:hover { border-color: color-mix(in srgb, var(--primary) 26%, var(--border)); background: #fffdf8; box-shadow: 0 10px 22px -14px rgba(48, 36, 18, .4); transform: translateY(-2px); }
-.paper-switcher-item.active { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); background: var(--primary-soft); }
-.paper-switcher-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-.paper-switcher-name { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.paper-switcher-status { color: var(--muted); font-size: 11px; }
-.paper-switcher-status.status-completed { color: #2f9e55; }
-.paper-switcher-status.status-failed { color: #e5484d; }
-.paper-switcher-status.status-partial { color: #d97706; }
-.paper-switcher-empty { display: grid; height: 52px; place-items: center; color: var(--muted); font-size: 13px; }
 .page { height: 100%; padding: var(--page-top) 54px 36px; overflow: auto; }
 /* Slim, warm scrollbars for scrolling pages: a rounded pill inset from the edge, tinted with the brand colour on hover. */
 .page::-webkit-scrollbar { width: 14px; height: 14px; }
@@ -654,7 +632,7 @@ button, input, select { font: inherit; }
   .storage-donut { width: min(110px, 100%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .edge-dock-panel, .edge-dock-trigger span, .window-control::before, .window-control span, .task-status-active, .paper-switcher-item, .top-navigation-item, .upload-entry, .upload-entry .ant-btn { transition: none; }
+  .edge-dock-panel, .window-control::before, .window-control span, .task-status-active, .top-navigation-item, .upload-entry, .upload-entry .ant-btn { transition: none; }
   .tasks-page, .settings-page, .tutorial-page { animation: none; }
 }
 

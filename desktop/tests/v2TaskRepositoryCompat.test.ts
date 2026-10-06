@@ -128,6 +128,82 @@ describe('temporary v2 task repository compatibility projection', () => {
     }
   })
 
+  it('lists a large library in stable keyset pages that match single-document projections', async () => {
+    const fixture = await createFixture()
+    try {
+      // Same timestamps force the id tie-breaker to decide page boundaries.
+      for (const [index, createdAt] of ['2026-01-02T00:00:00.000Z', '2026-01-02T00:00:00.000Z', '2026-01-03T00:00:00.000Z'].entries()) {
+        const outputDir = join(fixture.root, 'documents-v2', `document-${index + 2}`)
+        await mkdir(outputDir, { recursive: true })
+        fixture.repository.insertTask({
+          ...fixture.task,
+          id: `document-${index + 2}`,
+          sourceHash: `hash-${index + 2}`,
+          sourcePath: join(outputDir, 'original.pdf'),
+          outputDir,
+          createdAt,
+          updatedAt: createdAt
+        })
+      }
+      fixture.repository.updateTask('document-3', { status: 'translating' })
+
+      const all = fixture.repository.listTasks()
+      expect(all.map((task) => task.id)).toEqual(['document-4', 'document-2', 'document-3', 'document-1'])
+      const paged: string[] = []
+      let after: { createdAt: string; id: string } | null = null
+      do {
+        const page = fixture.repository.listTasksPage(after, 1)
+        paged.push(...page.map((task) => task.id))
+        const last = page.at(-1)
+        after = last ? { createdAt: last.createdAt, id: last.id } : null
+      } while (after)
+      expect(paged).toEqual(all.map((task) => task.id))
+      expect(fixture.repository.listTasks()).toEqual(all.map((task) => fixture.repository.getTask(task.id)))
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('projects translation progress identically in batched summaries and single lookups', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-v2-summaries-'))
+    roots.push(root)
+    const repository = new V2TaskRepositoryCompat(new V2Database(join(root, 'copilotix-desktop-v2.sqlite3')))
+    try {
+      const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']
+      for (const [index, id] of ids.entries()) {
+        const outputDir = join(root, 'documents-v2', id)
+        await mkdir(outputDir, { recursive: true })
+        repository.insertTask({
+          id,
+          originalName: `paper-${index}.pdf`,
+          title: null,
+          name: `paper-${index}.pdf`,
+          sourcePath: join(outputDir, 'original.pdf'),
+          sourceHash: `hash-${index}`,
+          outputDir,
+          status: 'uploading',
+          progress: 0,
+          translationProvider: 'qwen',
+          remoteBatchId: null,
+          remoteDataId: null,
+          remoteResultUrl: null,
+          error: null,
+          createdAt: `2026-01-0${index + 1}T00:00:00.000Z`,
+          updatedAt: `2026-01-0${index + 1}T00:00:00.000Z`
+        })
+      }
+      repository.updateTask(ids[0]!, { status: 'translating' })
+      repository['database'].connection.prepare("UPDATE jobs SET checkpoint_json=? WHERE document_id=? AND kind='translate'")
+        .run(JSON.stringify({ totalBlocks: 10, completedBlocks: 4, failedBlocks: 1 }), ids[0]!)
+
+      const summaries = repository.listDocumentSummaries()
+      expect(summaries).toEqual([ids[1]!, ids[0]!].map((id) => repository.getDocumentSummary(id)))
+      expect(summaries[1]!.workflow.translationProgress).toEqual({ totalBlocks: 10, completedBlocks: 4, failedBlocks: 1 })
+    } finally {
+      repository.close()
+    }
+  })
+
   it('keeps title metadata separate from the stable UUID storage path', async () => {
     const fixture = await createFixture()
     try {

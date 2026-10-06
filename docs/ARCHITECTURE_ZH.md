@@ -130,11 +130,15 @@ Main 先验证 sender，再解析请求；handler 结果再次验证，schema �
 | 取消 | `cancel` 以 requestId 取消活动 operation，并传播 AbortSignal |
 | 超时 | supervisor/CoreClient 默认 handshake `10s`、request `30s`；调用者可传更短的 operation timeout |
 
-当前 registry 已覆盖 `database:*`、`settings:*`、任务/文档、作业、artifact、翻译 block/cache/plan、标注以及有限 compute 操作。增加 operation 必须添加严格 payload/result schema、registry 项、两端 handler、取消/超时测试，并评估 1 MiB 上限。
+当前 registry 只保留 Main 实际调用的操作：`database:*`、`library:*`、`settings:*`、任务/文档（含批量插入）、作业、artifact revision、`knowledge:*`、标注快照/修改以及 `compute:*`（导入、归一化、映射、RAG 内容索引和翻译计划）。旧的逐块翻译、翻译缓存、整表标注替换等未被调用的 operation 已移除，Utility 内部仍可直接使用对应 Repository 方法。增加 operation 必须添加严格 payload/result schema、registry 项、两端 handler、取消/超时测试，并评估 1 MiB 上限。
+
+文库列表（`tasks:list`、`documents:list`）按 `(createdAt DESC, id ASC)` 做 keyset 分页：请求 `{ after? }`，响应 `{ items, next }`；Utility 每页最多 200 行并按 512 KiB 字节预算截断，Main 的 `RpcTaskRepository` 循环取完。这样大型文库不会触及 1 MiB 上限。Utility 端每页只用两次查询（文档 + 其 parse/translate 作业）完成投影，没有逐文档查询。
 
 ### 5.3 Utility supervisor
 
 Supervisor 启动 Utility 后等待 `ready`，再以 `database:init` 初始化 v2 数据库和 output root；Utility 异常退出会拒绝所有 in-flight RPC 并按 `[250ms, 1s, 4s]` 退避重启，连续失败最多三次，随后进入 failed。请求超时/取消只影响对应请求，并向 Utility 发 cancel；不会复用已结算的 requestId。关闭时执行 scheduler shutdown、drain、database flush/close，超时后才终止子进程。
+
+Utility 内触及 SQLite 的 operation 分三条 FIFO 通道：数据通道（任务、作业、心跳、文档、标注、设置）、compute 通道（所有 `compute:*` 长耗时文件操作，`compute:hash-file` 除外），以及独占的生命周期通道（`database:init/flush/close`、`library:*`）。长论文归一化或翻译计划只占用 compute 通道，不再阻塞心跳和 UI 读取；所有 SQLite 事务均为同步执行，因此两条通道交错是安全的；生命周期操作会等待并阻塞两条通道。Main 侧 compute 请求使用 `COMPUTE_RPC_TIMEOUT_MS`（10 分钟）超时并由作业 signal 取消，避免排队被误判为超时。
 
 Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close、restart 或 stale response 都不能让旧连接与新连接并存。重启后所有 repository/plan proxy 必须重新绑定，作业状态以 SQLite 为准。
 

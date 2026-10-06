@@ -1,5 +1,5 @@
 import React from 'react'
-import { Empty, Input, Segmented, Tag } from 'antd'
+import { Badge, Empty, Input, Segmented, Tag } from 'antd'
 import type { ReaderBlock } from '@shared/readerDocument'
 import type {
   BlockMapping,
@@ -12,9 +12,18 @@ import type {
 import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
 import JsonPane from './JsonPane'
 import MarkdownPane from './MarkdownPane'
+import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
+import type { PaperChatController } from '../usePaperChat'
 import { buildReaderFigureGeometries, projectReaderFigureGroups } from '../readerFigureGroups'
 
-export type ReaderTab = 'original' | 'translated' | 'json'
+export type ReaderTab = 'original' | 'translated' | 'json' | 'chat'
+
+/** AI chat lives in the same frame as the readers; it is optional so the reader works without it. */
+export interface ReaderChatOptions {
+  controller: PaperChatController
+  onOpenSettings(): void
+  onCitation(selection: BlockSelection): void
+}
 
 export default function ReaderTextPane(props: {
   tab: ReaderTab
@@ -35,6 +44,7 @@ export default function ReaderTextPane(props: {
   onAddToChat?(selection: ReaderChatSelection): void
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
+  chat?: ReaderChatOptions
 }): React.JSX.Element {
   const [highlightColor, setHighlightColor] = React.useState<HighlightColor>('yellow')
   const scrollPositionsRef = React.useRef<Record<ReaderAnnotationView, number>>({ original: 0, translated: 0 })
@@ -83,7 +93,8 @@ export default function ReaderTextPane(props: {
           options={[
             { value: 'original', label: 'Markdown' },
             { value: 'translated', label: 'Markdown（中文）' },
-            { value: 'json', label: 'JSON' }
+            { value: 'json', label: 'JSON' },
+            ...(props.chat ? [{ value: 'chat' as const, label: <ChatTabLabel controller={props.chat.controller} /> }] : [])
           ]}
         />
         {props.tab === 'translated' ? (
@@ -98,6 +109,7 @@ export default function ReaderTextPane(props: {
             onChange={(event) => props.onJsonQueryChange(event.target.value)}
           />
         ) : null}
+        {props.tab === 'chat' && props.chat ? <ReaderChatToolbar chat={props.chat.controller} /> : null}
       </div>
       <ReaderPanel tab="original" activeTab={props.tab}>
         {props.tab === 'original' ? <MarkdownPane
@@ -146,6 +158,18 @@ export default function ReaderTextPane(props: {
       <ReaderPanel tab="json" activeTab={props.tab}>
         {props.tab === 'json' ? <JsonPane json={props.layoutJson} query={props.jsonQuery} active /> : null}
       </ReaderPanel>
+      {props.chat ? (
+        // Stays mounted while hidden so scroll position and streaming output survive tab switches.
+        <ReaderPanel tab="chat" activeTab={props.tab}>
+          <ReaderChatPanel
+            documentId={props.taskId}
+            chat={props.chat.controller}
+            active={props.tab === 'chat'}
+            onSelect={props.chat.onCitation}
+            onOpenSettings={props.chat.onOpenSettings}
+          />
+        </ReaderPanel>
+      ) : null}
     </div>
   )
 }
@@ -164,6 +188,17 @@ function ReaderPanel(props: {
     >
       {props.children}
     </div>
+  )
+}
+
+function ChatTabLabel(props: { controller: PaperChatController }): React.JSX.Element {
+  const pinned = props.controller.pinned.length
+  return (
+    <span className="reader-chat-tab">
+      AI 问答
+      {props.controller.busy ? <span className="reader-chat-tab-busy" aria-label="正在生成" /> : null}
+      {pinned > 0 ? <Badge count={pinned} size="small" color="var(--primary)" title={`${pinned} 个选区`} /> : null}
+    </span>
   )
 }
 

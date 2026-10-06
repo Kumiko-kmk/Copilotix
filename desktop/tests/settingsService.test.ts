@@ -2,8 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { AppSettings, HealthResult, SettingsUpdate } from '@shared/types'
 import type { CredentialAccount, CredentialVault } from '../src/main/credentialVault'
-import { maskCredential, SettingsService, TRANSLATION_CREDENTIAL_RESET_MIGRATION } from '../src/main/settingsService'
-import type { TaskRepositoryCompat } from '../src/main/taskRepositoryCompat'
+import { maskCredential, SettingsService, TRANSLATION_CREDENTIAL_RESET_MIGRATION, type SettingsRepositoryPort } from '../src/main/settingsService'
 
 const roots: string[] = []
 
@@ -251,7 +250,7 @@ function baseSettings(): AppSettings {
   }
 }
 
-class SettingsRepository implements TaskRepositoryCompat {
+class SettingsRepository implements SettingsRepositoryPort {
   readonly saved: AppSettings[] = []
   migrationMarker = false
   migrationId: string | undefined
@@ -260,7 +259,6 @@ class SettingsRepository implements TaskRepositoryCompat {
   readonly migrationMarkers = new Set<string>()
   private settings = baseSettings()
 
-  async close(): Promise<void> {}
   async getSettings(outputRoot: string): Promise<AppSettings> {
     return { ...this.settings, outputRoot: this.settings.outputRoot || outputRoot, credentials: baseSettings().credentials }
   }
@@ -276,20 +274,6 @@ class SettingsRepository implements TaskRepositoryCompat {
     this.migrationId = id
     this.migrationMarkers.add(id)
   }
-  listTasks(): never[] { return [] }
-  getTask(): null { return null }
-  findByHash(): null { return null }
-  insertTask(): void {}
-  insertTasks(): void {}
-  updateTask(): never { throw new Error('unused') }
-  deleteTask(): void {}
-  upsertTranslationBlock(): void {}
-  listTranslationBlocks(): never[] { return [] }
-  updateTranslationRun(): void {}
-  getCache(): null { return null }
-  putCache(): void {}
-  listReaderAnnotations(): never[] { return [] }
-  replaceReaderAnnotations(): never[] { return [] }
 }
 
 class MemoryVault implements CredentialVault {
@@ -314,3 +298,16 @@ class MemoryVault implements CredentialVault {
   }
   async has(account: CredentialAccount): Promise<boolean> { return this.values.has(account) }
 }
+
+
+describe('paper chat settings authorization', () => {
+  it('keeps models independent and revokes consent whenever the recipient changes', async () => {
+    const repository = new SettingsRepository()
+    const service = new SettingsService(repository, new MemoryVault({}), 'C:/papers')
+    const selected = await service.save({ ...publicUpdate(), chatProvider: null, qwenChatModel: 'custom-chat', chatConsentVersion: 2 })
+    expect(selected.settings).toMatchObject({ chatProvider: null, chatConsentVersion: 2, qwenChatModel: 'custom-chat', qwenModel: DEFAULT_SETTINGS.qwenModel })
+    const changed = await service.save({ ...publicUpdate(), translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart'], chatConsentVersion: 2 })
+    expect(changed.settings.translationProvider).toBe('deepseek')
+    expect(changed.settings.chatConsentVersion).toBeNull()
+  })
+})

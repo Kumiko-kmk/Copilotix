@@ -462,8 +462,8 @@ test('shows the parsed English title in recent tasks and the Reader header', asy
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await window.getByRole('button', { name: '展开论文切换' }).click()
-    const paper = window.locator('.paper-switcher-item', { hasText: 'Attention Is All You Need.pdf' })
+    await openTaskList(window)
+    const paper = window.locator('.task-link', { hasText: 'Attention Is All You Need.pdf' })
     await expect(paper).toBeVisible()
     await paper.click()
     await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need.pdf')
@@ -544,9 +544,14 @@ test('renders and safely links an optional real Copilotix task', async () => {
   }
 })
 
+async function openTaskList(window: Page): Promise<void> {
+  await window.locator('[data-edge-dock="top"]').hover()
+  await window.getByRole('button', { name: '任务管理' }).click()
+}
+
 async function openPaper(window: Page, taskId: string): Promise<void> {
-  await window.locator('[data-edge-dock="bottom"]').hover()
-  const item = window.locator(`[data-paper-task-id="${taskId}"]`)
+  await openTaskList(window)
+  const item = window.locator(`tr[data-row-key="${taskId}"] .task-link`)
   await expect(item).toBeVisible()
   await item.click()
 }

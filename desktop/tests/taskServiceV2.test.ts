@@ -7,7 +7,6 @@ import type { CredentialVault } from '@main/credentialVault'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import { SettingsService } from '@main/settingsService'
 import { TaskService } from '@main/taskService'
-import type { ParserClient } from '@main/parserClient'
 import type { CopilotixTask } from '@shared/types'
 import { fixtureTaskCompute } from './taskComputeFixture'
 
@@ -33,7 +32,7 @@ describe('TaskService v2 path integration', () => {
     try {
       repository.insertTask(task(outputDir, sourcePath))
       const settings = new SettingsService(repository, vault, outputRoot)
-      const service = new TaskService(repository, settings, vault, unusedClient(), async () => new Response(), fixtureTaskCompute)
+      const service = new TaskService(repository, settings, fixtureTaskCompute)
 
       await expect(service.resolveAsset('document-1', 'original.pdf')).resolves.toBe(await realpath(sourcePath))
       await expect(service.resolveAsset('document-1', '../outside.pdf')).rejects.toThrow()
@@ -62,7 +61,7 @@ describe('TaskService v2 path integration', () => {
     try {
       repository.insertTask(task(outsideDir, sourcePath, 'outside-document'))
       const settings = new SettingsService(repository, vault, outputRoot)
-      const service = new TaskService(repository, settings, vault, unusedClient(), async () => new Response(), fixtureTaskCompute)
+      const service = new TaskService(repository, settings, fixtureTaskCompute)
 
       await expect(service.delete('outside-document', true)).rejects.toThrow()
       await expect(access(outsideDir)).resolves.toBeUndefined()
@@ -101,16 +100,5 @@ function emptyVault(): CredentialVault {
     set: async () => undefined,
     delete: async () => undefined,
     has: async () => false
-  }
-}
-
-function unusedClient(): ParserClient {
-  return {
-    verifyToken: async () => ({ ok: true, message: 'unused' }),
-    createUploadBatch: async () => { throw new Error('unused') },
-    uploadFile: async () => { throw new Error('unused') },
-    getBatchResult: async () => { throw new Error('unused') },
-    waitForBatch: async () => { throw new Error('unused') },
-    downloadResult: async () => { throw new Error('unused') }
   }
 }

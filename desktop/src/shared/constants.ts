@@ -1,8 +1,7 @@
-import type { AppSettings, TranslationProviderId } from './types'
+import type { AppSettings } from './types'
 import { TRANSLATION_PROVIDER_IDS } from './providerPolicy'
 
 export const PARSER_API_ORIGIN = 'https://mineru.net'
-export const PARSER_BATCH_SIZE = 50
 export const MAX_PDF_BYTES = 200 * 1024 * 1024
 export const MAX_PDF_PAGES = 600
 export const CREDENTIAL_SERVICE = 'Copilotix-Translation'
@@ -18,16 +17,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   qwenModel: 'qwen-mt-plus',
   deepseekBaseUrl: 'https://api.deepseek.com',
   deepseekModel: 'deepseek-flash',
+  chatProvider: null,
+  qwenChatModel: 'qwen-plus',
+  deepseekChatModel: 'deepseek-flash',
+  chatConsentVersion: null,
   credentials: {
     parser: { state: 'missing' },
     qwen: { state: 'missing' },
     deepseek: { state: 'missing' }
   }
-}
-
-export const PROVIDER_LABELS: Record<TranslationProviderId, string> = {
-  qwen: '千问',
-  deepseek: 'DeepSeek',
-  bing: 'Bing',
-  transmart: '腾讯 TranSmart'
 }

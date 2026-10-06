@@ -2,8 +2,8 @@ import React from 'react'
 
 const HIDE_DELAY_MS = 250
 
+/** Hover-revealed top navigation dock with an always-visible persistent slot. */
 interface EdgeDockProps {
-  edge: 'top' | 'bottom'
   label: string
   persistent?: React.ReactNode
   children: React.ReactNode
@@ -73,11 +73,11 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
 
   return (
     <>
-      {props.edge === 'top' ? <div className="window-drag-region" aria-hidden="true" /> : null}
+      <div className="window-drag-region" aria-hidden="true" />
       {props.persistent ? <div className="edge-dock-persistent">{props.persistent}</div> : null}
       <section
-        className={`edge-dock edge-dock-${props.edge}${open ? ' open' : ''}`}
-        data-edge-dock={props.edge}
+        className={`edge-dock edge-dock-top${open ? ' open' : ''}`}
+        data-edge-dock="top"
         onPointerEnter={show}
         onPointerLeave={handlePointerLeave}
         onFocusCapture={() => { if (!suppressFocusOpen.current) show() }}
@@ -91,9 +91,7 @@ export default function EdgeDock(props: EdgeDockProps): React.JSX.Element {
           aria-label={props.label}
           aria-expanded={open}
           onClick={handleTriggerClick}
-        >
-          {props.edge === 'bottom' ? <span aria-hidden="true" /> : null}
-        </button>
+        />
         <div className="edge-dock-panel" aria-hidden={!open} inert={open ? undefined : true} onPointerEnter={show}>
           {props.children}
         </div>

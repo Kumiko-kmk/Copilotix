@@ -8,7 +8,8 @@ import type { CopilotixTask } from '@shared/types'
 import { DEFAULT_SETTINGS } from '../src/shared/constants'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { SqliteRagRepository } from '../src/utility/core/persistence/sqliteRagRepository'
-import { createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
+import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
+import { byteBoundedPage, createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
 
 describe('utility persistence lifecycle', () => {
   it('serializes a flush before close', async () => {
@@ -26,6 +27,59 @@ describe('utility persistence lifecycle', () => {
 
     await Promise.all([flush, close])
     expect(calls).toEqual(['PRAGMA wal_checkpoint(PASSIVE)', 'close'])
+  })
+
+  it('keeps quick data operations available while long compute runs, but not across lifecycle operations', async () => {
+    const calls: string[] = []
+    let finishCompute!: () => void
+    const state = {
+      database: { connection: { exec: () => { calls.push('flush') } }, close: () => undefined },
+      repository: { getTask: () => { calls.push('get'); return null } },
+      translationPlanManager: {
+        open: () => new Promise<void>((resolve) => {
+          calls.push('compute:start')
+          finishCompute = () => { calls.push('compute:end'); resolve() }
+        })
+      }
+    } as never
+    const persistence = createUtilityOperationHandlers(state)
+    const signal = new AbortController().signal
+    const ids = { taskId: '11111111-1111-4111-8111-111111111111', jobId: '22222222-2222-4222-8222-222222222222' }
+
+    const compute = persistence.handlers['compute:translation-plan-open']!({ payload: ids } as never, signal)
+    await persistence.handlers['tasks:get']!({ payload: { id: ids.taskId } } as never, signal)
+    expect(calls).toEqual(['compute:start', 'get'])
+
+    const flush = persistence.handlers['database:flush']!({} as never, signal)
+    const afterFlush = persistence.handlers['tasks:get']!({ payload: { id: ids.taskId } } as never, signal)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(calls).toEqual(['compute:start', 'get'])
+    finishCompute()
+    await Promise.all([compute, flush, afterFlush])
+    expect(calls).toEqual(['compute:start', 'get', 'compute:end', 'flush', 'get'])
+  })
+
+  it('pages library listings by byte budget with a keyset cursor', () => {
+    const rows = Array.from({ length: 5 }, (_, index) => ({
+      id: `doc-${index}`,
+      createdAt: `2026-01-0${5 - index}T00:00:00.000Z`,
+      padding: 'x'.repeat(100)
+    }))
+    const read = (after: { createdAt: string; id: string } | null, limit: number) => {
+      const start = after ? rows.findIndex((row) => row.id === after.id) + 1 : 0
+      return rows.slice(start, start + limit)
+    }
+    const rowBytes = Buffer.byteLength(JSON.stringify(rows[0]), 'utf8')
+    const pages: string[][] = []
+    let after: { createdAt: string; id: string } | null = null
+    do {
+      const page = byteBoundedPage(read, after, rowBytes * 2)
+      pages.push(page.items.map((row) => row.id))
+      after = page.next
+    } while (after)
+    expect(pages).toEqual([['doc-0', 'doc-1'], ['doc-2', 'doc-3'], ['doc-4']])
+    // A row larger than the budget is still returned on its own page.
+    expect(byteBoundedPage(read, null, 1).items).toHaveLength(1)
   })
 
   it('accepts PDFs within the 600-page limit and leaves no partial file', async () => {
@@ -198,8 +252,8 @@ describe('utility persistence lifecycle', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z'
       }
-      await persistence.handlers['tasks:insert']!({ payload: { task } } as never, signal)
-      await persistence.handlers['tasks:update']!({ payload: { id: taskId, patch: { status: 'translating' } } } as never, signal)
+      await persistence.handlers['tasks:insert-many']!({ payload: { tasks: [task] } } as never, signal)
+      new V2TaskRepositoryCompat(state.database!).updateTask(taskId, { status: 'translating' })
       const job = state.database!.connection.prepare(
         "SELECT id FROM jobs WHERE document_id=? AND kind='translate'"
       ).get(taskId) as { id: string }
@@ -251,7 +305,7 @@ describe('utility persistence lifecycle', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z'
       }
-      await persistence.handlers['tasks:insert']!({ payload: { task } } as never, signal)
+      await persistence.handlers['tasks:insert-many']!({ payload: { tasks: [task] } } as never, signal)
       await expect(persistence.handlers['knowledge:get']!({ payload: { documentId: task.id } } as never, signal)).resolves.toMatchObject({
         documentId: task.id,
         localState: 'unindexed',

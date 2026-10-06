@@ -5,7 +5,6 @@ import type {
 } from '@shared/ipcSchemas'
 import {
   documentChangeEventSchema,
-  documentDetailsSchema,
   documentSummarySchema
 } from '@shared/ipcSchemas'
 import type { DocumentPayload, CopilotixTask } from '@shared/types'
@@ -33,9 +32,13 @@ export function projectDocumentSummary(task: CopilotixTask): DocumentSummary {
   })
 }
 
-/** Strip all legacy task fields, especially sourcePath/outputDir. */
+/**
+ * Strip all legacy task fields, especially sourcePath/outputDir. Fields are
+ * copied explicitly; the IPC handler validates the response once, so a long
+ * paper's Markdown and mappings are not schema-checked twice in Main.
+ */
 export function projectDocumentDetails(payload: DocumentPayload): DocumentDetails {
-  return documentDetailsSchema.parse({
+  return {
     summary: projectDocumentSummary(payload.task),
     markdown: payload.markdown,
     translatedMarkdown: payload.translatedMarkdown,
@@ -44,7 +47,7 @@ export function projectDocumentDetails(payload: DocumentPayload): DocumentDetail
     mappings: payload.mappings,
     pdfUrl: payload.pdfUrl,
     assetBaseUrl: payload.assetBaseUrl
-  })
+  }
 }
 
 export interface DocumentChangeComputation {

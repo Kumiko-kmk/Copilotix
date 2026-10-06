@@ -162,7 +162,7 @@ export default function PdfPane(props: {
 
   React.useEffect(() => {
     const selection = props.selection
-    if (!selection || selection.origin !== 'markdown') return
+    if (!selection || (selection.origin !== 'markdown' && selection.origin !== 'citation')) return
     const mapping = props.mappings.find((item) => item.id === selection.mappingId)
     const targetBox = mapping ? findTargetBox(mapping, selection.blockPosition) : undefined
     const pageIndex = targetBox?.pageIndex

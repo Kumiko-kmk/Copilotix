@@ -1,4 +1,5 @@
 import React from 'react'
+import { usePaperChat, type PaperChatTurn } from '../usePaperChat'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Space, Spin, Typography, message } from 'antd'
@@ -9,15 +10,16 @@ import type {
   ListReaderAnnotationsRequest,
   ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
-import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView } from '@shared/types'
+import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView, ReaderChatSelection } from '@shared/types'
 import { IpcClientError } from '@shared/ipc'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutations'
 import PdfPane from '../components/PdfPane'
-import ReaderTextPane, { type ReaderTab } from '../components/ReaderTextPane'
+import ReaderTextPane, { type ReaderChatOptions, type ReaderTab } from '../components/ReaderTextPane'
 import ReaderSplitPane from '../components/ReaderSplitPane'
 
-export default function ReaderPage(props: { documentId: string; onBack(): void }): React.JSX.Element {
+export default function ReaderPage(props: { documentId: string; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
   const queryClient = useQueryClient()
+  const chat = usePaperChat(props.documentId)
   const [tab, setTab] = React.useState<ReaderTab>('original')
   const [selection, setSelection] = React.useState<BlockSelection | null>(null)
   const [jsonQuery, setJsonQuery] = React.useState('')
@@ -31,11 +33,16 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
   const originalAnnotations = useAnnotationQuery(props.documentId, 'original')
   const translatedAnnotations = useAnnotationQuery(props.documentId, 'translated')
   const document = documentQuery.data
-  const snapshots = { original: originalAnnotations.data, translated: translatedAnnotations.data }
-  const annotations = [
+  const snapshots = React.useMemo(
+    () => ({ original: originalAnnotations.data, translated: translatedAnnotations.data }),
+    [originalAnnotations.data, translatedAnnotations.data]
+  )
+  // Keep this identity stable: every scroll-synced selection re-renders the
+  // page, and a fresh array would rebuild all highlight ranges of a long paper.
+  const annotations = React.useMemo(() => [
     ...(snapshots.original?.annotations ?? []).map(toLegacyAnnotation),
     ...(snapshots.translated?.annotations ?? []).map(toLegacyAnnotation)
-  ]
+  ], [snapshots])
 
   React.useEffect(() => {
     setTab('original')
@@ -59,6 +66,20 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
   const changeTab = React.useCallback((next: ReaderTab) => {
     startTransition(() => setTab(next))
   }, [startTransition])
+
+  // Adding a selection never leaves the current reader; the chat tab shows the count.
+  const { addSelection } = chat
+  const addToChat = React.useCallback((selection: ReaderChatSelection) => {
+    void addSelection(selection).then((failure) => {
+      if (failure) messageApi.warning({ content: failure, key: 'paper-chat-pin' })
+      else messageApi.success({ content: '已加入 AI 问答选区', key: 'paper-chat-pin', duration: 1.5 })
+    })
+  }, [addSelection, messageApi])
+  const chatOptions = React.useMemo<ReaderChatOptions>(() => ({
+    controller: chat,
+    onOpenSettings: props.onOpenSettings,
+    onCitation: selectBlock
+  }), [chat, props.onOpenSettings, selectBlock])
 
   const replaceAnnotations = React.useCallback(async (
     view: ReaderAnnotationView,
@@ -111,8 +132,8 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
         <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
         <Space>
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
-          <Button type="text" icon={<CopyOutlined />} onClick={() => void copyCurrent(document, tab, messageApi)} aria-label="复制当前内容" />
-          <Dropdown menu={{ items: [{ key: 'current', label: '另存当前 Markdown' }, { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, tab, messageApi) }}>
+          <Button type="text" icon={<CopyOutlined />} onClick={() => void copyCurrent(document, tab, chat.turns, messageApi)} aria-label="复制当前内容" />
+          <Dropdown menu={{ items: [...(tab === 'chat' ? [] : [{ key: 'current', label: '另存当前 Markdown' }]), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, tab, messageApi) }}>
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
           </Dropdown>
         </Space>
@@ -138,6 +159,8 @@ export default function ReaderPage(props: { documentId: string; onBack(): void }
           onReplaceAnnotations={replaceAnnotations}
           selection={selection}
           onSelect={selectBlock}
+          onAddToChat={addToChat}
+          chat={chatOptions}
         />}
       />
     </section>
@@ -221,11 +244,23 @@ function toDocumentAnnotation(annotation: ReaderAnnotation, snapshot: ReaderAnno
 async function copyCurrent(
   document: DocumentDetails,
   tab: ReaderTab,
+  turns: readonly PaperChatTurn[],
   messageApi: ReturnType<typeof message.useMessage>[0]
 ): Promise<void> {
-  const value = tab === 'original' ? document.markdown : tab === 'translated' ? document.translatedMarkdown : document.layoutJson
+  const value = tab === 'original' ? document.markdown
+    : tab === 'translated' ? document.translatedMarkdown
+      : tab === 'chat' ? chatTranscript(turns)
+        : document.layoutJson
   await navigator.clipboard.writeText(value)
   messageApi.success('已复制')
+}
+
+/** Questions as quotes, answers verbatim; evidence markers are kept as written. */
+export function chatTranscript(turns: readonly PaperChatTurn[]): string {
+  return turns
+    .filter((turn) => turn.answer.trim())
+    .map((turn) => `> ${turn.question.replace(/\n/gu, '\n> ')}\n\n${turn.answer.trim()}`)
+    .join('\n\n---\n\n')
 }
 
 async function saveDocument(

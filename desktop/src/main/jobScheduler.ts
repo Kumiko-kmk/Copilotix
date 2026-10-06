@@ -142,6 +142,9 @@ export class AsyncSemaphore {
 /**
  * Durable scheduler foundation. It intentionally claims work only for kinds
  * with a registered runner; unimplemented RAG kinds therefore remain queued.
+ *
+ * Events: `job-changed(job)` on every durable update and
+ * `job-notification(job)` once a job reaches a user-visible outcome.
  */
 export class JobScheduler extends EventEmitter {
   private readonly repository: JobRepositoryPort
@@ -458,7 +461,7 @@ export class JobScheduler extends EventEmitter {
         detail: normalized.detail
       }))
       this.emit('job-changed', entry.job)
-      this.emit('job-notification', entry.job.id, entry.job.status, entry.job.kind)
+      this.emit('job-notification', entry.job)
     } catch (error) {
       if (work.controller.signal.aborted) return
       await this.failJob(entry, error)
@@ -504,7 +507,7 @@ export class JobScheduler extends EventEmitter {
             detail: normalized.detail
           }))
           this.emit('job-changed', entry.job)
-          this.emit('job-notification', entry.job.id, entry.job.status, entry.job.kind)
+          this.emit('job-notification', entry.job)
         }
       }
     } catch (error) {
@@ -528,7 +531,7 @@ export class JobScheduler extends EventEmitter {
     }))
     entry.job = updated
     this.emit('job-changed', updated)
-    if (updated.status === 'failed') this.emit('job-notification', updated.id, updated.status, updated.kind)
+    if (updated.status === 'failed') this.emit('job-notification', updated)
   }
 
   private schedulePoll(): void {

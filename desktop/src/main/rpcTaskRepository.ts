@@ -1,19 +1,13 @@
 import type { ArtifactKind } from '@core/types'
-import type { TranslationBatchCommit } from '@core/types'
-import type {
-  AppSettings,
-  CopilotixTask,
-  ReaderAnnotation,
-  ReplaceReaderAnnotationsRequest,
-  TranslationBlockRecord
-} from '@shared/types'
+import type { AppSettings, CopilotixTask } from '@shared/types'
 import type {
   DocumentSummary,
   MutateReaderAnnotationsRequest,
   ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
+import type { CoreListCursor } from '@shared/coreRpcSchemas'
 import type { UtilitySupervisor } from './utilitySupervisor'
-import type { ArtifactReference, DocumentMetadataPatch, TaskRepositoryCompat } from './taskRepositoryCompat'
+import type { DocumentMetadataPatch, TaskRepositoryCompat } from './taskRepositoryCompat'
 
 /**
  * Main-side asynchronous repository port. The concrete SQLite repository is
@@ -45,7 +39,7 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
   }
 
   async listTasks(): Promise<CopilotixTask[]> {
-    return this.supervisor.request('tasks:list', {})
+    return collectPages((after) => this.supervisor.request('tasks:list', after ? { after } : {}))
   }
 
   async getTask(id: string): Promise<CopilotixTask | null> {
@@ -57,15 +51,11 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
   }
 
   async listDocumentSummaries(): Promise<DocumentSummary[]> {
-    return this.supervisor.request('documents:list', {})
+    return collectPages((after) => this.supervisor.request('documents:list', after ? { after } : {}))
   }
 
   async getDocumentSummary(id: string): Promise<DocumentSummary | null> {
     return this.supervisor.request('documents:get-summary', { id })
-  }
-
-  async getLatestArtifactReference(id: string, kind: ArtifactKind): Promise<ArtifactReference | null> {
-    return this.supervisor.request('artifacts:get-latest', { documentId: id, kind })
   }
 
   async listDocumentAnnotations(request: { documentId: string; view: 'original' | 'translated' }): Promise<ReaderAnnotationSnapshot> {
@@ -76,10 +66,6 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     return this.supervisor.request('annotations:mutate', { request })
   }
 
-  async insertTask(task: CopilotixTask): Promise<void> {
-    await this.supervisor.request('tasks:insert', { task })
-  }
-
   async insertTasks(tasks: CopilotixTask[]): Promise<void> {
     await this.supervisor.request('tasks:insert-many', { tasks })
   }
@@ -88,45 +74,8 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
     await this.supervisor.request('documents:update-metadata', { id, patch })
   }
 
-  async updateTask(id: string, patch: Partial<CopilotixTask>): Promise<CopilotixTask> {
-    return this.supervisor.request('tasks:update', { id, patch })
-  }
-
   async deleteTask(id: string): Promise<void> {
     await this.supervisor.request('tasks:delete', { id })
-  }
-
-  async upsertTranslationBlock(block: TranslationBlockRecord): Promise<void> {
-    await this.supervisor.request('translation:block-upsert', { block })
-  }
-
-  async commitTranslationBatch(input: TranslationBatchCommit): Promise<void> {
-    await this.supervisor.request('translation:batch-commit', input)
-  }
-
-  async listTranslationBlocks(taskId: string, jobId?: string): Promise<TranslationBlockRecord[]> {
-    return this.supervisor.request('translation:blocks-list', jobId === undefined ? { taskId } : { taskId, jobId })
-  }
-
-  async updateTranslationRun(taskId: string, total: number, completed: number, failed: number): Promise<void> {
-    await this.supervisor.request('translation:run-update', { taskId, total, completed, failed })
-  }
-
-  async getCache(cacheKey: string): Promise<string | null> {
-    const result = await this.supervisor.request('translation:cache-get', { cacheKey })
-    return result.translated
-  }
-
-  async putCache(cacheKey: string, translated: string, provider: string, model: string): Promise<void> {
-    await this.supervisor.request('translation:cache-put', { cacheKey, translated, provider: provider as AppSettings['translationProvider'], model })
-  }
-
-  async listReaderAnnotations(taskId: string): Promise<ReaderAnnotation[]> {
-    return this.supervisor.request('annotations:list', { taskId })
-  }
-
-  async replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): Promise<ReaderAnnotation[]> {
-    return this.supervisor.request('annotations:replace', { request })
   }
 
   async recordArtifactRevision(
@@ -146,4 +95,18 @@ export class RpcTaskRepository implements TaskRepositoryCompat {
       ...(jobId === undefined ? {} : { jobId })
     })
   }
+}
+
+/** Follow keyset cursors until the Utility reports the last page. */
+async function collectPages<T>(
+  fetchPage: (after: CoreListCursor | undefined) => Promise<{ items: T[]; next: CoreListCursor | null }>
+): Promise<T[]> {
+  const items: T[] = []
+  let after: CoreListCursor | undefined
+  do {
+    const page = await fetchPage(after)
+    items.push(...page.items)
+    after = page.next ?? undefined
+  } while (after)
+  return items
 }

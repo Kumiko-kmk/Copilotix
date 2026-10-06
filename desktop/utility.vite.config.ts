@@ -27,7 +27,9 @@ export default defineConfig({
     rollupOptions: {
       // The utility is a Node process. Keep every Node builtin external so
       // runtime-only modules such as node:sqlite are not browser-shimmed.
-      external: [/^node:/u, 'electron']
+      // KaTeX's supported Node renderToString API is a runtime dependency.
+      // Keep its optional browser toNode implementation out of this bundle.
+      external: [/^node:/u, 'electron', 'katex']
     }
   }
 })

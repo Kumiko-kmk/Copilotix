@@ -19,12 +19,7 @@ export const JOB_MANUAL_RETRY_TRANSITIONS: Readonly<Record<'partial' | 'failed' 
   cancelled: 'queued'
 })
 
-export const JOB_TRANSITIONS = JOB_STATUS_TRANSITIONS
-
-export const JOB_TERMINAL_STATES: ReadonlySet<JobStatus> = new Set(['succeeded', 'partial', 'failed', 'cancelled'])
-
 export type JobCheckpoint = JsonObject
-export type Checkpoint = JobCheckpoint
 
 export interface JobEnqueueInput {
   id?: string
@@ -52,7 +47,6 @@ export interface JobClaim {
   leaseOwner: string
   leaseExpiresAt: string
 }
-export type Claim = JobClaim
 
 export interface JobListQuery {
   documentId?: string
@@ -123,7 +117,6 @@ export interface JobTransition {
   detail: JsonObject
   createdAt: string
 }
-export type Transition = JobTransition
 
 export function canTransition(fromState: JobStatus | null, toState: JobStatus, manual = false, recovery = false): boolean {
   if (fromState === toState) return true

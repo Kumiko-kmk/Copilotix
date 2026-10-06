@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe('NewParsePage', () => {
   it('uses simplified Chinese and accepts a PDF dropped anywhere in the window', async () => {
-    const importDocuments = vi.fn(async () => ([{}]))
+    const importDocuments = vi.fn(async () => ({ created: [{}], failed: [] }))
     Object.defineProperty(window, 'copilotix', {
       configurable: true,
       value: { importDocuments } as unknown as CopilotixDesktopApi

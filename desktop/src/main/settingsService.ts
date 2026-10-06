@@ -13,6 +13,9 @@ import type {
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
+
+/** The only persistence SettingsService needs. */
+export type SettingsRepositoryPort = Pick<TaskRepositoryCompat, 'getSettings' | 'saveSettings' | 'getMigrationMarker' | 'markMigration'>
 import type { CredentialAccount, CredentialVault } from './credentialVault'
 
 export const TRANSLATION_CREDENTIAL_RESET_MIGRATION = 'translation-credentials-preserved-v2'
@@ -53,7 +56,7 @@ export class SettingsService {
   private saveTail: Promise<void> = Promise.resolve()
 
   constructor(
-    private readonly repository: TaskRepositoryCompat,
+    private readonly repository: SettingsRepositoryPort,
     private readonly vault: CredentialVault,
     private readonly defaultOutputRoot: string,
     probe: Partial<CredentialProbe> = {}
@@ -63,7 +66,6 @@ export class SettingsService {
 
   /** Record the one-time, non-destructive credential migration after the utility database is ready. */
   async initialize(): Promise<void> {
-    if (!this.repository.getMigrationMarker || !this.repository.markMigration) return
     try {
       if (await this.repository.getMigrationMarker(TRANSLATION_CREDENTIAL_RESET_MIGRATION)) return
       await this.repository.markMigration(TRANSLATION_CREDENTIAL_RESET_MIGRATION)
@@ -172,6 +174,7 @@ export class SettingsService {
     const candidateSettings = {
       ...current,
       ...publicUpdate,
+      chatConsentVersion: enabledTranslationProviders[0] !== current.translationProvider ? null : publicUpdate.chatConsentVersion,
       qwenBaseUrl: DEFAULT_SETTINGS.qwenBaseUrl,
       qwenModel: DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: DEFAULT_SETTINGS.deepseekBaseUrl,

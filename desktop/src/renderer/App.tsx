@@ -4,7 +4,6 @@ import { FileAddOutlined, FileTextOutlined, GithubOutlined, ReadOutlined, Settin
 import type { AppSettings } from '@shared/types'
 import type { DocumentDetails } from '@shared/ipcSchemas'
 import EdgeDock from './components/EdgeDock'
-import PaperSwitcher from './components/PaperSwitcher'
 import WindowControls from './components/WindowControls'
 import NewParsePage from './pages/NewParsePage'
 import TasksPage from './pages/TasksPage'
@@ -85,7 +84,7 @@ export default function App(): React.JSX.Element {
   return (
     <div className="app-shell">
       {view.name === 'new' ? null : <div className="titlebar-brand" aria-hidden="true">COPILOTIX</div>}
-      <EdgeDock edge="top" label="展开主导航" persistent={<WindowControls />}>
+      <EdgeDock label="展开主导航" persistent={<WindowControls />}>
         <nav className="top-navigation" aria-label="主导航">
           <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => setView({ name: 'new' })} />
           <NavigationButton active={view.name === 'tasks'} icon={<FileTextOutlined />} label="任务管理" onClick={() => setView({ name: 'tasks' })} />
@@ -128,14 +127,11 @@ export default function App(): React.JSX.Element {
         {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} /> : null}
         {view.name === 'reader' ? (
           <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>
-            <ReaderPage documentId={view.documentId} onBack={() => setView({ name: 'tasks' })} />
+            <ReaderPage documentId={view.documentId} onBack={() => setView({ name: 'tasks' })} onOpenSettings={() => setView({ name: 'settings' })} />
           </React.Suspense>
         ) : null}
         {!settings && view.name !== 'reader' ? <div className="page-loading">正在加载…</div> : null}
       </main>
-      <EdgeDock edge="bottom" label="展开论文切换">
-        <PaperSwitcher documents={documents} activeDocumentId={view.name === 'reader' ? view.documentId : null} onOpen={openDocument} />
-      </EdgeDock>
     </div>
   )
 }

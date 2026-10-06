@@ -94,6 +94,18 @@ pnpm desktop:release:from-built
 - Setup 強制目前使用者範圍，允許選擇安裝位置。安裝或卸載發現 Copilotix 仍在運行時須提示退出；不得強制結束背景佇列。預設卸載保留應用資料、系統憑證及獨立文檔庫；只有使用者明確勾選清除資料並經 Main 第二次原生確認，才由獨立 Utility 唯讀清單驗證並安全清理。覆蓋升級與靜默卸載不得觸發清理。程序目錄提供 uninstall.exe。新增憑證種類或文檔儲存結構時，須同步更新卸載清單與路徑驗證。
 - 正式發布仍須受信任簽章；Setup、主程式和內嵌卸載器皆受簽章門禁約束。必要安裝驗收可執行 `pnpm desktop:test:installer:wizard` 和 `pnpm desktop:test:installer`，腳本會拒絕覆蓋既有安裝。
 
+## 7. 閱讀器基座契約（大文庫、併發與長論文）
+
+- Core RPC 只保留 Main 實際調用的 operation；舊的逐塊翻譯、翻譯快取、整表標註替換等已移除。新增 RAG/問答 operation 時沿用「Utility 生成 descriptor、Main 只傳 ID 與小結果」模式。
+- `tasks:list`、`documents:list` 為 keyset 分頁（`{ after? }` → `{ items, next }`，每頁 ≤200 行、≤512 KiB）。任何可能隨文庫增長的列表 RPC 都必須分頁，不得一次返回全量。
+- Utility 觸及 SQLite 的 operation 分三條通道：data、compute（`compute:*`）與獨佔的生命週期（init/flush/close、library）。SQLite 事務必須保持同步（`transaction(() => …)` 內不得 await），否則通道交錯不再安全。Main 側 compute 請求用 `COMPUTE_RPC_TIMEOUT_MS`，並以作業 signal 取消。
+- JobScheduler 事件為 `job-changed(job)`、`job-notification(job)`；通知與 UI 均以 `job.documentId` 定位文檔，job id 與 document id 不同。
+- Main 對文檔變更用 `createCoalescedRefresh` 合併刷新；新的高頻事件源（例如 RAG 索引進度）應走同一路徑，不得每個事件都全量查詢。
+- Reader 傳給 `MarkdownPane` 的 `blocks`、`annotations` 必須保持引用穩定（`useMemo`），否則滾動聯動會反覆重建長論文的高亮與小地圖。
+- 單篇論文 AI 問答的實施計劃與交接說明見 `docs/READER_AI_CHAT_PLAN_ZH.md`（負責人 astra）。v1 不新增 migration、不持久化聊天；階段 A–D 已在 `codex/reader-ai-chat` 實作並接通「添加到對話」，驗證與尚待真人驗收的範圍見計劃第 10 節。
+- 問答現依使用者最新要求共用目前翻譯服務的 API 與憑據；模型在對話面板切換，不保留獨立問答 API 設定入口。舊 chatProvider 僅供資料相容，不參與路由；給 Claude 的最新交接與門禁結果見上述計劃第 11 節。
+- 問答 UI 是閱讀器右側第四個頁籤（與 Markdown／中文／JSON 並列，不使用 Drawer），設計與交互細則見計劃第 12 節；「添加到對話」只加入選區標籤，不切換頁籤。構建 bundle 請用 Node 24.19.0，系統 Node 24.11.1 會靜默崩潰並留下舊的 out/。
+
 ## 8. 遠端 CI 驗證與預設不跑本地測試
 
 - 日常開發不再預設跑本地自動化測試及 lint/typecheck；測試程式仍須隨行為修改一同維護，由遠端執行。只有使用者另行要求本地驗證時才執行。

@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
-import { access, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import archiver from 'archiver'
 import type { BlockMapping, DocumentPayload, CopilotixTask, TranslatedMarkdownBlock } from '@shared/types'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
-import type { ArtifactKind } from '@core/types'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
@@ -21,9 +20,14 @@ export class ArtifactService {
 
   async getDocument(taskId: string): Promise<DocumentPayload> {
     const task = await this.requireTask(taskId)
-    const markdown = await this.readOptional(join(task.outputDir, 'full.md'))
-    const translatedBlocks = await this.loadTranslatedBlocks(task)
-    const storedTranslatedMarkdown = await this.readOptional(join(task.outputDir, 'full.zh-CN.md'))
+    // Long papers produce multi-megabyte artifacts; read them concurrently.
+    const [markdown, translatedBlocks, storedTranslatedMarkdown, layoutJson, mappings] = await Promise.all([
+      this.readOptional(join(task.outputDir, 'full.md')),
+      this.loadTranslatedBlocks(task),
+      this.readOptional(join(task.outputDir, 'full.zh-CN.md')),
+      this.readOptional(join(task.outputDir, 'layout.json'), '{}'),
+      this.loadMappings(task)
+    ])
     // A succeeded translation job can outlive a missing/stale convenience
     // projection. The manifest is task-bound and contains the durable ordered
     // blocks, so prefer it when available instead of silently rendering blank
@@ -31,8 +35,6 @@ export class ArtifactService {
     const translatedMarkdown = translatedBlocks && translatedBlocks.length > 0
       ? joinTranslatedMarkdownBlocks(translatedBlocks)
       : storedTranslatedMarkdown
-    const layoutJson = await this.readOptional(join(task.outputDir, 'layout.json'), '{}')
-    const mappings = await this.loadMappings(task)
     return {
       task,
       markdown,
@@ -64,11 +66,6 @@ export class ArtifactService {
     })
   }
 
-  async recordArtifact(task: CopilotixTask, kind: ArtifactKind, path: string, jobId?: string): Promise<void> {
-    if (!this.repository.recordArtifactRevision) return
-    await this.repository.recordArtifactRevision(task.id, kind, path, await this.compute.hashFile(path), {}, jobId)
-  }
-
   async atomicWriteFile(path: string, content: string): Promise<void> {
     const partialPath = `${path}.partial-${randomUUID()}`
     try {
@@ -84,10 +81,6 @@ export class ArtifactService {
     } finally {
       await rm(partialPath, { force: true }).catch(() => undefined)
     }
-  }
-
-  async atomicWriteJson(path: string, value: unknown): Promise<void> {
-    await this.atomicWriteFile(path, JSON.stringify(value, null, 2))
   }
 
   async loadMappings(task: CopilotixTask): Promise<BlockMapping[]> {
@@ -144,7 +137,6 @@ export class ArtifactService {
 
   async readOptional(path: string, fallback = ''): Promise<string> {
     try {
-      await access(path)
       return await readFile(path, 'utf8')
     } catch {
       return fallback

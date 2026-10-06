@@ -237,3 +237,19 @@ function configuredSettings(): AppSettings {
     }
   }
 }
+
+
+describe('paper chat reuses translation settings', () => {
+  it('does not expose a second API or model settings card', async () => {
+    const settings = { ...configuredSettings(), chatProvider: 'qwen' as const, chatConsentVersion: 1, credentials: { ...configuredSettings().credentials, deepseek: { state: 'unknown' as const } } }
+    const saveSettings = vi.fn(async (update) => ({ settings: { ...settings, ...update }, fieldErrors: {} }))
+    Object.defineProperty(window, 'copilotix', { configurable: true, value: { getUsageAnalytics: vi.fn(async () => ({ days: [] })), saveSettings } })
+    render(<SettingsPage settings={settings} onSaved={vi.fn()} />)
+    expect(screen.getByRole('region', { name: '服务连接' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'AI 问答' })).toBeNull()
+    expect(screen.queryByLabelText('Qwen 问答模型')).toBeNull()
+    expect(screen.queryByLabelText('DeepSeek 问答模型')).toBeNull()
+    expect(screen.queryByLabelText('服务商')).toBeNull()
+    expect(saveSettings).not.toHaveBeenCalled()
+  })
+})

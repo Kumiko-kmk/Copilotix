@@ -58,11 +58,7 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
     expect(topBounds!.x + topBounds!.width).toBeLessThanOrEqual(viewport[0])
     await capture(window, 'chrome-1100x700-light-top.png')
 
-    await window.locator('[data-edge-dock="bottom"]').hover()
-    await window.waitForTimeout(500)
-    const bottomBounds = await window.locator('[data-edge-dock="bottom"] .edge-dock-panel').boundingBox()
-    expect(bottomBounds).not.toBeNull()
-    expect(bottomBounds!.y + bottomBounds!.height).toBeLessThanOrEqual(viewport[1])
+    await expect(window.locator('[data-edge-dock="bottom"]')).toHaveCount(0)
     await window.emulateMedia({ colorScheme: 'dark' })
     await expect.poll(() => window.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(true)
     await expect(window.locator('.app-shell')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
@@ -308,9 +304,13 @@ test('provides an interactive minimap for original and translated Markdown', asy
   try {
     const window = await app.firstWindow()
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 700))
-    await window.locator('[data-edge-dock="bottom"]').hover()
-    await window.locator(`[data-paper-task-id="${taskId}"]`).click()
+    // The bottom paper switcher was removed; papers open from the task list.
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.getByRole('button', { name: '任务管理' }).click()
+    await window.locator(`tr[data-row-key="${taskId}"] .task-link`).click()
 
+    // Opening a paper loads its details through IPC before the Markdown pane exists.
+    await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
     const activePanel = window.locator('.reader-tab-panel.active')
     const scroller = activePanel.locator('.markdown-scroll')
     const minimap = activePanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })

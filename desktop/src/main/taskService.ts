@@ -1,27 +1,31 @@
 import { EventEmitter } from 'node:events'
-import type { JobRepositoryPort } from '@core/jobs'
+import type { Job, JobRepositoryPort } from '@core/jobs'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
-import type { CreateTasksRequest, CopilotixTask, SelectedPdf } from '@shared/types'
-import type { CredentialVault } from './credentialVault'
-import type { ParserClient } from './parserClient'
+import type { CopilotixTask } from '@shared/types'
+import type { ImportDocumentsRequest } from '@shared/ipcSchemas'
 import type { SettingsService } from './settingsService'
 import type { TaskLogger } from './logger'
 import { PathPolicy } from './pathPolicy'
 import { ArtifactService } from './artifactService'
-import { DocumentCommandService } from './documentCommandService'
+import { DocumentCommandService, type ImportPathsResult } from './documentCommandService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import type { JobScheduler } from './jobScheduler'
-
-type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 const silentLogger: TaskLogger = { info: () => undefined, error: () => undefined }
 
 export interface TaskServiceOptions {
+  logger?: TaskLogger
   jobRepository?: JobRepositoryPort
   scheduler?: JobScheduler
 }
 
-/** Thin compatibility facade preserving the renderer-facing TaskService API. */
+/**
+ * Renderer-facing document facade.
+ *
+ * Events: `changed()` whenever document state may have changed (listeners
+ * decide how and when to re-read it), and `notification(documentId, status)`
+ * for user-visible workflow outcomes.
+ */
 export class TaskService extends EventEmitter {
   private readonly commands: DocumentCommandService
   private readonly artifacts: ArtifactService
@@ -29,34 +33,20 @@ export class TaskService extends EventEmitter {
   constructor(
     repository: TaskRepositoryCompat,
     settingsService: SettingsService,
-    _vault: CredentialVault,
-    _parserClient: ParserClient,
-    _fetcher: Fetcher,
-    loggerOrCompute: TaskLogger | TaskComputePort = silentLogger,
-    computeOrPathPolicy?: TaskComputePort | PathPolicyPort,
+    compute: TaskComputePort,
     pathPolicy: PathPolicyPort = new PathPolicy(),
     options: TaskServiceOptions = {}
   ) {
     super()
-    const logger = isTaskLogger(loggerOrCompute) ? loggerOrCompute : silentLogger
-    const compute = isTaskComputePort(loggerOrCompute)
-      ? loggerOrCompute
-      : isTaskComputePort(computeOrPathPolicy)
-        ? computeOrPathPolicy
-        : unavailableCompute()
-    const resolvedPathPolicy = isPathPolicyPort(computeOrPathPolicy) ? computeOrPathPolicy : pathPolicy
-    this.artifacts = new ArtifactService(repository, compute, resolvedPathPolicy)
-    this.commands = new DocumentCommandService(repository, settingsService, compute, resolvedPathPolicy, logger, options)
+    this.artifacts = new ArtifactService(repository, compute, pathPolicy)
+    this.commands = new DocumentCommandService(repository, settingsService, compute, pathPolicy, options.logger ?? silentLogger, options)
 
-    options.scheduler?.on('job-changed', () => { void this.emitTasks().catch(() => undefined) })
-    options.scheduler?.on('job-notification', (taskId: string, status: string, kind: string) => {
+    options.scheduler?.on('job-changed', () => this.emit('changed'))
+    options.scheduler?.on('job-notification', (job: Job) => {
       // RAG jobs share the durable scheduler but have independent state and
-      // user-facing surfaces.  Only document workflow jobs may produce the
-      // legacy completion/failure notification consumed by the renderer.
-      const isDocumentJob = kind === 'parse' || kind === 'translate'
-      if (isDocumentJob && (kind === 'translate' || status === 'failed') && (status === 'succeeded' || status === 'partial' || status === 'failed')) {
-        this.emit('notification', taskId, status === 'succeeded' ? 'completed' : status)
-      }
+      // user-facing surfaces. Only document workflow jobs notify the user.
+      const status = documentNotificationStatus(job)
+      if (status) this.emit('notification', job.documentId, status)
     })
   }
 
@@ -64,30 +54,20 @@ export class TaskService extends EventEmitter {
     return this.commands.list()
   }
 
-  async inspectPdfs(paths: string[]): Promise<SelectedPdf[]> {
-    return this.commands.inspectPdfs(paths)
-  }
-
-  async create(request: CreateTasksRequest): Promise<CopilotixTask[]> {
-    const created = await this.commands.create(request)
-    await this.emitTasks()
-    return created
-  }
-
-  async importPaths(paths: readonly string[], options: Omit<CreateTasksRequest, 'files'>): Promise<CopilotixTask[]> {
-    const created = await this.commands.importPaths(paths, options)
-    await this.emitTasks()
-    return created
+  async importPaths(paths: readonly string[], options: ImportDocumentsRequest): Promise<ImportPathsResult> {
+    const result = await this.commands.importPaths(paths, options)
+    if (result.created.length > 0) this.emit('changed')
+    return result
   }
 
   async retry(taskId: string): Promise<void> {
     await this.commands.retry(taskId)
-    await this.emitTasks()
+    this.emit('changed')
   }
 
   async delete(taskId: string, deleteFiles: boolean): Promise<void> {
     await this.commands.delete(taskId, deleteFiles)
-    await this.emitTasks()
+    this.emit('changed')
   }
 
   async getDocument(taskId: string) {
@@ -101,43 +81,11 @@ export class TaskService extends EventEmitter {
   async createResultZip(taskId: string, destination: string): Promise<void> {
     await this.artifacts.createResultZip(taskId, destination)
   }
-
-  private async emitTasks(): Promise<void> {
-    this.emit('changed', await this.list())
-  }
 }
 
-export function splitIntoParserBatches<T>(values: T[], size: number): T[][] {
-  if (!Number.isInteger(size) || size < 1) throw new Error('Batch size must be positive')
-  const groups: T[][] = []
-  for (let index = 0; index < values.length; index += size) groups.push(values.slice(index, index + size))
-  return groups
-}
-
-function isTaskLogger(value: unknown): value is TaskLogger {
-  return Boolean(value && typeof value === 'object' && typeof (value as { info?: unknown }).info === 'function' && typeof (value as { error?: unknown }).error === 'function')
-}
-
-function isTaskComputePort(value: unknown): value is TaskComputePort {
-  return Boolean(value && typeof value === 'object' && typeof (value as { hashFile?: unknown }).hashFile === 'function')
-}
-
-function isPathPolicyPort(value: unknown): value is PathPolicyPort {
-  return Boolean(value && typeof value === 'object' && typeof (value as { resolveChild?: unknown }).resolveChild === 'function')
-}
-
-function unavailableCompute(): TaskComputePort {
-  const unavailable = async (): Promise<never> => { throw new Error('核心计算服务尚未初始化') }
-  return {
-    hashFile: unavailable,
-    importPdf: unavailable,
-    normalizeParserOutput: unavailable,
-    rebuildMappings: unavailable,
-    openTranslationPlan: unavailable,
-    listTranslationWork: unavailable,
-    tryTranslationCache: unavailable,
-    applyTranslation: unavailable,
-    failTranslation: unavailable,
-    finalizeTranslation: unavailable
-  }
+function documentNotificationStatus(job: Job): 'completed' | 'partial' | 'failed' | null {
+  if (job.kind === 'parse') return job.status === 'failed' ? 'failed' : null
+  if (job.kind !== 'translate') return null
+  if (job.status === 'succeeded') return 'completed'
+  return job.status === 'partial' || job.status === 'failed' ? job.status : null
 }

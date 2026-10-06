@@ -123,6 +123,14 @@ describe('PdfPane mapping navigation', () => {
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
     expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'center', inline: 'nearest' })
     expect(continuation.classList.contains('active')).toBe(true)
+
+    // Citations from the chat tab scroll the PDF exactly like Markdown clicks.
+    scrollIntoView.mockClear()
+    view.rerender(
+      <PdfPane url="copilotix-asset://document/original.pdf" mappings={mappings} selection={{ mappingId: 'image-block', origin: 'citation' }} onSelect={onSelect} />
+    )
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    expect(image.classList.contains('active')).toBe(true)
   })
 
   it('reveals only the overflowing scrollbar nearest the pointer edge', () => {

@@ -1,9 +1,10 @@
+import { DEFAULT_SETTINGS } from '@shared/constants'
 import { describe, expect, it } from 'vitest'
 import { IpcClientError, ipcFailure, ipcSuccess } from '../src/shared/ipc'
 import {
   appSettingsSchema,
   ipcEnvelopeSchema,
-  inspectPdfsRequestSchema,
+  importDocumentsIpcRequestSchema,
   settingsUpdateSchema,
   windowStateSchema
 } from '../src/shared/ipcSchemas'
@@ -37,6 +38,7 @@ describe('IPC contracts', () => {
 
   it('keeps settings response fields explicit at runtime', () => {
     const settings = {
+      ...DEFAULT_SETTINGS,
       outputRoot: 'C:/papers',
       formulaEnabled: true,
       tableEnabled: true,
@@ -57,7 +59,7 @@ describe('IPC contracts', () => {
   })
 
   it('rejects NUL characters in paths and path-derived names', () => {
-    expect(() => inspectPdfsRequestSchema.parse(['C:/papers/bad\0.pdf'])).toThrow()
+    expect(() => importDocumentsIpcRequestSchema.parse({ options: {}, paths: ['C:/papers/bad\0.pdf'] })).toThrow()
     expect(() => settingsUpdateSchema.parse({
       outputRoot: 'C:/papers\0bad',
       formulaEnabled: true,

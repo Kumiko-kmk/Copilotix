@@ -4,7 +4,13 @@ import React from 'react'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@shared/readerDocument'
-import ReaderTextPane, { type ReaderTab } from '../src/renderer/components/ReaderTextPane'
+import ReaderTextPane, { type ReaderChatOptions, type ReaderTab } from '../src/renderer/components/ReaderTextPane'
+import type { PaperChatController } from '../src/renderer/usePaperChat'
+
+vi.mock('../src/renderer/components/ReaderChatPanel', () => ({
+  default: () => <section aria-label="论文 AI 问答"><textarea aria-label="问答草稿" /></section>,
+  ReaderChatToolbar: () => <div>问答工具栏</div>
+}))
 
 let scrollIntoView: ReturnType<typeof vi.fn>
 
@@ -54,6 +60,32 @@ describe('ReaderTextPane', () => {
     expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBeNull()
   })
 
+  it('adds AI chat as a fourth tab that keeps its panel mounted while readers stay lazy', async () => {
+    const chat: ReaderChatOptions = {
+      controller: { pinned: [{}, {}], busy: true } as unknown as PaperChatController,
+      onOpenSettings: vi.fn(),
+      onCitation: vi.fn()
+    }
+    const view = render(<Harness chat={chat} />)
+    const tab = view.getByText('AI 问答')
+    expect(tab.closest('.reader-chat-tab')?.querySelector('[aria-label="正在生成"]')).toBeTruthy()
+    expect(tab.closest('.reader-chat-tab')?.textContent).toContain('2')
+    expect(view.queryByText('问答工具栏')).toBeNull()
+    const chatPanel = view.container.querySelector('[data-reader-tab-panel="chat"]')!
+    expect(chatPanel.classList.contains('inactive')).toBe(true)
+
+    fireEvent.click(tab)
+    expect(chatPanel.classList.contains('active')).toBe(true)
+    expect(view.getByText('问答工具栏')).toBeTruthy()
+    expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBeNull()
+    fireEvent.change(view.getByLabelText('问答草稿'), { target: { value: 'draft' } })
+
+    fireEvent.click(view.getByText('Markdown', { exact: true }))
+    await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBeTruthy())
+    expect(chatPanel.classList.contains('inactive')).toBe(true)
+    expect((view.getByLabelText('问答草稿') as HTMLTextAreaElement).value).toBe('draft')
+  })
+
   it('accepts a completed translation without reloading or repositioning the active original pane', async () => {
     const view = render(<TranslationArrivalHarness />)
     const originalPanel = view.container.querySelector<HTMLElement>('[data-reader-tab-panel="original"]')!
@@ -101,7 +133,7 @@ function TranslationArrivalHarness(): React.JSX.Element {
   )
 }
 
-function Harness(): React.JSX.Element {
+function Harness(props: { chat?: ReaderChatOptions }): React.JSX.Element {
   const [tab, setTab] = React.useState<ReaderTab>('original')
   return (
     <ReaderTextPane
@@ -120,6 +152,7 @@ function Harness(): React.JSX.Element {
       onReplaceAnnotations={async () => undefined}
       selection={null}
       onSelect={() => undefined}
+      chat={props.chat}
     />
   )
 }

@@ -1,3 +1,5 @@
+import type { PaperChatAskRequest, PaperChatStatus } from './paperChatSchemas'
+import type { RagStreamEvent } from './ragSchemas'
 import type { LibraryRequest, LibraryResult } from './librarySchemas'
 import type {
   DeleteDocumentRequest,
@@ -5,6 +7,7 @@ import type {
   DocumentDetails,
   DocumentSummary,
   ImportDocumentsRequest,
+  ImportDocumentsResult,
   ListReaderAnnotationsRequest,
   MutateReaderAnnotationsRequest,
   ReaderAnnotationSnapshot,
@@ -64,6 +67,11 @@ export interface AppSettings {
   qwenModel: string
   deepseekBaseUrl: string
   deepseekModel: string
+  /** Legacy persisted field, ignored by chat routing; use translationProvider. */
+  chatProvider: 'qwen' | 'deepseek' | null
+  qwenChatModel: string
+  deepseekChatModel: string
+  chatConsentVersion: number | null
   credentials: CredentialStatuses
 }
 
@@ -98,24 +106,6 @@ export interface CopilotixTask {
   updatedAt: string
 }
 
-export interface SelectedPdf {
-  path: string
-  name: string
-  size: number
-  duplicateTask?: CopilotixTask
-}
-
-export interface CreateTasksRequest {
-  files: SelectedPdf[]
-  createDuplicates?: boolean
-  useOriginalFilename?: boolean
-}
-
-export interface DeleteTaskRequest {
-  taskId: string
-  deleteFiles: boolean
-}
-
 export interface HealthResult {
   ok: boolean
   message: string
@@ -141,7 +131,7 @@ export interface BlockMapping {
   boxes: BlockBox[]
 }
 
-export type BlockSelectionOrigin = 'pdf' | 'markdown' | 'scroll'
+export type BlockSelectionOrigin = 'pdf' | 'markdown' | 'scroll' | 'citation'
 
 export interface BlockSelection {
   mappingId: string
@@ -208,14 +198,6 @@ export interface TranslatedMarkdownBlock {
   mappingIds: string[]
 }
 
-export interface TranslationCheckpoint {
-  taskId: string
-  totalBlocks: number
-  completedBlocks: number
-  failedBlockIds: string[]
-  updatedAt: string
-}
-
 export interface TranslationBlockRecord {
   taskId: string
   /** Durable translate job owning this block; omitted only by legacy adapters. */
@@ -230,11 +212,6 @@ export interface TranslationBlockRecord {
   error: string | null
 }
 
-export interface SaveAsRequest {
-  taskId: string
-  kind: 'original-markdown' | 'translated-markdown' | 'result-zip'
-}
-
 export type WindowAction = 'minimize' | 'toggle-maximize' | 'close'
 
 export interface WindowState {
@@ -242,6 +219,12 @@ export interface WindowState {
 }
 
 export interface CopilotixDesktopApi {
+  paperChat: {
+    ask(request: PaperChatAskRequest): Promise<{ requestId: string }>
+    cancel(request: { requestId: string }): Promise<{ cancelled: boolean }>
+    ensureIndex(request: { documentId: string }): Promise<PaperChatStatus>
+    onEvent(listener: (event: RagStreamEvent) => void): () => void
+  }
   manageLibrary(request: LibraryRequest): Promise<LibraryResult>
   getSettings(): Promise<AppSettings>
   saveSettings(update: SettingsUpdate): Promise<SettingsSaveResult>
@@ -250,7 +233,7 @@ export interface CopilotixDesktopApi {
   getStorageInfo(): Promise<StorageInfo>
   getUsageAnalytics(): Promise<UsageAnalytics>
   openStorageLocation(): Promise<void>
-  importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[]): Promise<DocumentSummary[]>
+  importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[]): Promise<ImportDocumentsResult>
   importTutorialPaper(createDuplicate?: boolean): Promise<DocumentSummary | null>
   listDocuments(): Promise<DocumentSummary[]>
   retryDocument(documentId: string): Promise<void>
