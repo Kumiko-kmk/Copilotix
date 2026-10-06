@@ -366,18 +366,6 @@ Claude，用户在首版 EXE 交付后明确调整了交互要求：**默认使�
 - 本机默认 pnpm wrapper 是 11.25.0，打包脚本要求 11.19.0；可用已缓存的 `C:/Users/12479/AppData/Local/node/corepack/v1/pnpm/11.19.0/bin/pnpm.mjs`，由 Codex Node 24.19.0 执行，并将该 Node 的 bin 放到 PATH 前面。正式 release 仍沿用签名门禁；不要通过关闭 sandbox 或伪造 npm user-agent 通过检查。
 - 不新增 migration、不持久化聊天、不碰真实文库、不合并 demo RAG；阶段 E 仍未纳入本次实现。此前真实服务／安装后验收的限制继续有效。
 
-## 12. 給 Claude：遠端 CI 與測試執行規則（2026-10-06）
-
-使用者要求檢查 GitHub Actions 的頻繁失敗，並改為日常不跑本地自動化測試。最新失敗為 UI 分支 PR #3 的 TasksPage 篩選測試在 Windows 覆蓋率下耗時 16.62 秒，超過 15 秒；程式碼多次對全頁 Ant Design 表格執行 getByRole，存在重複可存取性／樣式計算成本。已將 chip 查找限定於「按狀態篩選」group，任務存在性查找改為具 button selector 的文字查找；CI worker 限為 2，保留原有斷言語義、15 秒上限與覆蓋率門檻。
-
-早期安裝驗收的錯誤還包括 PowerShell 腳本調用、Unicode 捷徑目標讀取失真與 wizard 控件等待競態；這些在現有 master 已修復，2026-10-03 的主分支與 1.0.0 發布 Actions 已成功，不能把歷史紅燈當作仍未修復的當前缺陷。
-
-- 共用 CI 修復已提交為 97cd6b1，PR：https://github.com/Kumiko-kmk/Copilotix/pull/4 。所有分支 push、PR 與手動觸發均可驗證；master/tag 不取消在途驗證，工作分支的同類舊驗證可取消。
-- 原先失敗的遠端 ui/homepage-redesign 已追加 74fec74 與 db52f76（合計 5 個 CI／測試規則文件）。第一輪遠端測試發現 Ant Design「清除篩選」按鈕的內層 span 不適合直接 button 文字 selector，已恢復該按鈕的語義查找；最新驗證對應 db52f76。沒有推送本地閱讀器／問答 WIP。
-- AGENTS.md 第 1 與第 8 節已改成：日常不預設跑本地 lint、typecheck、單元／coverage／E2E；必須 commit **並 push**，等待最新 SHA 的遠端 build 成功後才合併／交付。PR 還須看最新合併結果檢查。不要跳過、降低門檻或重試掩蓋失敗。
-- Unit JUnit 放在 desktop/unit-test-results，避免被 Playwright 清除；Actions 保存 Copilotix-Windows-verification-reports。供真人測試的完整 ZIP 在 Copilotix-Windows-x64-Bundle artifact。
-- 本地問答分支已同步 CI 配置、TasksPage 測試與 AGENTS 規則；原有未提交修改繼續保留。遠端 CI 結果僅覆蓋已推送的修復／UI 版本，不能據此宣稱本地未推送的 AI 問答或付費 API 已驗證。
-
 ## 12. UI 改版：问答成为阅读器第四个页签 — 2026-10-06（Claude）
 
 ### 为什么改
@@ -425,6 +413,18 @@ Claude，用户在首版 EXE 交付后明确调整了交互要求：**默认使�
 - 一次全量 coverage 运行中，`TasksPage` 的一个用例因耗时接近 waitFor 超时而失败一次；单独连跑 3 次以及再次全量运行均通过。该测试文件有他人未提交的修改，本次没有改动。
 - 测试 fixture 的论文没有建立内容索引，所以原生 E2E 只覆盖到「索引准备中」状态。授权卡片和真实回答在单元测试中覆盖，视觉上用注入样例核对。真实模型回答仍需真人验收。
 
+## 13. 給 Claude：遠端 CI 與測試執行規則（2026-10-06）
+
+使用者要求檢查 GitHub Actions 的頻繁失敗，並改為日常不跑本地自動化測試。最新失敗為 UI 分支 PR #3 的 TasksPage 篩選測試在 Windows 覆蓋率下耗時 16.62 秒，超過 15 秒；程式碼多次對全頁 Ant Design 表格執行 getByRole，存在重複可存取性／樣式計算成本。已將 chip 查找限定於「按狀態篩選」group，任務存在性查找改為具 button selector 的文字查找；CI worker 限為 2，保留原有斷言語義、15 秒上限與覆蓋率門檻。
+
+早期安裝驗收的錯誤還包括 PowerShell 腳本調用、Unicode 捷徑目標讀取失真與 wizard 控件等待競態；這些在現有 master 已修復，2026-10-03 的主分支與 1.0.0 發布 Actions 已成功，不能把歷史紅燈當作仍未修復的當前缺陷。
+
+- 共用 CI 修復已提交為 97cd6b1，PR：https://github.com/Kumiko-kmk/Copilotix/pull/4 。所有分支 push、PR 與手動觸發均可驗證；master/tag 不取消在途驗證，工作分支的同類舊驗證可取消。
+- 原先失敗的遠端 ui/homepage-redesign 已追加 74fec74 與 db52f76（合計 5 個 CI／測試規則文件）。第一輪遠端測試發現 Ant Design「清除篩選」按鈕的內層 span 不適合直接 button 文字 selector，已恢復該按鈕的語義查找；最新驗證對應 db52f76。沒有推送本地閱讀器／問答 WIP。
+- AGENTS.md 第 1 與第 8 節已改成：日常不預設跑本地 lint、typecheck、單元／coverage／E2E；必須 commit **並 push**，等待最新 SHA 的遠端 build 成功後才合併／交付。PR 還須看最新合併結果檢查。不要跳過、降低門檻或重試掩蓋失敗。
+- Unit JUnit 放在 desktop/unit-test-results，避免被 Playwright 清除；Actions 保存 Copilotix-Windows-verification-reports。供真人測試的完整 ZIP 在 Copilotix-Windows-x64-Bundle artifact。
+- 本地問答分支已同步 CI 配置、TasksPage 測試與 AGENTS 規則；原有未提交修改繼續保留。遠端 CI 結果僅覆蓋已推送的修復／UI 版本，不能據此宣稱本地未推送的 AI 問答或付費 API 已驗證。
+
 ### 後續排查：打包鎖與窗口裁切
 
 - 共用規則 PR #4 已於完整 push／PR 門禁成功後合入 master（c96de9e）。其遠端結果為 80 文件、434 項通過／3 項既有跳過，18 項 Electron E2E 通過；兩次真實打包、安裝升級／卸載／重裝與下載驗收皆成功。
@@ -433,3 +433,23 @@ Claude，用户在首版 EXE 交付后明确调整了交互要求：**默认使�
 - PR #5 最新提交 d75fda7；UI 分支最新提交 4f310c6 已同步打包鎖、錯誤退出、發布前置校驗與截圖修復，等待這兩個最新版本的完整遠端驗證。PR #3 的產品 UI 不自動合併，閱讀器／問答 WIP 也未推送。
 - 新增測試涵蓋臨時鎖恢復、永久鎖的有界失敗、非暫態／非 Windows 錯誤不重試，以及 CLI 真實子進程失敗退出碼。此輪僅用遠端 Actions 執行自動化驗證，本地沒有跑 lint/typecheck/單元/coverage/E2E。
 - 主分支 metadata 可確認 protected=true 且必需 build；完整管理員保護／bypass 設定受 GitHub App administration 權限限制，未將未讀取的規則宣稱為已核實。
+
+### 閱讀器就緒等待補充
+
+窗口圓角修復後，UI 的 4f310c6 已在 push 與 PR 兩次完整 CI 通過。共用補充修復 d75fda7 的 PR 全套通過，但 push 在另一台 runner 捕獲尚未完成文檔詳情 IPC 的 Spin 加載狀態；原測試立即找 Markdown pane，默認 5 秒後失敗。新增對實際 reader-header 就緒的等待（30 秒），再執行原有 scroller ready 與互動斷言；測試整體仍為 60 秒，沒有增加 test retry 或全局 timeout。
+
+PR #5 最新提交為 24284c7，UI 最新提交為 887c647；前述 d75fda7／4f310c6 是舊版本證據，不替代這兩個最新版本的完整 CI。所有本地問答 WIP 仍保留，原 ui-chrome 測試導覽修改未覆蓋。
+
+共享工作目錄最新狀態：檢查期間開發方已將問答分支提交為 ae1c212 並推送（不是本輪 CI 修復代為提交全部 WIP）；其 push 自動觸發 https://github.com/Kumiko-kmk/Copilotix/actions/runs/37473979245 。上文未提交／未推送描述只代表當時狀態。該分支包括最新 reader-header 等待條件；正式驗收以它自己的最新 Actions 為準，不套用 UI 或 master 的測試結果。
+
+### 主分支驗收與問答分支測試夾具
+
+- PR #5 的 24284c7 已在最新 push／PR 的全套檢查成功後合入 master（97dd801）。合併後再次觸發的主分支 CI 亦完整成功：https://github.com/Kumiko-kmk/Copilotix/actions/runs/37475419002 。80 個測試文件、440 項通過／3 項既有跳過，18 項 Electron E2E 通過；打包 smoke、安裝升級／卸載／重裝、下載完整性與解壓刪除均成功。行覆蓋率 87.21%，分支覆蓋率 78.01%，原門檻不變。
+- UI 分支最新 887c647 的 push 與 PR 全部成功：https://github.com/Kumiko-kmk/Copilotix/actions/runs/37473977113 、https://github.com/Kumiko-kmk/Copilotix/actions/runs/37473984219 。81 個文件、447 項通過／3 項既有跳過，18 項 Electron E2E 通過；PR #3 的產品改版仍待產品方合併。
+- 問答分支 ae1c212 的首次遠端運行實際為失敗：85 文件的 520 項單元測試通過／3 項跳過，但 E2E 有兩項失敗。paper-chat 夾具未配置翻譯憑據卻斷言沒有「前往設定」；乾淨 runner 顯示該按鈕是正確行為。標註測試亦在 Markdown image/font loading 階段的 5 秒等待內操作。不能以其他分支綠燈代替這份新代碼的驗證。
+- 開發方後續提交 d8346d6，將 chat 面板改為首次進入才掛載，避免僅打開論文就啟動內容索引；本輪在獨立 CI worktree 基於此最新提交追加夾具修復，未覆蓋共享目錄的 UI 工作。修復 PR：https://github.com/Kumiko-kmk/Copilotix/pull/6 ，最新修復提交 d4b1c7f 已在 push／PR 全套成功後合入 codex/reader-ai-chat（76f054a），沒有將產品代碼合入 master。
+- 原 WindowsCredentialVault 使用全機相同 service，即使 SQLite/userData 夾具隔離，E2E 仍可能讀寫真人憑據。現在只對「未打包 + NODE_ENV=test + 明確 E2E userData」派生每夾具獨立的 native vault service；打包版本一律沿用正式 service。夾具清理只刪自己的六種 account。單元測試覆蓋正式模式門禁，以及測試寫入／清理不影響真人和其他夾具。
+- 問答 E2E 用真實設定 IPC 保存假 Qwen key，只模擬 Main 端 provider HTTP 回應，核對翻譯模型 qwen-mt-plus／假 key／probe 次數；重新載入後同時斷言共享 Qwen 路由、valid 憑據與沒有「前往設定」，保留模型切換與導覽斷言。沒有真人 key、沒有付費 API 請求、沒有直接偽造 IPC 結果或有效狀態。
+- 閱讀器測試等實際 header 與 Markdown ready/error 後才操作；等待配合既有 30 秒資源 deadline，error 仍立即令 ready 斷言失敗。不加全局 timeout/retry、不降低斷言／覆蓋率／安全門禁。本輪持續只使用 Actions 執行自動化測試。
+- 問答夾具修復的 push：https://github.com/Kumiko-kmk/Copilotix/actions/runs/37477027695 ；PR：https://github.com/Kumiko-kmk/Copilotix/actions/runs/37477227268 。兩次全套成功；86 文件、525 項通過／3 項既有跳過，19 項 Electron E2E 通過（另 3 項真實論文環境選配未執行），行覆蓋率 87.94%、分支覆蓋率 79.91%。真實 API 回答與真人視覺體驗仍需人工驗收。
+- Claude 後續採用 AGENTS.md 第 8 節：預設不跑本地自動化測試，修改測試後 commit **並 push**，以工作分支最新 SHA 和 PR 最新合併檢查成功為交付條件。不要套用本文舊 SHA 的綠燈；分支合併／文檔提交後亦須等待最新 Actions：https://github.com/Kumiko-kmk/Copilotix/actions?query=branch%3Acodex%2Freader-ai-chat 。共享工作目錄的既有 README_zh-CN.md 刪除未代為提交；切換／同步分支前繼續檢查未提交狀態。
