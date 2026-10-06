@@ -1,5 +1,16 @@
 import { Entry } from '@napi-rs/keyring'
+import { createHash } from 'node:crypto'
 import { CREDENTIAL_SERVICE } from '@shared/constants'
+
+/** Test workspaces must never read or overwrite the user's native credentials. */
+export function credentialServiceForRuntime(options: {
+  isPackaged: boolean
+  nodeEnv?: string
+  e2eUserData?: string
+}): string {
+  if (options.isPackaged || options.nodeEnv !== 'test' || !options.e2eUserData) return CREDENTIAL_SERVICE
+  return `${CREDENTIAL_SERVICE}-e2e-${createHash('sha256').update(options.e2eUserData).digest('hex')}`
+}
 
 export type CredentialAccount =
   | 'parser-token'
@@ -17,9 +28,11 @@ export interface CredentialVault {
 }
 
 export class WindowsCredentialVault implements CredentialVault {
+  constructor(private readonly service = CREDENTIAL_SERVICE) {}
+
   async get(account: CredentialAccount): Promise<string | null> {
     try {
-      return new Entry(CREDENTIAL_SERVICE, account).getPassword()
+      return new Entry(this.service, account).getPassword()
     } catch {
       return null
     }
@@ -31,12 +44,12 @@ export class WindowsCredentialVault implements CredentialVault {
       await this.delete(account)
       return
     }
-    new Entry(CREDENTIAL_SERVICE, account).setPassword(normalized)
+    new Entry(this.service, account).setPassword(normalized)
   }
 
   async delete(account: CredentialAccount): Promise<void> {
     try {
-      new Entry(CREDENTIAL_SERVICE, account).deletePassword()
+      new Entry(this.service, account).deletePassword()
     } catch (error) {
       // The native binding reports a missing item as NoEntry. That case is
       // intentionally idempotent; other failures (for example an unavailable

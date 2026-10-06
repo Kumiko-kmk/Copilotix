@@ -25,7 +25,7 @@ import {
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import { RpcTaskRepository } from './rpcTaskRepository'
 import { RpcTaskCompute } from './rpcTaskCompute'
-import { WindowsCredentialVault } from './credentialVault'
+import { credentialServiceForRuntime, WindowsCredentialVault } from './credentialVault'
 import { SettingsService } from './settingsService'
 import { OfficialParserClient } from './parserClient'
 import { ElectronFileUploader } from './fileUploader'
@@ -130,7 +130,11 @@ async function bootstrap(): Promise<void> {
   const userData = app.getPath('userData')
   await mkdir(userData, { recursive: true })
   repository = new RpcTaskRepository(utilitySupervisor)
-  const vault = new WindowsCredentialVault()
+  const vault = new WindowsCredentialVault(credentialServiceForRuntime({
+    isPackaged: app.isPackaged,
+    nodeEnv: process.env.NODE_ENV,
+    e2eUserData: process.env.COPILOTIX_E2E_USER_DATA
+  }))
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
     net.fetch(input instanceof URL ? input.toString() : input, init)
   const parserClient = new OfficialParserClient(fetcher, new ElectronFileUploader())
