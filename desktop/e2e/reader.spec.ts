@@ -578,17 +578,34 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     if (!sourceTaskDir) await expect(panel.locator('.markdown-minimap-heading')).toHaveCount(180)
     await panel.locator('.markdown-scroll').hover({ position: { x: 50, y: 50 } })
     await window.waitForTimeout(600)
-    const readSnapshot = async () => ({
-      pixels: (await panel.locator('.markdown-minimap-canvas').screenshot({
-        style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; } .markdown-minimap-heading:focus-visible { background: transparent !important; box-shadow: none !important; } .markdown-minimap:focus-visible { box-shadow: none !important; }'
-      })).toString('base64'),
-      ...await panel.evaluate((element) => ({
-        canvasPixels: element.querySelector<HTMLCanvasElement>('.markdown-minimap-canvas')!.toDataURL(),
-        formulas: element.querySelector('.markdown-minimap-formulas')!.innerHTML,
-        headings: Array.from(element.querySelectorAll<HTMLElement>('.markdown-minimap-heading')).map((heading) => heading.style.cssText),
-        paintCount: (window as Window & { minimapPaintCount: number }).minimapPaintCount
-      }))
-    })
+    const readSnapshot = async () => {
+      const displayBounds = await panel.locator('.markdown-minimap-canvas').boundingBox()
+      if (!displayBounds) throw new Error('Minimap canvas is not visible')
+      // Capture only complete CSS pixels. Fractional element screenshot edges are
+      // composited differently after a pane resize/scroll, despite identical canvas
+      // bytes. Keep the display geometry in the exact-equality assertion as well.
+      const clip = {
+        x: Math.ceil(displayBounds.x),
+        y: Math.ceil(displayBounds.y),
+        width: Math.floor(displayBounds.x + displayBounds.width) - Math.ceil(displayBounds.x),
+        height: Math.floor(displayBounds.y + displayBounds.height) - Math.ceil(displayBounds.y)
+      }
+      return {
+        displayBounds,
+        pixels: (await window.screenshot({
+          clip,
+          scale: 'css',
+          animations: 'disabled',
+          style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; } .markdown-minimap-heading:focus-visible { background: transparent !important; box-shadow: none !important; } .markdown-minimap:focus-visible { box-shadow: none !important; }'
+        })).toString('base64'),
+        ...await panel.evaluate((element) => ({
+          canvasPixels: element.querySelector<HTMLCanvasElement>('.markdown-minimap-canvas')!.toDataURL(),
+          formulas: element.querySelector('.markdown-minimap-formulas')!.innerHTML,
+          headings: Array.from(element.querySelectorAll<HTMLElement>('.markdown-minimap-heading')).map((heading) => heading.style.cssText),
+          paintCount: (window as Window & { minimapPaintCount: number }).minimapPaintCount
+        }))
+      }
+    }
     const expectSnapshot = async (baseline: Awaited<ReturnType<typeof readSnapshot>>) => {
       const current = await readSnapshot()
       const { pixels: expectedPixels, ...expectedContent } = baseline
@@ -627,6 +644,10 @@ test('keeps the complete minimap static across long-document jumps', async () =>
         }
         return { sameDimensions: true, maxChannelDelta, changedRatio: changedPixels / (left.width * left.height) }
       }, { expected: expectedPixels, actual: currentPixels })
+      if (!difference.sameDimensions || difference.maxChannelDelta > 1 || difference.changedRatio > 0.001) {
+        await test.info().attach('minimap-expected', { body: Buffer.from(expectedPixels, 'base64'), contentType: 'image/png' })
+        await test.info().attach('minimap-actual', { body: Buffer.from(currentPixels, 'base64'), contentType: 'image/png' })
+      }
       expect(difference.sameDimensions).toBe(true)
       expect(difference.maxChannelDelta).toBeLessThanOrEqual(1)
       expect(difference.changedRatio).toBeLessThanOrEqual(0.001)
