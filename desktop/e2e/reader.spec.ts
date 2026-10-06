@@ -596,7 +596,8 @@ test('keeps the complete minimap static across long-document jumps', async () =>
           clip,
           scale: 'css',
           animations: 'disabled',
-          style: '.markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; } .markdown-minimap-heading:focus-visible { background: transparent !important; box-shadow: none !important; } .markdown-minimap:focus-visible { box-shadow: none !important; }'
+          // Keep the outer window's rounded corner out of this canvas invariant.
+          style: '.app-shell { border-radius: 0 !important; } .markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; } .markdown-minimap-heading:focus-visible { background: transparent !important; box-shadow: none !important; } .markdown-minimap:focus-visible { box-shadow: none !important; }'
         })).toString('base64'),
         ...await panel.evaluate((element) => ({
           canvasPixels: element.querySelector<HTMLCanvasElement>('.markdown-minimap-canvas')!.toDataURL(),
