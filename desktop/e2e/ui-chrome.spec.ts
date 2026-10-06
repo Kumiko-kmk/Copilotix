@@ -311,6 +311,8 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await window.locator('[data-edge-dock="bottom"]').hover()
     await window.locator(`[data-paper-task-id="${taskId}"]`).click()
 
+    // Opening a paper loads its details through IPC before the Markdown pane exists.
+    await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
     const activePanel = window.locator('.reader-tab-panel.active')
     const scroller = activePanel.locator('.markdown-scroll')
     const minimap = activePanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
