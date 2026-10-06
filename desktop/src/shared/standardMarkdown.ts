@@ -223,7 +223,11 @@ function walk(node: Node, visit: (node: Node) => void): void {
 export function normalizeMarkdown(source: string, rewriteImage?: (url: string) => string): MarkdownNormalization {
   const stats: MarkdownNormalization = { markdown: '', controlsReplaced: 0, tablesConverted: 0 }
   const clean = source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, () => { stats.controlsReplaced += 1; return '\uFFFD' })
+    .replace(/\p{Cc}/gu, (character) => {
+      if (character === '\t' || character === '\n') return character
+      stats.controlsReplaced += 1
+      return '\uFFFD'
+    })
   const root = normalizeTree(processor.parse(canonicalDelimiters(clean)) as unknown as Node, stats)[0]!
   walk(root, (node) => {
     trimInlineEdges(node)
