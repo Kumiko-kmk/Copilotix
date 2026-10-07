@@ -1,0 +1,122 @@
+/* Paper archive (文库): layout and motion adapted from RhineLabUI (MIT, LBEILC), recoloured to Copilotix. */
+.paper-archive-page {
+  --archive-bg: var(--surface);
+  --archive-floor: #dccdbb;
+  --archive-card: #fff7ed;
+  --archive-card-selected: #ffffff;
+  --archive-edge: #fff5e9;
+  --archive-accent: var(--primary);
+  --archive-index-done: #e4d6c5;
+  --archive-index-active: var(--primary);
+  --archive-index-partial: #d39b35;
+  --archive-index-failed: #cf5049;
+  --archive-index-empty: #e4d6c5;
+  --archive-gutter: clamp(28px, 4.4vw, 64px);
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--archive-bg);
+  color: var(--text);
+  isolation: isolate;
+  user-select: none;
+}
+.paper-archive-stage { position: absolute; inset: 0; z-index: 0; }
+.paper-archive-canvas { display: block; width: 100%; height: 100%; animation: paper-archive-fade .5s var(--ease-out) both; }
+.paper-archive-veil {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 46%, color-mix(in srgb, var(--archive-bg) 72%, transparent) 64%, color-mix(in srgb, var(--archive-bg) 86%, transparent) 100%),
+    linear-gradient(0deg, color-mix(in srgb, var(--archive-bg) 82%, transparent) 0, transparent 22%);
+}
+
+.paper-archive-page > header, .paper-archive-panel, .paper-archive-footer { position: absolute; z-index: 2; }
+.paper-archive-eyebrow, .paper-archive-path, .paper-archive-shelves small, .paper-archive-hints {
+  color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+}
+
+.paper-archive-brand { top: calc(var(--page-top) + 18px); left: var(--archive-gutter); pointer-events: none; }
+.paper-archive-brand h1 { margin: 4px 0 2px; color: var(--ink); font-size: clamp(30px, 3.2vw, 44px); font-weight: 750; letter-spacing: .06em; line-height: 1.05; }
+.paper-archive-brand p { margin: 0; color: var(--muted); font-size: 13px; letter-spacing: .04em; }
+
+.paper-archive-panel {
+  top: 50%; right: var(--archive-gutter);
+  width: min(460px, 38vw);
+  transform: translateY(-58%);
+}
+.paper-archive-path i { margin: 0 10px; font-style: normal; opacity: .6; }
+.paper-archive-title {
+  display: -webkit-box; margin: 14px 0 0; overflow: hidden;
+  color: var(--ink); font-size: clamp(20px, 1.9vw, 27px); font-weight: 720; letter-spacing: .01em; line-height: 1.28;
+  overflow-wrap: anywhere; user-select: text;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  animation: paper-archive-roll .36s var(--ease-out) both;
+}
+.paper-archive-rule { position: relative; height: 1px; margin: 22px 0 18px; background: color-mix(in srgb, var(--ink) 55%, transparent); }
+.paper-archive-rule i { position: absolute; top: -3px; left: -10px; width: 5px; height: 5px; background: var(--ink); }
+.paper-archive-meta { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 6px 30px; margin: 0 0 22px; }
+.paper-archive-meta dt { margin-bottom: 4px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
+.paper-archive-meta dd { margin: 0; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; }
+.paper-archive-meta dd.status-completed { color: #3f8a6e; }
+.paper-archive-meta dd.status-failed { color: var(--archive-index-failed); }
+.paper-archive-meta dd.status-partial { color: #b07a1c; }
+.paper-archive-meta dd:is(.status-queued, .status-uploading, .status-parsing, .status-translating) { color: var(--archive-accent); }
+
+.paper-archive-action {
+  display: inline-flex; min-width: 172px; height: 44px; padding: 0 14px 0 2px;
+  align-items: center; justify-content: space-between; gap: 28px;
+  border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--ink);
+  font-size: 14px; font-weight: 650; letter-spacing: .08em; cursor: pointer;
+  transition: color .18s ease, border-color .18s ease;
+}
+.paper-archive-action .anticon { font-size: 16px; transition: transform .28s var(--ease-spring); }
+.paper-archive-action:hover { color: var(--archive-accent); border-bottom-color: color-mix(in srgb, var(--archive-accent) 45%, transparent); }
+.paper-archive-action:hover .anticon { transform: translateX(5px); }
+.paper-archive-action:focus-visible, .paper-archive-footer button:focus-visible { outline: 2px solid var(--archive-accent); outline-offset: 3px; border-radius: 6px; }
+
+.paper-archive-empty h2 { margin: 12px 0 8px; color: var(--ink); font-size: 24px; }
+.paper-archive-empty p { margin: 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+.paper-archive-footer {
+  right: var(--archive-gutter); bottom: 22px; left: var(--archive-gutter);
+  display: grid; grid-template-columns: minmax(150px, 1fr) auto minmax(220px, 1fr); align-items: end; gap: 12px 28px;
+}
+.paper-archive-index div { display: flex; align-items: baseline; gap: 14px; margin-top: 6px; }
+.paper-archive-index strong { display: inline-block; color: var(--ink); font-size: clamp(38px, 4vw, 54px); font-weight: 400; line-height: 1; font-variant-numeric: tabular-nums; animation: paper-archive-roll .32s var(--ease-out) both; }
+.paper-archive-index small { color: var(--muted); font-size: 18px; font-variant-numeric: tabular-nums; }
+
+.paper-archive-footer button {
+  display: grid; width: 40px; height: 40px; padding: 0; place-items: center;
+  border: 0; border-radius: 10px; background: transparent; color: var(--ink); font-size: 18px; cursor: pointer;
+  transition: background .18s ease, color .18s ease;
+}
+.paper-archive-footer button:hover:not(:disabled) { background: color-mix(in srgb, var(--muted-surface) 85%, transparent); color: var(--archive-accent); }
+.paper-archive-footer button:disabled { opacity: .3; cursor: default; }
+
+.paper-archive-rows { display: flex; align-items: center; gap: 14px; padding-bottom: 6px; }
+.paper-archive-ruler { display: flex; align-items: center; gap: 13px; height: 24px; }
+.paper-archive-ruler i { width: 1px; height: 11px; background: color-mix(in srgb, var(--ink) 40%, transparent); transition: height .22s var(--ease-out), background .22s ease; }
+.paper-archive-ruler i.active { width: 2px; height: 24px; background: var(--archive-accent); }
+
+.paper-archive-shelves { display: flex; align-items: center; justify-self: end; gap: 18px; padding-bottom: 6px; }
+.paper-archive-shelves > div { display: flex; min-width: 118px; flex-direction: column; gap: 3px; text-align: center; }
+.paper-archive-shelves span { color: var(--ink); font-size: 14px; font-weight: 600; animation: paper-archive-roll .32s var(--ease-out) both; }
+
+.paper-archive-hints { grid-column: 1 / -1; justify-self: center; margin: 2px 0 0; font-size: 10.5px; letter-spacing: .12em; text-transform: none; }
+.paper-archive-hints i { margin: 0 12px; font-style: normal; opacity: .55; }
+
+@keyframes paper-archive-roll { from { opacity: 0; transform: translateY(45%); filter: blur(1.5px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes paper-archive-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 980px) {
+  .paper-archive-panel { width: min(400px, 46vw); }
+  .paper-archive-footer { grid-template-columns: 1fr auto; }
+  .paper-archive-rows { display: none; }
+}
+@media (max-height: 620px) {
+  .paper-archive-hints { display: none; }
+  .paper-archive-brand p { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .paper-archive-canvas, .paper-archive-title, .paper-archive-index strong, .paper-archive-shelves span { animation: none; }
+}

@@ -154,4 +154,24 @@ pnpm desktop:release:from-built
 - 1.1.0 tag 的 Windows CI（run `37606519266`）通過：lint、typecheck、600 項單元測試及覆蓋率、21 項 Electron 測試、安裝／升級／卸載／重裝、下載解壓及遠端四個文件哈希校驗；保留既定跳過項目。付費模型及個人硬體仍需真人驗收；後續合併仍須通過最新合併結果的檢查，不沿用舊版本綠燈。
 - 已依使用者授權清理兩端 `codex/reader-ai-chat` 和 `ui/reader-workbench`，保留 `master` 與仍有獨立開發工作的 `codex/rag-review-20260923`；不得清理其他 worktree 的未提交內容。
 - README／Wiki 已按 1.1.0 整理四視圖工作台、DeepSeek／Qwen 問答、本地聊天恢復、PDF 與排版、導出／備份及安裝。四張實際運行截圖用真實公開論文的獨立示例文庫采集，無真人聊天或 API 憑據；問答圖僅未發送草稿，不代表付費模型回答驗收。兩張藍白示意圖與截圖分開標示。
+- 文庫頁（RhineLabUI 檔案陣列）第一版在 `ui/library-rhinelab`，契約與給 Astra 的交接見第 13 節；尚未 push、未跑 CI。
 - Wiki 的版本化源文件在 `docs/wiki/`，先合併主倉庫圖片與文檔，再同步到獨立 Wiki；此目錄提交不會自動發布 Wiki。用戶已明確授權本次遠端 README 與 Wiki 更新，其他任務仍遵守第 8 節上傳授權與最新 CI 門禁。
+
+## 13. 文庫頁（RhineLabUI 檔案陣列，2026-10-07，分支 `ui/library-rhinelab`）
+
+- 上方主導航新增「文庫」（`App.tsx` 的 `library` 視圖），頁面 `pages/LibraryPage.tsx` 以 `React.lazy` 載入，Three.js 只在打開文庫時下載；從文庫打開的閱讀器返回文庫（`returnTo: 'library'`），其他入口仍返回任務管理。
+- 動效、鏡頭、材質與燈光移植自 RhineLabUI（MIT，LBEILC）：`paperArchive/archiveMotion.ts`（入場掃描波、選中肩部、選擇漣漪、閒置呼吸、拖曳慣性）、`paperArchive/PaperArchiveScene.ts`（59°／19° 遠距窄視角、RoomEnvironment、ACES、陰影地板、磨砂蓋板底部漸暗著色＋transmission）。`assets/archive-shell.glb` 只含原 `archive-cassette.glb` 的五個外殼網格（約 210 KB，以 `?inline` 內嵌、`GLTFLoader.parseAsync` 解析，不經 fetch，CSP 不變）；renderer 配置因此加入 `assetsInclude: ['**/*.glb']`。不含原專案的開場、時鐘、音頻、字體、檔案正文與品牌；許可見 `THIRD_PARTY_NOTICES.md` 與 `paperArchive/RHINELABUI_LICENSE.txt`。
+- 資料投影：`archiveShelves.ts` 純函式，按 `createdAt` 本地月份分列（新月份、新論文在前，無效日期歸「未標注日期」），列與行雙向無限循環（`nearestOccurrence` 防止跨整圈跳躍），切列回到該列上次查看的論文；文庫內容變更時以 `jumpTo` 保持目前論文。Index_Inlay 顏色表示狀態：完成為原色、處理中為主色、部分完成琥珀、失敗紅色。
+- 性能契約：按需渲染（只有彈簧、漣漪、拖曳慣性或入場未穩定時連續出幀；閒置呼吸限 30 fps，視窗失焦或 `document.hidden` 時停止）；實例按視錐與霧距剔除，所有外殼共用一個 instanceMatrix；DPR 上限 1.5；只有內部 diffuser（188 三角形）投射陰影；`prefers-reduced-motion` 關閉入場、漣漪與呼吸；卸載時釋放幾何、材質、環境貼圖與 WebGL context。WebGL 或模型失敗時顯示降級提示。體積：runtime 351.6 → 353.15 MiB（上限 360），文庫 chunk 約 1.6 MB。
+- 驗證：以獨立 Vite harness 渲染真實 `LibraryPage`（假資料）與原 RhineLabUI 並排比對鏡頭參數（fov 2.999°、相機位置一致）、靜止肩部、漣漪與切列；Electron 打包內建校驗通過。單元測試 `tests/paperArchive.test.ts` 已補，但依第 8 節未在本地執行，CI 未觸發。
+
+### 給 Astra 的話（Claude，2026-10-07）
+
+Astra 你好～我是 Claude，文庫頁的第一版在 `ui/library-rhinelab`（worktree `Copilotix-library-ui`），只做了論文陣列的滑動／波浪效果。使用者轉達任務後，建議你接手以下幾項（任選，彼此獨立）：
+
+1. **E2E**：在 `e2e/` 加一條文庫冒煙測試——主導航可見「文庫」、點擊後 `section[aria-label="文庫"]` 與 `canvas.paper-archive-canvas` 出現、↑↓ 後 `.paper-archive-index strong` 數字變化、「打開閱讀」進入閱讀器並能返回文庫。注意 CI 的 Windows 虛擬機可能沒有 GPU，WebGL 失敗時頁面會顯示「當前環境無法顯示三維文庫」，斷言要接受這條降級路徑。
+2. **檢索**：仿 RhineLab 的 ARCHIVE INDEX，在文庫右上加搜尋（可重用任務頁的 `/` 快捷鍵），選中結果後呼叫 `PaperArchiveScene.focusPaper(id)`，它會沿最近的循環位置平滑移動並觸發漣漪。
+3. **低端顯卡畫質開關**：如果真人驗收在核顯上卡頓，可在 `arrayMaterial` 把 Frosted_Polymer 的 `transmission` 設 0 並把顏色壓暗（約 `#e9dfd2`），保留底部漸暗著色即可維持波浪可讀性。
+
+請不要改 `archiveMotion.ts` 的曲線常數（與原作逐幀校準）；需要調整手感時改 `PaperArchiveScene.ts` 的彈簧速率。有問題請在本節下方追加回覆～
+

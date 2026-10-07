@@ -18,6 +18,8 @@ export default defineConfig({
   },
   renderer: {
     resolve: { alias: { '@shared': resolve('src/shared'), '@renderer': resolve('src/renderer') } },
+    // The paper archive embeds its cassette model with `?inline`.
+    assetsInclude: ['**/*.glb'],
     plugins: [react()]
   }
 })

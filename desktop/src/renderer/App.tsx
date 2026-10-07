@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileAddOutlined, FileTextOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, FileAddOutlined, FileTextOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
 import type { AppSettings } from '@shared/types'
 import type { DocumentDetails } from '@shared/ipcSchemas'
 import EdgeDock from './components/EdgeDock'
@@ -17,8 +17,10 @@ import {
 } from './documentCache'
 
 const ReaderPage = React.lazy(() => import('./pages/ReaderPage'))
+// Three.js is only loaded once the archive is opened.
+const LibraryPage = React.lazy(() => import('./pages/LibraryPage'))
 
-type View = { name: 'new' | 'tasks' | 'settings' | 'tutorial' } | { name: 'reader'; documentId: string }
+type View = { name: 'new' | 'tasks' | 'library' | 'settings' | 'tutorial' } | { name: 'reader'; documentId: string; returnTo?: 'tasks' | 'library' }
 
 export default function App(): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -77,6 +79,7 @@ export default function App(): React.JSX.Element {
   }, [queryClient])
 
   const openDocument = React.useCallback((documentId: string) => setView({ name: 'reader', documentId }), [])
+  const openFromLibrary = React.useCallback((documentId: string) => setView({ name: 'reader', documentId, returnTo: 'library' }), [])
   const onSettingsSaved = React.useCallback((next: AppSettings) => {
     queryClient.setQueryData(['settings'], next)
   }, [queryClient])
@@ -88,6 +91,7 @@ export default function App(): React.JSX.Element {
         <nav className="top-navigation" aria-label="主导航">
           <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => setView({ name: 'new' })} />
           <NavigationButton active={view.name === 'tasks'} icon={<FileTextOutlined />} label="任务管理" onClick={() => setView({ name: 'tasks' })} />
+          <NavigationButton active={view.name === 'library'} icon={<AppstoreOutlined />} label="文库" onClick={() => setView({ name: 'library' })} />
           <NavigationButton active={view.name === 'settings'} icon={<SettingOutlined />} label="设置" onClick={() => setView({ name: 'settings' })} />
           <NavigationButton active={view.name === 'tutorial'} icon={<ReadOutlined />} label="新手教程" onClick={() => setView({ name: 'tutorial' })} />
           <a className="top-navigation-item" href="https://github.com/Kumiko-kmk/Copilotix" target="_blank" rel="noreferrer" aria-label="打开 GitHub">
@@ -111,6 +115,11 @@ export default function App(): React.JSX.Element {
           />
         ) : null}
         {view.name === 'tasks' ? <TasksPage documents={documents} onOpen={openDocument} onCreate={() => setView({ name: 'new' })} /> : null}
+        {view.name === 'library' ? (
+          <React.Suspense fallback={<div className="page-loading">正在加载文库…</div>}>
+            <LibraryPage documents={documents} onOpen={openFromLibrary} onCreate={() => setView({ name: 'new' })} />
+          </React.Suspense>
+        ) : null}
         {view.name === 'tutorial' && settings ? <TutorialPage
           settings={settings}
           documents={documents}
@@ -127,10 +136,10 @@ export default function App(): React.JSX.Element {
         {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} /> : null}
         {view.name === 'reader' ? (
           <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>
-            <ReaderPage documentId={view.documentId} onBack={() => setView({ name: 'tasks' })} onOpenSettings={() => setView({ name: 'settings' })} />
+            <ReaderPage documentId={view.documentId} onBack={() => setView({ name: view.returnTo ?? 'tasks' })} onOpenSettings={() => setView({ name: 'settings' })} />
           </React.Suspense>
         ) : null}
-        {!settings && view.name !== 'reader' ? <div className="page-loading">正在加载…</div> : null}
+        {!settings && view.name !== 'reader' && view.name !== 'library' ? <div className="page-loading">正在加载…</div> : null}
       </main>
     </div>
   )

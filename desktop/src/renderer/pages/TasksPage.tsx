@@ -7,7 +7,7 @@ import type { DocumentSummary } from '@shared/ipcSchemas'
 type WorkflowStatus = DocumentSummary['workflow']['status']
 type StatusFilter = 'all' | 'active' | 'completed' | 'attention'
 
-const statusLabels: Record<WorkflowStatus, string> = {
+export const statusLabels: Record<WorkflowStatus, string> = {
   queued: '排队中', uploading: '上传中', parsing: '解析中', translating: '翻译中',
   partial: '部分完成', completed: '已完成', failed: '失败'
 }
