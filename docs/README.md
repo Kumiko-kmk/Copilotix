@@ -5,6 +5,8 @@
 - [桌面開發說明](DESKTOP_DEVELOPMENT_ZH.md)
 - [桌面端 UI 交互规范](UI_INTERACTION_ZH.md)
 - [桌面架構基線](ARCHITECTURE_ZH.md)
+- [單篇文獻 AI 問答：Agent 協作與維護契約](READER_AI_CHAT_PLAN_ZH.md)
+- [Markdown 閱讀與標準導出](MARKDOWN_FORMAT_ZH.md)
 - [RAG 開發計劃](RAG_DEVELOPMENT_PLAN_ZH.md)
 - [RAG 分步實施計劃（代碼＋測試＋驗收）](rag-implementation/README.md)
 - [安全策略](SECURITY.md)

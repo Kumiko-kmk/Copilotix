@@ -1,13 +1,8 @@
+import SafeMarkdown, { resolveAsset } from './SafeMarkdown'
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Button, Spin } from 'antd'
 import { HighlightOutlined, MessageOutlined, UnderlineOutlined } from '@ant-design/icons'
-import ReactMarkdown, { type Components } from 'react-markdown'
-import rehypeKatex from 'rehype-katex'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
 import type { ReaderBlock } from '@shared/readerDocument'
 import {
@@ -32,12 +27,18 @@ import {
   type ReaderTextSelection
 } from '../readerAnnotations'
 import MarkdownMinimap from './MarkdownMinimap'
-import rehypeTableMath from '../rehypeTableMath'
 import ReaderFigureSnapshot from './ReaderFigureSnapshot'
 import type { ReaderFigureGroup } from '../readerFigureGroups'
 import { recordReaderDuration } from '../readerPerformance'
+import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
+/**
+ * Long papers mount their blocks over several frames so opening one never
+ * freezes the window. Short documents still mount in a single commit.
+ */
+export const MARKDOWN_INITIAL_BLOCKS = 80
+export const MARKDOWN_BLOCKS_PER_FRAME = 40
 const SCROLL_SELECTION_INTERVAL_MS = 80
 const SCROLL_IDLE_DELAY_MS = 120
 
@@ -51,19 +52,6 @@ interface BlockPosition {
   center: number
 }
 
-const markdownSanitizeSchema = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    code: [['className', /^language-./, 'math-inline', 'math-display']],
-    th: [...(defaultSchema.attributes?.th ?? []), 'rowSpan', 'colSpan'],
-    td: [...(defaultSchema.attributes?.td ?? []), 'rowSpan', 'colSpan']
-  },
-  protocols: {
-    ...defaultSchema.protocols,
-    src: [...(defaultSchema.protocols?.src ?? []), 'blob', 'data', 'copilotix-asset']
-  }
-}
 
 export default function MarkdownPane(props: {
   active: boolean
@@ -83,8 +71,12 @@ export default function MarkdownPane(props: {
   onRenderReady?(): void
   initialScrollTop?: number
   onScrollTopChange?(scrollTop: number): void
+  /** Optional scroll sync with other reader views (follows and leads by block mapping). */
+  scrollSync?: ScrollSyncChannel
 }): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const paneRef = React.useRef<HTMLDivElement>(null)
+  const scrollIntentRef = React.useRef<ScrollIntent | null>(null)
   const articleRef = React.useRef<HTMLElement>(null)
   const documentId = React.useId()
   const scrollFrameRef = React.useRef<number | null>(null)
@@ -127,6 +119,37 @@ export default function MarkdownPane(props: {
     totalImages: 0
   })
   const ready = renderState.status === 'ready'
+  const readyRef = React.useRef(ready)
+  readyRef.current = ready
+
+  // Scroll sync: lead with the block at the reading line, follow other views to the same block.
+  React.useEffect(() => {
+    const pane = paneRef.current
+    const channel = props.scrollSync
+    if (!pane || !channel) return
+    const intent = trackScrollIntent(pane)
+    scrollIntentRef.current = intent
+    const unregister = channel.register((position) => {
+      const container = containerRef.current
+      const element = blockElementsRef.current.get(position.mappingId)
+      if (!container || !element || !readyRef.current) return
+      const target = element.offsetTop + position.fraction * element.offsetHeight - container.clientHeight * SYNC_READING_LINE
+      intent.markProgrammatic()
+      container.scrollTop = Math.max(0, target)
+    })
+    return () => {
+      unregister()
+      intent.dispose()
+      scrollIntentRef.current = null
+    }
+  }, [props.scrollSync])
+  const mountKey = `${contentRevision}:${renderAttempt}`
+  const [mountProgress, setMountProgress] = React.useState({ key: mountKey, count: MARKDOWN_INITIAL_BLOCKS })
+  const mountedCount = Math.min(
+    props.blocks.length,
+    mountProgress.key === mountKey ? mountProgress.count : MARKDOWN_INITIAL_BLOCKS
+  )
+  const allBlocksMounted = mountedCount >= props.blocks.length
   const figureGroupByBlockIndex = React.useMemo(() => {
     const result = new Map<number, ReaderFigureGroup>()
     for (const group of props.figureGroups ?? []) {
@@ -160,6 +183,10 @@ export default function MarkdownPane(props: {
   React.useLayoutEffect(() => {
     const article = articleRef.current
     if (!article) return
+    if (!allBlocksMounted) {
+      setRenderState({ status: 'loading', completedImages: 0, totalImages: 0 })
+      return
+    }
     const controller = new AbortController()
     const images = Array.from(article.querySelectorAll<HTMLImageElement>('img'))
     let completedImages = 0
@@ -203,7 +230,15 @@ export default function MarkdownPane(props: {
       controller.abort()
       if (timeoutId !== null) window.clearTimeout(timeoutId)
     }
-  }, [props.assetBaseUrl, contentRevision, renderAttempt])
+  }, [allBlocksMounted, props.assetBaseUrl, contentRevision, renderAttempt])
+
+  React.useEffect(() => {
+    if (allBlocksMounted) return
+    const frame = window.requestAnimationFrame(() => {
+      setMountProgress({ key: mountKey, count: mountedCount + MARKDOWN_BLOCKS_PER_FRAME })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [allBlocksMounted, mountKey, mountedCount])
 
   const rebuildBlockPositions = React.useCallback(() => {
     const startedAt = performance.now()
@@ -392,6 +427,14 @@ export default function MarkdownPane(props: {
     const container = containerRef.current
     if (container) props.onScrollTopChange?.(container.scrollTop)
     if (!props.active || !ready) return
+    if (container && props.scrollSync && scrollIntentRef.current?.isUserScroll()) {
+      const line = container.scrollTop + container.clientHeight * SYNC_READING_LINE
+      const nearest = nearestBlockPosition(blockPositionsRef.current, line)
+      const element = nearest ? blockElementsRef.current.get(nearest.mappingId) : undefined
+      if (nearest && element) {
+        props.scrollSync.report({ mappingId: nearest.mappingId, fraction: clampFraction((line - element.offsetTop) / Math.max(1, element.offsetHeight)) })
+      }
+    }
     scrollActiveRef.current = true
     if (scrollIdleTimerRef.current !== null) window.clearTimeout(scrollIdleTimerRef.current)
     scrollIdleTimerRef.current = window.setTimeout(() => {
@@ -404,7 +447,7 @@ export default function MarkdownPane(props: {
       scrollSelectionTimerRef.current = null
       syncScrollSelection()
     }, SCROLL_SELECTION_INTERVAL_MS)
-  }, [closeTextSelection, flushDeferredResize, props.active, props.onScrollTopChange, ready, syncScrollSelection, textSelection])
+  }, [closeTextSelection, flushDeferredResize, props.active, props.onScrollTopChange, props.scrollSync, ready, syncScrollSelection, textSelection])
 
   const applyTextAnnotation = React.useCallback((kind: ReaderAnnotationKind) => {
     const article = articleRef.current
@@ -469,7 +512,7 @@ export default function MarkdownPane(props: {
   }, [])
 
   return (
-    <div className="markdown-pane">
+    <div className="markdown-pane" ref={paneRef}>
       <div
         id={documentId}
         className={`markdown-scroll markdown-render-${renderState.status}`}
@@ -482,6 +525,7 @@ export default function MarkdownPane(props: {
           <div className="markdown-render-status" role="status">
             <Spin size="large" />
             <span>正在渲染 Markdown…</span>
+            {!allBlocksMounted ? <small>段落 {mountedCount} / {props.blocks.length}</small> : null}
             {renderState.totalImages > 0 ? (
               <small>图片 {renderState.completedImages} / {renderState.totalImages}</small>
             ) : null}
@@ -504,7 +548,7 @@ export default function MarkdownPane(props: {
           className="markdown-body"
           aria-hidden={!ready}
         >
-          {props.blocks.map((block, index) => {
+          {props.blocks.slice(0, mountedCount).map((block, index) => {
             const blockId = block.mappingIds[0] ?? `markdown-${index}`
             const figureGroup = figureGroupByBlockIndex.get(index)
             return (
@@ -612,7 +656,7 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
         data-page-index={props.block.pageIndex}
         className={'markdown-supplemental markdown-supplemental-' + props.block.role}
       >
-        <MarkdownContent markdown={props.block.text ?? ''} assetBaseUrl={props.assetBaseUrl} />
+        <SafeMarkdown markdown={props.block.text ?? ''} assetBaseUrl={props.assetBaseUrl} />
       </div>
     )
   }
@@ -645,7 +689,7 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
           onRendered={props.onFigureRendered}
         />
       ) : (
-        <MarkdownContent markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} />
+        <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} />
       )}
     </div>
   )
@@ -666,7 +710,7 @@ function FigureBlockPresentation(props: {
     <>
       {hiddenMarkdown ? (
         <div className="reader-figure-hidden-source" aria-hidden="true">
-          <MarkdownContent markdown={hiddenMarkdown} assetBaseUrl={props.assetBaseUrl} />
+          <SafeMarkdown markdown={hiddenMarkdown} assetBaseUrl={props.assetBaseUrl} />
         </div>
       ) : null}
       {isOwner ? (
@@ -681,14 +725,14 @@ function FigureBlockPresentation(props: {
                   <img key={asset} src={resolveAsset(asset, props.assetBaseUrl)} alt="" />
                 ))}
               </div>
-              <MarkdownContent markdown={props.group.fallbackLegendMarkdown} assetBaseUrl={props.assetBaseUrl} />
+              <SafeMarkdown markdown={props.group.fallbackLegendMarkdown} assetBaseUrl={props.assetBaseUrl} />
             </div>
           )}
         />
       ) : null}
       {isCaption ? (
         <div className="reader-figure-caption">
-          <MarkdownContent markdown={props.group.captionMarkdown} assetBaseUrl={props.assetBaseUrl} />
+          <SafeMarkdown markdown={props.group.captionMarkdown} assetBaseUrl={props.assetBaseUrl} />
         </div>
       ) : null}
     </>
@@ -779,48 +823,6 @@ function highlightColorLabel(color: HighlightColor): string {
   return ({ yellow: '黄色', green: '绿色', blue: '蓝色', pink: '粉色', purple: '紫色' })[color]
 }
 
-const MarkdownContent = React.memo(function MarkdownContent(props: {
-  markdown: string
-  assetBaseUrl: string
-}): React.JSX.Element {
-  const components = React.useMemo<Components>(() => ({
-    img: ({ src, alt, width, height }) => (
-      <img
-        src={resolveAsset(src, props.assetBaseUrl)}
-        alt={alt ?? ''}
-        width={width}
-        height={height}
-        loading="eager"
-        decoding="async"
-      />
-    ),
-    table: ({ node: _node, ...tableProps }) => (
-      <div className="markdown-table-scroll">
-        <table {...tableProps} />
-      </div>
-    ),
-    a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>
-  }), [props.assetBaseUrl])
-
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[
-        rehypeRaw,
-        [rehypeSanitize, markdownSanitizeSchema],
-        rehypeTableMath,
-        [rehypeKatex, { trust: false, throwOnError: false, strict: 'ignore' }]
-      ]}
-      components={components}
-    >
-      {props.markdown}
-    </ReactMarkdown>
-  )
-})
-
-function parseMappingIds(value: string | undefined): string[] {
-  return value?.split(/\s+/).filter(Boolean) ?? []
-}
 
 function nearestBlockPosition(positions: BlockPosition[], target: number): BlockPosition | null {
   if (positions.length === 0) return null
@@ -897,7 +899,7 @@ function readableRenderError(error: unknown): string {
   return error instanceof Error && error.message ? error.message : 'Markdown 资源加载失败，请重新加载。'
 }
 
-function resolveAsset(src: string | undefined, base: string): string | undefined {
-  if (!src || /^(https?:|data:|blob:|copilotix-asset:)/i.test(src)) return src
-  return new URL(src.replace(/^\.\//, ''), base).toString()
+
+function parseMappingIds(value: string | undefined): string[] {
+  return value?.split(/\s+/).filter(Boolean) ?? []
 }

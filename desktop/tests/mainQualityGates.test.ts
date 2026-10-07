@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from '@shared/constants'
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -13,10 +14,9 @@ import { projectDocumentDetails, projectDocumentSummary } from '@main/documentPr
 import { RpcJobRepository } from '@main/rpcJobRepository'
 import { RpcRagContentIndexer } from '@main/rpcRagContentIndexer'
 import { RpcRagRepository } from '@main/rpcRagRepository'
-import { RpcTaskCompute } from '@main/rpcTaskCompute'
+import { COMPUTE_RPC_TIMEOUT_MS, RpcTaskCompute } from '@main/rpcTaskCompute'
 import { RpcTaskRepository } from '@main/rpcTaskRepository'
 import { SettingsService } from '@main/settingsService'
-import { splitIntoParserBatches } from '@main/taskService'
 import { canTransition, JobRunnerError } from '@core/jobs'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { TaskComputePort } from '@core/ports'
@@ -84,6 +84,7 @@ const baseTask: CopilotixTask = {
 }
 
 const baseSettings: AppSettings = {
+  ...DEFAULT_SETTINGS,
   outputRoot: 'C:\\output',
   formulaEnabled: true,
   tableEnabled: true,
@@ -155,8 +156,7 @@ describe('main quality boundaries', () => {
         if (operation === 'compute:rag-content-index') return {
           documentId: 'task', contentRevisionId: 'revision', chunkCount: 3, revisionState: 'ready'
         }
-        if (operation === 'translation:cache-get') return { translated: 'cached' }
-        if (operation === 'tasks:get' || operation === 'documents:get-summary' || operation === 'artifacts:get-latest' || operation === 'knowledge:get') return null
+        if (operation === 'tasks:get' || operation === 'documents:get-summary' || operation === 'knowledge:get') return null
         if (operation === 'knowledge:set-semantic-consent') return {
           documentId: 'task', localState: 'unindexed', localProgress: 0, localError: null,
           activeContentRevisionId: null, semanticConsent: true, semanticState: 'requires-credential',
@@ -169,8 +169,11 @@ describe('main quality boundaries', () => {
           jobStatus: 'queued', vectorIndexState: 'queued', semanticState: 'queued'
         }
         if (operation === 'jobs:list' || operation === 'jobs:claim-batch' || operation === 'jobs:recover-expired') return []
-        if (operation === 'tasks:list' || operation === 'documents:list' || operation === 'translation:blocks-list' || operation === 'annotations:list' || operation === 'annotations:replace') return []
-        return operation === 'tasks:update' ? baseTask : undefined
+        if (operation === 'tasks:list' || operation === 'documents:list') {
+          // Two pages: the repository must follow the cursor to the end.
+          return (payload as { after?: unknown }).after ? { items: [], next: null } : { items: [], next: { createdAt: now, id: 'task' } }
+        }
+        return undefined
       }
     } as unknown as UtilitySupervisor
 
@@ -199,23 +202,11 @@ describe('main quality boundaries', () => {
     await repository.findByHash('hash')
     await repository.listDocumentSummaries()
     await repository.getDocumentSummary('task')
-    await repository.getLatestArtifactReference('task', 'layout')
     await repository.listDocumentAnnotations({ documentId: 'task', view: 'original' })
     await repository.mutateDocumentAnnotations({ documentId: 'task', artifactId: 'artifact', view: 'original', expectedRevision: 0, upserts: [], deleteIds: [] })
-    await repository.insertTask(baseTask)
     await repository.insertTasks([baseTask])
     await repository.updateDocumentMetadata('task', { displayTitle: 'title' })
-    await repository.updateTask('task', { error: null })
     await repository.deleteTask('task')
-    await repository.upsertTranslationBlock({ taskId: 'task', blockId: 'block', sourceHash: 'hash', sourceMarkdown: 'text', translatedMarkdown: null, provider: null, model: null, status: 'pending', error: null })
-    await repository.commitTranslationBatch({ taskId: 'task', jobId: 'job', blocks: [], cacheEntries: [] })
-    await repository.listTranslationBlocks('task')
-    await repository.listTranslationBlocks('task', 'job')
-    await repository.updateTranslationRun('task', 1, 1, 0)
-    await expect(repository.getCache('key')).resolves.toBe('cached')
-    await repository.putCache('key', 'translated', 'qwen', 'model')
-    await repository.listReaderAnnotations('task')
-    await repository.replaceReaderAnnotations({ taskId: 'task', view: 'original', annotations: [] })
     await repository.recordArtifactRevision('task', 'layout', 'layout.json', 'hash')
     await repository.recordArtifactRevision('task', 'layout', 'layout.json', 'hash', { source: 'test' }, 'job')
 
@@ -245,7 +236,7 @@ describe('main quality boundaries', () => {
     await expect(contentIndexer.index('task', 'revision', indexSignal)).resolves.toMatchObject({ chunkCount: 3 })
 
     expect(calls.some((call) => call.operation === 'compute:translation-plan-open' && call.payload === 'full.md')).toBe(false)
-    expect(calls.map((call) => call.operation)).toContain('translation:batch-commit')
+    expect(calls.filter((call) => call.operation === 'documents:list').map((call) => call.payload)).toEqual([{}, { after: { createdAt: now, id: 'task' } }])
     expect(calls.map((call) => call.operation)).toContain('jobs:cancel')
     expect(calls).toContainEqual({ operation: 'knowledge:get', payload: { documentId: 'task' }, options: undefined })
     expect(calls).toContainEqual({
@@ -261,7 +252,7 @@ describe('main quality boundaries', () => {
     expect(calls).toContainEqual({
       operation: 'compute:rag-content-index',
       payload: { documentId: 'task', contentRevisionId: 'revision' },
-      options: { signal: indexSignal }
+      options: { signal: indexSignal, timeoutMs: COMPUTE_RPC_TIMEOUT_MS }
     })
   })
 
@@ -315,10 +306,8 @@ describe('main quality boundaries', () => {
     ])
 
     expect(await service.resolveAsset(task.id, '/images/figure.png')).toBe(join(await realpath(root), 'images', 'figure.png'))
-    await service.recordArtifact(task, 'parsed_markdown', join(root, 'full.md'), 'job')
-    expect(revisions).toHaveLength(1)
-    await service.atomicWriteJson(join(root, 'atomic.json'), { ok: true })
-    await expect(readFile(join(root, 'atomic.json'), 'utf8')).resolves.toContain('"ok": true')
+    await service.atomicWriteFile(join(root, 'atomic.json'), JSON.stringify({ ok: true }))
+    await expect(readFile(join(root, 'atomic.json'), 'utf8')).resolves.toContain('"ok":true')
 
     await writeFile(blockPath, '{"version":2,"mappings":[]}', 'utf8')
     await expect(service.loadMappings(task)).resolves.toEqual([mapping])
@@ -374,6 +363,7 @@ describe('main quality boundaries', () => {
     })
     await expect(service.get()).resolves.toMatchObject({ credentials: { parser: { state: 'unknown', maskedValue: 'pa****er' }, qwen: { state: 'missing' } } })
     const result = await service.save({
+      ...DEFAULT_SETTINGS,
       credentialMutations: {
         parser: { action: 'set', value: ' parser-next ' },
         qwen: { action: 'clear' },
@@ -397,8 +387,6 @@ describe('main quality boundaries', () => {
     expect(result.settings.credentials.deepseek).toMatchObject({ state: 'valid', maskedValue: 'de****ek' })
     expect(saved).toHaveLength(1)
     expect(saved[0]).toMatchObject({ formulaEnabled: true, tableEnabled: true })
-    expect(splitIntoParserBatches([1, 2, 3], 2)).toEqual([[1, 2], [3]])
-    expect(() => splitIntoParserBatches([], 0)).toThrow('Batch size')
   })
 
   it('exercises document commands across duplicate, retry, import, and deletion paths', async () => {
@@ -422,6 +410,7 @@ describe('main quality boundaries', () => {
     }
     const tasks = new Map<string, CopilotixTask>()
     const enqueued: unknown[] = []
+    const insertBatches: number[] = []
     const job = {
       id: 'job-retry',
       documentId: baseTask.id,
@@ -432,14 +421,20 @@ describe('main quality boundaries', () => {
     const repository = {
       listTasks: async () => [...tasks.values()],
       findByHash: async (hash: string) => hash === 'existing-hash' ? baseTask : null,
-      insertTasks: async (created: CopilotixTask[]) => { for (const task of created) tasks.set(task.id, task) },
+      insertTasks: async (created: CopilotixTask[]) => {
+        insertBatches.push(created.length)
+        for (const task of created) tasks.set(task.id, task)
+      },
       getTask: async (id: string) => id === baseTask.id ? { ...baseTask, outputDir: join(root, 'output', 'documents-v2', baseTask.id) } : tasks.get(id) ?? null,
       updateTask: async (id: string, patch: Partial<CopilotixTask>) => ({ ...baseTask, id, ...patch }),
       deleteTask: async (id: string) => { tasks.delete(id) }
     } as unknown as TaskRepositoryCompat
     const compute = {
       hashFile: async (path: string) => path === duplicateSource ? 'existing-hash' : 'new-hash',
-      importPdf: async (_path: string, id: string) => ({ sha256: 'imported-hash', size: 12 + id.length })
+      importPdf: async (path: string, id: string) => {
+        if (path.endsWith('oversized.pdf')) throw Object.assign(new Error('PDF exceeds the supported size limit'), { code: 'CORE_LIMIT_EXCEEDED' })
+        return { sha256: path.includes('bulk-') ? `hash-${path}` : 'imported-hash', size: 12 + id.length }
+      }
     } as unknown as TaskComputePort
     const jobs = {
       list: async (query: { documentId?: string }) => query.documentId === baseTask.id ? [job] : [],
@@ -458,17 +453,19 @@ describe('main quality boundaries', () => {
     )
 
     await expect(service.list()).resolves.toEqual([])
-    await expect(service.inspectPdfs([source])).resolves.toMatchObject([{ name: 'paper.pdf', size: 15 }])
-    await expect(service.create({
-      files: [
-        { path: source, name: 'paper.pdf', size: 15 },
-        { path: textFile, name: 'notes.txt', size: 9 }
-      ]
-    })).resolves.toHaveLength(1)
-    expect(enqueued.length).toBeGreaterThan(0)
+    const first = await service.importPaths([duplicateSource, join(root, 'oversized.pdf'), duplicateSource, textFile], {})
+    expect(first.created).toHaveLength(1)
+    // One bad file is reported without aborting the rest of the selection.
+    expect(first.failed).toEqual([{ name: 'oversized.pdf', message: '超过 200MB 或 600 页的解析限制' }])
     expect(scheduler.wake).toHaveBeenCalled()
-    await expect(service.importPaths([duplicateSource, duplicateSource, textFile], {})).resolves.toHaveLength(1)
+    // A selection larger than one RPC batch is inserted in bounded batches.
+    const bulk = Array.from({ length: 205 }, (_, index) => join(root, `bulk-${index}.pdf`))
+    expect((await service.importPaths(bulk, {})).created).toHaveLength(205)
+    expect(insertBatches).toEqual([1, 100, 100, 5])
+    // Parse jobs are created with the documents; import never enqueues separately.
+    expect(enqueued).toEqual([])
     await expect(service.retry(baseTask.id)).resolves.toBeUndefined()
+    expect(enqueued).toHaveLength(1)
     await expect(service.retry('missing')).rejects.toThrow('任务不存在')
     const noRetryJobs = { ...jobs, list: async () => [] } as unknown as JobRepositoryPort
     const noRetryService = new DocumentCommandService(repository, { get: async () => settings } as never, compute, new PathPolicy(), logger, { jobRepository: noRetryJobs })
@@ -483,7 +480,7 @@ describe('main quality boundaries', () => {
       new PathPolicy(),
       logger
     )
-    await expect(noTokenService.create({ files: [] })).rejects.toThrow('Token')
+    await expect(noTokenService.importPaths([source], {})).rejects.toThrow('Token')
   })
 
   it('covers IPC URL/error/event boundary cases', () => {

@@ -1,4 +1,5 @@
 import type { CoreOperationPayload, CoreOperationResult } from '@shared/coreRpcSchemas'
+import { COMPUTE_RPC_TIMEOUT_MS } from './rpcTaskCompute'
 import type { UtilitySupervisor } from './utilitySupervisor'
 
 export type RpcRagContentIndexResult = CoreOperationResult['compute:rag-content-index']
@@ -9,6 +10,6 @@ export class RpcRagContentIndexer {
 
   index(documentId: string, contentRevisionId: string, signal?: AbortSignal): Promise<RpcRagContentIndexResult> {
     const payload: CoreOperationPayload['compute:rag-content-index'] = { documentId, contentRevisionId }
-    return this.supervisor.request('compute:rag-content-index', payload, { signal })
+    return this.supervisor.request('compute:rag-content-index', payload, { signal, timeoutMs: COMPUTE_RPC_TIMEOUT_MS })
   }
 }

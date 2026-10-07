@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { resolvePaperChatModel } from '@shared/paperChatSchemas'
 import { existsSync, realpathSync } from 'node:fs'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
@@ -45,6 +46,11 @@ type V2JobStatus = 'queued' | 'running' | 'retry-wait' | 'succeeded' | 'partial'
 
 /** Must match the Utility chunker identity used by the 03 index runner. */
 export const RAG_DEFAULT_CHUNKER_FINGERPRINT = 'structure-aware-v1:tokens-v1:utf16'
+
+export interface ListCursor {
+  createdAt: string
+  id: string
+}
 
 export interface DocumentMetadataPatch {
   displayTitle?: string | null
@@ -103,6 +109,7 @@ const TERMINAL: ReadonlySet<V2JobStatus> = new Set(['succeeded', 'partial', 'fai
 const MAX_TRANSLATION_BATCH_ITEMS = 32
 const MAX_TRANSLATION_BATCH_BYTES = 768 * 1024
 const MAX_TRANSLATION_FIELD_BYTES = 262_144
+const WORKFLOW_JOB_QUERY_CHUNK = 500
 
 export class CompatDomainError extends Error {
   constructor(readonly code: string, message: string) {
@@ -181,6 +188,11 @@ export class V2TaskRepositoryCompat {
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
       deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
+      chatProvider: stored.chatProvider ?? DEFAULT_SETTINGS.chatProvider,
+      qwenChatModel: resolvePaperChatModel('qwen', stored.qwenChatModel),
+      deepseekChatModel: resolvePaperChatModel('deepseek', stored.deepseekChatModel),
+      chatConsentProvider: stored.chatConsentProvider ?? null,
+      chatConsentVersion: stored.chatConsentVersion ?? null,
       credentials: DEFAULT_SETTINGS.credentials
     }
   }
@@ -205,9 +217,14 @@ export class V2TaskRepositoryCompat {
       .run(id, new Date().toISOString())
   }
 
+  /** All tasks, newest first. Prefer the paged variant for RPC responses. */
   listTasks(): CopilotixTask[] {
-    const ids = this.database.connection.prepare('SELECT id FROM documents ORDER BY created_at DESC').all() as Array<{ id: string }>
-    return ids.map(({ id }) => this.getTask(id)).filter((task): task is CopilotixTask => task !== null)
+    return this.listTasksPage(null, -1)
+  }
+
+  /** One keyset page in list order; `after` is the last row of the previous page. */
+  listTasksPage(after: ListCursor | null, limit: number): CopilotixTask[] {
+    return this.readProjectionPage(after, limit).map(({ task }) => task)
   }
 
   getTask(id: string): CopilotixTask | null {
@@ -236,17 +253,20 @@ export class V2TaskRepositoryCompat {
   }
 
   listDocumentSummaries(): DocumentSummary[] {
-    return this.listTasks().map((task) => this.projectSummary(task))
+    return this.listDocumentSummariesPage(null, -1)
+  }
+
+  listDocumentSummariesPage(after: ListCursor | null, limit: number): DocumentSummary[] {
+    return this.readProjectionPage(after, limit).map(({ task, translate }) => this.projectSummary(task, translate))
   }
 
   getDocumentSummary(id: string): DocumentSummary | null {
     const task = this.getTask(id)
-    return task ? this.projectSummary(task) : null
+    return task ? this.projectSummary(task, this.latestJob(id, 'translate') ?? undefined) : null
   }
 
-  private projectSummary(task: CopilotixTask): DocumentSummary {
+  private projectSummary(task: CopilotixTask, job: CompatJobRow | undefined): DocumentSummary {
     const summary = projectDocumentSummary(task)
-    const job = this.latestJob(task.id, 'translate')
     if (!job || (task.status !== 'translating' && task.status !== 'partial' && task.status !== 'completed')) return summary
     const checkpoint = parseObject(job.checkpoint_json)
     if (task.status === 'translating' && (job.status === 'queued' || job.status === 'retry-wait')) summary.workflow.status = 'queued'
@@ -735,6 +755,11 @@ export class V2TaskRepositoryCompat {
    * inside recordArtifactRevisions()'s transaction, including superseding an
    * obsolete active job and inserting the new durable job.
    */
+  ensureContentIndex(documentId: string): void {
+    if (!this.getTask(documentId)) throw new CompatDomainError('QUERY_SCOPE_INVALID', '文档不存在')
+    this.database.transaction(() => this.maybeQueueParsedContentIndexUnsafe(documentId))
+  }
+
   private maybeQueueParsedContentIndexUnsafe(documentId: string): void {
     const parsed = this.database.connection.prepare(`
       SELECT id,created_by_job_id,content_hash,metadata_json
@@ -1069,6 +1094,36 @@ export class V2TaskRepositoryCompat {
       SELECT id,revision FROM artifacts WHERE document_id=? AND kind=? ORDER BY revision DESC LIMIT 1
     `).get(documentId, kind) as { id: string; revision: number } | undefined
     return row ?? null
+  }
+
+  /**
+   * Project a page of documents with two queries (documents + their workflow
+   * jobs) instead of one query per document. A negative limit reads all rows.
+   */
+  private readProjectionPage(after: ListCursor | null, limit: number): Array<{ task: CopilotixTask; translate: CompatJobRow | undefined }> {
+    const documents = (after
+      ? this.database.connection.prepare(`
+          SELECT * FROM documents WHERE created_at < ? OR (created_at = ? AND id > ?)
+          ORDER BY created_at DESC, id ASC LIMIT ?
+        `).all(after.createdAt, after.createdAt, after.id, limit)
+      : this.database.connection.prepare('SELECT * FROM documents ORDER BY created_at DESC, id ASC LIMIT ?').all(limit)
+    ) as unknown as CompatDocumentRow[]
+    const jobsByDocument = new Map<string, CompatJobRow[]>()
+    for (let start = 0; start < documents.length; start += WORKFLOW_JOB_QUERY_CHUNK) {
+      const ids = documents.slice(start, start + WORKFLOW_JOB_QUERY_CHUNK).map((document) => document.id)
+      const rows = this.database.connection.prepare(`
+        SELECT * FROM jobs WHERE kind IN ('parse','translate') AND document_id IN (${ids.map(() => '?').join(',')})
+      `).all(...ids) as unknown as CompatJobRow[]
+      for (const row of rows) {
+        const jobs = jobsByDocument.get(row.document_id)
+        if (jobs) jobs.push(row)
+        else jobsByDocument.set(row.document_id, [row])
+      }
+    }
+    return documents.map((document) => {
+      const jobs = jobsByDocument.get(document.id) ?? []
+      return { task: projectCompatTask(document, jobs), translate: latestJobOfKind(jobs, 'translate') }
+    })
   }
 
   private readProjection(id: string): CopilotixTask | null {

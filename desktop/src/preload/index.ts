@@ -1,3 +1,6 @@
+import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
+import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
+import { ragStreamEventSchema } from '@shared/ragSchemas'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { z } from 'zod'
@@ -19,6 +22,7 @@ import {
   type MutateReaderAnnotationsRequest,
   type SaveDocumentAsRequest,
   importDocumentsIpcRequestSchema,
+  importDocumentsResultSchema,
   listReaderAnnotationsRequestSchema,
   mutateReaderAnnotationsRequestSchema,
   noRequestSchema,
@@ -53,6 +57,23 @@ async function invokeValidated<Request, Response>(
 }
 
 const api: CopilotixDesktopApi = {
+  paperChat: {
+    load: (request) => invokeValidated('paper-chat:load', paperChatLoadRequestSchema, paperChatPageSchema, request),
+    session: (request) => invokeValidated('paper-chat:session', paperChatDocumentRequestSchema, paperChatSessionSchema, request),
+    saveSession: (request) => invokeValidated('paper-chat:save-session', paperChatSaveSessionSchema, paperChatSavedSchema, request),
+    clear: (request) => invokeValidated('paper-chat:clear', paperChatDocumentRequestSchema, paperChatClearedSchema, request),
+    ask: (request) => invokeValidated('paper-chat:ask', paperChatAskRequestSchema, paperChatAskResultSchema, request),
+    cancel: (request) => invokeValidated('paper-chat:cancel', paperChatCancelRequestSchema, paperChatCancelResultSchema, request),
+    ensureIndex: (request) => invokeValidated('paper-chat:ensure-index', paperChatStatusRequestSchema, paperChatStatusSchema, request),
+    onEvent: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const event = decodeIpcEvent(payload, ragStreamEventSchema)
+        if (event) listener(event)
+      }
+      ipcRenderer.on('paper-chat:event', handler)
+      return () => ipcRenderer.removeListener('paper-chat:event', handler)
+    }
+  },
   manageLibrary: (request) => invokeValidated('library:manage', libraryRequestSchema, libraryResultSchema, request),
   getSettings: () => invokeValidated('settings:get', noRequestSchema, appSettingsSchema, undefined),
   saveSettings: (update: SettingsUpdate) => invokeValidated('settings:save', settingsUpdateSchema, settingsSaveResultSchema, update),
@@ -64,16 +85,19 @@ const api: CopilotixDesktopApi = {
   getUsageAnalytics: () => invokeValidated('analytics:usage', noRequestSchema, usageAnalyticsSchema, undefined),
   openStorageLocation: () => invokeValidated('storage:open-location', noRequestSchema, voidResponseSchema, undefined),
   importDocuments: (request: ImportDocumentsRequest, droppedFiles?: File[]) => {
-    const paths = droppedFiles
+    const dropped = droppedFiles
       ?.map((file) => webUtils.getPathForFile(file))
       .filter((path) => path.length > 0)
-    const internalRequest = paths && paths.length > 0
-      ? { options: request, paths }
+    // Main ignores non-PDF paths anyway; dropping them here keeps a mixed
+    // folder drop inside the request limit. Without dropped files Main opens
+    // the native picker instead.
+    const internalRequest = dropped && dropped.length > 0
+      ? { options: request, paths: dropped.filter((path) => /\.pdf$/iu.test(path)) }
       : { options: request }
     return invokeValidated(
       'documents:import',
       importDocumentsIpcRequestSchema,
-      documentSummarySchema.array(),
+      importDocumentsResultSchema,
       internalRequest
     )
   },

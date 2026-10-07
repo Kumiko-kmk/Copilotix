@@ -110,12 +110,17 @@ export class ParseJobRunner implements BatchJobRunner {
 
     const resumable = valid.filter(({ job }) => hasRemoteCheckpoint(job))
     const fresh = valid.filter(({ job }) => !hasRemoteCheckpoint(job))
-    if (fresh.length > 0) results.push(...await this.processFresh(fresh, settings, token, input))
-    if (resumable.length > 0) {
-      const resumed = await Promise.all(resumable.map((loadedJob) => this.resumeOne(loadedJob, settings, token, input)))
-      results.push(...resumed)
+    try {
+      // Fresh uploads and resumed polls are independent; run them together.
+      const [created, resumed] = await Promise.all([
+        fresh.length > 0 ? this.processFresh(fresh, settings, token, input) : [],
+        Promise.all(resumable.map((loadedJob) => this.resumeOne(loadedJob, settings, token, input)))
+      ])
+      return results.concat(created, resumed)
+    } finally {
+      // Snapshots only de-duplicate progress within one run.
+      for (const { job } of valid) this.remoteSnapshots.delete(job.id)
     }
-    return results
   }
 
   private async processFresh(
@@ -312,7 +317,7 @@ export class ParseJobRunner implements BatchJobRunner {
         { signal: input.signal }
       )
       if (!normalized) throw new Error('Parser normalization queue returned no result')
-      if (normalized.displayTitle && originalTask.title === null && this.options.repository.updateDocumentMetadata) {
+      if (normalized.displayTitle && originalTask.title === null) {
         await this.options.repository.updateDocumentMetadata(originalTask.id, { displayTitle: normalized.displayTitle })
       }
       await this.options.usageAnalytics?.recordDocumentPages(originalTask.id, originalTask.createdAt, normalized.pageCount)

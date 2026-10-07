@@ -1,15 +1,21 @@
+import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
+import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
+import { PaperChatStore } from './persistence/paperChatStore'
+import { PaperContextBuilder, PaperContextError } from './paperContextBuilder'
 import { assertLibraryIdle, manageLibrary } from './libraryMaintenance'
 import { libraryCoreRequestSchema } from '@shared/librarySchemas'
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { prepareReaderMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdown'
 import { dirname, extname, isAbsolute, join, relative } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { CoreOperation } from '@shared/coreRpcSchemas'
+import type { CoreListCursor, CoreOperation } from '@shared/coreRpcSchemas'
 import {
+  CORE_LIST_PAGE_MAX_ROWS,
   coreDatabaseInitPayloadSchema,
-  coreTaskPatchSchema,
+  coreListPagePayloadSchema,
   coreJobEnqueuePayloadSchema,
   coreJobIdPayloadSchema,
   coreJobListPayloadSchema,
@@ -29,7 +35,6 @@ import {
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
   coreRagContentIndexPayloadSchema,
-  coreTranslationBatchCommitPayloadSchema,
   coreTranslationPlanOpenPayloadSchema,
   coreTranslationPlanListPayloadSchema,
   coreTranslationPlanCachePayloadSchema,
@@ -75,13 +80,26 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
   flush: () => Promise<void>
   close: () => Promise<void>
 } {
-  // Core runtime handlers may run concurrently.  Keep every operation that
-  // touches the SQLite connection on one async lane so init/close/flush can
-  // never race an in-flight query or let a new query cross a close boundary.
-  let persistenceTail = Promise.resolve()
-  const serializePersistence = <T>(operation: () => T | Promise<T>): Promise<T> => {
-    const next = persistenceTail.then(operation, operation)
-    persistenceTail = next.then(() => undefined, () => undefined)
+  // Core runtime handlers may run concurrently. Operations that touch SQLite
+  // are queued on FIFO lanes: quick data operations on one, long file-heavy
+  // compute (import, normalize, translation plans, indexing) on another, so a
+  // long paper can no longer hold heartbeats, listings and annotation writes
+  // behind it. Interleaving the two lanes is safe because every SQLite
+  // transaction is synchronous. Lifecycle operations (init/flush/close and
+  // library maintenance) are exclusive: they wait for and block both lanes,
+  // so no query can cross a close boundary.
+  let dataTail = Promise.resolve()
+  let computeTail = Promise.resolve()
+  const settled = (promise: Promise<unknown>): Promise<void> => promise.then(() => undefined, () => undefined)
+  const runOnLane = <T>(lane: OperationLane, operation: () => T | Promise<T>): Promise<T> => {
+    if (lane === 'exclusive') {
+      const next = Promise.all([dataTail, computeTail]).then(operation, operation)
+      dataTail = computeTail = settled(next)
+      return next
+    }
+    const next = (lane === 'data' ? dataTail : computeTail).then(operation, operation)
+    if (lane === 'data') dataTail = settled(next)
+    else computeTail = settled(next)
     return next
   }
 
@@ -116,7 +134,24 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     }
     return state.translationPlanManager
   }
+  const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const handlers: UtilityHandlerMap = {
+    'chat:load': (request) => { const { documentId, before } = paperChatLoadRequestSchema.parse(request.payload); return chatStore.load(documentId, before) },
+    'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
+    'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),
+    'chat:save-session': (request) => { const { documentId, session } = paperChatSaveSessionSchema.parse(request.payload); return chatStore.saveSession(documentId, session) },
+    'chat:clear': (request) => chatStore.clear(paperChatDocumentRequestSchema.parse(request.payload).documentId),
+    'chat:ensure-index': (request, signal) => {
+      signal.throwIfAborted()
+      const { documentId } = paperChatStatusRequestSchema.parse(request.payload)
+      requireRepository().ensureContentIndex(documentId)
+      const k = requireRagService().getKnowledge(documentId)
+      return { state: k?.localState ?? 'unindexed', progress: k?.localProgress ?? 0, contentRevisionId: k?.activeContentRevisionId ?? null }
+    },
+    'chat:build-context': (request, signal) => {
+      if (!state.ragRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
+      return new PaperContextBuilder(state.ragRepository).build(paperContextRequestSchema.parse(request.payload), signal)
+    },
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {
       if (!state.databasePath) throw new Error('文档库尚未初始化')
@@ -181,20 +216,15 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       requireRepository().markMigration?.(payload.id)
       return { applied: true }
     },
-    'tasks:list': () => requireRepository().listTasks(),
+    'tasks:list': (request) => {
+      const { after } = coreListPagePayloadSchema.parse(request.payload)
+      return byteBoundedPage((cursor, limit) => requireRepository().listTasksPage(cursor, limit), after ?? null)
+    },
     'tasks:get': (request) => requireRepository().getTask((request.payload as { id: string }).id),
     'tasks:find-by-hash': (request) => requireRepository().findByHash((request.payload as { hash: string }).hash),
-    'tasks:insert': (request) => {
-      requireRepository().insertTask((request.payload as { task: CopilotixTask }).task)
-      return { changed: true }
-    },
     'tasks:insert-many': (request) => {
       requireRepository().insertTasks((request.payload as { tasks: CopilotixTask[] }).tasks)
       return { changed: true }
-    },
-    'tasks:update': (request) => {
-      const payload = request.payload as { id: string; patch: Partial<CopilotixTask> }
-      return requireRepository().updateTask(payload.id, coreTaskPatchSchema.parse(payload.patch))
     },
     'tasks:delete': (request) => {
       requireRepository().deleteTask((request.payload as { id: string }).id)
@@ -212,7 +242,10 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'jobs:manual-retry': (request) => requireJobRepository().manualRetry(coreJobManualRetryPayloadSchema.parse(request.payload)),
     'jobs:recover-expired': (request) => requireJobRepository().recoverExpired(coreJobRecoverExpiredPayloadSchema.parse(request.payload)),
     'jobs:list-events': (request) => requireJobRepository().listEvents(coreJobEventsPayloadSchema.parse(request.payload).jobId),
-    'documents:list': () => requireRepository().listDocumentSummaries(),
+    'documents:list': (request) => {
+      const { after } = coreListPagePayloadSchema.parse(request.payload)
+      return byteBoundedPage((cursor, limit) => requireRepository().listDocumentSummariesPage(cursor, limit), after ?? null)
+    },
     'documents:get-summary': (request) => requireRepository().getDocumentSummary((request.payload as { id: string }).id),
     'documents:update-metadata': (request) => {
       const payload = coreDocumentMetadataPayloadSchema.parse(request.payload)
@@ -231,40 +264,11 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const payload = coreEnsureEmbeddingPayloadSchema.parse(request.payload)
       return requireRagService().ensureEmbeddingJob(payload)
     },
-    'artifacts:get-latest': (request) => {
-      const payload = request.payload as { documentId: string; kind: Parameters<V2TaskRepositoryCompat['getLatestArtifactReference']>[1] }
-      return requireRepository().getLatestArtifactReference(payload.documentId, payload.kind)
-    },
     'artifacts:record-revision': (request) => {
       const payload = request.payload as { taskId: string; kind: Parameters<V2TaskRepositoryCompat['recordArtifactRevision']>[1]; path: string; checksum: string; metadata?: Record<string, unknown>; jobId?: string }
       requireRepository().recordArtifactRevision(payload.taskId, payload.kind, payload.path, payload.checksum, payload.metadata ?? {}, payload.jobId)
       return { changed: true }
     },
-    'translation:block-upsert': (request) => {
-      requireRepository().upsertTranslationBlock((request.payload as { block: Parameters<V2TaskRepositoryCompat['upsertTranslationBlock']>[0] }).block)
-      return { changed: true }
-    },
-    'translation:batch-commit': (request) => {
-      requireRepository().commitTranslationBatch(coreTranslationBatchCommitPayloadSchema.parse(request.payload))
-      return { changed: true }
-    },
-    'translation:blocks-list': (request) => {
-      const payload = request.payload as { taskId: string; jobId?: string }
-      return requireRepository().listTranslationBlocks(payload.taskId, payload.jobId)
-    },
-    'translation:run-update': (request) => {
-      const payload = request.payload as { taskId: string; total: number; completed: number; failed: number }
-      requireRepository().updateTranslationRun(payload.taskId, payload.total, payload.completed, payload.failed)
-      return { changed: true }
-    },
-    'translation:cache-get': (request) => ({ translated: requireRepository().getCache((request.payload as { cacheKey: string }).cacheKey) }),
-    'translation:cache-put': (request) => {
-      const payload = request.payload as { cacheKey: string; translated: string; provider: string; model: string }
-      requireRepository().putCache(payload.cacheKey, payload.translated, payload.provider, payload.model)
-      return { changed: true }
-    },
-    'annotations:list': (request) => requireRepository().listReaderAnnotations((request.payload as { taskId: string }).taskId),
-    'annotations:replace': (request) => requireRepository().replaceReaderAnnotations((request.payload as { request: Parameters<V2TaskRepositoryCompat['replaceReaderAnnotations']>[0] }).request),
     'annotations:list-snapshot': (request) => {
       const payload = request.payload as Parameters<V2TaskRepositoryCompat['listDocumentAnnotations']>[0]
       return requireRepository().listDocumentAnnotations(payload)
@@ -321,31 +325,15 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     }
   }
 
-  const persistenceOperations: readonly CoreOperation[] = [
-    'database:init', 'database:flush', 'database:close', 'library:check', 'library:manage',
-    'settings:get', 'settings:save', 'settings:migration-get', 'settings:migration-mark',
-    'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
-    'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
-    'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
-    'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:get-latest', 'artifacts:record-revision',
-    'knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed',
-    'translation:block-upsert', 'translation:batch-commit', 'translation:blocks-list', 'translation:run-update',
-    'translation:cache-get', 'translation:cache-put',
-    'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
-    'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
-    'compute:rag-content-index',
-    'compute:translation-plan-open', 'compute:translation-plan-list', 'compute:translation-plan-cache',
-    'compute:translation-plan-apply', 'compute:translation-plan-fail', 'compute:translation-plan-finalize'
-  ]
-  for (const operation of persistenceOperations) {
-    const handler = handlers[operation]
-    if (!handler) continue
-    handlers[operation] = (request, signal) => serializePersistence(() => handler(request, signal)).catch((error: unknown) => {
+  for (const [operation, handler] of Object.entries(handlers) as Array<[CoreOperation, CoreUtilityOperationHandler]>) {
+    const lane = operationLane(operation)
+    if (!lane) continue
+    handlers[operation] = (request, signal) => runOnLane(lane, () => handler(request, signal)).catch((error: unknown) => {
       if (operation === 'library:manage' || operation === 'library:check') {
         const message = error instanceof Error ? error.message : '文档库操作失败，请检查目录权限与磁盘空间。'
         throw new CoreUtilityOperationError('LIBRARY_MAINTENANCE_FAILED', message, false)
       }
-      if (error instanceof SqliteJobRepositoryError || error instanceof SqliteRagRepositoryError || error instanceof RagContentIndexError) {
+      if (error instanceof SqliteJobRepositoryError || error instanceof SqliteRagRepositoryError || error instanceof RagContentIndexError || error instanceof PaperContextError) {
         throw new CoreUtilityOperationError(error.code, error.message, error.retryable)
       }
       throw error
@@ -354,11 +342,49 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
 
   return {
     handlers,
-    flush: () => serializePersistence(() => {
+    flush: () => runOnLane('exclusive', () => {
       if (state.database) state.database.connection.exec('PRAGMA wal_checkpoint(PASSIVE)')
     }),
-    close: () => serializePersistence(() => closeState(state))
+    close: () => runOnLane('exclusive', () => closeState(state))
   }
+}
+
+/** Leaves ample room under the 1 MiB envelope for JSON framing. */
+const LIST_PAGE_MAX_BYTES = 512 * 1024
+
+/**
+ * Read up to CORE_LIST_PAGE_MAX_ROWS rows after `after`, then keep only as
+ * many as fit the byte budget (always at least one). Rows that did not fit
+ * are read again for the next page.
+ */
+export function byteBoundedPage<T extends { id: string; createdAt: string }>(
+  readPage: (after: CoreListCursor | null, limit: number) => T[],
+  after: CoreListCursor | null,
+  maxBytes = LIST_PAGE_MAX_BYTES
+): { items: T[]; next: CoreListCursor | null } {
+  const rows = readPage(after, CORE_LIST_PAGE_MAX_ROWS)
+  const items: T[] = []
+  let bytes = 0
+  for (const row of rows) {
+    const size = Buffer.byteLength(JSON.stringify(row), 'utf8')
+    if (items.length > 0 && bytes + size > maxBytes) break
+    items.push(row)
+    bytes += size
+  }
+  const last = items.at(-1)
+  const hasMore = items.length < rows.length || rows.length === CORE_LIST_PAGE_MAX_ROWS
+  return { items, next: hasMore && last ? { createdAt: last.createdAt, id: last.id } : null }
+}
+
+type OperationLane = 'exclusive' | 'data' | 'compute'
+
+const EXCLUSIVE_OPERATIONS: ReadonlySet<CoreOperation> = new Set(['database:init', 'database:flush', 'database:close', 'library:check', 'library:manage'])
+
+/** Unlisted operations (ping, cancel, hash-file) never touch SQLite and run freely. */
+function operationLane(operation: CoreOperation): OperationLane | null {
+  if (EXCLUSIVE_OPERATIONS.has(operation)) return 'exclusive'
+  if (operation === 'compute:hash-file' || !operation.includes(':')) return null
+  return operation.startsWith('compute:') ? 'compute' : 'data'
 }
 
 function closeState(state: UtilityPersistenceState): void {
@@ -535,7 +561,12 @@ async function normalizeParserOutput(
     const layoutData = JSON.parse(await readFile(layoutStaged, 'utf8')) as unknown
     const mappings = buildBlockMappings(task.id, layoutData)
     const pageCount = mappings.reduce((maximum, mapping) => Math.max(maximum, ...mapping.boxes.map((box) => box.pageIndex + 1), 0), 0)
-    const markdownText = await readFile(markdownStaged, 'utf8')
+    const markdownText = prepareReaderMarkdown(await readFile(markdownStaged, 'utf8'), (url) => {
+      if (!isLocalMarkdownImage(url)) return url
+      const asset = pathPolicy.resolveChild(extractedRoot, join(dirname(markdown), decodeURIComponent(url.split(/[?#]/u)[0]!)))
+      return relative(extractedRoot, asset).replace(/\\/gu, '/').split('/').map(encodeURIComponent).join('/')
+    })
+    await writeFile(markdownStaged, markdownText, 'utf8')
     const extractedTitle = extractPaperTitle(markdownText, mappings)
     const displayTitle = extractedTitle ? displayPaperTitle(extractedTitle) : null
     const blockStaged = pathPolicy.resolveChild(stagingRoot, 'block_list.json')

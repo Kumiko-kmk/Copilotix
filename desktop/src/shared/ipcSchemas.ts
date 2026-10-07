@@ -1,17 +1,10 @@
+import { paperChatProviderSchema, qwenChatModelSchema, deepseekChatModelSchema } from './paperChatSchemas'
 import { z } from 'zod'
 import type {
   AppSettings,
   BlockBox,
   BlockMapping,
-  CreateTasksRequest,
-  DeleteTaskRequest,
-  DocumentPayload,
-  HealthResult,
   CopilotixTask,
-  ReaderAnnotation,
-  ReplaceReaderAnnotationsRequest,
-  SaveAsRequest,
-  SelectedPdf,
   CredentialFieldError,
   CredentialMutation,
   CredentialName,
@@ -103,6 +96,11 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   qwenModel: z.string().min(1).max(512),
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
+  chatProvider: paperChatProviderSchema.nullable().default(null),
+  qwenChatModel: qwenChatModelSchema.default('qwen-plus').catch('qwen-plus'),
+  deepseekChatModel: deepseekChatModelSchema.default('deepseek-flash').catch('deepseek-flash'),
+  chatConsentProvider: paperChatProviderSchema.nullable().default(null),
+  chatConsentVersion: z.number().int().min(1).max(1000).nullable().default(null),
   credentials: credentialStatusesSchema
 }).strict().refine(
   (settings) => settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) === settings.translationProvider,
@@ -120,6 +118,11 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
   qwenModel: z.string().min(1).max(512),
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
+  chatProvider: paperChatProviderSchema.nullable().default(null),
+  qwenChatModel: qwenChatModelSchema.default('qwen-plus'),
+  deepseekChatModel: deepseekChatModelSchema.default('deepseek-flash'),
+  chatConsentProvider: paperChatProviderSchema.nullable().default(null),
+  chatConsentVersion: z.number().int().min(1).max(1000).nullable().default(null),
   credentialMutations: z.object({
     parser: credentialMutationSchema.optional(),
     qwen: credentialMutationSchema.optional(),
@@ -137,13 +140,6 @@ export const settingsSaveResultSchema: z.ZodType<SettingsSaveResult> = z.object(
     qwen: credentialFieldErrorSchema.optional(),
     deepseek: credentialFieldErrorSchema.optional()
   }).strict()
-}).strict()
-
-export const healthResultSchema: z.ZodType<HealthResult> = z.object({
-  ok: z.boolean(),
-  message: z.string().max(16_384),
-  code: z.union([z.string().max(512), z.number().finite()]).optional(),
-  traceId: z.string().max(512).optional()
 }).strict()
 
 export const copilotixTaskSchema: z.ZodType<CopilotixTask> = z.object({
@@ -189,67 +185,9 @@ export const translatedMarkdownBlockSchema: z.ZodType<TranslatedMarkdownBlock> =
   mappingIds: z.array(boundedId).max(100_000)
 }).strict()
 
-export const readerAnnotationSchema: z.ZodType<ReaderAnnotation> = z.object({
-  id: boundedId,
-  taskId: boundedId,
-  view: z.enum(['original', 'translated']),
-  kind: z.enum(['highlight', 'underline']),
-  color: z.enum(['yellow', 'green', 'blue', 'pink', 'purple']).nullable(),
-  blockKey: z.string().min(1).max(4_096),
-  startOffset: z.number().int().min(0),
-  endOffset: z.number().int().min(0),
-  quote: z.string().max(1_000_000),
-  prefix: z.string().max(1_000_000),
-  suffix: z.string().max(1_000_000),
-  createdAt: timestamp,
-  updatedAt: timestamp
-}).strict()
-
-export const selectedPdfSchema: z.ZodType<SelectedPdf> = z.object({
-  path: boundedPath,
-  name: safeName,
-  size: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-  duplicateTask: copilotixTaskSchema.optional()
-}).strict()
-
-export const createTasksRequestSchema: z.ZodType<CreateTasksRequest> = z.object({
-  files: z.array(selectedPdfSchema).min(1).max(100),
-  createDuplicates: z.boolean().optional(),
-  useOriginalFilename: z.boolean().optional()
-}).strict()
-
-export const deleteTaskRequestSchema: z.ZodType<DeleteTaskRequest> = z.object({
-  taskId: boundedId,
-  deleteFiles: z.boolean()
-}).strict()
-
-export const replaceReaderAnnotationsRequestSchema: z.ZodType<ReplaceReaderAnnotationsRequest> = z.object({
-  taskId: boundedId,
-  view: z.enum(['original', 'translated']),
-  annotations: z.array(readerAnnotationSchema).max(10_000)
-}).strict()
-
-export const documentPayloadSchema: z.ZodType<DocumentPayload> = z.object({
-  task: copilotixTaskSchema,
-  markdown: z.string().max(100_000_000),
-  translatedMarkdown: z.string().max(100_000_000),
-  translatedBlocks: z.array(translatedMarkdownBlockSchema).max(100_000).nullable(),
-  layoutJson: z.string().max(100_000_000),
-  mappings: z.array(blockMappingSchema).max(100_000),
-  pdfUrl: z.string().min(1).max(8_192),
-  assetBaseUrl: z.string().min(1).max(8_192)
-}).strict()
-
-export const saveAsRequestSchema: z.ZodType<SaveAsRequest> = z.object({
-  taskId: boundedId,
-  kind: z.enum(['original-markdown', 'translated-markdown', 'result-zip'])
-}).strict()
-
 export const windowActionSchema = z.enum(['minimize', 'toggle-maximize', 'close'])
 export const windowStateSchema: z.ZodType<WindowState> = z.object({ maximized: z.boolean() }).strict()
 
-export const taskIdRequestSchema = boundedId
-export const inspectPdfsRequestSchema = z.array(boundedPath).max(100)
 export const noRequestSchema = z.undefined()
 export const outputDirectorySchema = z.string().max(32_768).nullable()
 
@@ -389,12 +327,22 @@ export const importDocumentsRequestSchema = z.object({
 }).strict()
 export type ImportDocumentsRequest = z.infer<typeof importDocumentsRequestSchema>
 
+/** Drag-and-drop accepts as many PDFs as the native file dialog does. */
+export const MAX_IMPORT_PATHS = 2_000
+
 // This request is used only between preload and main. `paths` is never part
 // of the renderer-visible API or any response DTO.
 export const importDocumentsIpcRequestSchema = z.object({
   options: importDocumentsRequestSchema,
-  paths: z.array(boundedPath).max(100).optional()
+  paths: z.array(boundedPath).max(MAX_IMPORT_PATHS).optional()
 }).strict()
+
+/** One unreadable or oversized PDF no longer aborts the rest of a selection. */
+export const importDocumentsResultSchema = z.object({
+  created: z.array(documentSummarySchema).max(MAX_IMPORT_PATHS),
+  failed: z.array(z.object({ name: safeName, message: z.string().max(4_096) }).strict()).max(MAX_IMPORT_PATHS)
+}).strict()
+export type ImportDocumentsResult = z.infer<typeof importDocumentsResultSchema>
 
 export const documentIdRequestSchema = uuid
 export const deleteDocumentRequestSchema = z.object({
@@ -495,4 +443,3 @@ export const mutateReaderAnnotationsRequestSchema = z.object({
 })
 export type MutateReaderAnnotationsRequest = z.infer<typeof mutateReaderAnnotationsRequestSchema>
 
-export const voidDocumentResponseSchema = z.undefined()

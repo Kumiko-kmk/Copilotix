@@ -17,7 +17,6 @@ import {
 } from '@shared/translationPlanProtocol'
 import type { CredentialName, CopilotixTask, TranslationProviderId } from '@shared/types'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
-import type { ArtifactService } from '../artifactService'
 import type { TranslationProvider } from './providers'
 import { TranslationCredentialError, TranslationHttpError } from './providers'
 import { PathPolicy } from '../pathPolicy'
@@ -42,10 +41,8 @@ export interface TranslationPlanOrchestratorOptions {
   providers: Map<TranslationProviderId, TranslationProvider>
   providerOrder: readonly TranslationProviderId[]
   compute: TaskComputePort
-  /** ArtifactService is accepted by structural typing; a small writer keeps tests lightweight. */
-  artifacts?: TranslationPlanFileWriter | Pick<ArtifactService, 'atomicWriteFile'>
-  /** Alias useful to callers that name the dependency after the concrete service. */
-  artifactService?: TranslationPlanFileWriter | Pick<ArtifactService, 'atomicWriteFile'>
+  /** ArtifactService satisfies this structurally; a small writer keeps tests lightweight. */
+  artifacts?: TranslationPlanFileWriter
   pathPolicy?: PathPolicyPort
   signal: AbortSignal
   onProgress(progress: TranslationPlanProgress): void | Promise<void>
@@ -72,7 +69,7 @@ export class TranslationPlanOrchestrator {
 
   constructor(private readonly options: TranslationPlanOrchestratorOptions) {
     this.pathPolicy = options.pathPolicy ?? new PathPolicy()
-    this.fileWriter = options.artifacts ?? options.artifactService
+    this.fileWriter = options.artifacts
   }
 
   async run(): Promise<TranslationPlanFinalizeResult> {
@@ -82,7 +79,7 @@ export class TranslationPlanOrchestrator {
     const compute = requirePlanCompute(this.options.compute)
     const opened = translationPlanOpenResultSchema.parse(await compute.openTranslationPlan(task.id, jobId, signal))
     throwIfAborted(signal)
-    await this.report(opened, [])
+    await this.report(opened)
 
     let cursor = 0
     for (;;) {
@@ -92,7 +89,7 @@ export class TranslationPlanOrchestrator {
       )
       throwIfAborted(signal)
       this.rememberFailed(page.items)
-      await this.report(page.counts, [])
+      await this.report(page.counts)
       const pending = page.items.filter((item) => item.status === 'pending')
       if (pending.length > 0) await this.processPage(pending, compute)
       if (page.nextCursor === null) break
@@ -107,7 +104,7 @@ export class TranslationPlanOrchestrator {
     )
     throwIfAborted(signal)
     this.rememberFailedIds(finalized.failedBlockIdsSample)
-    await this.report(finalized, [])
+    await this.report(finalized)
     return finalized
   }
 
@@ -155,7 +152,7 @@ export class TranslationPlanOrchestrator {
         )
         throwIfAborted(signal)
         this.rememberMutation(descriptor, cache)
-        await this.report(cache, [])
+        await this.report(cache)
         if (cache.status === 'completed') return
       } catch (error) {
         if (isAbortError(error, signal)) throw abortError()
@@ -190,7 +187,7 @@ export class TranslationPlanOrchestrator {
         )
         throwIfAborted(signal)
         this.rememberMutation(descriptor, applied)
-        await this.report(applied, [])
+        await this.report(applied)
         if (applied.status === 'completed') return
         throw new Error(`utility 未完成翻译单元（状态：${applied.status}）`)
       } catch (error) {
@@ -211,7 +208,7 @@ export class TranslationPlanOrchestrator {
     )
     throwIfAborted(signal)
     this.rememberMutation(descriptor, failed)
-    await this.report(failed, [])
+    await this.report(failed)
   }
 
   private async readRequest(descriptor: TranslationPlanWorkDescriptor): Promise<TranslationPlanRequest> {
@@ -273,7 +270,7 @@ export class TranslationPlanOrchestrator {
     }
   }
 
-  private report(result: TranslationPlanCounts | TranslationPlanMutationResult | TranslationPlanFinalizeResult, _failedBlockIds: readonly string[]): Promise<void> {
+  private report(result: TranslationPlanCounts | TranslationPlanMutationResult | TranslationPlanFinalizeResult): Promise<void> {
     const operation = this.progressTail.then(() => this.options.onProgress({
       counts: { total: result.total, completed: result.completed, failed: result.failed },
       failedBlockIds: [...this.failedBlockIds].slice(0, 64)
@@ -287,9 +284,6 @@ export class TranslationPlanOrchestrator {
 export async function runTranslationPlan(options: TranslationPlanOrchestratorOptions): Promise<TranslationPlanFinalizeResult> {
   return new TranslationPlanOrchestrator(options).run()
 }
-
-/** Alias kept explicit for call sites that describe this operation as orchestration. */
-export const orchestrateTranslationPlan = runTranslationPlan
 
 type PlanComputePort = Required<Pick<
   TaskComputePort,

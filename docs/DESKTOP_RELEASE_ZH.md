@@ -48,7 +48,9 @@ manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`�
 
 ## GitHub 正式发布
 
-首次 `desktop-v1.0.0` 可先发布未签章版本，以供后续申请签章服务。此例外要求仓库 Actions variable `COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE` 精确等于 `desktop-v1.0.0`；仅此 tag 使用未签章构建，Release 说明明确标注 unsigned。完整构建、安装／卸载、下载删除、资产数量和远端哈希校验仍执行。发布完成后移除此 variable；其他版本继续要求受信任签章，不以自签证书代替。
+各版本的简体中文发布说明保存为 `docs/releases/<版本>.zh-CN.md`，首行为 Release 标题。发布 job 从对应文件创建草稿，不追加英文自动生成摘要；内容应包括版本更新、下载与安装、服务配置、升级、数据保留、文件校验及实际验证范围。说明和版本号必须与发布 tag 对应，缺少说明时停止发布。
+
+首次 `desktop-v1.0.0` 的未签章例外要求仓库 Actions variable `COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE` 精确等于 `desktop-v1.0.0`。2026-10-07，维护者另行明确授权 **仅本次 `desktop-v1.1.0` 未签章发布**；此例外要求 `COPILOTIX_UNSIGNED_RELEASE_TAG` 精确等于 `desktop-v1.1.0`，工作流也严格限制相同 tag，其他 tag 或变量值不能启用例外。Release 说明醒目标注未签章。完整构建、安装／卸载、下载删除、资产数量和远端哈希校验照常执行。对应发布完成后移除变量，后续版本继续要求受信任签章，不以自签证书代替。
 
 正式发布 tag 必须严格等于 `desktop-v<desktop/package.json version>`，例如 package version 为 `1.0.0` 时只能推送 `desktop-v1.0.0`。CI 会先核对 tag 与包版本，再构建并验证 Electron fuses、签名、运行包和哈希。
 

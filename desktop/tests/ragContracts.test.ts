@@ -576,7 +576,7 @@ describe('RAG bounded answer stream and stable errors', () => {
 
     const evidence = { requestId, sequence: 1, type: 'evidence-ready' as const, resultCount: RAG_MAX_RESULT_PAGE_ITEMS }
     expect(ragStreamEventSchema.parse(evidence)).toEqual(evidence)
-    expect(() => ragStreamEventSchema.parse({ ...evidence, resultCount: RAG_MAX_RESULT_PAGE_ITEMS + 1 })).toThrow()
+    expect(() => ragStreamEventSchema.parse({ ...evidence, resultCount: RAG_MAX_TOTAL_RESULTS + 1 })).toThrow()
 
     const completed = {
       requestId,
@@ -594,7 +594,8 @@ describe('RAG bounded answer stream and stable errors', () => {
   })
 
   it('accepts every stable error code and rejects unknown or unbounded errors', () => {
-    expect(RAG_ERROR_CODES).toHaveLength(20)
+    expect(RAG_ERROR_CODES).toHaveLength(25)
+    expect(RAG_ERROR_CODES).toContain('CHAT_STORAGE_FAILED')
     for (const code of RAG_ERROR_CODES) {
       expect(ragErrorCodeSchema.parse(code)).toBe(code)
       expect(ragErrorSchema.parse({ ...ragError, code })).toMatchObject({ code })
@@ -649,5 +650,15 @@ describe('existing document and job contracts', () => {
     }
     expect(documentSummarySchema.parse(summary)).toEqual(summary)
     expect(() => documentSummarySchema.parse({ ...summary, indexing: 'ready' })).toThrow()
+  })
+})
+
+
+describe('paper chat citation compatibility', () => {
+  it('accepts honest selection and full-text provenance and deterministic revision IDs', () => {
+    for (const source of ['selection', 'full-text'] as const) {
+      const parsed = citationSchema.parse({ ...citation(), locator: { ...citation().locator, contentRevisionId: 'rag-content-revision-' + 'a'.repeat(64) }, scoreProvenance: [{ source, rank: 1, score: 1 }] })
+      expect(parsed.scoreProvenance[0]!.source).toBe(source)
+    }
   })
 })

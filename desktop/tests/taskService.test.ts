@@ -68,27 +68,22 @@ describe('durable TaskService cutover', () => {
 
   it('forwards legacy document notifications only for parse and translate jobs', () => {
     const scheduler = new EventEmitter() as unknown as JobScheduler
-    const service = new TaskService(
-      {} as TaskRepositoryCompat,
-      {} as SettingsService,
-      {} as CredentialVault,
-      {} as ParserClient,
-      async () => new Response(),
-      fixtureTaskCompute,
-      undefined,
-      undefined,
-      { scheduler }
-    )
+    const service = new TaskService({} as TaskRepositoryCompat, {} as SettingsService, fixtureTaskCompute, new PathPolicy(), { scheduler })
     const notifications: Array<[string, string]> = []
-    service.on('notification', (taskId: string, status: string) => notifications.push([taskId, status]))
+    service.on('notification', (documentId: string, status: string) => notifications.push([documentId, status]))
+    const notify = (documentId: string, kind: string, status: string): void => {
+      // Job IDs differ from document IDs; notifications must name the document.
+      scheduler.emit('job-notification', { id: `job-${documentId}`, documentId, kind, status })
+    }
 
-    scheduler.emit('job-notification', 'parse-failed', 'failed', 'parse')
-    scheduler.emit('job-notification', 'translation-complete', 'succeeded', 'translate')
-    scheduler.emit('job-notification', 'translation-partial', 'partial', 'translate')
-    scheduler.emit('job-notification', 'rag-content-failed', 'failed', 'rag-content-index')
-    scheduler.emit('job-notification', 'rag-content-complete', 'succeeded', 'rag-content-index')
-    scheduler.emit('job-notification', 'rag-embed-failed', 'failed', 'rag-embed')
-    scheduler.emit('job-notification', 'rag-delete-complete', 'succeeded', 'rag-delete')
+    notify('parse-failed', 'parse', 'failed')
+    notify('parse-succeeded', 'parse', 'succeeded')
+    notify('translation-complete', 'translate', 'succeeded')
+    notify('translation-partial', 'translate', 'partial')
+    notify('rag-content-failed', 'rag-content-index', 'failed')
+    notify('rag-content-complete', 'rag-content-index', 'succeeded')
+    notify('rag-embed-failed', 'rag-embed', 'failed')
+    notify('rag-delete-complete', 'rag-delete', 'succeeded')
 
     expect(notifications).toEqual([
       ['parse-failed', 'failed'],
@@ -108,24 +103,17 @@ describe('durable TaskService cutover', () => {
     const vault = new MemoryVault({ 'parser-token': 'parser-token' })
     const settings = new SettingsService(repository, vault, join(root, 'output'))
     const client = new NeverCalledClient()
-    const service = new TaskService(repository, settings, vault, client, async () => new Response(), fixtureTaskCompute, undefined, undefined, { jobRepository: jobs })
+    const service = new TaskService(repository, settings, fixtureTaskCompute, new PathPolicy(), { jobRepository: jobs })
 
     try {
-      const created = await service.create({
-        files: [{ path: source, name: 'paper.pdf', size: 16 }],
-        createDuplicates: false,
-        useOriginalFilename: true
-      })
+      const { created } = await service.importPaths([source], { createDuplicates: false, useOriginalFilename: true })
       expect(created[0]).toMatchObject({ originalName: 'paper.pdf', title: 'paper' })
       const parseJobs = jobs.list({ documentId: created[0]!.id, kind: 'parse' })
       expect(parseJobs).toHaveLength(1)
       expect(parseJobs[0]).toMatchObject({ status: 'queued', attempt: 0 })
       expect(client.createCalls).toBe(0)
 
-      const duplicate = await service.create({
-        files: [{ path: source, name: 'renamed-copy.pdf', size: 16 }],
-        createDuplicates: false
-      })
+      const { created: duplicate } = await service.importPaths([source], { createDuplicates: false })
       expect(duplicate).toEqual([])
       expect(repository.listTasks()).toHaveLength(1)
     } finally {
@@ -265,15 +253,7 @@ describe('durable TaskService cutover', () => {
     const secondTask = makeTask(secondDir, join(secondDir, 'original.pdf'))
     repository.insertTask({ ...secondTask, id: 'document-delete-files' })
 
-    const service = new TaskService(
-      repository,
-      settings,
-      new MemoryVault({}),
-      new NeverCalledClient(),
-      async () => new Response(),
-      fixtureTaskCompute,
-      new PathPolicy()
-    )
+    const service = new TaskService(repository, settings, fixtureTaskCompute, new PathPolicy())
     try {
       await service.delete('document-delete-keep', false)
       expect(repository.getTask('document-delete-keep')).toBeNull()

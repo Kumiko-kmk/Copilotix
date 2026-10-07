@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from '@shared/constants'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,6 +9,7 @@ import type { AppSettings, CopilotixTask } from '@shared/types'
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 const settings: AppSettings = {
+  ...DEFAULT_SETTINGS,
   outputRoot: 'C:\\output',
   formulaEnabled: true,
   tableEnabled: false,

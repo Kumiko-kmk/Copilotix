@@ -123,8 +123,8 @@ async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<vo
   await expect(activeTextPanel.locator('.markdown-body')).toHaveCSS('padding-top', '15px')
   await expect(activeTextPanel.locator('.markdown-body h1')).toHaveCSS('margin-top', '4px')
   await expect(activeTextPanel.locator('.markdown-body h1')).toHaveCSS('margin-bottom', '11px')
-  await expect(activeTextPanel.locator('.markdown-body p').first()).toHaveCSS('margin-top', '6px')
-  await expect(activeTextPanel.locator('.markdown-body p').first()).toHaveCSS('margin-bottom', '6px')
+  await expect(activeTextPanel.locator('.markdown-body .markdown-block > p').first()).toHaveCSS('margin-top', '3px')
+  await expect(activeTextPanel.locator('.markdown-body .markdown-block > p').first()).toHaveCSS('margin-bottom', '3px')
   await expect(activeTextPanel.locator('.markdown-body td .katex')).toHaveCount(4)
   await expect(activeTextPanel.locator('.markdown-minimap-formula .katex')).toHaveCount(5)
   await expect(activeTextPanel.locator('.markdown-body table')).not.toContainText('$x$')
@@ -149,6 +149,147 @@ async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<vo
   expect(tableMetrics).toMatchObject({ fontSize: '13px', paddingBlock: '3px 3px' })
 }
 
+test('fits PDF pages without an outer frame and preserves the current page while resizing', async () => {
+  const workspace = await createE2EWorkspace()
+  const taskId = await seedReaderTask(workspace, { sourcePdf: join(__dirname, '../resources/tutorial/Attention Is All You Need.pdf') })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await openPaper(window, taskId)
+    const scroller = window.locator('.pdf-scroll')
+    await expect(window.getByText('1 / 15')).toBeVisible()
+    await expect.poll(() => window.locator('[data-pdf-page="1"] canvas').evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
+    await expect(scroller).toHaveCSS('padding', '0px')
+    await expect(scroller).toHaveCSS('border-left-width', '0px')
+    await expect(window.locator('.pdf-page').first()).toHaveCSS('box-shadow', 'none')
+    await expect.poll(() => scroller.evaluate((element) =>
+      Math.abs(element.querySelector('.pdf-page')!.getBoundingClientRect().width - element.clientWidth)
+    )).toBeLessThan(1)
+    await scroller.evaluate((element) => {
+      const page = element.querySelector('[data-pdf-page="1"]')!.getBoundingClientRect()
+      const viewport = element.getBoundingClientRect()
+      element.scrollTo({ top: element.scrollTop + page.top - viewport.top + page.height * 0.35 - element.clientHeight * 0.45, behavior: 'instant' })
+    })
+    await expect(window.getByText('2 / 15')).toBeVisible()
+    const expectReadingPosition = async (): Promise<void> => {
+      await expect(window.getByText('2 / 15')).toBeVisible()
+      await expect.poll(() => scroller.evaluate((element) => {
+        const page = element.querySelector('[data-pdf-page="1"]')!.getBoundingClientRect()
+        const viewport = element.getBoundingClientRect()
+        return Math.abs((viewport.top + element.clientHeight * 0.45 - page.top) / page.height - 0.35)
+      })).toBeLessThan(0.01)
+    }
+    const split = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
+    for (const key of ['Home', 'End', 'Home', 'End']) {
+      const previousWidth = await scroller.evaluate((element) => element.clientWidth)
+      await split.press(key)
+      await expect.poll(() => scroller.evaluate((element) => element.clientWidth)).not.toBe(previousWidth)
+      await expectReadingPosition()
+    }
+    const handle = (await split.boundingBox())!
+    const area = (await window.locator('.reader-split').boundingBox())!
+    await window.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+    await window.mouse.down()
+    for (const percent of [0.42, 0.58, 0.45]) {
+      await window.mouse.move(area.x + area.width * percent, handle.y + handle.height / 2, { steps: 12 })
+      await expectReadingPosition()
+    }
+    await window.mouse.up()
+    await window.getByLabel('放大').click()
+    await expect(window.getByText('110%')).toBeVisible()
+    await expectReadingPosition()
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
+test('uses the entire PDF viewport without scrollbar gutters or page gaps on a real paper', async ({}, testInfo) => {
+  const workspace = await createE2EWorkspace()
+  const taskId = await seedReaderTask(workspace, { sourcePdf: join(__dirname, '../resources/tutorial/Attention Is All You Need.pdf') })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await openPaper(window, taskId)
+    const scroller = window.locator('.pdf-scroll')
+    await expect(window.getByText('1 / 15')).toBeVisible()
+    await expect.poll(() => window.locator('[data-pdf-page="1"] canvas').evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
+    const expectNoGutters = async (): Promise<void> => {
+      const dimensions = await scroller.evaluate((element) => {
+        const parent = element.parentElement!.getBoundingClientRect()
+        const bounds = element.getBoundingClientRect()
+        return { rightGutter: element.offsetWidth - element.clientWidth, bottomGutter: element.offsetHeight - element.clientHeight,
+          rightInset: parent.right - bounds.right, bottomInset: parent.bottom - bounds.bottom }
+      })
+      expect(dimensions).toEqual({ rightGutter: 0, bottomGutter: 0, rightInset: 0, bottomInset: 0 })
+    }
+    await expectNoGutters()
+    expect(await window.locator('.reader-split').evaluate((element) => {
+      const panes = element.querySelectorAll('.reader-split-pane')
+      return Math.abs(panes[1]!.getBoundingClientRect().left - panes[0]!.getBoundingClientRect().right)
+    })).toBeLessThan(0.1)
+    await expect(window.locator('.reader-split-handle')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect.poll(() => scroller.evaluate((element) => {
+      const page = element.querySelector('.pdf-page')!.getBoundingClientRect()
+      return Math.abs(page.right - element.getBoundingClientRect().right)
+    })).toBeLessThan(1)
+    await expect.poll(() => window.locator('[data-pdf-page="0"]').evaluate((page) => {
+      const next = page.parentElement!.querySelector('[data-pdf-page="1"]')!
+      return Math.abs(next.getBoundingClientRect().top - page.getBoundingClientRect().bottom)
+    })).toBeLessThan(0.1)
+    await scroller.evaluate((element) => {
+      const next = element.querySelector('[data-pdf-page="1"]')!.getBoundingClientRect()
+      element.scrollTo({ top: element.scrollTop + next.top - element.getBoundingClientRect().top - element.clientHeight * 0.7, behavior: 'instant' })
+    })
+    await window.mouse.move(20, 20)
+    await window.locator('.pdf-viewport').screenshot({ path: testInfo.outputPath('pdf-no-frame-100.png') })
+    await window.getByLabel('放大', { exact: true }).click()
+    await window.getByLabel('放大', { exact: true }).click()
+    await expect(window.getByText('120%')).toBeVisible()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    await expectNoGutters()
+    const viewport = (await scroller.boundingBox())!
+    await window.mouse.move(viewport.x + viewport.width - 1, viewport.y + viewport.height - 1)
+    const vertical = window.getByRole('scrollbar', { name: 'PDF 垂直滚动' })
+    const horizontal = window.getByRole('scrollbar', { name: 'PDF 水平滚动' })
+    await expect(vertical).toHaveClass(/visible/)
+    await expect(horizontal).toHaveClass(/visible/)
+    await expectNoGutters()
+    const oldLeft = await scroller.evaluate((element) => element.scrollLeft)
+    const horizontalThumb = (await horizontal.locator('.pdf-scrollbar-thumb').boundingBox())!
+    await window.mouse.move(horizontalThumb.x + horizontalThumb.width / 2, horizontalThumb.y + horizontalThumb.height / 2)
+    await window.mouse.down()
+    await window.mouse.move(horizontalThumb.x + horizontalThumb.width / 2 + 25, horizontalThumb.y + horizontalThumb.height / 2, { steps: 5 })
+    await window.mouse.up()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(oldLeft)
+    await window.mouse.move(viewport.x + viewport.width - 1, viewport.y + viewport.height / 2)
+    const oldTop = await scroller.evaluate((element) => element.scrollTop)
+    const verticalThumb = (await vertical.locator('.pdf-scrollbar-thumb').boundingBox())!
+    await window.mouse.move(verticalThumb.x + verticalThumb.width / 2, verticalThumb.y + verticalThumb.height / 2)
+    await window.mouse.down()
+    await window.mouse.move(verticalThumb.x + verticalThumb.width / 2, verticalThumb.y + verticalThumb.height / 2 + 25, { steps: 5 })
+    await window.mouse.up()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(oldTop)
+    await window.mouse.move(20, 20)
+    await expect(vertical).not.toHaveClass(/visible/)
+    await expect(horizontal).not.toHaveClass(/visible/)
+    await expect(vertical).toHaveCSS('opacity', '0')
+    await expect(horizontal).toHaveCSS('opacity', '0')
+    await expectNoGutters()
+    await window.locator('.pdf-viewport').screenshot({ path: testInfo.outputPath('pdf-no-frame-120.png') })
+    await vertical.press('End')
+    await expect(window.getByText('15 / 15')).toBeVisible()
+    await expect.poll(() => scroller.evaluate((element) => {
+      const last = element.querySelector('[data-pdf-page="14"]')!.getBoundingClientRect()
+      return Math.abs(last.bottom - element.getBoundingClientRect().bottom)
+    })).toBeLessThan(1)
+    await expectNoGutters()
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
 test('renders a local PDF with range requests before parsing succeeds', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
@@ -168,7 +309,8 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await expect(activeTextPanel.locator('.markdown-body sup')).toHaveText('12')
     await expect(activeTextPanel.locator('.markdown-body sub', { hasText: /^2$/ })).toHaveText('2')
     await expect(activeTextPanel.locator('.markdown-body td')).toHaveText('Academic cell')
-    await expect(activeTextPanel.locator('.markdown-body .katex')).toBeVisible()
+    await expect(activeTextPanel.locator('.markdown-body .katex').first()).toBeVisible()
+    await expect(activeTextPanel.locator('.markdown-body .katex-error')).toHaveCount(0)
     const markdownImage = activeTextPanel.locator('.markdown-body img')
     await expect.poll(() => markdownImage.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
     const stableImageRect = await markdownImage.boundingBox()
@@ -211,7 +353,8 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await expect(activeTextPanel.locator('.markdown-body sup')).toHaveText('12')
     await expect(activeTextPanel.locator('.markdown-body sub', { hasText: /^2$/ })).toHaveText('2')
     await expect(activeTextPanel.locator('.markdown-body td')).toHaveText('学术单元格')
-    await expect(activeTextPanel.locator('.markdown-body .katex')).toBeVisible()
+    await expect(activeTextPanel.locator('.markdown-body .katex').first()).toBeVisible()
+    await expect(activeTextPanel.locator('.markdown-body .katex-error')).toHaveCount(0)
     const translatedAuthors = activeTextPanel.locator('.markdown-block', { hasText: '艾达·洛夫莱斯' })
     const translatedAbstract = activeTextPanel.locator('.markdown-block', { hasText: '独立映射的摘要' })
     await expect(translatedAuthors).not.toContainText('独立映射的摘要')
@@ -237,12 +380,8 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     const afterPassiveScroll = await window.locator('.pdf-scroll').evaluate((element) => element.scrollTop)
     expect(afterPassiveScroll).toBe(beforePassiveScroll)
 
-    await window.getByText('JSON', { exact: true }).click()
-    await expect(activeTextPanel.locator('.json-view')).toBeVisible()
-    await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(0)
-    await window.locator('[data-block-position="1-0"]').click()
-    await expect(activeTextPanel.locator('.json-view')).toBeVisible()
-    await window.getByText('Markdown（中文）').click()
+    await expect(window.getByText('JSON', { exact: true })).toHaveCount(0)
+    await expect(window.locator('[data-reader-tab-panel="json"]')).toHaveCount(0)
     await expect(activeTextPanel.locator('.markdown-block', { hasText: '第二段落包含' })).toBeVisible()
 
     const rangeResult = await window.evaluate(async (url) => {
@@ -462,8 +601,8 @@ test('shows the parsed English title in recent tasks and the Reader header', asy
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await window.getByRole('button', { name: '展开论文切换' }).click()
-    const paper = window.locator('.paper-switcher-item', { hasText: 'Attention Is All You Need.pdf' })
+    await openTaskList(window)
+    const paper = window.locator('.task-link', { hasText: 'Attention Is All You Need.pdf' })
     await expect(paper).toBeVisible()
     await paper.click()
     await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need.pdf')
@@ -544,11 +683,22 @@ test('renders and safely links an optional real Copilotix task', async () => {
   }
 })
 
+async function openTaskList(window: Page): Promise<void> {
+  await window.locator('[data-edge-dock="top"]').hover()
+  await window.getByRole('button', { name: '任务管理' }).click()
+}
+
 async function openPaper(window: Page, taskId: string): Promise<void> {
-  await window.locator('[data-edge-dock="bottom"]').hover()
-  const item = window.locator(`[data-paper-task-id="${taskId}"]`)
+  await openTaskList(window)
+  const item = window.locator(`tr[data-row-key="${taskId}"] .task-link`)
   await expect(item).toBeVisible()
   await item.click()
+  await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
+  // Image/font readiness has a production 30 s deadline. Wait for the actual
+  // ready/error state, failing promptly on errors rather than operating during loading.
+  const scroller = window.locator('.reader-tab-panel.active .markdown-scroll')
+  await expect(scroller).toHaveAttribute('data-render-state', /^(ready|error)$/, { timeout: 31_000 })
+  await expect(scroller).toHaveAttribute('data-render-state', 'ready')
 }
 
 test('keeps the complete minimap static across long-document jumps', async () => {

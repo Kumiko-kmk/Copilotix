@@ -104,12 +104,16 @@ export default function NewParsePage(props: {
   const start = React.useCallback(async () => {
     setSubmitting(true)
     try {
-      const created = await window.copilotix.importDocuments(
+      const { created, failed } = await window.copilotix.importDocuments(
         { createDuplicates: !skipDuplicates, useOriginalFilename },
         files.map(({ file }) => file)
       )
+      if (failed.length > 0) {
+        const examples = failed.slice(0, 3).map((item) => `${item.name}（${item.message}）`).join('；')
+        messageApi.warning(`${failed.length} 个 PDF 未导入：${examples}${failed.length > 3 ? ' 等' : ''}`)
+      }
       if (created.length === 0) {
-        messageApi.warning('没有创建任务；所选 PDF 已存在于论文库')
+        if (failed.length === 0) messageApi.warning('没有创建任务；所选 PDF 已存在于论文库')
         return
       }
       messageApi.success(`已创建 ${created.length} 个任务`)

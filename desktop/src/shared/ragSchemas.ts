@@ -152,6 +152,11 @@ export const ragErrorCodeSchema = z.enum([
   'SEMANTIC_CONSENT_REQUIRED',
   'EMBEDDING_CREDENTIALS_REQUIRED',
   'CHAT_CREDENTIALS_REQUIRED',
+  'CHAT_CONSENT_REQUIRED',
+  'CHAT_PROVIDER_REQUIRED',
+  'CHAT_CREDENTIAL_UNVERIFIED',
+  'CHAT_STORAGE_FAILED',
+  'CONTENT_NOT_READY',
   'EMBEDDING_RATE_LIMITED',
   'PROVIDER_UNAVAILABLE',
   'EMBEDDING_PROFILE_MISMATCH',
@@ -236,7 +241,7 @@ export const canTransitionSemanticState = canTransitionSemanticIndexState
 export const localIndexStatusSchema = z.object({
   state: localIndexStateSchema,
   progress: boundedProgressSchema,
-  activeContentRevisionId: uuidSchema.nullable(),
+  activeContentRevisionId: boundedIdSchema.nullable(),
   error: ragErrorSchema.nullable()
 }).strict().superRefine((value, context) => {
   if (value.state === 'unindexed' && value.activeContentRevisionId !== null) {
@@ -258,7 +263,7 @@ export type LocalIndexStatus = z.infer<typeof localIndexStatusSchema>
 export const semanticIndexStatusSchema = z.object({
   state: semanticIndexStateSchema,
   progress: boundedProgressSchema,
-  activeContentRevisionId: uuidSchema.nullable(),
+  activeContentRevisionId: boundedIdSchema.nullable(),
   activeVectorIndexId: uuidSchema.nullable(),
   profileId: boundedIdSchema.nullable(),
   error: ragErrorSchema.nullable()
@@ -339,7 +344,7 @@ export { currentDocumentScopeSchema, documentsScopeSchema, collectionScopeSchema
 // Retrieval and pagination
 // ---------------------------------------------------------------------------
 
-export const scoreSourceSchema = z.enum(['lexical', 'dense', 'hybrid'])
+export const scoreSourceSchema = z.enum(['lexical', 'dense', 'hybrid', 'selection', 'full-text'])
 export type ScoreSource = z.infer<typeof scoreSourceSchema>
 
 export const scoreProvenanceSchema = z.object({
@@ -353,7 +358,7 @@ export type ScoreProvenance = z.infer<typeof scoreProvenanceSchema>
 export const citationLocatorSchema = z.object({
   documentId: uuidSchema,
   artifactId: uuidSchema,
-  contentRevisionId: uuidSchema,
+  contentRevisionId: boundedIdSchema,
   contentHash: hashSchema,
   mappingIds: z.array(boundedIdSchema).max(RAG_MAX_MAPPING_IDS),
   pageStart: z.number().int().min(0).max(100_000).nullable(),
@@ -378,7 +383,7 @@ export type CitationLocator = z.infer<typeof citationLocatorSchema>
 export const searchResultItemSchema = z.object({
   resultId: boundedIdSchema.optional(),
   documentId: uuidSchema,
-  contentRevisionId: uuidSchema,
+  contentRevisionId: boundedIdSchema,
   chunkId: boundedIdSchema,
   excerpt: boundedExcerptSchema,
   sectionPath: z.array(boundedSectionSchema).max(RAG_MAX_SECTION_DEPTH).optional(),
@@ -398,7 +403,7 @@ const searchRequestFields = {
   query: boundedQuerySchema,
   limit: z.number().int().min(1).max(RAG_MAX_RESULT_PAGE_ITEMS),
   cursor: boundedCursorSchema.nullable().optional(),
-  contentRevisionId: uuidSchema.nullable().optional()
+  contentRevisionId: boundedIdSchema.nullable().optional()
 }
 
 export const lexicalSearchRequestSchema = z.object({
@@ -481,6 +486,7 @@ export const searchResultPageSchema = ragSearchResultPageSchema
 
 export const citationSchema = z.object({
   citationId: uuidSchema,
+  evidenceId: z.string().regex(/^E[1-9]\d{0,3}$/u).optional(),
   documentId: uuidSchema,
   chunkId: boundedIdSchema,
   excerpt: boundedExcerptSchema,
@@ -501,7 +507,7 @@ export type Citation = z.infer<typeof citationSchema>
 
 export const selectionSnapshotSchema = z.object({
   artifactId: uuidSchema,
-  contentRevisionId: uuidSchema,
+  contentRevisionId: boundedIdSchema,
   contentHash: hashSchema
 }).strict()
 export type SelectionSnapshot = z.infer<typeof selectionSnapshotSchema>
@@ -557,7 +563,7 @@ const streamRetrievingSchema = z.object({ ...streamCommon, type: z.literal('retr
 const streamEvidenceReadySchema = z.object({
   ...streamCommon,
   type: z.literal('evidence-ready'),
-  resultCount: z.number().int().min(0).max(RAG_MAX_RESULT_PAGE_ITEMS)
+  resultCount: z.number().int().min(0).max(RAG_MAX_TOTAL_RESULTS)
 }).strict()
 const streamDeltaSchema = z.object({
   ...streamCommon,

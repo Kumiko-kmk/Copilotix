@@ -5,7 +5,6 @@ import {
   deserializeCoreMessage,
   serializeCoreMessage,
   validateCoreOperationResult,
-  type CoreError,
   type CoreEvent,
   type CoreMessage,
   type CoreOperation,
@@ -400,6 +399,3 @@ function extractRequestId(raw: unknown): string | undefined {
   return coreRequestIdSchema.safeParse(requestId).success ? requestId as string : undefined
 }
 
-export function coreErrorToClientError(error: CoreError, requestId?: string): CoreClientError {
-  return new CoreClientError(error.code, error.message, error.retryable, requestId)
-}

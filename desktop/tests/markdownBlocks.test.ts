@@ -16,6 +16,18 @@ function mapping(id: string, order: number, sourceText: string, type = 'text'): 
 }
 
 describe('Markdown block alignment', () => {
+  it('maps expanded GFM tables to the forward physical table without stealing a chart mapping', () => {
+    const blocks = alignMarkdownBlocks('| Group | Value |\n| --- | --- |\n| Shared | 1 |\n| Shared | 2 |', [
+      mapping('chart', 0, '', 'chart'), mapping('table', 1, 'Group Value Shared 1 2', 'table')
+    ])
+    expect(blocks[0]?.mappingIds).toEqual(['table'])
+  })
+
+  it('materializes document-wide reference images before splitting into independent blocks', () => {
+    const blocks = alignMarkdownBlocks('![plot][figure]\n\n[figure]: images/chart.png', [mapping('chart', 0, '', 'chart')])
+    expect(blocks[0]?.markdown).toBe('![plot](images/chart.png)')
+    expect(blocks[0]?.mappingIds).toEqual(['chart'])
+  })
   it('maps Markdown by canonical content instead of array index', () => {
     const mappings = [
       mapping('discarded', 0, 'Header', 'page_header'),

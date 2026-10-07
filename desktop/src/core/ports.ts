@@ -10,8 +10,7 @@ import type {
   RagCitationResolutionInput,
   RagVectorEntry,
   RagVectorSearchInput,
-  RagVectorSearchResult,
-  TranslationBlock
+  RagVectorSearchResult
 } from './types'
 import type { CopilotixTask } from '@shared/types'
 import type {
@@ -130,11 +129,6 @@ export interface IdGeneratorPort {
 
 export interface PathPolicyPort {
   resolveChild(root: string, candidate: string): string
-}
-
-export interface TranslationBlockRepositoryPort {
-  upsert(block: TranslationBlock): void
-  list(jobId: string): TranslationBlock[]
 }
 
 /** Builds deterministic, provenance-bearing chunks from a published artifact. */

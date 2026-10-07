@@ -35,6 +35,20 @@ function responseFor(request: TableTranslationRequest, prefix = '译:'): TableTr
 }
 
 describe('table translation protocol', () => {
+  it('translates native GFM cells through JSON while preserving formulas, code, links and dimensions', () => {
+    const plan = buildTableTranslationPlan([block(0, '| Model | Objective |\n| --- | --- |\n| [Baseline](https://example.org) | $x^2$ `code` 3.17 |')])!
+    expect(plan.request.tables[0]!.rows.map((row) => row.length)).toEqual([2, 2])
+    expect(flattenSegments(plan.request).map((segment) => segment.text)).toEqual(['Model', 'Objective', 'Baseline'])
+    applyTableTranslation(plan, responseFor(plan.request))
+    const result = plan.blocks[0]!.render()
+    expect(result).toContain('[译:Baseline](https://example.org)')
+    expect(result).toContain('$x^2$ `code` 3.17')
+    expect(result).not.toContain('<table')
+  })
+
+  it('does not mistake a fenced HTML example for a translatable table', () => {
+    expect(buildTableTranslationPlan([block(0, '```html\n<table><tr><td>Example</td></tr></table>\n```')])).toBeNull()
+  })
   it('extracts cells, empty cells, headers and row/column spans while preserving the HTML tree', () => {
     const plan = buildTableTranslationPlan([
       block(1, [

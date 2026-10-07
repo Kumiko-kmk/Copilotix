@@ -1,14 +1,14 @@
+import { paperChatStatusRequestSchema, paperChatStatusSchema, paperContextRequestSchema, paperContextResultSchema } from './paperChatSchemas'
+import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from './paperChatStorageSchemas'
 import { z } from 'zod'
 import { libraryCoreRequestSchema, libraryResultSchema } from './librarySchemas'
 import {
   appSettingsSchema,
   documentAnnotationViewSchema,
-  documentAnnotationKindSchema,
   documentSummarySchema,
   copilotixTaskSchema,
   mutateReaderAnnotationsRequestSchema,
   readerAnnotationSnapshotSchema,
-  replaceReaderAnnotationsRequestSchema,
   translationProviderIdSchema
 } from './ipcSchemas'
 import {
@@ -124,75 +124,10 @@ const coreTimestampSchema = z.string().min(1).max(128).refine(noNul, 'timestamp 
 /** Job kinds are metadata only; raw document/vector/credential data is never a job RPC field. */
 export const coreJobKindSchema = z.enum(['parse', 'translate', 'rag-content-index', 'rag-embed', 'rag-delete'])
 export const coreJobStatusSchema = z.enum(['queued', 'running', 'retry-wait', 'succeeded', 'partial', 'failed', 'cancelled'])
-export const coreTaskPatchSchema = z.object({
-  originalName: z.string().min(1).max(32_768).refine(noNul).optional(),
-  title: z.string().max(32_768).refine(noNul).nullable().optional(),
-  name: z.string().min(1).max(32_768).refine(noNul).optional(),
-  sourcePath: corePathSchema.optional(),
-  sourceHash: coreHashSchema.optional(),
-  outputDir: corePathSchema.optional(),
-  status: z.enum(['uploading', 'parsing', 'translating', 'partial', 'completed', 'failed']).optional(),
-  progress: z.number().int().min(0).max(100).optional(),
-  translationProvider: translationProviderIdSchema.optional(),
-  remoteBatchId: z.string().max(4_096).refine(noNul).nullable().optional(),
-  remoteDataId: z.string().max(4_096).refine(noNul).nullable().optional(),
-  remoteResultUrl: z.string().max(8_192).refine(noNul).nullable().optional(),
-  error: z.string().max(32_768).refine(noNul).nullable().optional()
-}).strict()
 const coreMetadataSchema = z.record(z.string().max(512).refine(noNul), coreJsonValueSchema).refine((value) => Object.keys(value).length <= 128, 'metadata too large')
 const coreArtifactKindSchema = z.enum([
   'source_pdf', 'parsed_markdown', 'layout', 'block_mappings', 'content_list', 'translated_markdown', 'manifest'
 ])
-const coreTranslationBlockSchema = z.object({
-  taskId: coreIdSchema,
-  jobId: coreIdSchema.optional(),
-  blockId: coreIdSchema,
-  sourceHash: coreHashSchema,
-  sourceMarkdown: z.string().max(262_144).refine(noNul),
-  translatedMarkdown: z.string().max(262_144).refine(noNul).nullable(),
-  provider: translationProviderIdSchema.nullable(),
-  model: z.string().max(512).refine(noNul).nullable(),
-  status: z.enum(['pending', 'completed', 'failed']),
-  error: z.string().max(32_768).refine(noNul).nullable()
-}).strict()
-const coreTranslationBatchBlockSchema = z.object({
-  blockId: coreIdSchema,
-  sourceHash: coreHashSchema,
-  sourceMarkdown: z.string().max(262_144).refine(noNul),
-  translatedMarkdown: z.string().max(262_144).refine(noNul).nullable(),
-  provider: translationProviderIdSchema.nullable(),
-  model: z.string().max(512).refine(noNul).nullable(),
-  status: z.enum(['pending', 'completed', 'failed']),
-  error: z.string().max(32_768).refine(noNul).nullable()
-}).strict()
-const coreTranslationCacheEntrySchema = z.object({
-  cacheKey: z.string().min(1).max(4_096).refine(noNul),
-  translated: z.string().max(262_144).refine(noNul),
-  provider: translationProviderIdSchema,
-  model: z.string().max(512).refine(noNul)
-}).strict()
-const coreTranslationCheckpointSummarySchema = z.object({
-  totalBlocks: z.number().int().min(0).max(100_000),
-  completedBlocks: z.number().int().min(0).max(100_000),
-  failedBlocks: z.number().int().min(0).max(100_000),
-  failedBlockIds: z.array(coreIdSchema).max(64)
-}).strict()
-const coreReaderAnnotationSchema = z.object({
-  id: coreIdSchema,
-  taskId: coreIdSchema,
-  view: documentAnnotationViewSchema,
-  kind: documentAnnotationKindSchema,
-  color: z.enum(['yellow', 'green', 'blue', 'pink', 'purple']).nullable(),
-  blockKey: z.string().min(1).max(4_096).refine(noNul),
-  startOffset: z.number().int().min(0),
-  endOffset: z.number().int().min(1),
-  quote: z.string().min(1).max(262_144).refine(noNul),
-  prefix: z.string().max(256).refine(noNul),
-  suffix: z.string().max(256).refine(noNul),
-  createdAt: z.string().min(1).max(128).refine(noNul),
-  updatedAt: z.string().min(1).max(128).refine(noNul)
-}).strict()
-const coreReaderAnnotationsSchema = z.array(coreReaderAnnotationSchema).max(10_000)
 
 /**
  * Knowledge lifecycle DTOs contain only bounded identities, state, progress,
@@ -254,14 +189,14 @@ const coreOperationNames = [
   'ping', 'cancel', 'drain', 'shutdown',
   'database:init', 'database:flush', 'database:close', 'library:check', 'library:manage',
   'settings:get', 'settings:save', 'settings:migration-get', 'settings:migration-mark',
-  'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert', 'tasks:insert-many', 'tasks:update', 'tasks:delete',
+  'tasks:list', 'tasks:get', 'tasks:find-by-hash', 'tasks:insert-many', 'tasks:delete',
   'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
   'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
-  'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:get-latest', 'artifacts:record-revision',
+  'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:record-revision',
   'knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed',
-  'translation:block-upsert', 'translation:batch-commit', 'translation:blocks-list', 'translation:run-update',
-  'translation:cache-get', 'translation:cache-put',
-  'annotations:list', 'annotations:replace', 'annotations:list-snapshot', 'annotations:mutate',
+  'chat:ensure-index', 'chat:build-context',
+  'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear',
+  'annotations:list-snapshot', 'annotations:mutate',
   'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
   'compute:rag-content-index',
   'compute:translation-plan-open', 'compute:translation-plan-list', 'compute:translation-plan-cache',
@@ -293,15 +228,24 @@ export const coreSettingsSaveResultSchema = appSettingsSchema
 export const coreSettingsMigrationPayloadSchema = z.object({ id: coreIdSchema }).strict()
 export const coreSettingsMigrationGetResultSchema = z.object({ applied: z.boolean() }).strict()
 export const coreSettingsMigrationMarkResultSchema = z.object({ applied: z.literal(true) }).strict()
-export const coreTasksListPayloadSchema = emptyPayloadSchema
-export const coreTasksListResultSchema = z.array(copilotixTaskSchema).max(10_000)
+/**
+ * Library listings are keyset-paged so a large library never exceeds the
+ * 1 MiB RPC envelope. `after` is the last row of the previous page; the
+ * Utility trims each page to a byte budget and returns the next cursor.
+ */
+export const CORE_LIST_PAGE_MAX_ROWS = 200
+export const coreListCursorSchema = z.object({ createdAt: coreTimestampSchema, id: coreIdSchema }).strict()
+export type CoreListCursor = z.infer<typeof coreListCursorSchema>
+export const coreListPagePayloadSchema = z.object({ after: coreListCursorSchema.optional() }).strict()
+export const coreTasksListResultSchema = z.object({
+  items: z.array(copilotixTaskSchema).max(CORE_LIST_PAGE_MAX_ROWS),
+  next: coreListCursorSchema.nullable()
+}).strict()
 export const coreTaskIdPayloadSchema = z.object({ id: coreIdSchema }).strict()
 export const coreTaskResultSchema = copilotixTaskSchema.nullable()
 export const coreFindTaskByHashPayloadSchema = z.object({ hash: coreHashSchema }).strict()
-export const coreInsertTaskPayloadSchema = z.object({ task: copilotixTaskSchema }).strict()
 export const coreInsertTasksPayloadSchema = z.object({ tasks: z.array(copilotixTaskSchema).max(100) }).strict()
 export const coreMutationResultSchema = z.object({ changed: z.literal(true) }).strict()
-export const coreUpdateTaskPayloadSchema = z.object({ id: coreIdSchema, patch: coreTaskPatchSchema }).strict()
 export const coreDocumentMetadataPatchSchema = z.object({
   displayTitle: z.string().max(32_768).refine(noNul).nullable().optional()
 }).strict()
@@ -415,18 +359,10 @@ export const coreJobManualRetryPayloadSchema = z.object({
 }).strict()
 export const coreJobRecoverExpiredPayloadSchema = z.object({ now: coreTimestampSchema }).strict()
 export const coreJobEventsPayloadSchema = z.object({ jobId: coreIdSchema }).strict()
-export const coreDocumentsListResultSchema = z.array(documentSummarySchema).max(10_000)
-export const coreArtifactLatestPayloadSchema = z.object({ documentId: coreIdSchema, kind: coreArtifactKindSchema }).strict()
-export const coreArtifactReferenceSchema = z.object({
-  id: coreIdSchema,
-  documentId: coreIdSchema,
-  kind: coreArtifactKindSchema,
-  revision: z.number().int().min(1),
-  relativePath: corePathSchema,
-  contentHash: coreHashSchema,
-  metadata: coreMetadataSchema
+export const coreDocumentsListResultSchema = z.object({
+  items: z.array(documentSummarySchema).max(CORE_LIST_PAGE_MAX_ROWS),
+  next: coreListCursorSchema.nullable()
 }).strict()
-export const coreArtifactLatestResultSchema = coreArtifactReferenceSchema.nullable()
 export const coreArtifactRecordPayloadSchema = z.object({
   taskId: coreIdSchema,
   kind: coreArtifactKindSchema,
@@ -435,34 +371,6 @@ export const coreArtifactRecordPayloadSchema = z.object({
   metadata: coreMetadataSchema.optional(),
   jobId: coreIdSchema.optional()
 }).strict()
-export const coreTranslationBlockUpsertPayloadSchema = z.object({ block: coreTranslationBlockSchema }).strict()
-export const coreTranslationBatchCommitPayloadSchema = z.object({
-  taskId: z.string().uuid().refine(noNul),
-  jobId: z.string().uuid().refine(noNul),
-  blocks: z.array(coreTranslationBatchBlockSchema).max(32),
-  cacheEntries: z.array(coreTranslationCacheEntrySchema).max(32),
-  checkpoint: coreTranslationCheckpointSummarySchema.optional()
-}).strict().refine((value) => utf8ByteLength(JSON.stringify(value)) <= 768 * 1024, 'translation batch is too large')
-export const coreTranslationBlocksListPayloadSchema = z.object({ taskId: coreIdSchema, jobId: coreIdSchema.optional() }).strict()
-export const coreTranslationBlocksListResultSchema = z.array(coreTranslationBlockSchema).max(10_000)
-export const coreTranslationRunUpdatePayloadSchema = z.object({
-  taskId: coreIdSchema,
-  total: z.number().int().min(0).max(100_000),
-  completed: z.number().int().min(0).max(100_000),
-  failed: z.number().int().min(0).max(100_000)
-}).strict()
-export const coreCacheGetPayloadSchema = z.object({ cacheKey: z.string().min(1).max(4_096).refine(noNul) }).strict()
-export const coreCacheGetResultSchema = z.object({ translated: z.string().max(262_144).refine(noNul).nullable() }).strict()
-export const coreCachePutPayloadSchema = z.object({
-  cacheKey: z.string().min(1).max(4_096).refine(noNul),
-  translated: z.string().max(262_144).refine(noNul),
-  provider: translationProviderIdSchema,
-  model: z.string().min(1).max(512).refine(noNul)
-}).strict()
-export const coreAnnotationsListPayloadSchema = z.object({ taskId: coreIdSchema }).strict()
-export const coreAnnotationsListResultSchema = coreReaderAnnotationsSchema
-export const coreAnnotationsReplacePayloadSchema = z.object({ request: replaceReaderAnnotationsRequestSchema }).strict()
-export const coreAnnotationsReplaceResultSchema = coreReaderAnnotationsSchema
 export const coreAnnotationsSnapshotPayloadSchema = z.object({ documentId: coreIdSchema, view: documentAnnotationViewSchema }).strict()
 export const coreAnnotationsSnapshotResultSchema = readerAnnotationSnapshotSchema
 export const coreAnnotationsMutatePayloadSchema = z.object({ request: mutateReaderAnnotationsRequestSchema }).strict()
@@ -544,6 +452,13 @@ export const coreTranslationPlanFinalizeResultSchema = translationPlanFinalizeRe
  * compute operations must add one entry here with strict schemas on both sides.
  */
 export const coreOperationRegistry = {
+  'chat:load': { payload: paperChatLoadRequestSchema, result: paperChatPageSchema },
+  'chat:save-turn': { payload: paperChatSaveTurnSchema, result: paperChatSavedSchema },
+  'chat:session': { payload: paperChatDocumentRequestSchema, result: paperChatSessionSchema },
+  'chat:save-session': { payload: paperChatSaveSessionSchema, result: paperChatSavedSchema },
+  'chat:clear': { payload: paperChatDocumentRequestSchema, result: paperChatClearedSchema },
+  'chat:ensure-index': { payload: paperChatStatusRequestSchema, result: paperChatStatusSchema },
+  'chat:build-context': { payload: paperContextRequestSchema, result: paperContextResultSchema },
   'library:check': { payload: emptyPayloadSchema, result: z.object({ idle: z.literal(true) }).strict() },
   'library:manage': { payload: libraryCoreRequestSchema, result: libraryResultSchema },
   ping: { payload: corePingPayloadSchema, result: corePingResultSchema },
@@ -557,12 +472,10 @@ export const coreOperationRegistry = {
   'settings:save': { payload: coreSettingsSavePayloadSchema, result: coreSettingsSaveResultSchema },
   'settings:migration-get': { payload: coreSettingsMigrationPayloadSchema, result: coreSettingsMigrationGetResultSchema },
   'settings:migration-mark': { payload: coreSettingsMigrationPayloadSchema, result: coreSettingsMigrationMarkResultSchema },
-  'tasks:list': { payload: coreTasksListPayloadSchema, result: coreTasksListResultSchema },
+  'tasks:list': { payload: coreListPagePayloadSchema, result: coreTasksListResultSchema },
   'tasks:get': { payload: coreTaskIdPayloadSchema, result: coreTaskResultSchema },
   'tasks:find-by-hash': { payload: coreFindTaskByHashPayloadSchema, result: coreTaskResultSchema },
-  'tasks:insert': { payload: coreInsertTaskPayloadSchema, result: coreMutationResultSchema },
   'tasks:insert-many': { payload: coreInsertTasksPayloadSchema, result: coreMutationResultSchema },
-  'tasks:update': { payload: coreUpdateTaskPayloadSchema, result: copilotixTaskSchema },
   'tasks:delete': { payload: coreTaskIdPayloadSchema, result: coreMutationResultSchema },
   'jobs:enqueue': { payload: coreJobEnqueuePayloadSchema, result: coreJobSchema },
   'jobs:get': { payload: coreJobIdPayloadSchema, result: coreJobResultSchema },
@@ -576,22 +489,13 @@ export const coreOperationRegistry = {
   'jobs:manual-retry': { payload: coreJobManualRetryPayloadSchema, result: coreJobSchema },
   'jobs:recover-expired': { payload: coreJobRecoverExpiredPayloadSchema, result: coreJobsResultSchema },
   'jobs:list-events': { payload: coreJobEventsPayloadSchema, result: coreJobEventsResultSchema },
-  'documents:list': { payload: coreTasksListPayloadSchema, result: coreDocumentsListResultSchema },
+  'documents:list': { payload: coreListPagePayloadSchema, result: coreDocumentsListResultSchema },
   'documents:get-summary': { payload: coreTaskIdPayloadSchema, result: documentSummarySchema.nullable() },
   'documents:update-metadata': { payload: coreDocumentMetadataPayloadSchema, result: coreMutationResultSchema },
-  'artifacts:get-latest': { payload: coreArtifactLatestPayloadSchema, result: coreArtifactLatestResultSchema },
   'artifacts:record-revision': { payload: coreArtifactRecordPayloadSchema, result: coreMutationResultSchema },
   'knowledge:get': { payload: coreKnowledgeGetPayloadSchema, result: coreKnowledgeGetResultSchema },
   'knowledge:set-semantic-consent': { payload: coreSemanticConsentPayloadSchema, result: coreSemanticConsentResultSchema },
   'knowledge:ensure-embed': { payload: coreEnsureEmbeddingPayloadSchema, result: coreEmbeddingJobResultSchema },
-  'translation:block-upsert': { payload: coreTranslationBlockUpsertPayloadSchema, result: coreMutationResultSchema },
-  'translation:batch-commit': { payload: coreTranslationBatchCommitPayloadSchema, result: coreMutationResultSchema },
-  'translation:blocks-list': { payload: coreTranslationBlocksListPayloadSchema, result: coreTranslationBlocksListResultSchema },
-  'translation:run-update': { payload: coreTranslationRunUpdatePayloadSchema, result: coreMutationResultSchema },
-  'translation:cache-get': { payload: coreCacheGetPayloadSchema, result: coreCacheGetResultSchema },
-  'translation:cache-put': { payload: coreCachePutPayloadSchema, result: coreMutationResultSchema },
-  'annotations:list': { payload: coreAnnotationsListPayloadSchema, result: coreAnnotationsListResultSchema },
-  'annotations:replace': { payload: coreAnnotationsReplacePayloadSchema, result: coreAnnotationsReplaceResultSchema },
   'annotations:list-snapshot': { payload: coreAnnotationsSnapshotPayloadSchema, result: coreAnnotationsSnapshotResultSchema },
   'annotations:mutate': { payload: coreAnnotationsMutatePayloadSchema, result: coreAnnotationsMutateResultSchema },
   'compute:hash-file': { payload: coreHashFilePayloadSchema, result: coreHashFileResultSchema },
@@ -748,13 +652,6 @@ export function deserializeCoreMessage(rawMessage: unknown): CoreMessage {
   }
 }
 
-export function validateCoreRequest(raw: unknown): CoreRequest {
-  try {
-    return coreRequestSchema.parse(raw)
-  } catch {
-    throw new CoreRpcProtocolError('Core RPC request failed validation')
-  }
-}
 
 export function validateCoreOperationResult<K extends CoreOperation>(operation: K, value: unknown): CoreOperationResult[K] {
   try {
