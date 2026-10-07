@@ -34,7 +34,8 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
     const mainBounds = await window.locator('.main-surface').boundingBox()
     expect(mainBounds).not.toBeNull()
     expect(mainBounds!.x).toBeCloseTo(1, 0)
-    expect(mainBounds!.y).toBeCloseTo(32, 0)
+    // Compact 28px titlebar.
+    expect(mainBounds!.y).toBeCloseTo(28, 0)
     expect(mainBounds!.x + mainBounds!.width).toBeCloseTo(viewport[0] - 1, 0)
     expect(mainBounds!.y + mainBounds!.height).toBeCloseTo(viewport[1] - 1, 0)
     await expect(window.locator('.app-shell')).toHaveCSS('border-radius', '8px')
@@ -43,12 +44,12 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
     await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     const closeControl = window.locator('[data-window-control="close"]')
     await expect(closeControl).toHaveCSS('width', '20px')
-    await expect(closeControl).toHaveCSS('height', '28px')
+    await expect(closeControl).toHaveCSS('height', '24px')
     expect(await closeControl.evaluate((element) => getComputedStyle(element, '::before').width)).toBe('12px')
     const closeBounds = await closeControl.boundingBox()
     expect(closeBounds).not.toBeNull()
     expect(closeBounds!.y).toBeGreaterThanOrEqual(1)
-    expect(closeBounds!.y + closeBounds!.height).toBeLessThanOrEqual(32)
+    expect(closeBounds!.y + closeBounds!.height).toBeLessThanOrEqual(28)
 
     await window.locator('[data-edge-dock="top"]').hover()
     await window.waitForTimeout(300)
@@ -316,10 +317,11 @@ test('provides an interactive minimap for original and translated Markdown', asy
     const minimap = activePanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
     const separator = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
     await expect(scroller).toHaveAttribute('data-render-state', 'ready')
-    await expect(window.locator('.reader-header')).toHaveCSS('height', '44px')
-    // Each workbench group has one 48px tab bar; PDF page/zoom controls live inside it.
-    await expect(window.locator('.reader-group-bar').first()).toHaveCSS('height', '48px')
-    await expect(window.locator('.reader-group-bar').last()).toHaveCSS('height', '48px')
+    // Compact reader chrome leaves more height for reading.
+    await expect(window.locator('.reader-header')).toHaveCSS('height', '36px')
+    // Each workbench group has one 40px tab bar; PDF page/zoom controls live inside it.
+    await expect(window.locator('.reader-group-bar').first()).toHaveCSS('height', '40px')
+    await expect(window.locator('.reader-group-bar').last()).toHaveCSS('height', '40px')
     await expect(window.locator('.reader-group-bar .pdf-toolbar')).toBeVisible()
     await expect.poll(async () => Number(await separator.getAttribute('aria-valuemin'))).toBeLessThan(40)
     await expect.poll(async () => Number(await separator.getAttribute('aria-valuemax'))).toBeGreaterThan(60)

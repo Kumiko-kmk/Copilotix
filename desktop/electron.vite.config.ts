@@ -6,7 +6,8 @@ export default defineConfig({
   main: {
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['p-queue', 'remark-gfm', 'remark-math', 'remark-parse', 'remark-stringify', 'unified', 'uuid']
+        // zod is bundled (tree-shaken) like in preload, so it does not ship in app.asar.
+        exclude: ['p-queue', 'remark-gfm', 'remark-math', 'remark-parse', 'remark-stringify', 'unified', 'uuid', 'zod']
       })
     ],
     resolve: { alias: { '@shared': resolve('src/shared'), '@core': resolve('src/core'), '@main': resolve('src/main') } }

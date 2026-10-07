@@ -53,6 +53,8 @@ pnpm desktop:release:from-built
 
 若修改過任何會進入 bundle 的源碼，不得跳過 `desktop:build:bundles`，否則會打包舊代碼。
 
+體積預算（2026-10-07）：runtime 上限 360 MiB 中 Electron 本體約占 330 MiB，餘量很小。`dependencies` 會原樣打進 app.asar，只供 Renderer 使用（已由 Vite 打包）的套件必須放 `devDependencies`；Main 需要的純 JS 套件優先用 electron-vite 的 externalize `exclude` 打包進 bundle（如 zod），只有原生模組或刻意外部化的套件（keyring、katex 等）才留在 `dependencies`。調整後 app.asar 由 29.9 降至 22.0 MiB、runtime 由 359.5 降至 351.6 MiB。
+
 ### 正式交付前的驗證路徑
 
 依使用者要求，日常開發預設不執行本地 lint、typecheck、單元／覆蓋率或 E2E 測試。2026-10-07 補充：未經使用者明確允許，不得 push、上傳產物或觸發遠端發布。允許本地 commit；只有授權上傳後，才可用 GitHub Actions 驗證最新提交（詳見第 8 節）。
@@ -150,4 +152,5 @@ pnpm desktop:release:from-built
 - 最新本地驗證（使用者明確要求測試）：typecheck、PDF／分隔器／聊天儲存 20 項單元測試、四個 bundle 和 Utility smoke 通過。兩項 Electron E2E 通過：反覆欄寬拖曳／鍵盤调整及縮放保持頁碼與頁內位置；真實 15 頁論文在 100%／120% 無右側／底部 gutter、無頁間 gap、兩軸浮動捲動條可拖曳、末頁底邊貼合。已人工檢查測試截圖。未執行完整 CI，付費 API 仍待真人驗收。
 - 使用者此次明確要求不打包，現有 `release-artifacts/muxofbtq-39548-6096bb0c/program/Copilotix.exe` 及 `release/setup.exe` 保持原樣，**不含最新 PDF 邊緣修正**；不可把它們當成最新已測版本交付。此前打包 smoke 結果只對此前產物有效。
 - 2026-10-07 另開 `ui/reader-workbench`（基於 `codex/reader-ai-chat` 1f6c18f）完成編輯器式閱讀工作台第一至三階段（分組／拆分／拖曳／最大化／快捷鍵／捲動同步／引用顯示），見第 7 節；僅本地 commit，未 push；依第 8 節未跑本地測試，只以 Node 24.19.0 build 四個 bundle 並人工檢查 Electron 截圖（預設佈局、右鍵拆分、向下拆分、關閉／重開、原文｜中文並排點選聯動）。
+- 2026-10-07 閱讀器版面緊湊化：視窗標題列 32→28px、閱讀器資訊列 44→36px、工作台頁籤列 48→40px，閱讀區多出 20px；e2e 高度斷言同步更新。最新本地包 `release-artifacts/muxvhkb6-3084-bb0c9178/`（含工作台三階段與緊湊版面），舊產物目錄已按使用者要求清理；僅通過打包內建校驗，未跑 CI。
 - 遠端唯讀核對後只有 `master`、`codex/reader-ai-chat`、`codex/rag-review-20260923`；兩個開發分支均未合併，使用者明確選擇保留三個分支，因此未刪遠端分支。本次程式及產物沒有 push／上傳；後續遠端修改仍需符合當時的使用者授權。
