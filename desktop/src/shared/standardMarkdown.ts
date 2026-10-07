@@ -281,7 +281,7 @@ export function prepareReaderMarkdown(source: string, rewriteImage?: (url: strin
     if (node.type === 'html' && node.value) {
       const visit = (html: Html): void => {
         if (['pre', 'code', 'script', 'style'].includes(tag(html))) return
-        if (tag(html) === 'img' && 'sourceCodeLocation' in html) {
+        if ('tagName' in html && html.tagName === 'img') {
           const location = html.sourceCodeLocation?.attrs?.src
           const original = attribute(html, 'src')
           if (location && original !== undefined) {
