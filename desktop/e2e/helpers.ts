@@ -1,4 +1,5 @@
 import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { _electron as electron } from '@playwright/test'
@@ -195,7 +196,8 @@ export async function seedReaderTask(
   for (const [kind, path] of artifacts) {
     try {
       await access(path)
-      repository.recordArtifactRevision(taskId, kind, path, `fixture-${kind}`)
+      const contentHash = createHash('sha256').update(await readFile(path)).digest('hex')
+      repository.recordArtifactRevision(taskId, kind, path, contentHash)
     } catch {
       // Some fixtures intentionally omit translated or supplemental files.
     }
