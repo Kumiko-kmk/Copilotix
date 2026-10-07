@@ -1,6 +1,9 @@
 # Copilotix 開發文檔
 
-本目錄只保留與目前代碼和後續開發直接相關的文檔：
+本目錄保留目前產品指南與開發維護文檔：
+
+- [中文 Wiki 版本化源文件與發布流程](wiki/README.md)
+- [1.1.0 實際運行截圖及采集範圍](images/screenshots/README.md)
 
 - [桌面開發說明](DESKTOP_DEVELOPMENT_ZH.md)
 - [桌面端 UI 交互规范](UI_INTERACTION_ZH.md)
@@ -11,7 +14,7 @@
 - [RAG 分步實施計劃（代碼＋測試＋驗收）](rag-implementation/README.md)
 - [安全策略](SECURITY.md)
 
-產品介紹站點、歷史更新日誌、插件教程、硬件適配教程與演示素材已移除，避免與當前 Copilotix 實現混淆。
+舊產品介紹站點、插件與硬件適配教程已移除；當前指南以正式發布的版本和實際運行界面為準。
 
 - [许可证与签名配置](LICENSE_AND_SIGNING_ZH.md)
 - [Windows 桌面发布](DESKTOP_RELEASE_ZH.md)
