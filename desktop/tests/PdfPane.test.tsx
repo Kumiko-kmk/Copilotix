@@ -13,15 +13,18 @@ vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
 
 import PdfPane, {
   buildPdfPageLayout,
+  capturePdfScrollAnchor,
   indexMappingsByPage,
   pageIndexAtOffset,
   pdfCanvasOutput,
   pdfPageMetrics,
+  pdfScrollTopForAnchor,
   pdfRenderWindow,
   readPdfContentWidth
 } from '../src/renderer/components/PdfPane'
 
 let scrollIntoView: ReturnType<typeof vi.fn>
+let resizeCallbacks: Array<() => void>
 
 class IntersectionObserverMock {
   observe(): void {}
@@ -29,12 +32,16 @@ class IntersectionObserverMock {
 }
 
 class ResizeObserverMock {
+  constructor(callback: ResizeObserverCallback) {
+    resizeCallbacks.push(() => callback([], this as unknown as ResizeObserver))
+  }
   observe(): void {}
   disconnect(): void {}
 }
 
 beforeEach(() => {
   scrollIntoView = vi.fn()
+  resizeCallbacks = []
   vi.stubGlobal('IntersectionObserver', IntersectionObserverMock)
   vi.stubGlobal('ResizeObserver', ResizeObserverMock)
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -45,6 +52,13 @@ beforeEach(() => {
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
     configurable: true,
     value: scrollIntoView
+  })
+  Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+    configurable: true,
+    value(this: HTMLElement, options: ScrollToOptions) {
+      if (options.top !== undefined) this.scrollTop = options.top
+      if (options.left !== undefined) this.scrollLeft = options.left
+    }
   })
   Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     configurable: true,
@@ -189,6 +203,72 @@ describe('PdfPane mapping navigation', () => {
 })
 
 describe('PDF fit-width zoom', () => {
+  it('keeps page eight and its reading position through repeated resize and zoom, including a queued scroll frame', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let frameId = 0
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.set(++frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    const flushFrames = (): void => {
+      act(() => {
+        const callbacks = [...frames.values()]
+        frames.clear()
+        callbacks.forEach((callback) => callback(0))
+      })
+    }
+    const page = {
+      cleanup: vi.fn(),
+      getViewport: ({ scale }: { scale: number }) => ({ width: 612 * scale, height: 792 * scale }),
+      render: vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() }))
+    }
+    getDocumentMock.mockReturnValue({
+      promise: Promise.resolve({ numPages: 15, getPage: vi.fn(async () => page) }),
+      destroy: vi.fn(async () => undefined)
+    })
+    const view = render(<PdfPane url="copilotix-asset://resize/15-pages.pdf" mappings={[]} selection={null} onSelect={vi.fn()} />)
+    await waitFor(() => expect(view.getByText('1 / 15')).toBeTruthy())
+    const scroller = view.container.querySelector<HTMLElement>('.pdf-scroll')!
+    const sizes = Array.from({ length: 15 }, () => ({ width: 612, height: 792 }))
+    const resize = (width: number): void => {
+      setScrollerMetrics(scroller, { clientWidth: width, clientHeight: 600, scrollWidth: width, scrollHeight: 30_000 })
+      act(() => resizeCallbacks.forEach((callback) => callback()))
+    }
+    resize(600)
+    const initialLayout = buildPdfPageLayout(sizes, 600, 1)
+    scroller.scrollTop = initialLayout.pages[7]!.top + initialLayout.pages[7]!.height * 0.35 - 600 * 0.45
+    fireEvent.scroll(scroller)
+    flushFrames()
+    await waitFor(() => expect(view.getByText('8 / 15')).toBeTruthy())
+    const expectPosition = (width: number, zoom = 1): void => {
+      const anchor = capturePdfScrollAnchor(buildPdfPageLayout(sizes, width, zoom), scroller.scrollTop, 600)
+      expect(anchor?.pageIndex).toBe(7)
+      expect(anchor?.pageFraction).toBeCloseTo(0.35, 8)
+      expect(view.getByText('8 / 15')).toBeTruthy()
+    }
+    // Resizing overtakes a pending scroll handler; it must not select a new page.
+    fireEvent.scroll(scroller)
+    expect(frames.size).toBeGreaterThan(0)
+    for (const width of [450, 900, 500, 600]) {
+      resize(width)
+      flushFrames()
+      fireEvent.scroll(scroller)
+      flushFrames()
+      expectPosition(width)
+    }
+    fireEvent.click(view.getByLabelText('放大'))
+    fireEvent.scroll(scroller)
+    flushFrames()
+    expectPosition(600, 1.1)
+    // A subsequent deliberate scroll must still update the current page.
+    const zoomed = buildPdfPageLayout(sizes, 600, 1.1)
+    scroller.scrollTop = zoomed.pages[8]!.top + zoomed.pages[8]!.height * 0.35 - 600 * 0.45
+    fireEvent.scroll(scroller)
+    flushFrames()
+    expect(view.getByText('9 / 15')).toBeTruthy()
+  })
+
   it('treats the available reader width as 100%', () => {
     expect(pdfPageMetrics({ width: 612, height: 792 }, 500, 1)).toEqual({
       scale: 500 / 612,
@@ -230,6 +310,21 @@ describe('PDF fit-width zoom', () => {
 })
 
 describe('PDF long-document indexing', () => {
+  it('preserves a page-local point across mixed page geometry and viewport sizes', () => {
+    const sizes = Array.from({ length: 15 }, (_, index) => ({ width: index % 2 ? 600 : 500, height: index % 3 ? 800 : 1000 }))
+    const original = buildPdfPageLayout(sizes, 600, 1)
+    const scrollTop = original.pages[7]!.top + original.pages[7]!.height * 0.6 - 600 * 0.45
+    const anchor = capturePdfScrollAnchor(original, scrollTop, 600)!
+    for (const [width, zoom, viewportHeight] of [[450, 1, 600], [900, 1.2, 500], [600, 0.8, 700]]) {
+      const resized = buildPdfPageLayout(sizes, width!, zoom!)
+      const restored = capturePdfScrollAnchor(resized, pdfScrollTopForAnchor(resized, anchor, viewportHeight!), viewportHeight!)!
+      expect(restored.pageIndex).toBe(7)
+      expect(restored.pageFraction).toBeCloseTo(0.6, 8)
+    }
+    expect(capturePdfScrollAnchor({ pages: [], totalHeight: 0 }, 0, 600)).toBeNull()
+    expect(pdfScrollTopForAnchor(original, { pageIndex: 0, pageFraction: 0, viewportFraction: 0.45 }, 600)).toBe(0)
+  })
+
   it('keeps the heavy render window bounded for a thousand-page document', () => {
     expect(pdfRenderWindow(0, 1000, 1)).toEqual({ start: 0, end: 2 })
     expect(pdfRenderWindow(500, 1000, 1)).toEqual({ start: 499, end: 502 })

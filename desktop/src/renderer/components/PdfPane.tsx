@@ -14,6 +14,7 @@ type LoadingState =
 
 const PAGE_RENDER_RADIUS = 1
 const PDF_PAGE_GAP = 24
+const PDF_VIEWPORT_FOCUS = 0.45
 const PDF_MAX_CANVAS_PIXELS = 8 * 1024 * 1024
 const PDF_MAX_CANVAS_DIMENSION = 8192
 const SCROLLBAR_HOT_ZONE_PX = 16
@@ -46,6 +47,9 @@ export default function PdfPane(props: {
   const scrollFrameRef = React.useRef<number | null>(null)
   const mappingsByPage = React.useMemo(() => indexMappingsByPage(props.mappings, document?.numPages ?? 0), [document?.numPages, props.mappings])
   const pageLayout = React.useMemo(() => buildPdfPageLayout(pageSizes, contentWidth, zoom), [contentWidth, pageSizes, zoom])
+  const pageLayoutRef = React.useRef(pageLayout)
+  const layoutDocumentRef = React.useRef(document)
+  const scrollAnchorRef = React.useRef<PdfScrollAnchor | null>(null)
   const renderWindow = pdfRenderWindow(currentPage - 1, pageSizes.length, PAGE_RENDER_RADIUS)
 
   const cancelScrollbarHide = React.useCallback(() => {
@@ -160,6 +164,32 @@ export default function PdfPane(props: {
     return () => observer.disconnect()
   }, [])
 
+  React.useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const documentChanged = layoutDocumentRef.current !== document
+    const layoutChanged = pageLayoutRef.current !== pageLayout
+    pageLayoutRef.current = pageLayout
+    layoutDocumentRef.current = document
+    if (documentChanged || layoutChanged) {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current)
+        scrollFrameRef.current = null
+      }
+      // Preserve a PDF point, rather than interpreting the old pixel offset
+      // against resized pages. Instant scrolling also stops stale smooth motion.
+      if (documentChanged) {
+        scroller.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+      } else if (scrollAnchorRef.current) {
+        scroller.scrollTo({
+          top: pdfScrollTopForAnchor(pageLayout, scrollAnchorRef.current, scroller.clientHeight),
+          behavior: 'instant'
+        })
+      }
+    }
+    scrollAnchorRef.current = capturePdfScrollAnchor(pageLayout, scroller.scrollTop, scroller.clientHeight)
+  }, [document, pageLayout])
+
   React.useEffect(() => {
     const selection = props.selection
     if (!selection || (selection.origin !== 'markdown' && selection.origin !== 'citation')) return
@@ -167,6 +197,11 @@ export default function PdfPane(props: {
     const targetBox = mapping ? findTargetBox(mapping, selection.blockPosition) : undefined
     const pageIndex = targetBox?.pageIndex
     if (!mapping || !targetBox || pageIndex === undefined) return
+    scrollAnchorRef.current = {
+      pageIndex,
+      pageFraction: (targetBox.bbox[1] + targetBox.bbox[3]) / (2 * targetBox.pageSize[1]),
+      viewportFraction: 0.5
+    }
     setCurrentPage(pageIndex + 1)
     requestAnimationFrame(() => {
       const page = scrollerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${pageIndex}"]`)
@@ -182,6 +217,7 @@ export default function PdfPane(props: {
   const goToPage = React.useCallback((page: number) => {
     if (!document) return
     const next = Math.max(1, Math.min(document.numPages, page))
+    scrollAnchorRef.current = { pageIndex: next - 1, pageFraction: 0, viewportFraction: 0 }
     setCurrentPage(next)
     requestAnimationFrame(() => {
       scrollerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${next - 1}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -198,15 +234,19 @@ export default function PdfPane(props: {
     })
   }, [])
   const onPdfScroll = React.useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    // Capture immediately: a queued scroll frame can be overtaken by resizing.
+    scrollAnchorRef.current = capturePdfScrollAnchor(pageLayoutRef.current, scroller.scrollTop, scroller.clientHeight)
     if (scrollFrameRef.current !== null) return
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null
       const scroller = scrollerRef.current
-      if (!scroller || pageSizes.length === 0) return
-      const pageIndex = pageIndexAtOffset(pageLayout, scroller.scrollTop + scroller.clientHeight * 0.45)
+      if (!scroller || pageLayoutRef.current.pages.length === 0) return
+      const pageIndex = pageIndexAtOffset(pageLayoutRef.current, scroller.scrollTop + scroller.clientHeight * PDF_VIEWPORT_FOCUS)
       setCurrentPage((current) => current === pageIndex + 1 ? current : pageIndex + 1)
     })
-  }, [pageLayout, pageSizes.length])
+  }, [])
   const retry = React.useCallback(() => setReloadKey((value) => value + 1), [])
   const onPageError = React.useCallback((message: string) => setLoadingState({ status: 'error', message }), [])
   const onPdfBlock = React.useCallback((mappingId: string, blockPosition: string) => {
@@ -446,6 +486,31 @@ export function indexMappingsByPage(mappings: BlockMapping[], pageCount: number)
 export interface PdfPageLayout {
   pages: Array<{ top: number; width: number; height: number }>
   totalHeight: number
+}
+
+export interface PdfScrollAnchor {
+  pageIndex: number
+  pageFraction: number
+  viewportFraction: number
+}
+
+export function capturePdfScrollAnchor(layout: PdfPageLayout, scrollTop: number, viewportHeight: number): PdfScrollAnchor | null {
+  const focusOffset = scrollTop + viewportHeight * PDF_VIEWPORT_FOCUS
+  const pageIndex = pageIndexAtOffset(layout, focusOffset)
+  const page = layout.pages[pageIndex]
+  if (!page) return null
+  return {
+    pageIndex,
+    pageFraction: Math.max(0, Math.min(1, (focusOffset - page.top) / page.height)),
+    viewportFraction: PDF_VIEWPORT_FOCUS
+  }
+}
+
+export function pdfScrollTopForAnchor(layout: PdfPageLayout, anchor: PdfScrollAnchor, viewportHeight: number): number {
+  const page = layout.pages[anchor.pageIndex]
+  if (!page) return 0
+  const requested = page.top + page.height * anchor.pageFraction - viewportHeight * anchor.viewportFraction
+  return Math.max(0, Math.min(Math.max(0, layout.totalHeight - viewportHeight), requested))
 }
 
 export function buildPdfPageLayout(

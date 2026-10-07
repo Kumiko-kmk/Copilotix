@@ -123,8 +123,8 @@ async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<vo
   await expect(activeTextPanel.locator('.markdown-body')).toHaveCSS('padding-top', '15px')
   await expect(activeTextPanel.locator('.markdown-body h1')).toHaveCSS('margin-top', '4px')
   await expect(activeTextPanel.locator('.markdown-body h1')).toHaveCSS('margin-bottom', '11px')
-  await expect(activeTextPanel.locator('.markdown-body p').first()).toHaveCSS('margin-top', '6px')
-  await expect(activeTextPanel.locator('.markdown-body p').first()).toHaveCSS('margin-bottom', '6px')
+  await expect(activeTextPanel.locator('.markdown-body .markdown-block > p').first()).toHaveCSS('margin-top', '3px')
+  await expect(activeTextPanel.locator('.markdown-body .markdown-block > p').first()).toHaveCSS('margin-bottom', '3px')
   await expect(activeTextPanel.locator('.markdown-body td .katex')).toHaveCount(4)
   await expect(activeTextPanel.locator('.markdown-minimap-formula .katex')).toHaveCount(5)
   await expect(activeTextPanel.locator('.markdown-body table')).not.toContainText('$x$')
@@ -148,6 +148,61 @@ async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<vo
   expect(tableMetrics.scrollWidth).toBeGreaterThan(tableMetrics.clientWidth)
   expect(tableMetrics).toMatchObject({ fontSize: '13px', paddingBlock: '3px 3px' })
 }
+
+test('fits PDF pages without an outer frame and preserves the current page while resizing', async () => {
+  const workspace = await createE2EWorkspace()
+  const taskId = await seedReaderTask(workspace)
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await openPaper(window, taskId)
+    const scroller = window.locator('.pdf-scroll')
+    await expect(window.getByText('1 / 2')).toBeVisible()
+    await expect.poll(() => window.locator('[data-pdf-page="1"] canvas').evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
+    await expect(scroller).toHaveCSS('padding', '0px')
+    await expect(scroller).toHaveCSS('border-left-width', '0px')
+    await expect(window.locator('.pdf-page').first()).toHaveCSS('box-shadow', 'none')
+    await expect.poll(() => scroller.evaluate((element) =>
+      Math.abs(element.querySelector('.pdf-page')!.getBoundingClientRect().width - element.clientWidth)
+    )).toBeLessThan(1)
+    await scroller.evaluate((element) => {
+      const page = element.querySelector('[data-pdf-page="1"]')!.getBoundingClientRect()
+      const viewport = element.getBoundingClientRect()
+      element.scrollTo({ top: element.scrollTop + page.top - viewport.top + page.height * 0.35 - element.clientHeight * 0.45, behavior: 'instant' })
+    })
+    await expect(window.getByText('2 / 2')).toBeVisible()
+    const expectReadingPosition = async (): Promise<void> => {
+      await expect(window.getByText('2 / 2')).toBeVisible()
+      await expect.poll(() => scroller.evaluate((element) => {
+        const page = element.querySelector('[data-pdf-page="1"]')!.getBoundingClientRect()
+        const viewport = element.getBoundingClientRect()
+        return Math.abs((viewport.top + element.clientHeight * 0.45 - page.top) / page.height - 0.35)
+      })).toBeLessThan(0.01)
+    }
+    const split = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
+    for (const key of ['Home', 'End', 'Home', 'End']) {
+      const previousWidth = await scroller.evaluate((element) => element.clientWidth)
+      await split.press(key)
+      await expect.poll(() => scroller.evaluate((element) => element.clientWidth)).not.toBe(previousWidth)
+      await expectReadingPosition()
+    }
+    const handle = (await split.boundingBox())!
+    const area = (await window.locator('.reader-split').boundingBox())!
+    await window.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+    await window.mouse.down()
+    for (const percent of [0.42, 0.58, 0.45]) {
+      await window.mouse.move(area.x + area.width * percent, handle.y + handle.height / 2, { steps: 12 })
+      await expectReadingPosition()
+    }
+    await window.mouse.up()
+    await window.getByLabel('放大').click()
+    await expect(window.getByText('110%')).toBeVisible()
+    await expectReadingPosition()
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
 
 test('renders a local PDF with range requests before parsing succeeds', async () => {
   const workspace = await createE2EWorkspace()

@@ -490,13 +490,13 @@ button, input, select { font: inherit; }
 .pdf-pane, .text-pane { min-width: 0; min-height: 0; }
 .pdf-pane { display: grid; grid-template-rows: 48px minmax(0, 1fr); background: var(--muted-surface); }
 .pdf-toolbar, .text-toolbar { display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
-.pdf-scroll { padding: 24px; overflow: auto; scroll-behavior: smooth; }
+.pdf-scroll { padding: 0; border: 0; overflow: auto; overflow-anchor: none; scroll-behavior: smooth; }
 .pdf-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 .pdf-scroll::-webkit-scrollbar-track, .pdf-scroll::-webkit-scrollbar-corner { background: transparent; }
 .pdf-scroll::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: transparent; background-clip: padding-box; transition: background-color .15s ease; }
 .pdf-scroll.pdf-scrollbar-y-visible::-webkit-scrollbar-thumb:vertical,
 .pdf-scroll.pdf-scrollbar-x-visible::-webkit-scrollbar-thumb:horizontal { background-color: rgba(111, 103, 91, .62); }
-.pdf-page { position: relative; margin: 0 auto 24px; background: white; box-shadow: 0 6px 24px rgba(0,0,0,.13); content-visibility: auto; contain-intrinsic-size: 612px 792px; }
+.pdf-page { position: relative; margin: 0 auto 24px; border: 0; background: white; content-visibility: auto; contain-intrinsic-size: 612px 792px; }
 .pdf-page-spacer { width: 1px; pointer-events: none; contain: strict; }
 .pdf-page canvas { display: block; }
 .pdf-overlay-layer { position: absolute; inset: 0; }
