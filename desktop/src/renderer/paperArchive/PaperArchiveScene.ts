@@ -173,6 +173,7 @@ export class PaperArchiveScene {
   } | null = null
 
   private reduced: boolean
+  private performanceMode = false
   private loaded = false
   private focused = document.hasFocus()
   private clock = 0
@@ -279,7 +280,9 @@ export class PaperArchiveScene {
       })
       if (!this.surfaces.has('Frosted_Polymer')) throw new Error('archive shell is missing its cover')
       this.applyPalette()
+      this.applyPerformanceMode()
       this.loaded = true
+      this.renderer.domElement.dataset.archiveState = 'ready'
       this.entryTime = this.reduced ? this.clock - ENTRY_DURATION - 2 : this.clock
       this.lastInteraction = this.clock
       this.wake()
@@ -343,6 +346,22 @@ export class PaperArchiveScene {
   setReducedMotion(reduced: boolean): void {
     this.reduced = reduced
     this.wake()
+  }
+
+  /** Change cover quality in place, preserving the current selection and motion. */
+  setPerformanceMode(enabled: boolean): void {
+    this.performanceMode = enabled
+    this.applyPerformanceMode()
+    this.wake()
+  }
+
+  private applyPerformanceMode(): void {
+    const cover = this.surfaces.get('Frosted_Polymer')
+    if (!cover) return
+    const material = cover.material as MeshPhysicalMaterial
+    material.transmission = this.performanceMode ? 0 : 0.78
+    material.color.set(this.performanceMode ? '#e9dfd2' : '#ffffff')
+    material.needsUpdate = true
   }
 
   /** Replace the archive contents, keeping the current paper in view when it still exists. */

@@ -39,6 +39,22 @@
 .paper-archive-brand h1 { margin: 4px 0 2px; color: var(--ink); font-size: clamp(30px, 3.2vw, 44px); font-weight: 750; letter-spacing: .06em; line-height: 1.05; }
 .paper-archive-brand p { margin: 0; color: var(--muted); font-size: 13px; letter-spacing: .04em; }
 
+.paper-archive-tools { position: absolute; z-index: 3; top: calc(var(--page-top) + 18px); right: var(--archive-gutter); width: min(360px, 42%); }
+.paper-archive-search { position: relative; }
+.paper-archive-search-field { display: flex; align-items: center; gap: 8px; margin-top: 6px; border-bottom: 1px solid var(--muted); }
+.paper-archive-search input { width: 100%; min-width: 0; padding: 9px 2px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14px; }
+.paper-archive-search kbd { color: var(--muted); font-size: 12px; }
+.paper-archive-search input:focus-visible, .paper-archive-results button:focus-visible, .paper-archive-quality input:focus-visible { outline: 2px solid var(--archive-accent); outline-offset: 2px; }
+.paper-archive-results { position: absolute; top: 100%; right: 0; left: 0; margin-top: 8px; padding: 12px; max-height: min(48vh, 380px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--muted-surface); border-radius: 8px; background: var(--archive-bg); box-shadow: 0 12px 32px #0002; }
+.paper-archive-results p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.paper-archive-results ul { margin: 0; padding: 0; list-style: none; }
+.paper-archive-results button { display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 10px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.paper-archive-results button:hover { background: var(--muted-surface); }
+.paper-archive-results span { font-size: 14px; overflow-wrap: anywhere; }
+.paper-archive-results small { color: var(--muted); font-size: 11px; }
+.paper-archive-quality { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 10px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.paper-archive-quality input { accent-color: var(--archive-accent); }
+
 .paper-archive-panel {
   top: 50%; right: var(--archive-gutter);
   width: min(460px, 38vw);

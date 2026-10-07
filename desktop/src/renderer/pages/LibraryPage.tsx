@@ -8,6 +8,8 @@ import '../paperArchive/paperArchive.css'
 
 // Survives page switches so returning from the reader lands on the same paper.
 let lastPaperId: string | null = null
+const PERFORMANCE_KEY = 'copilotix.library.performance.v1'
+const SEARCH_LIMIT = 40
 
 type Selection = { cell: ArchiveCell; paper: ArchivePaper | null }
 
@@ -17,12 +19,26 @@ export default function LibraryPage(props: {
   onCreate(): void
 }): React.JSX.Element {
   const hostRef = React.useRef<HTMLDivElement>(null)
+  const pageRef = React.useRef<HTMLElement>(null)
+  const searchRef = React.useRef<HTMLInputElement>(null)
   const sceneRef = React.useRef<PaperArchiveScene | null>(null)
   const onOpenRef = React.useRef(props.onOpen)
   onOpenRef.current = props.onOpen
   const [selection, setSelection] = React.useState<Selection>({ cell: { lane: 0, row: 0 }, paper: null })
   const [unsupported, setUnsupported] = React.useState(false)
+  const [query, setQuery] = React.useState('')
+  const [searchOpen, setSearchOpen] = React.useState(false)
+  const [performanceMode, setPerformanceMode] = React.useState(() => {
+    try { return localStorage.getItem(PERFORMANCE_KEY) === 'true' } catch { return false }
+  })
   const shelves = React.useMemo(() => groupPapersByMonth(props.documents), [props.documents])
+  const searchIndex = React.useMemo(() => shelves.flatMap((shelf) => shelf.papers.map((paper) => ({
+    paper, month: shelf.label, text: `${paper.displayName}\n${paper.originalName}`.toLowerCase()
+  }))), [shelves])
+  const matches = React.useMemo(() => {
+    const terms = query.trim().toLowerCase().split(/\s+/u).filter(Boolean)
+    return searchIndex.filter((item) => terms.every((term) => item.text.includes(term)))
+  }, [query, searchIndex])
   const restoredRef = React.useRef(false)
 
   React.useEffect(() => {
@@ -68,12 +84,23 @@ export default function LibraryPage(props: {
   }, [shelves])
 
   React.useEffect(() => {
+    sceneRef.current?.setPerformanceMode(performanceMode)
+    try { localStorage.setItem(PERFORMANCE_KEY, String(performanceMode)) } catch { /* Session-only when storage is unavailable. */ }
+  }, [performanceMode])
+
+  React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const scene = sceneRef.current
-      if (!scene || event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return
+      if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented || event.isComposing) return
       const target = event.target as HTMLElement | null
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
       if (document.querySelector('.ant-modal-wrap')) return
+      if (event.key === '/') {
+        event.preventDefault()
+        searchRef.current?.focus()
+        return
+      }
+      if (!scene || target?.closest('.paper-archive-tools')) return
       const moves: Record<string, ['lane' | 'row', number]> = {
         ArrowLeft: ['lane', -1], ArrowRight: ['lane', 1], ArrowUp: ['row', -1], ArrowDown: ['row', 1]
       }
@@ -96,9 +123,19 @@ export default function LibraryPage(props: {
   const paperIndex = paperIndexAt(shelves, selection.cell)
   const shelfIndex = shelves.length ? wrap(selection.cell.lane, shelves.length) : 0
   const empty = shelves.length === 0
+  const chooseResult = (result: ArchivePaper): void => {
+    lastPaperId = result.id
+    setSearchOpen(false)
+    setQuery('')
+    if (unsupported) props.onOpen(result.id)
+    else {
+      sceneRef.current?.focusPaper(result.id)
+      pageRef.current?.focus({ preventScroll: true })
+    }
+  }
 
   return (
-    <section className="paper-archive-page" aria-label="文库">
+    <section ref={pageRef} tabIndex={-1} className="paper-archive-page" aria-label="文库">
       <div ref={hostRef} className="paper-archive-stage" />
       <div className="paper-archive-veil" aria-hidden="true" />
 
@@ -108,10 +145,55 @@ export default function LibraryPage(props: {
         <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${shelves.length} 个月份`}</p>
       </header>
 
+      <div className="paper-archive-tools">
+        <div className="paper-archive-search" role="search" aria-label="文库检索"
+          onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false) }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              setSearchOpen(false)
+              pageRef.current?.focus({ preventScroll: true })
+            }
+          }}>
+          <label htmlFor="paper-archive-search" className="paper-archive-eyebrow">ARCHIVE INDEX</label>
+          <div className="paper-archive-search-field">
+            <input id="paper-archive-search" ref={searchRef} type="search" autoComplete="off"
+              aria-label="搜索文库" placeholder="搜索标题或文件名" value={query}
+              aria-controls={searchOpen ? 'paper-archive-results' : undefined}
+              onFocus={() => setSearchOpen(true)}
+              onChange={(event) => { setQuery(event.target.value); setSearchOpen(true) }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.nativeEvent.isComposing && searchOpen && matches[0]) {
+                  event.preventDefault()
+                  chooseResult(matches[0].paper)
+                }
+              }} />
+            <kbd aria-hidden="true">/</kbd>
+          </div>
+          {searchOpen ? (
+            <div id="paper-archive-results" className="paper-archive-results">
+              <p role="status">{matches.length ? `${matches.length} 篇论文${matches.length > SEARCH_LIMIT ? ` · 显示前 ${SEARCH_LIMIT} 篇，请细化关键词` : ''}` : '没有匹配的论文'}</p>
+              <ul aria-label="搜索结果">
+                {matches.slice(0, SEARCH_LIMIT).map(({ paper: result, month }) => (
+                  <li key={result.id}><button type="button" onClick={() => chooseResult(result)}>
+                    <span>{result.displayName}</span>
+                    <small>{month} · {statusLabels[result.workflow.status]}{unsupported ? ' · 打开阅读' : ''}</small>
+                  </button></li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+        <label className="paper-archive-quality" title="关闭半透明材质，降低显卡负担">
+          <input type="checkbox" checked={performanceMode} disabled={unsupported}
+            onChange={(event) => setPerformanceMode(event.target.checked)} />流畅模式
+        </label>
+      </div>
+
       {unsupported ? (
         <div className="paper-archive-panel paper-archive-empty" role="status">
           <h2>当前环境无法显示三维文库</h2>
-          <p>显卡加速不可用，可以在任务管理中浏览全部论文。</p>
+          <p>可以使用右上角搜索打开论文，或在任务管理中浏览全部论文。</p>
         </div>
       ) : empty ? (
         <div className="paper-archive-panel paper-archive-empty" role="status">
