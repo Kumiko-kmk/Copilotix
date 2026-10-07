@@ -515,6 +515,8 @@ button, input, select { font: inherit; }
 .reader-group-button:hover, .reader-group-button.ant-dropdown-open { color: var(--text); background: var(--muted-surface); }
 .reader-group-button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .reader-tab-add { width: 26px; height: 26px; margin-left: 2px; }
+.reader-sync-toggle.on { color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 85%, transparent); }
+.reader-sync-toggle.on:hover { color: var(--primary); background: var(--primary-soft); }
 .reader-group-actions { display: flex; min-width: 0; height: 100%; align-items: center; justify-content: flex-end; flex: 1 1 auto; gap: 8px; overflow: hidden; }
 .reader-group-actions:empty { flex: 1 1 auto; }
 .reader-group-actions .pdf-toolbar { height: 100%; padding: 0; border: 0; background: transparent; }

@@ -36,7 +36,13 @@ export interface ReaderLayout {
   root: LayoutNode
   /** Views closed by the user, most recently hidden last. */
   hidden: ReaderViewId[]
+  /** Reading views whose scrolling is linked (the 🔗 toggle). Chat never syncs. */
+  synced: ReaderViewId[]
 }
+
+/** Views that can take part in scroll sync, and that a citation can be shown in (preference order). */
+export const READING_VIEW_IDS: readonly ReaderViewId[] = ['original', 'translated', 'pdf']
+const DEFAULT_SYNCED: readonly ReaderViewId[] = ['original', 'translated']
 
 export const LAYOUT_STORAGE_KEY = 'copilotix.reader.layout.v1'
 const LEGACY_SPLIT_KEY = 'copilotix.reader.split-percent'
@@ -47,6 +53,7 @@ export function defaultReaderLayout(pdfPercent = DEFAULT_PDF_PERCENT): ReaderLay
   return {
     version: 1,
     hidden: [],
+    synced: [...DEFAULT_SYNCED],
     root: {
       kind: 'split',
       id: 's1',
@@ -199,6 +206,39 @@ export function equalizeSplit(layout: ReaderLayout, splitId: string): ReaderLayo
     : split))
 }
 
+/** Turn scroll sync on or off for a reading view. */
+export function toggleSync(layout: ReaderLayout, view: ReaderViewId): ReaderLayout {
+  if (!READING_VIEW_IDS.includes(view)) return layout
+  const synced = layout.synced.includes(view) ? layout.synced.filter((item) => item !== view) : [...layout.synced, view]
+  return { ...layout, synced }
+}
+
+/** Reading views that are currently shown (active tab of a group) with sync on. */
+export function activeSyncedViews(layout: ReaderLayout): ReaderViewId[] {
+  return listGroups(layout.root).map((group) => group.active).filter((view) => layout.synced.includes(view))
+}
+
+/**
+ * Make sure some reading view is on screen, e.g. after a chat citation is
+ * clicked while only the chat is showing. A reading view sharing a group with
+ * the active chat is split out to the left rather than replacing the chat.
+ */
+export function ensureReadingView(layout: ReaderLayout, available: readonly ReaderViewId[] = READING_VIEW_IDS): ReaderLayout {
+  if (listGroups(layout.root).some((group) => READING_VIEW_IDS.includes(group.active))) return layout
+  const view = READING_VIEW_IDS.find((item) => available.includes(item) && (groupOfView(layout, item) || layout.hidden.includes(item)))
+  if (!view) return layout
+  let group = groupOfView(layout, view)
+  let next = layout
+  if (!group) {
+    // Reopen next to the chat (or in the first group) and split it out below.
+    const host = groupOfView(layout, 'chat') ?? listGroups(layout.root)[0]!
+    next = revealView(layout, view, host.id)
+    group = groupOfView(next, view)!
+  }
+  if (group.views.length > 1 && (group.views.includes('chat') || next !== layout)) return splitView(next, view, group.id, 'left')
+  return activateView(next, view)
+}
+
 /** The group before/after `groupId` in reading order (left-to-right, top-to-bottom). */
 export function adjacentGroup(layout: ReaderLayout, groupId: string, offset: -1 | 1): LayoutGroup | undefined {
   const groups = listGroups(layout.root)
@@ -272,7 +312,11 @@ export function normalizeLayout(input: unknown): ReaderLayout {
   const storedHidden = Array.isArray(input.hidden) ? input.hidden.filter(isViewId) : []
   const hidden = [...new Set(storedHidden)].filter((view) => !seen.has(view))
   for (const view of READER_VIEW_IDS) if (!seen.has(view) && !hidden.includes(view)) hidden.push(view)
-  return { version: 1, root, hidden }
+  // Layouts saved before scroll sync existed get the default.
+  const synced = Array.isArray(input.synced)
+    ? [...new Set(input.synced.filter((view): view is ReaderViewId => isViewId(view) && READING_VIEW_IDS.includes(view)))]
+    : [...DEFAULT_SYNCED]
+  return { version: 1, root, hidden, synced }
 }
 
 export function loadReaderLayout(): ReaderLayout {

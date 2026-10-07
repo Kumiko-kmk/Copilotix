@@ -4,9 +4,9 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@shared/readerDocument'
-import ReaderWorkbench, { dropVerdict, dropZoneAt } from '../src/renderer/components/ReaderWorkbench'
+import ReaderWorkbench, { MIN_GROUP_HEIGHT, MIN_GROUP_WIDTH, dropVerdict, dropZoneAt, minNodeExtent } from '../src/renderer/components/ReaderWorkbench'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../src/renderer/components/ReaderViews'
-import { defaultReaderLayout, normalizeLayout, type ReaderLayout } from '../src/renderer/readerLayout'
+import { defaultReaderLayout, normalizeLayout, splitView, type ReaderLayout } from '../src/renderer/readerLayout'
 import type { PaperChatController } from '../src/renderer/usePaperChat'
 
 vi.mock('../src/renderer/components/ReaderChatPanel', () => ({
@@ -194,6 +194,25 @@ describe('tab drop targets', () => {
     expect(dropVerdict(layout, 'translated', 'g2', 'right', { ...bounds, width: 400 })).toEqual({ allowed: false, reason: '空间不足' })
     expect(dropVerdict(layout, 'translated', 'g2', 'bottom', { ...bounds, height: 250 })).toEqual({ allowed: false, reason: '空间不足' })
     expect(dropVerdict(layout, 'pdf', 'g2', 'center')).toEqual({ allowed: true })
+  })
+})
+
+describe('minimum sizes and scroll sync toggle', () => {
+  it('reserves enough room for every group in nested splits', () => {
+    const layout = splitView(splitView(defaultReaderLayout(), 'translated', 'g2', 'right'), 'chat', 'g2', 'bottom')
+    // Row: PDF | (Markdown over chat) | 中文 → three columns wide, two groups tall.
+    expect(minNodeExtent(layout.root, 'row')).toBe(MIN_GROUP_WIDTH * 3)
+    expect(minNodeExtent(layout.root, 'column')).toBe(MIN_GROUP_HEIGHT * 2)
+  })
+
+  it('toggles scroll sync for the active reading view and hides the toggle for chat', () => {
+    const onLayout = vi.fn()
+    const view = render(<Harness onLayout={onLayout} />)
+    const toggle = view.getByRole('button', { name: '滚动同步' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(toggle)
+    expect(onLayout).toHaveBeenLastCalledWith(expect.objectContaining({ synced: ['translated'] }))
+    expect(view.getByRole('button', { name: '滚动同步' }).getAttribute('aria-pressed')).toBe('false')
   })
 })
 

@@ -16,6 +16,7 @@ import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutation
 import ReaderWorkbench from '../components/ReaderWorkbench'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
+  activeSyncedViews,
   findGroup,
   groupOfView,
   listGroups,
@@ -30,6 +31,7 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
   const chat = usePaperChat(props.documentId)
   const [layout, setLayout] = React.useState<ReaderLayout>(loadReaderLayout)
   const [focusedGroupId, setFocusedGroupId] = React.useState<string | null>(null)
+  const [revealReadingNonce, setRevealReadingNonce] = React.useState(0)
   const [selection, setSelection] = React.useState<BlockSelection | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -83,11 +85,16 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
       else messageApi.success({ content: '已加入 AI 问答选区', key: 'paper-chat-pin', duration: 1.5 })
     })
   }, [addSelection, messageApi])
+  // A citation scrolls the reading views to its block; if none is on screen, the workbench shows one.
+  const openCitation = React.useCallback((next: BlockSelection) => {
+    selectBlock(next)
+    setRevealReadingNonce((value) => value + 1)
+  }, [selectBlock])
   const chatOptions = React.useMemo<ReaderChatOptions>(() => ({
     controller: chat,
     onOpenSettings: props.onOpenSettings,
-    onCitation: selectBlock
-  }), [chat, props.onOpenSettings, selectBlock])
+    onCitation: openCitation
+  }), [chat, openCitation, props.onOpenSettings])
 
   const replaceAnnotations = React.useCallback(async (
     view: ReaderAnnotationView,
@@ -152,6 +159,7 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
         onLayoutChange={setLayout}
         focusedGroupId={focusedGroupId}
         onFocusGroup={setFocusedGroupId}
+        revealReadingNonce={revealReadingNonce}
         views={{
           pdfUrl: document.pdfUrl,
           mappings: document.mappings,
@@ -183,9 +191,11 @@ function ReaderWorkspace(props: {
   onLayoutChange(layout: ReaderLayout): void
   focusedGroupId: string | null
   onFocusGroup(groupId: string): void
+  revealReadingNonce: number
   views: ReaderViewsInput
 }): React.JSX.Element {
-  const specs = useReaderViews(props.views)
+  const scrollSyncViews = React.useMemo(() => activeSyncedViews(props.layout), [props.layout])
+  const specs = useReaderViews({ ...props.views, scrollSyncViews })
   return (
     <ReaderWorkbench
       layout={props.layout}
@@ -193,6 +203,7 @@ function ReaderWorkspace(props: {
       focusedGroupId={props.focusedGroupId}
       onLayoutChange={props.onLayoutChange}
       onFocusGroup={props.onFocusGroup}
+      revealReadingNonce={props.revealReadingNonce}
     />
   )
 }

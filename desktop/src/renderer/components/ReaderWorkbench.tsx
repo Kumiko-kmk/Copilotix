@@ -1,11 +1,13 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
-import { CloseOutlined, LayoutOutlined, PlusOutlined, ShrinkOutlined } from '@ant-design/icons'
+import { CloseOutlined, DisconnectOutlined, LayoutOutlined, LinkOutlined, PlusOutlined, ShrinkOutlined } from '@ant-design/icons'
 import { Dropdown, type MenuProps } from 'antd'
 import {
   activateView,
   adjacentGroup,
+  READING_VIEW_IDS,
   defaultReaderLayout,
+  ensureReadingView,
   equalizeSplit,
   findGroup,
   groupOfView,
@@ -16,6 +18,7 @@ import {
   resizeSplit,
   revealView,
   splitView,
+  toggleSync,
   visibleViews,
   type LayoutGroup,
   type LayoutNode,
@@ -35,6 +38,17 @@ const DRAG_THRESHOLD_PX = 5
 const SHORTCUT_VIEWS: readonly ReaderViewId[] = ['pdf', 'original', 'translated', 'chat']
 
 export type DropZone = 'center' | SplitSide
+
+/**
+ * Smallest width (row) or height (column) a node needs so none of its groups
+ * goes below the minimum. With at most four views this always fits the
+ * minimum window, so narrowing the window shrinks groups but never hides one.
+ */
+export function minNodeExtent(node: LayoutNode, direction: 'row' | 'column'): number {
+  if (node.kind === 'group') return direction === 'row' ? MIN_GROUP_WIDTH : MIN_GROUP_HEIGHT
+  const extents = node.children.map((child) => minNodeExtent(child, direction))
+  return node.direction === direction ? extents.reduce((sum, extent) => sum + extent, 0) : Math.max(...extents)
+}
 
 interface Bounds { left: number; top: number; width: number; height: number }
 
@@ -83,6 +97,7 @@ interface WorkbenchActions {
   reset(): void
   focus(groupId: string): void
   toggleMaximize(groupId: string): void
+  toggleSync(view: ReaderViewId): void
   beginTabPointer(event: React.PointerEvent<HTMLElement>, view: ReaderViewId): void
   /** True right after a drag ended, so the tab's click does not also select it. */
   consumeDragClick(): boolean
@@ -114,6 +129,8 @@ export default function ReaderWorkbench(props: {
   focusedGroupId: string | null
   onLayoutChange(layout: ReaderLayout): void
   onFocusGroup(groupId: string): void
+  /** Bump to make sure a reading view is on screen (e.g. after a chat citation). */
+  revealReadingNonce?: number
 }): React.JSX.Element {
   const rootRef = React.useRef<HTMLDivElement>(null)
   const layoutRef = React.useRef(props.layout)
@@ -189,6 +206,7 @@ export default function ReaderWorkbench(props: {
       },
       focus: (groupId) => focusRef.current(groupId),
       toggleMaximize: (groupId) => setMaximized((current) => current === groupId ? null : groupId),
+      toggleSync: (view) => commit(toggleSync(layoutRef.current, view)),
       consumeDragClick: () => {
         const consumed = dragClickRef.current
         dragClickRef.current = false
@@ -251,6 +269,17 @@ export default function ReaderWorkbench(props: {
       }
     }
   }, [])
+
+  // A chat citation must land somewhere visible: leave a maximized chat and show a reading view.
+  React.useEffect(() => {
+    if (!props.revealReadingNonce) return
+    const layout = layoutRef.current
+    const maximizedGroup = maximizedRef.current ? findGroup(layout, maximizedRef.current) : undefined
+    if (maximizedGroup && !READING_VIEW_IDS.includes(maximizedGroup.active)) setMaximized(null)
+    const available = READING_VIEW_IDS.filter((view) => specsRef.current[view])
+    const next = ensureReadingView(layout, available)
+    if (next !== layout) changeRef.current(next)
+  }, [props.revealReadingNonce])
 
   // Keyboard shortcuts, active while the reader (and so the workbench) is mounted.
   React.useEffect(() => {
@@ -365,13 +394,21 @@ function SplitView(props: { split: LayoutSplit }): React.JSX.Element {
     return () => observer.disconnect()
   }, [row])
 
-  const minPercent = extent > 0 ? Math.min(45, (row ? MIN_GROUP_WIDTH : MIN_GROUP_HEIGHT) / extent * 100) : 10
+  const minExtents = React.useMemo(
+    () => split.children.map((child) => minNodeExtent(child, split.direction)),
+    [split.children, split.direction]
+  )
+  /** A child's minimum as a percentage of this split (10% while unmeasured). */
+  const minPercent = React.useCallback(
+    (index: number) => extent > 0 ? Math.min(45, minExtents[index]! / extent * 100) : 10,
+    [extent, minExtents]
+  )
 
   /** New sizes when the divider before child `index` sits at `position` percent of the split. */
   const sizesAt = React.useCallback((index: number, position: number, base: readonly number[]): number[] => {
     const start = base.slice(0, index - 1).reduce((sum, size) => sum + size, 0)
     const pair = base[index - 1]! + base[index]!
-    const before = Math.min(pair - minPercent, Math.max(minPercent, position - start))
+    const before = Math.min(pair - minPercent(index), Math.max(minPercent(index - 1), position - start))
     const next = [...base]
     next[index - 1] = before
     next[index] = pair - before
@@ -412,8 +449,8 @@ function SplitView(props: { split: LayoutSplit }): React.JSX.Element {
                 role="separator"
                 aria-label={`调整 ${nodeLabel(split.children[index - 1]!, specs)} 与 ${nodeLabel(child, specs)} 阅读器${row ? '宽度' : '高度'}`}
                 aria-orientation={row ? 'vertical' : 'horizontal'}
-                aria-valuemin={Math.round(cumulative - sizes[index - 1]! + minPercent)}
-                aria-valuemax={Math.round(cumulative + sizes[index]! - minPercent)}
+                aria-valuemin={Math.round(cumulative - sizes[index - 1]! + minPercent(index - 1))}
+                aria-valuemax={Math.round(cumulative + sizes[index]! - minPercent(index))}
                 aria-valuenow={Math.round(cumulative)}
                 tabIndex={0}
                 title="拖动调整大小，双击平均分配"
@@ -444,7 +481,7 @@ function SplitView(props: { split: LayoutSplit }): React.JSX.Element {
                 }}
               />
             ) : null}
-            <div className="reader-split-pane" style={{ flexGrow: sizes[index] }}>
+            <div className="reader-split-pane" style={row ? { flexGrow: sizes[index], minWidth: minExtents[index] } : { flexGrow: sizes[index], minHeight: minExtents[index] }}>
               <MemoNodeView node={child} />
             </div>
           </React.Fragment>
@@ -471,6 +508,8 @@ function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
   const focused = groups.length > 1 && focusedGroupId === group.id
   const maximized = maximizedGroupId === group.id
   const parentId = parentSplitId(layout, group.id)
+  const syncable = READING_VIEW_IDS.includes(group.active) && Boolean(specs[group.active])
+  const synced = syncable && layout.synced.includes(group.active)
 
   const measureRoom = React.useCallback((open: boolean) => {
     if (!open) return
@@ -597,6 +636,18 @@ function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
           ) : null}
         </div>
         <div className="reader-group-actions" ref={setActionsHost} />
+        {syncable ? (
+          <button
+            type="button"
+            className={synced ? 'reader-group-button reader-sync-toggle on' : 'reader-group-button reader-sync-toggle'}
+            aria-label="滚动同步"
+            aria-pressed={synced}
+            title={synced ? '滚动同步已开启：与其他开启同步的视图按段落一起滚动' : '滚动同步已关闭：点击后与其他开启同步的视图按段落一起滚动'}
+            onClick={() => actions.toggleSync(group.active)}
+          >
+            {synced ? <LinkOutlined /> : <DisconnectOutlined />}
+          </button>
+        ) : null}
         {maximized ? (
           <button type="button" className="reader-group-button" aria-label="还原分组" title="还原分组（Esc）" onClick={() => actions.toggleMaximize(group.id)}>
             <ShrinkOutlined />

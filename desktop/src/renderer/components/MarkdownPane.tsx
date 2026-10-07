@@ -30,6 +30,7 @@ import MarkdownMinimap from './MarkdownMinimap'
 import ReaderFigureSnapshot from './ReaderFigureSnapshot'
 import type { ReaderFigureGroup } from '../readerFigureGroups'
 import { recordReaderDuration } from '../readerPerformance'
+import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 /**
@@ -70,8 +71,12 @@ export default function MarkdownPane(props: {
   onRenderReady?(): void
   initialScrollTop?: number
   onScrollTopChange?(scrollTop: number): void
+  /** Optional scroll sync with other reader views (follows and leads by block mapping). */
+  scrollSync?: ScrollSyncChannel
 }): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const paneRef = React.useRef<HTMLDivElement>(null)
+  const scrollIntentRef = React.useRef<ScrollIntent | null>(null)
   const articleRef = React.useRef<HTMLElement>(null)
   const documentId = React.useId()
   const scrollFrameRef = React.useRef<number | null>(null)
@@ -114,6 +119,30 @@ export default function MarkdownPane(props: {
     totalImages: 0
   })
   const ready = renderState.status === 'ready'
+  const readyRef = React.useRef(ready)
+  readyRef.current = ready
+
+  // Scroll sync: lead with the block at the reading line, follow other views to the same block.
+  React.useEffect(() => {
+    const pane = paneRef.current
+    const channel = props.scrollSync
+    if (!pane || !channel) return
+    const intent = trackScrollIntent(pane)
+    scrollIntentRef.current = intent
+    const unregister = channel.register((position) => {
+      const container = containerRef.current
+      const element = blockElementsRef.current.get(position.mappingId)
+      if (!container || !element || !readyRef.current) return
+      const target = element.offsetTop + position.fraction * element.offsetHeight - container.clientHeight * SYNC_READING_LINE
+      intent.markProgrammatic()
+      container.scrollTop = Math.max(0, target)
+    })
+    return () => {
+      unregister()
+      intent.dispose()
+      scrollIntentRef.current = null
+    }
+  }, [props.scrollSync])
   const mountKey = `${contentRevision}:${renderAttempt}`
   const [mountProgress, setMountProgress] = React.useState({ key: mountKey, count: MARKDOWN_INITIAL_BLOCKS })
   const mountedCount = Math.min(
@@ -398,6 +427,14 @@ export default function MarkdownPane(props: {
     const container = containerRef.current
     if (container) props.onScrollTopChange?.(container.scrollTop)
     if (!props.active || !ready) return
+    if (container && props.scrollSync && scrollIntentRef.current?.isUserScroll()) {
+      const line = container.scrollTop + container.clientHeight * SYNC_READING_LINE
+      const nearest = nearestBlockPosition(blockPositionsRef.current, line)
+      const element = nearest ? blockElementsRef.current.get(nearest.mappingId) : undefined
+      if (nearest && element) {
+        props.scrollSync.report({ mappingId: nearest.mappingId, fraction: clampFraction((line - element.offsetTop) / Math.max(1, element.offsetHeight)) })
+      }
+    }
     scrollActiveRef.current = true
     if (scrollIdleTimerRef.current !== null) window.clearTimeout(scrollIdleTimerRef.current)
     scrollIdleTimerRef.current = window.setTimeout(() => {
@@ -410,7 +447,7 @@ export default function MarkdownPane(props: {
       scrollSelectionTimerRef.current = null
       syncScrollSelection()
     }, SCROLL_SELECTION_INTERVAL_MS)
-  }, [closeTextSelection, flushDeferredResize, props.active, props.onScrollTopChange, ready, syncScrollSelection, textSelection])
+  }, [closeTextSelection, flushDeferredResize, props.active, props.onScrollTopChange, props.scrollSync, ready, syncScrollSelection, textSelection])
 
   const applyTextAnnotation = React.useCallback((kind: ReaderAnnotationKind) => {
     const article = articleRef.current
@@ -475,7 +512,7 @@ export default function MarkdownPane(props: {
   }, [])
 
   return (
-    <div className="markdown-pane">
+    <div className="markdown-pane" ref={paneRef}>
       <div
         id={documentId}
         className={`markdown-scroll markdown-render-${renderState.status}`}

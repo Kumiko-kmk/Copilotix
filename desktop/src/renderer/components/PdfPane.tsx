@@ -7,6 +7,7 @@ import type { BlockBox, BlockMapping, BlockSelection } from '@shared/types'
 import { acquirePdfDocument } from '../pdfDocumentCache'
 import { pdfPageRenderScheduler, type ScheduledPdfRender } from '../pdfRenderScheduler'
 import { recordReaderDuration } from '../readerPerformance'
+import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
 
 type LoadingState =
   | { status: 'loading'; progress: number | null }
@@ -54,6 +55,8 @@ export default function PdfPane(props: {
   toolbarHost?: HTMLElement | null
   initialViewState?: PdfViewState | null
   onViewStateChange?(state: PdfViewState): void
+  /** Optional scroll sync with the Markdown views (follows and leads by block mapping). */
+  scrollSync?: ScrollSyncChannel
 }): React.JSX.Element {
   const [document, setDocument] = React.useState<PDFDocumentProxy | null>(null)
   const [loadingState, setLoadingState] = React.useState<LoadingState>({ status: 'loading', progress: null })
@@ -90,6 +93,41 @@ export default function PdfPane(props: {
   const layoutDocumentRef = React.useRef(document)
   const scrollAnchorRef = React.useRef<PdfScrollAnchor | null>(null)
   const renderWindow = pdfRenderWindow(currentPage - 1, pageSizes.length, PAGE_RENDER_RADIUS)
+  const viewportRef = React.useRef<HTMLDivElement>(null)
+  const scrollIntentRef = React.useRef<ScrollIntent | null>(null)
+  const mappingsByPageRef = React.useRef(mappingsByPage)
+  mappingsByPageRef.current = mappingsByPage
+  const mappingsRef = React.useRef(props.mappings)
+  mappingsRef.current = props.mappings
+
+  // Scroll sync: follow other views to a block, and lead with the block on the reading line.
+  React.useEffect(() => {
+    const viewport = viewportRef.current
+    const channel = props.scrollSync
+    if (!viewport || !channel) return
+    const intent = trackScrollIntent(viewport)
+    scrollIntentRef.current = intent
+    const unregister = channel.register((position) => {
+      const scroller = scrollerRef.current
+      const mapping = mappingsRef.current.find((item) => item.id === position.mappingId)
+      const box = mapping ? findTargetBox(mapping) : undefined
+      if (!scroller || !box || box.pageIndex >= pageLayoutRef.current.pages.length) return
+      const [, top, , bottom] = box.bbox
+      const anchor: PdfScrollAnchor = {
+        pageIndex: box.pageIndex,
+        pageFraction: (top + position.fraction * (bottom - top)) / box.pageSize[1],
+        viewportFraction: SYNC_READING_LINE
+      }
+      intent.markProgrammatic()
+      scrollAnchorRef.current = anchor
+      scroller.scrollTo({ top: pdfScrollTopForAnchor(pageLayoutRef.current, anchor, scroller.clientHeight), behavior: 'instant' })
+    })
+    return () => {
+      unregister()
+      intent.dispose()
+      scrollIntentRef.current = null
+    }
+  }, [props.scrollSync])
 
   const cancelScrollbarHide = React.useCallback(() => {
     if (scrollbarHideTimerRef.current === null) return
@@ -290,6 +328,10 @@ export default function PdfPane(props: {
   const onPdfScroll = React.useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
+    if (props.scrollSync && scrollIntentRef.current?.isUserScroll()) {
+      const position = pdfSyncPosition(pageLayoutRef.current, mappingsByPageRef.current, scroller.scrollTop + scroller.clientHeight * SYNC_READING_LINE)
+      if (position) props.scrollSync.report(position)
+    }
     // Capture immediately: a queued scroll frame can be overtaken by resizing.
     scrollAnchorRef.current = capturePdfScrollAnchor(pageLayoutRef.current, scroller.scrollTop, scroller.clientHeight)
     if (scrollFrameRef.current !== null) return
@@ -302,7 +344,7 @@ export default function PdfPane(props: {
       setCurrentPage((current) => current === pageIndex + 1 ? current : pageIndex + 1)
       onViewStateChangeRef.current?.({ zoom: zoomRef.current, anchor: scrollAnchorRef.current })
     })
-  }, [updateScrollMetrics])
+  }, [props.scrollSync, updateScrollMetrics])
   const retry = React.useCallback(() => setReloadKey((value) => value + 1), [])
   const onPageError = React.useCallback((message: string) => setLoadingState({ status: 'error', message }), [])
   const onPdfBlock = React.useCallback((mappingId: string, blockPosition: string) => {
@@ -326,7 +368,7 @@ export default function PdfPane(props: {
       {embedded
         ? props.toolbarHost ? createPortal(<div className="pdf-toolbar">{controls}</div>, props.toolbarHost) : null
         : <div className="pdf-toolbar"><strong>原文件</strong>{controls}</div>}
-      <div className="pdf-viewport" onPointerMove={revealScrollbarsNearEdge} onPointerLeave={scheduleScrollbarHide}>
+      <div className="pdf-viewport" ref={viewportRef} onPointerMove={revealScrollbarsNearEdge} onPointerLeave={scheduleScrollbarHide}>
         <div
           className={`pdf-scroll${scrollbars.vertical ? ' pdf-scrollbar-y-visible' : ''}${scrollbars.horizontal ? ' pdf-scrollbar-x-visible' : ''}`}
           ref={scrollerRef}
@@ -673,6 +715,33 @@ export function pdfRenderWindow(currentPageIndex: number, pageCount: number, rad
 
 function remainingPdfLayoutHeight(layout: PdfPageLayout, firstHiddenPage: number): number {
   return Math.max(0, layout.totalHeight - (layout.pages[firstHiddenPage]?.top ?? layout.totalHeight))
+}
+
+/** The mapped block on the reading line (innermost containing box, else the nearest one) and how far through it. */
+export function pdfSyncPosition(
+  layout: PdfPageLayout,
+  mappingsByPage: readonly BlockMapping[][],
+  offset: number
+): { mappingId: string; fraction: number } | null {
+  if (layout.pages.length === 0) return null
+  const pageIndex = pageIndexAtOffset(layout, offset)
+  const page = layout.pages[pageIndex]
+  if (!page || page.height <= 0) return null
+  const pageFraction = (offset - page.top) / page.height
+  let best: { mappingId: string; fraction: number; distance: number; span: number } | null = null
+  for (const mapping of mappingsByPage[pageIndex] ?? []) {
+    for (const box of mapping.boxes) {
+      if (box.pageIndex !== pageIndex || box.isDiscarded || box.pageSize[1] <= 0) continue
+      const top = box.bbox[1] / box.pageSize[1]
+      const bottom = box.bbox[3] / box.pageSize[1]
+      const span = Math.max(bottom - top, 1e-6)
+      const distance = pageFraction < top ? top - pageFraction : pageFraction > bottom ? pageFraction - bottom : 0
+      if (!best || distance < best.distance || (distance === best.distance && span < best.span)) {
+        best = { mappingId: mapping.id, fraction: clampFraction((pageFraction - top) / span), distance, span }
+      }
+    }
+  }
+  return best ? { mappingId: best.mappingId, fraction: best.fraction } : null
 }
 
 function findTargetBox(mapping: BlockMapping, blockPosition?: string): BlockBox | undefined {

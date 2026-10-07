@@ -18,6 +18,7 @@ import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
 import type { PaperChatController } from '../usePaperChat'
 import type { ReaderViewId } from '../readerLayout'
 import { buildReaderFigureGeometries, projectReaderFigureGroups } from '../readerFigureGroups'
+import { createScrollSyncHub } from '../readerScrollSync'
 
 /** AI chat lives in the same workbench as the readers; it is optional so the reader works without it. */
 export interface ReaderChatOptions {
@@ -66,6 +67,8 @@ export interface ReaderViewsInput {
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
   chat?: ReaderChatOptions
+  /** Reading views currently on screen with scroll sync on; they lead and follow each other. */
+  scrollSyncViews?: readonly ReaderViewId[]
 }
 
 /**
@@ -77,6 +80,12 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   const [highlightColor, setHighlightColor] = React.useState<HighlightColor>('yellow')
   const scrollPositionsRef = React.useRef<Record<ReaderAnnotationView, number>>({ original: 0, translated: 0 })
   const pdfStateRef = React.useRef<PdfViewState | null>(null)
+  const syncHub = React.useMemo(createScrollSyncHub, [])
+  React.useEffect(() => () => syncHub.dispose(), [syncHub])
+  const syncKey = (props.scrollSyncViews ?? []).join(',')
+  React.useEffect(() => {
+    syncHub.setParticipants(syncKey ? syncKey.split(',') as ReaderViewId[] : [])
+  }, [syncHub, syncKey])
   const mappings = props.mappings ?? EMPTY_MAPPINGS
   const originalAnnotations = React.useMemo(
     () => props.annotations.filter((annotation) => annotation.view === 'original'),
@@ -137,6 +146,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           onSelect={props.onSelect}
           initialScrollTop={scrollPositionsRef.current.original}
           onScrollTopChange={rememberOriginalScroll}
+          scrollSync={syncHub.channel('original')}
         /> : null
       },
       translated: {
@@ -162,6 +172,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
             onSelect={props.onSelect}
             initialScrollTop={scrollPositionsRef.current.translated}
             onScrollTopChange={rememberTranslatedScroll}
+            scrollSync={syncHub.channel('translated')}
           /> : null) : <Empty className="translation-empty" description={translationLabel(props.taskStatus)} />}
         </>
       }
@@ -181,6 +192,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           toolbarHost={actionsHost}
           initialViewState={pdfStateRef.current}
           onViewStateChange={rememberPdfState}
+          scrollSync={syncHub.channel('pdf')}
         />
       }
     }
@@ -213,7 +225,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
     props.onAddToChat, props.onSelect, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
     props.taskStatus, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
-    rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, translatedAnnotations,
+    rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups
   ])
 }

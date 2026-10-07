@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   LAYOUT_STORAGE_KEY,
   activateView,
+  activeSyncedViews,
   adjacentGroup,
+  ensureReadingView,
+  toggleSync,
   defaultReaderLayout,
   equalizeSplit,
   groupOfView,
@@ -153,6 +156,37 @@ describe('reader layout model', () => {
     expect((repaired.root as LayoutSplit).sizes.reduce((sum, size) => sum + size, 0)).toBeCloseTo(100)
     expect(normalizeLayout({ version: 2 })).toEqual(defaultReaderLayout())
     expect(normalizeLayout(null)).toEqual(defaultReaderLayout())
+  })
+
+  it('syncs original and Chinese by default and toggles reading views only', () => {
+    const layout = defaultReaderLayout()
+    expect(layout.synced).toEqual(['original', 'translated'])
+    // Only the active tab of each group is on screen.
+    expect(activeSyncedViews(layout)).toEqual(['original'])
+    expect(activeSyncedViews(splitView(layout, 'translated', 'g2', 'right'))).toEqual(['original', 'translated'])
+    expect(toggleSync(layout, 'pdf').synced).toEqual(['original', 'translated', 'pdf'])
+    expect(toggleSync(layout, 'original').synced).toEqual(['translated'])
+    expect(toggleSync(layout, 'chat')).toBe(layout)
+    // Stored layouts from before scroll sync get the default; bad entries are dropped.
+    expect(normalizeLayout({ ...layout, synced: undefined }).synced).toEqual(['original', 'translated'])
+    expect(normalizeLayout({ ...layout, synced: ['pdf', 'chat', 'pdf', 'x'] }).synced).toEqual(['pdf'])
+  })
+
+  it('shows a reading view for a citation without replacing the chat', () => {
+    const chatOnly = activateView(moveView(defaultReaderLayout(), 'pdf', 'g2'), 'chat')
+    const shown = ensureReadingView(chatOnly)
+    expect(shape(shown)).toEqual({
+      root: { row: [{ views: ['original'], active: 'original' }, { views: ['translated', 'chat', 'pdf'], active: 'chat' }], sizes: [50, 50] },
+      hidden: []
+    })
+    // Already showing a reading view: nothing changes.
+    expect(ensureReadingView(defaultReaderLayout())).toEqual(defaultReaderLayout())
+
+    let lonely = moveView(defaultReaderLayout(), 'pdf', 'g2')
+    for (const view of ['pdf', 'original', 'translated'] as const) lonely = hideView(lonely, view)
+    const reopened = ensureReadingView(lonely)
+    expect(listGroups(reopened.root).map((group) => group.active)).toEqual(['original', 'chat'])
+    expect(reopened.hidden).toEqual(['pdf', 'translated'])
   })
 
   it('falls back to the default layout for corrupt storage', () => {
