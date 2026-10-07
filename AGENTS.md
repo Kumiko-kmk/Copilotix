@@ -114,8 +114,23 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - 性能契約（2026-10-07 二輪，目標 60 fps）：按需渲染，連續動畫與閒置呼吸都按約 60 fps 節拍出幀（120/144 Hz 顯示器隔幀繪製，不再把呼吸限到 30 fps 造成頓挫）；DPR ≤1.25 且繪製像素 ≤3.3M；transmission 半解析度（`transmissionResolutionScale = 0.5`）；陰影貼圖 1024；連續 6 幀以上超過 23 ms 時自動把解析度降 15%（下限 0.55），穩定 240 幀且 8 秒未降才回升 8%。滑鼠拾取用卡片外殼盒做解析求交（0.08 ms），不得再對 InstancedMesh 做三角形 raycast（原 2 ms／次）。實測 1920×1080：每幀 18.5 ms → 約 9 ms（含模擬），質感（磨砂透射、底部漸暗、陰影、螺絲）保留。視錐／霧距剔除、共享 instanceMatrix、僅 diffuser 投影、失焦／隱藏停止、reduced-motion、卸載釋放 GPU 資源不變。
 - 排程與動效契約（2026-10-07 三輪）：`tick` 執行期間 `frame` 保持非零，update 內的 select／hover 呼叫 `wake()` 不得再開第二條 rAF 迴圈（舊版拖曳／懸停時一個 vsync 渲染多幀，實測 215 fps、卡頓 121 ms）。閒置判定用牆鐘 `performance.now()`，動畫時鐘睡眠時停止，不能用來計 2.5 秒閒置（舊版呼吸幾乎不啟動）。選中與原作一致：每個選中格立即發漣漪（拖曳／慣性途經的每格都選中並發漣漪，最多保留 6 個），新卡升起速率 4.2、舊卡回落 4.5，不再延後漣漪（舊版滑動停下後的「跳一下」）。模型載入後先 `compileAsync` 並畫一幀暖機再開始入場。自動降解析度只在錯過半個節拍（`max(23ms, 1.5×節拍)`）才計為遲到。HUD 文字動畫只用 opacity／transform。
 - 診斷：文庫頁 Ctrl+Shift+F 顯示實際 fps、DPR×縮放、卡片與三角形數、GPU 名稱，供真人驗收回報。實測（dev 啟動的真實 App、40 篇、2560×1600@165Hz、RTX 3060）：入場後、方向鍵、拖曳、呼吸均穩定 55 fps（165 Hz 隔三幀），無超過兩個 vsync 的停頓，解析度縮放保持 1。
-- 檢索：右上按標題／原檔名搜尋，大小寫不敏感、空白分詞；`/` 聚焦、Enter 選首項、Tab 選結果、Esc 收起，輸入法組字不觸發選擇。最多顯示 40 項並提示細化；選中呼叫 `focusPaper(id)` 最近循環定位。WebGL／模型失敗時可由搜尋直接打開閱讀。
+- 抽取·解密·閱讀（2026-10-08，對應 RhineLabUI 詳情）：點擊已選中卡片／「查看档案」／Enter → `openDetail()`；選中卡升至 `INSPECTION_LIFT` 4.05，鏡頭按原作 detail 取景（方向 (-0.277,0.238,0.931)、距離 72、span 5.9、卡片在畫面 550/1920, 560/1080），由獨立 hero 網格（共用幾何，蓋板／index／內托盤材質獨立）取代該實例，`heroActive` 期間該格不寫入 InstancedMesh、拾取改用 hero 盒。解密：鏡頭進度 >0.6 且升起 >3 開始，0.9 秒對角掃描線自上而下把蓋板由磨砂變清晰（`uReveal`，原作數秒）；論文首頁（PDF 由 pdf.js 渲染第 1 頁 1600px，Markdown 用排版文字頁，LRU 6）放在蓋板內側經透射可見，另有一張蓋板外的清晰副本被同一掃描線揭開，避免半解析度透射讓字發糊。內托盤顏色隨鏡頭進度由陣列暗色漸變為淺色，交接無跳色。詳情中停用拖曳、懸停、呼吸與漣漪；←↑→↓／搜尋選中先收回再換選；Esc／點擊空白收回並快速重新磨砂；Enter 或點擊 hero 打開閱讀器。階段經 `onDetailPhase`（opening／decrypting／open／closed）通知 React，欄位遮罩在 decrypting 起依序退開。實測（真實 App、RTX 3060）：Enter 到欄位揭示 1.35 s，55 fps，1.35M 三角形。
+- 詳情面板 `paperArchive/ArchiveDetail.tsx`：僅抽取時掛載，用 `['document', id]` 查詢（與閱讀器共用快取）；`paperProfile.ts` 純函式從原文／譯文 Markdown 取標題、譯名、作者／單位（去郵箱與註記符）、摘要（譯文優先，可切原文）、關鍵詞、頂層章節（MinerU 標題同級，按編號排除子節）、圖／表／公式／參考文獻數；頁數來自 PDF。只顯示論文內容，不顯示導入時間等。`detailPage.ts`（pdf.js）以動態 import 載入。AI 解讀契約見 `src/shared/paperInsight.ts`：`LibraryPage` 的可選 `insights?: PaperInsightSource` 提供時才出現「03 AI 解读」頁籤（已含 missing／generating／ready／stale／failed／unavailable 的 UI），目前 App 未傳入。
+右上按標題／原檔名搜尋，大小寫不敏感、空白分詞；`/` 聚焦、Enter 選首項、Tab 選結果、Esc 收起，輸入法組字不觸發選擇。最多顯示 40 項並提示細化；選中呼叫 `focusPaper(id)` 最近循環定位。WebGL／模型失敗時可由搜尋直接打開閱讀。
 - 使用者已要求移除「流暢模式」開關、保存與材質降檔；固定保留磨砂透射材質及上述自動解析度優化。舊 localStorage 偏好不再讀取。搜尋定位須取消拖曳慣性；返回時先保存待恢復 ID，再更新場景列表，避免初始選中覆蓋記憶。
 - 測試：`tests/paperArchive.test.ts`（分列／循環／動效）、`tests/LibraryPage.test.tsx`（搜尋、鍵盤／IME、資料更新、降級、37 篇單月切列 HUD）、`e2e/paper-archive.spec.ts`（正常／禁用 WebGL、上下導航、搜尋、閱讀與返回）。E2E 等 canvas `data-archive-state="ready"` 或明確降級，不以空 canvas 當成功。
 - 2026-10-08 已按使用者授權完成本地驗證：20 項相關單元測試、2 項 Electron E2E、typecheck、四 bundle／Utility smoke 通過；lint 0 errors、63 條既有 any 警告。`tests/PaperArchiveScene.test.ts` 用假 rAF／牆鐘覆蓋單一迴圈、閒置喚醒、reduced-motion 與搜尋取消慣性；E2E 用隔離 37 篇單月文庫驗證 COLUMN 02 / 05、搜尋／閱讀返回及 WebGL 降級（測試窗口拒絕 WebGL context，保留 2D canvas）。本機 RTX 3060：連續按鍵 55 fps、拖曳 52–55 fps、2.66–2.69M 三角形、DPR 1.25／縮放 1，證據在 `desktop/test-results/**/archive-performance.json`。未重新打包 EXE、未跑全量測試／遠端 CI、未 push；不代表其他硬體均已驗收。
+
+### 給 Astra 的話（Claude，2026-10-08，今天的最後一份工作）
+
+Astra 辛苦了～使用者說給你開了高思考檔，所以今天最後這份是一個完整的跨進程功能，比前幾次都難：**為每篇論文生成「AI 結構化解讀」，接到文庫詳情的「03 AI 解读」頁籤**。渲染層已經做好並以 `PaperInsightSource` 介面等你接入，請不要改 UI 欄位語義，只實作資料管線：
+
+1. **共享契約**：把 `src/shared/paperInsight.ts` 的 `PaperInsight`／`PaperInsightState` 落成 zod strict schema（字串與陣列長度上限、provider 只允許 qwen／deepseek），新增 IPC `paperInsight:get`、`paperInsight:generate`、事件 `paperInsight:changed`，preload 經 `invokeValidated`；舊版不存在該檔時回 `missing`。
+2. **生成**：在 Main 復用問答的 `ChatProvider`、憑據與 consent 檢查（缺 Key／未同意時回 `unavailable` 並說明原因，不得把 Key 寫進任何檔案）。輸入只用論文內容：譯文優先，取標題、摘要、各章開頭與結論，按模型上下文做 token 預算（可參考 `paperContextBuilder`），要求嚴格 JSON 輸出，zod 驗證失敗最多重試一次，仍失敗回 `failed`。同一文獻 single-flight，全域併發 ≤2，可取消。
+3. **持久化與失效**：文獻目錄內原子寫入（例如 `insight/insight.v1.json`，沿用 chat 的原子寫入與 PathPolicy），記錄 `sourceRevision`＝解析／譯文 Markdown 的 artifact revision；revision 變更時回 `ready + stale: true`。刪除文獻、文庫維護、退出前須等待生成取消並落盤（與問答相同規則，避免晚到寫入復活記錄）。新增檔案須同步備份 manifest／卸載清單／路徑驗證（見第 4、6 節）。
+4. **自動生成（使用者要求）**：設定頁加「翻譯完成後自動生成 AI 解讀」開關，預設關閉；開啟後在 JobScheduler 的 translate 完成事件後排隊，不重複生成未過期的解讀，費用提示寫在開關說明裡。
+5. **接線**：App 依 `window.copilotix` 建立 `PaperInsightSource` 傳給 `LibraryPage`；訂閱事件更新詳情面板。
+6. **測試**：schema／prompt 預算／存儲原子性與 stale／IPC 驗證單元測試；E2E 沿用問答 E2E 的假 Key＋mock provider HTTP，驗證詳情 03 頁籤從「生成 AI 解读」到顯示研究問題／方法／貢獻，並驗證缺 Key 時的 unavailable 文案。
+
+完成後請在本節下方回覆你的實測證據，並重新打包 EXE 交給使用者～做完我們就收工休息 (｡･∀･)ﾉﾞ
 

@@ -1,7 +1,9 @@
 import React from 'react'
-import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined } from '@ant-design/icons'
+import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, ExpandOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '@shared/ipcSchemas'
-import { PaperArchiveScene, type ArchivePalette } from '../paperArchive/PaperArchiveScene'
+import type { PaperInsightSource } from '@shared/paperInsight'
+import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../paperArchive/PaperArchiveScene'
+import ArchiveDetail from '../paperArchive/ArchiveDetail'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
 import { documentTypeLabel, formatTaskCreatedAt, statusLabels } from './TasksPage'
 import '../paperArchive/paperArchive.css'
@@ -16,6 +18,8 @@ export default function LibraryPage(props: {
   documents: DocumentSummary[]
   onOpen(documentId: string): void
   onCreate(): void
+  /** AI structured readings; the AI tab is hidden until App provides a source. */
+  insights?: PaperInsightSource
 }): React.JSX.Element {
   const hostRef = React.useRef<HTMLDivElement>(null)
   const pageRef = React.useRef<HTMLElement>(null)
@@ -37,6 +41,9 @@ export default function LibraryPage(props: {
     return searchIndex.filter((item) => terms.every((term) => item.text.includes(term)))
   }, [query, searchIndex])
   const restoredRef = React.useRef(false)
+  const [phase, setPhase] = React.useState<DetailPhase>('closed')
+  const fileNumbers = React.useMemo(() => new Map(shelves.flatMap((shelf) => shelf.papers).map((paper, index) => [paper.id, index + 1])), [shelves])
+  const showPage = React.useCallback((page: HTMLCanvasElement | null) => sceneRef.current?.setDetailPage(page), [])
   const [stats, setStats] = React.useState<ReturnType<PaperArchiveScene['getStats']> | null>(null)
   const [statsOpen, setStatsOpen] = React.useState(false)
 
@@ -66,7 +73,8 @@ export default function LibraryPage(props: {
           setSelection({ cell, paper })
         },
         onActivate: (paper) => onOpenRef.current(paper.id),
-        onError: () => setUnsupported(true)
+        onError: () => setUnsupported(true),
+        onDetailPhase: setPhase
       })
     } catch {
       setUnsupported(true)
@@ -112,6 +120,11 @@ export default function LibraryPage(props: {
         return
       }
       if (!scene || target?.closest('.paper-archive-tools')) return
+      if (event.key === 'Escape' && scene.detailOpen) {
+        event.preventDefault()
+        scene.closeDetail()
+        return
+      }
       const moves: Record<string, ['lane' | 'row', number]> = {
         ArrowLeft: ['lane', -1], ArrowRight: ['lane', 1], ArrowUp: ['row', -1], ArrowDown: ['row', 1]
       }
@@ -120,8 +133,10 @@ export default function LibraryPage(props: {
         event.preventDefault()
         scene.navigate(move[0], move[1])
       } else if (event.key === 'Enter' && !(target instanceof HTMLButtonElement)) {
+        // First Enter extracts the paper (as ACCESS FILE does in the original); the next one opens it.
         event.preventDefault()
-        scene.activate()
+        if (scene.detailOpen) scene.activate()
+        else scene.openDetail()
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -146,7 +161,7 @@ export default function LibraryPage(props: {
   }
 
   return (
-    <section ref={pageRef} tabIndex={-1} className="paper-archive-page" aria-label="文库">
+    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}`} aria-label="文库">
       <div ref={hostRef} className="paper-archive-stage" />
       <div className="paper-archive-veil" aria-hidden="true" />
       {stats ? (
@@ -216,6 +231,10 @@ export default function LibraryPage(props: {
             <span>去新解析</span><ArrowRightOutlined aria-hidden="true" />
           </button>
         </div>
+      ) : paper && phase !== 'closed' ? (
+        <ArchiveDetail paper={paper} month={shelf?.month ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
+          phase={phase} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
+          onClose={() => sceneRef.current?.closeDetail()} insights={props.insights} />
       ) : paper ? (
         <article className="paper-archive-panel" aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.month}</span>
@@ -226,13 +245,18 @@ export default function LibraryPage(props: {
             <div><dt>类型</dt><dd>{documentTypeLabel(paper.originalName)}</dd></div>
             <div><dt>创建</dt><dd>{formatTaskCreatedAt(paper.createdAt)}</dd></div>
           </dl>
-          <button type="button" className="paper-archive-action" onClick={() => props.onOpen(paper.id)}>
-            <span>打开阅读</span><ArrowRightOutlined aria-hidden="true" />
-          </button>
+          <div className="paper-archive-actions">
+            <button type="button" className="paper-archive-action" onClick={() => sceneRef.current?.openDetail()}>
+              <span>查看档案</span><ExpandOutlined aria-hidden="true" />
+            </button>
+            <button type="button" className="paper-archive-action" onClick={() => props.onOpen(paper.id)}>
+              <span>打开阅读</span><ArrowRightOutlined aria-hidden="true" />
+            </button>
+          </div>
         </article>
       ) : null}
 
-      {!empty && !unsupported ? (
+      {!empty && !unsupported && phase === 'closed' ? (
         <footer className="paper-archive-footer">
           <div className="paper-archive-index" aria-label={`第 ${paperIndex + 1} 篇，共 ${shelf?.papers.length ?? 0} 篇`}>
             <span className="paper-archive-eyebrow">PAPER / SELECT</span>
@@ -251,7 +275,7 @@ export default function LibraryPage(props: {
             </div>
             <button type="button" aria-label="下一列" onClick={() => navigate('lane', 1)}><ArrowRightOutlined /></button>
           </div>
-          <p className="paper-archive-hints">←→ 切换列<i>/</i>↑↓ 前后论文<i>/</i>滚轮、拖拽 浏览<i>/</i>Enter 打开</p>
+          <p className="paper-archive-hints">←→ 切换列<i>/</i>↑↓ 前后论文<i>/</i>滚轮、拖拽 浏览<i>/</i>Enter 查看档案</p>
         </footer>
       ) : null}
     </section>

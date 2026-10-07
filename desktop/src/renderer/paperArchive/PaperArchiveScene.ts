@@ -2,11 +2,13 @@ import {
   ACESFilmicToneMapping,
   Box3,
   BoxGeometry,
+  CanvasTexture,
   Color,
   DirectionalLight,
   DynamicDrawUsage,
   Fog,
   Frustum,
+  Group,
   HemisphereLight,
   InstancedMesh,
   Matrix4,
@@ -28,7 +30,8 @@ import {
   WebGLRenderer,
   type BufferGeometry,
   type Material,
-  type Texture
+  type Texture,
+  type IUniform
 } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
@@ -91,6 +94,25 @@ const MAX_PIXEL_RATIO = 1.25
 const MAX_DRAWING_PIXELS = 3.3e6
 const MIN_RESOLUTION_SCALE = 0.55
 const ENTRY_DURATION = 4.35
+// Extraction and detail framing from RhineLabUI (INSPECTION_LIFT, archiveFraming detail values).
+const INSPECTION_LIFT = 4.05
+const BASE_DIRECTION = new Vector3(
+  -Math.sin(CAMERA_YAW) * Math.cos(CAMERA_ELEVATION),
+  Math.sin(CAMERA_ELEVATION),
+  Math.cos(CAMERA_YAW) * Math.cos(CAMERA_ELEVATION)
+)
+const DETAIL_DIRECTION = new Vector3(-0.277, 0.238, 0.931).normalize()
+const DETAIL_DISTANCE = 72
+const DETAIL_SPAN = 5.9
+const DETAIL_SCREEN = { x: 550 / 1920, y: 560 / 1080 }
+// The original holds the decryption for several seconds; the archive keeps it short.
+const DECRYPT_SECONDS = 0.9
+const PAGE_HEIGHT = 3.15
+const PAGE_MAX_WIDTH = 4.5
+const UP = new Vector3(0, 1, 0)
+// The array's dark inner diffuser and the light tray of the extracted card, blended with the camera.
+const ARRAY_TRAY = new Color('#806447')
+const DETAIL_TRAY = new Color('#efe7da')
 const SHELL_SURFACES = ['Frosted_Polymer', 'Ivory_Edges', 'Index_Inlay', 'Titanium_Fasteners', 'Optical_Diffuser'] as const
 type ShellSurface = typeof SHELL_SURFACES[number]
 
@@ -110,11 +132,16 @@ export interface PaperArchiveSceneOptions {
   reducedMotion: boolean
   /** The selected cell changed (drag, wheel, click or keyboard). */
   onSelect(cell: ArchiveCell, paper: ArchivePaper | null): void
-  /** The selected card was clicked again or double-clicked. */
+  /** The extracted paper was clicked: open it in the reader. */
   onActivate(paper: ArchivePaper): void
   /** The model could not be prepared; the page shows a fallback. */
   onError?(error: unknown): void
+  /** Extraction state of the selected paper, for the detail panel. */
+  onDetailPhase?(phase: DetailPhase): void
 }
+
+/** closed → opening (lifting, camera turning) → decrypting (cover clearing) → open. */
+export type DetailPhase = 'closed' | 'opening' | 'decrypting' | 'open'
 
 type Pulse = { row: number; lane: number; time: number }
 
@@ -201,6 +228,23 @@ export class PaperArchiveScene {
   private onTimeFrames = 0
   private lastDownscale = -Infinity
   private presentedTimes: number[] = []
+  private targetDetail = false
+  private detail = 0
+  private reveal = 0
+  private phase: DetailPhase = 'closed'
+  private pulseGain = 1
+  private hero: Group | null = null
+  private heroIndex: MeshStandardMaterial | null = null
+  private heroTray: MeshStandardMaterial | null = null
+  private readonly heroUniforms: Record<'uReveal' | 'uScanColor' | 'uPageSize', IUniform> = {
+    uReveal: { value: 0 }, uScanColor: { value: new Color() }, uPageSize: { value: new Vector2(1, 1) }
+  }
+  private readonly heroPosition = new Vector3()
+  private readonly heroRotation = new Quaternion()
+  private page: Mesh | null = null
+  private pageFront: Mesh | null = null
+  private pageTexture: CanvasTexture | null = null
+  private cameraKey = ''
   private frame = 0
   private idleTimer = 0
   private disposed = false
@@ -299,13 +343,18 @@ export class PaperArchiveScene {
         ;(object.material as Material).dispose()
       })
       if (!this.surfaces.has('Frosted_Polymer')) throw new Error('archive shell is missing its cover')
+      this.createHero()
       this.applyPalette()
       // Compile every program (transmission cover, shadow depth) and draw one warm-up frame before
       // the entry starts; lazily compiling them stalled the first animated frames on the desktop.
       this.layout(0)
+      // The hero is compiled with the array, parked below the floor and out of view.
+      this.hero!.visible = true
+      this.hero!.position.set(0, -200, 0)
       await this.renderer.compileAsync(this.scene, this.camera)
       if (this.disposed) return
       this.renderer.render(this.scene, this.camera)
+      this.hero!.visible = false
       this.loaded = true
       this.renderer.domElement.dataset.archiveState = 'ready'
       this.entryTime = this.reduced ? this.clock - ENTRY_DURATION - 2 : this.clock
@@ -314,6 +363,167 @@ export class PaperArchiveScene {
     } catch (error) {
       if (!this.disposed) this.options.onError?.(error)
     }
+  }
+
+  /**
+   * The extracted card is drawn by its own meshes (as RhineLabUI's selected model is) so its
+   * cover can clear while the array keeps one instanced draw per surface. It shares geometry
+   * and, except for the cover and index, materials with the array.
+   */
+  private createHero(): void {
+    const hero = new Group()
+    for (const [name, mesh] of this.surfaces) {
+      let material = mesh.material as Material
+      if (name === 'Frosted_Polymer') material = this.heroCoverMaterial()
+      if (name === 'Index_Inlay') material = this.heroIndex = new MeshStandardMaterial({ roughness: 0.5, metalness: 0.05, envMapIntensity: 0.6 })
+      // A light tray behind the page, so the cleared card reads as paper rather than the array's dark core.
+      if (name === 'Optical_Diffuser') material = this.heroTray = new MeshStandardMaterial({ color: ARRAY_TRAY, roughness: 0.7 })
+      if (material !== mesh.material) this.disposables.push(material)
+      const part = new Mesh(mesh.geometry, material)
+      part.castShadow = name === 'Optical_Diffuser'
+      part.receiveShadow = true
+      hero.add(part)
+    }
+    const pageGeometry = new PlaneGeometry(1, 1)
+    const pageMaterial = new MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+    this.page = new Mesh(pageGeometry, pageMaterial)
+    this.page.position.set(0, CARD_HEIGHT / 2, 0.1)
+    this.page.visible = false
+    hero.add(this.page)
+    // Seen through the half-resolution transmission the inner page stays soft, so a crisp copy in
+    // front of the cover is uncovered by the same wipe: frosted page before the line, sharp after.
+    const frontMaterial = new MeshBasicMaterial({ color: 0xffffff, toneMapped: false, transparent: true, depthWrite: false })
+    const uniforms = this.heroUniforms
+    frontMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.uReveal = uniforms.uReveal
+      shader.uniforms.uPageSize = uniforms.uPageSize
+      shader.vertexShader = 'uniform vec2 uPageSize;\nvarying vec2 vCard;\n' + shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>\nvCard = vec2((position.x * uPageSize.x) / 5.0 + 0.5, (${(CARD_HEIGHT / 2).toFixed(3)} + position.y * uPageSize.y) / ${CARD_HEIGHT.toFixed(1)});`
+      )
+      shader.fragmentShader = 'uniform float uReveal;\nvarying vec2 vCard;\n' + shader.fragmentShader.replace(
+        '#include <alphamap_fragment>',
+        [
+          '#include <alphamap_fragment>',
+          'float front = mix(1.3, -0.3, uReveal);',
+          'diffuseColor.a *= smoothstep(front - 0.05, front + 0.05, vCard.y + 0.22 * (vCard.x - 0.5));'
+        ].join('\n')
+      )
+    }
+    frontMaterial.customProgramCacheKey = () => 'paper-archive-page-front'
+    this.pageFront = new Mesh(pageGeometry, frontMaterial)
+    this.pageFront.position.set(0, CARD_HEIGHT / 2, CARD_FRONT + 0.006)
+    this.pageFront.renderOrder = 2
+    this.pageFront.visible = false
+    hero.add(this.pageFront)
+    this.disposables.push(pageGeometry, pageMaterial, frontMaterial)
+    hero.visible = false
+    this.hero = hero
+    this.scene.add(hero)
+  }
+
+  /** The array cover plus a diagonal wipe that clears the frost from the top down. */
+  private heroCoverMaterial(): MeshPhysicalMaterial {
+    const material = new MeshPhysicalMaterial({
+      roughness: 0.28, metalness: 0, transmission: 0.78, ior: 1.46,
+      clearcoat: 0.3, clearcoatRoughness: 0.25, envMapIntensity: 0.6
+    })
+    const uniforms = this.heroUniforms
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uReveal = uniforms.uReveal
+      shader.uniforms.uScanColor = uniforms.uScanColor
+      shader.vertexShader = 'varying float vPanelHeight;\nvarying float vPanelX;\n' + shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>\nvPanelHeight = position.y / ${CARD_HEIGHT.toFixed(1)};\nvPanelX = position.x / 5.0 + 0.5;`
+      )
+      shader.fragmentShader = [
+        'uniform float uReveal;',
+        'uniform vec3 uScanColor;',
+        'varying float vPanelHeight;',
+        'varying float vPanelX;',
+        // The wipe front runs diagonally, top first, from above the card to below it.
+        'float paperArchiveEdge() { return vPanelHeight + 0.22 * (vPanelX - 0.5); }',
+        'float paperArchiveFront() { return mix(1.3, -0.3, uReveal); }',
+        shader.fragmentShader
+      ].join('\n')
+        .replace('#include <color_fragment>', [
+          '#include <color_fragment>',
+          'float clearAmount = smoothstep(paperArchiveFront() - 0.05, paperArchiveFront() + 0.05, paperArchiveEdge());',
+          'vec3 frostShade = mix(vec3(0.40, 0.30, 0.20), vec3(1.0, 0.98, 0.94), smoothstep(0.1, 1.0, vPanelHeight));',
+          'diffuseColor.rgb *= mix(frostShade, vec3(0.8, 0.78, 0.74), clearAmount);'
+        ].join('\n'))
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.03, clearAmount);')
+        .replace('#include <emissivemap_fragment>', [
+          '#include <emissivemap_fragment>',
+          'float scanLine = exp(-pow((paperArchiveEdge() - paperArchiveFront()) / 0.012, 2.0)) * step(0.001, uReveal) * step(uReveal, 0.999);',
+          'totalEmissiveRadiance += uScanColor * scanLine * 1.6;'
+        ].join('\n'))
+    }
+    material.customProgramCacheKey = () => 'paper-archive-hero'
+    return material
+  }
+
+  /** Show a page image (the paper's first page) inside the extracted card, or remove it. */
+  setDetailPage(page: HTMLCanvasElement | null): void {
+    const mesh = this.page
+    if (!mesh) return
+    const material = mesh.material as MeshBasicMaterial
+    const front = this.pageFront!
+    const frontMaterial = front.material as MeshBasicMaterial
+    this.pageTexture?.dispose()
+    this.pageTexture = null
+    material.map = null
+    frontMaterial.map = null
+    mesh.visible = false
+    front.visible = false
+    if (page && page.width > 0 && page.height > 0) {
+      const texture = new CanvasTexture(page)
+      texture.colorSpace = SRGBColorSpace
+      texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy())
+      const aspect = page.width / page.height
+      const width = Math.min(PAGE_MAX_WIDTH, PAGE_HEIGHT * aspect)
+      mesh.scale.set(width, width / aspect, 1)
+      front.scale.copy(mesh.scale)
+      ;(this.heroUniforms.uPageSize.value as Vector2).set(width, width / aspect)
+      material.map = texture
+      frontMaterial.map = texture
+      this.pageTexture = texture
+      mesh.visible = true
+      front.visible = true
+    }
+    material.needsUpdate = true
+    frontMaterial.needsUpdate = true
+    this.wake()
+  }
+
+  get detailOpen(): boolean {
+    return this.targetDetail
+  }
+
+  /** Extract the selected paper: lift it clear, turn the camera to it and decrypt its cover. */
+  openDetail(): boolean {
+    if (!this.loaded || this.targetDetail || !paperAt(this.shelves, this.selected)) return false
+    this.stopMomentum()
+    this.hoverCell = null
+    this.targetDetail = true
+    this.lastInteraction = performance.now()
+    this.setPhase('opening')
+    this.wake()
+    return true
+  }
+
+  closeDetail(): void {
+    if (!this.targetDetail) return
+    this.targetDetail = false
+    this.lastInteraction = performance.now()
+    this.setPhase('closed')
+    this.wake()
+  }
+
+  private setPhase(phase: DetailPhase): void {
+    if (this.phase === phase) return
+    this.phase = phase
+    this.options.onDetailPhase?.(phase)
   }
 
   /** Array materials from RhineLabUI's baseline look. */
@@ -356,6 +566,7 @@ export class PaperArchiveScene {
     this.palette.cardSelected.set(palette.cardSelected)
     for (const [tone, value] of Object.entries(palette.index)) this.palette.index.set(tone, new Color(value))
     ;(this.strip.material as MeshBasicMaterial).color.set(palette.accent)
+    ;(this.heroUniforms.uScanColor.value as Color).set(palette.accent)
     this.edgeColor.set(palette.edge)
     this.applyPalette()
     this.wake()
@@ -389,6 +600,7 @@ export class PaperArchiveScene {
   focusPaper(paperId: string, options: { instant?: boolean } = {}): boolean {
     const cell = cellForPaper(this.shelves, paperId, this.selected)
     if (!cell) return false
+    this.closeDetail()
     this.stopMomentum()
     if (options.instant) {
       this.jumpTo(cell)
@@ -400,6 +612,7 @@ export class PaperArchiveScene {
 
   navigate(axis: 'lane' | 'row', direction: number): void {
     if (this.drag?.active) return
+    this.closeDetail()
     this.stopMomentum()
     const target = axis === 'row'
       ? { lane: this.selected.lane, row: this.selected.row + direction }
@@ -421,6 +634,7 @@ export class PaperArchiveScene {
     this.resizeObserver.disconnect()
     for (const mesh of this.surfaces.values()) mesh.dispose()
     for (const item of this.disposables) item.dispose()
+    this.pageTexture?.dispose()
     this.renderer.dispose()
     this.renderer.forceContextLoss()
     this.renderer.domElement.remove()
@@ -471,23 +685,59 @@ export class PaperArchiveScene {
     const { clientWidth: width, clientHeight: height } = this.options.container
     if (!width || !height) return
     this.applyResolution()
-    const aspect = width / height
-    // RhineLabUI's archiveFraming: wide windows extend sideways, narrow ones keep the 16:9 width.
-    const span = Math.max(VIEW_SPAN, VIEW_SPAN * (16 / 9) / aspect)
-    const direction = new Vector3(
-      -Math.sin(CAMERA_YAW) * Math.cos(CAMERA_ELEVATION),
-      Math.sin(CAMERA_ELEVATION),
-      Math.cos(CAMERA_YAW) * Math.cos(CAMERA_ELEVATION)
-    )
-    this.camera.aspect = aspect
-    this.camera.fov = (2 * Math.atan(span / (2 * CAMERA_DISTANCE)) * 180) / Math.PI
-    this.camera.position.copy(ARRAY_AIM).addScaledVector(direction, CAMERA_DISTANCE)
-    this.camera.lookAt(ARRAY_AIM)
-    this.camera.updateProjectionMatrix()
-    this.camera.updateMatrixWorld()
-    this.frustum.setFromProjectionMatrix(new Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse))
+    this.cameraKey = ''
+    this.updateCamera()
     this.wake()
   }
+
+  /**
+   * Blend from the array camera to RhineLabUI's detail framing: a more frontal direction,
+   * distance 72 and span 5.9, aimed so the lifted card sits left of centre beside the panel.
+   */
+  private updateCamera(): void {
+    const { clientWidth: width, clientHeight: height } = this.options.container
+    if (!width || !height) return
+    const detail = this.detail
+    const key = detail < 1e-4 ? `array:${width}x${height}` : ''
+    if (key && key === this.cameraKey) return
+    this.cameraKey = key
+    const aspect = width / height
+    const baseSpan = VIEW_SPAN + (DETAIL_SPAN - VIEW_SPAN) * detail
+    // RhineLabUI's archiveFraming: wide windows extend sideways, narrow ones keep the 16:9 width.
+    const span = Math.max(baseSpan, baseSpan * (16 / 9) / aspect)
+    const direction = this.cameraDirection.copy(BASE_DIRECTION).lerp(DETAIL_DIRECTION, detail).normalize()
+    const distance = CAMERA_DISTANCE + (DETAIL_DISTANCE - CAMERA_DISTANCE) * detail
+    const aim = this.cameraAim.copy(ARRAY_AIM)
+    if (detail > 0) {
+      const right = this.cameraRight.crossVectors(UP, direction).normalize()
+      const up = this.cameraUp.crossVectors(direction, right).normalize()
+      const unitsPerPixel = span / height
+      const detailAim = this.cameraDetailAim.copy(this.heroPosition)
+      detailAim.y += CARD_HEIGHT / 2
+      detailAim.addScaledVector(right, (0.5 - DETAIL_SCREEN.x) * width * unitsPerPixel)
+      detailAim.addScaledVector(up, (DETAIL_SCREEN.y - 0.5) * height * unitsPerPixel)
+      aim.lerp(detailAim, detail)
+    }
+    this.camera.aspect = aspect
+    this.camera.fov = (2 * Math.atan(span / (2 * distance)) * 180) / Math.PI
+    this.camera.near = Math.max(1, distance - 45)
+    this.camera.far = distance + 60
+    this.camera.position.copy(aim).addScaledVector(direction, distance)
+    this.camera.lookAt(aim)
+    this.camera.updateProjectionMatrix()
+    this.camera.updateMatrixWorld()
+    const fog = this.scene.fog as Fog
+    fog.near = distance + 5 + (-1 - 5) * detail
+    fog.far = distance + 25 + (12 - 25) * detail
+    this.frustum.setFromProjectionMatrix(this.frustumMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse))
+  }
+
+  private readonly cameraDirection = new Vector3()
+  private readonly cameraAim = new Vector3()
+  private readonly cameraRight = new Vector3()
+  private readonly cameraUp = new Vector3()
+  private readonly cameraDetailAim = new Vector3()
+  private readonly frustumMatrix = new Matrix4()
 
   /** Diagnostics for testers (Ctrl+Shift+F on the archive page). */
   getStats(): { fps: number; pixelRatio: number; resolutionScale: number; drawn: number; triangles: number; gpu: string } {
@@ -593,7 +843,7 @@ export class PaperArchiveScene {
   }
 
   private idleEligible(): boolean {
-    return this.idleFeatureEnabled() && !this.drag?.active && !this.momentum &&
+    return this.idleFeatureEnabled() && !this.targetDetail && this.detail < 0.01 && !this.drag?.active && !this.momentum &&
       this.pulses.length === 0 && (performance.now() - this.lastInteraction) / 1000 > IDLE_DELAY
   }
 
@@ -626,8 +876,9 @@ export class PaperArchiveScene {
     const selectedKey = cellKey(this.selected)
     if (this.shelves.length && !this.lifts.has(selectedKey)) this.lifts.set(selectedKey, { value: 0, velocity: 0 })
     for (const [key, spring] of this.lifts) {
-      const target = key === selectedKey && this.shelves.length ? PREVIEW_LIFT : 0
-      const rate = reduced ? 35 : target ? 4.2 : 4.5
+      const target = key === selectedKey && this.shelves.length ? (this.targetDetail ? INSPECTION_LIFT : PREVIEW_LIFT) : 0
+      const extracting = key === selectedKey && (this.targetDetail || spring.value > PREVIEW_LIFT + 0.01)
+      const rate = reduced ? 35 : extracting ? 5 : target ? 4.2 : 4.5
       damp(spring, target, rate, dt)
       if (springSettled(spring, target)) {
         spring.value = target
@@ -652,6 +903,7 @@ export class PaperArchiveScene {
 
     this.pulses = this.pulses.filter((pulse) => this.clock - pulse.time < 3.2)
     if (this.pulses.length) moving = true
+    moving = this.updateDetail(dt, selectedKey) || moving
 
     const entry = this.clock - this.entryTime
     if (entry < ENTRY_DURATION + 1.2) moving = true
@@ -661,6 +913,38 @@ export class PaperArchiveScene {
     if (!idleTarget && this.idleGain < 0.001) this.idleGain = 0
 
     this.layout(entry)
+    return moving
+  }
+
+  /** Camera progress, decryption and ripple gain for the extracted card; returns whether it is still moving. */
+  private updateDetail(dt: number, selectedKey: string): boolean {
+    const reduced = this.reduced
+    const lift = this.lifts.get(selectedKey)?.value ?? 0
+    // As in the original, the camera follows the lift: it turns once the card is clear of the array.
+    const cameraTarget = this.targetDetail
+      ? smooth((lift - 0.8) / 2.4)
+      : smooth((lift - PREVIEW_LIFT) / (INSPECTION_LIFT - PREVIEW_LIFT))
+    this.detail += (cameraTarget - this.detail) * (reduced ? 1 : 1 - Math.exp(-dt * 3.2))
+    if (Math.abs(cameraTarget - this.detail) < 1e-4) this.detail = cameraTarget
+    let moving = this.detail !== cameraTarget
+    if (this.targetDetail) {
+      if (this.phase === 'opening' && this.detail > 0.6 && lift > 3) this.setPhase('decrypting')
+      if (this.phase === 'decrypting') {
+        this.reveal = reduced ? 1 : Math.min(1, this.reveal + dt / DECRYPT_SECONDS)
+        if (this.reveal >= 1) this.setPhase('open')
+        moving = true
+      }
+    } else if (this.reveal > 0) {
+      // Re-frost quickly on the way back, like the original's returning copies.
+      this.reveal = reduced ? 0 : this.reveal * Math.exp(-dt * 9)
+      if (this.reveal < 0.001) this.reveal = 0
+      moving = true
+    }
+    this.heroUniforms.uReveal.value = smooth(this.reveal)
+    const pulseTarget = this.targetDetail ? 0 : 1
+    this.pulseGain += (pulseTarget - this.pulseGain) * (1 - Math.exp(-dt * 8))
+    if (Math.abs(pulseTarget - this.pulseGain) < 1e-3) this.pulseGain = pulseTarget
+    else moving = true
     return moving
   }
 
@@ -692,7 +976,7 @@ export class PaperArchiveScene {
       for (const pulse of this.pulses) {
         ripple += selectionWave(Math.hypot(row - pulse.row, (lane - pulse.lane) * 2.2), this.clock - pulse.time)
       }
-      height += Math.max(-0.6, Math.min(0.6, ripple))
+      height += Math.max(-0.6, Math.min(0.6, ripple)) * this.pulseGain
     }
     return height
   }
@@ -705,6 +989,26 @@ export class PaperArchiveScene {
   private readonly bounds = new Sphere()
   private readonly tint = new Color()
 
+  /** Whether the selected card is drawn as the separate hero (extracting, open or returning). */
+  private heroActive(): boolean {
+    if (!this.hero || !this.shelves.length) return false
+    const lift = this.lifts.get(cellKey(this.selected))?.value ?? 0
+    return this.targetDetail || this.detail > 1e-4 || this.reveal > 0 || lift > PREVIEW_LIFT + 0.02
+  }
+
+  /** Pose of one card into `position` / `rotation`; returns its own selection lift. */
+  private pose(lane: number, row: number, x: number, z: number, entry: number): number {
+    const key = `${lane}:${row}`
+    const selectedLift = this.lifts.get(key)?.value ?? 0
+    const lift = selectedLift + (this.hoverLifts.get(key) ?? 0)
+    const height = this.field(row, lane, entry)
+    // Cards lean with the slope of the wave until they are lifted clear of it.
+    const slope = this.field(row + 0.5, lane, entry) - this.field(row - 0.5, lane, entry)
+    this.rotation.setFromAxisAngle(this.axisX, slope * 0.024 * (1 - smooth(lift / PREVIEW_LIFT)))
+    this.position.set(x, BASE_Y + height + lift, z)
+    return selectedLift
+  }
+
   private layout(entry: number): void {
     const cover = this.surfaces.get('Frosted_Polymer')!
     const index = this.surfaces.get('Index_Inlay')
@@ -714,13 +1018,40 @@ export class PaperArchiveScene {
     const centerRow = Math.round(this.rowTrack.value - slide / ROW_SPACING)
     const trackX = this.laneTrack.value * COLUMN_SPACING
     const rail = RAIL_OFFSET - this.rowTrack.value * ROW_SPACING
+    const selected = this.selected
+    const selectedShelf = shelfAt(this.shelves, selected.lane)
+    const heroActive = this.heroActive()
+
+    // Pose the selected card first: the detail camera aims at it before the array is culled.
+    const selectedLift = this.pose(selected.lane, selected.row, selected.lane * COLUMN_SPACING - trackX, selected.row * ROW_SPACING + rail + slide, entry)
+    this.heroPosition.copy(this.position)
+    this.heroRotation.copy(this.rotation)
+    const selectedAmount = Math.min(1, selectedLift / PREVIEW_LIFT)
+    this.strip.visible = Boolean(selectedShelf) && selectedAmount > 0.01
+    if (this.strip.visible) {
+      this.strip.position.copy(this.heroPosition)
+      this.strip.quaternion.copy(this.heroRotation)
+      ;(this.strip.material as MeshBasicMaterial).opacity = selectedAmount * (1 - this.detail)
+    }
+    if (this.hero) {
+      this.hero.visible = heroActive
+      if (heroActive) {
+        this.hero.position.copy(this.heroPosition)
+        this.hero.quaternion.copy(this.heroRotation)
+        const paper = selectedShelf ? selectedShelf.papers[wrap(selected.row, selectedShelf.papers.length)] ?? null : null
+        this.heroIndex?.color.copy(this.palette.index.get(indexTone(paper))!)
+        this.heroTray?.color.copy(ARRAY_TRAY).lerp(DETAIL_TRAY, this.detail)
+      }
+    }
+    this.updateCamera()
+
     const fogFar = (this.scene.fog as Fog).far
     let count = 0
-    this.strip.visible = false
     for (let lane = centerLane - LANE_RADIUS; lane <= centerLane + LANE_RADIUS; lane++) {
       const shelf = shelfAt(this.shelves, lane)
       const x = lane * COLUMN_SPACING - trackX
       for (let row = centerRow - ROW_RADIUS; row <= centerRow + ROW_RADIUS; row++) {
+        if (heroActive && lane === selected.lane && row === selected.row) continue
         const z = row * ROW_SPACING + rail + slide
         // Skip cards outside the view or wholly inside the fog before evaluating their motion.
         this.bounds.center.set(x, BASE_Y + CARD_HEIGHT / 2 + 1, z)
@@ -728,42 +1059,36 @@ export class PaperArchiveScene {
         if (!this.frustum.intersectsSphere(this.bounds)) continue
         if (this.bounds.center.distanceTo(this.camera.position) - CARD_RADIUS > fogFar) continue
 
-        const key = `${lane}:${row}`
-        const selectedLift = this.lifts.get(key)?.value ?? 0
-        const lift = selectedLift + (this.hoverLifts.get(key) ?? 0)
-        const height = this.field(row, lane, entry)
-        // Cards lean with the slope of the wave until they are lifted clear of it.
-        const slope = this.field(row + 0.5, lane, entry) - this.field(row - 0.5, lane, entry)
-        this.rotation.setFromAxisAngle(this.axisX, slope * 0.024 * (1 - smooth(lift / PREVIEW_LIFT)))
-        this.position.set(x, BASE_Y + height + lift, z)
+        const lift = this.pose(lane, row, x, z, entry)
         this.matrix.compose(this.position, this.rotation, this.scale)
         cover.setMatrixAt(count, this.matrix)
-
-        const selectedAmount = Math.min(1, selectedLift / PREVIEW_LIFT)
-        this.tint.copy(this.palette.card).lerp(this.palette.cardSelected, selectedAmount)
+        this.tint.copy(this.palette.card).lerp(this.palette.cardSelected, Math.min(1, lift / PREVIEW_LIFT))
         cover.setColorAt(count, this.tint)
         const paper = shelf ? shelf.papers[wrap(row, shelf.papers.length)] ?? null : null
         index?.setColorAt(count, this.palette.index.get(indexTone(paper))!)
-        if (lane === this.selected.lane && row === this.selected.row && shelf) {
-          this.strip.position.copy(this.position)
-          this.strip.quaternion.copy(this.rotation)
-          ;(this.strip.material as MeshBasicMaterial).opacity = selectedAmount
-          this.strip.visible = selectedAmount > 0.01
-        }
-        const cell = this.drawn[count]!
-        cell.lane = lane
-        cell.row = row
-        this.drawnPositions[count * 3] = this.position.x
-        this.drawnPositions[count * 3 + 1] = this.position.y
-        this.drawnPositions[count * 3 + 2] = this.position.z
+        this.recordDrawn(count, lane, row, this.position)
         count++
       }
     }
     this.drawnCount = count
     for (const mesh of this.surfaces.values()) mesh.count = count
+    // The hero is not an instance, but it stays pickable after the instances.
+    this.pickCount = count
+    if (heroActive && count < POOL_SIZE) this.recordDrawn(this.pickCount++, selected.lane, selected.row, this.heroPosition)
     cover.instanceMatrix.needsUpdate = true
     if (cover.instanceColor) cover.instanceColor.needsUpdate = true
     if (index?.instanceColor) index.instanceColor.needsUpdate = true
+  }
+
+  private pickCount = 0
+
+  private recordDrawn(slot: number, lane: number, row: number, position: Vector3): void {
+    const cell = this.drawn[slot]!
+    cell.lane = lane
+    cell.row = row
+    this.drawnPositions[slot * 3] = position.x
+    this.drawnPositions[slot * 3 + 1] = position.y
+    this.drawnPositions[slot * 3 + 2] = position.z
   }
 
   private readonly pickBox = new Box3()
@@ -771,14 +1096,14 @@ export class PaperArchiveScene {
 
   private pickCell(clientX: number, clientY: number): ArchiveCell | null {
     const rect = this.renderer.domElement.getBoundingClientRect()
-    if (!rect.width || !rect.height || !this.drawnCount) return null
+    if (!rect.width || !rect.height || !this.pickCount) return null
     const pointer = new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
     this.raycaster.setFromCamera(pointer, this.camera)
     const ray = this.raycaster.ray
     let nearest = Infinity
     let hit = -1
     // The wave tilt is under 2°, so each card is tested as its upright shell box.
-    for (let index = 0; index < this.drawnCount; index++) {
+    for (let index = 0; index < this.pickCount; index++) {
       const x = this.drawnPositions[index * 3]!
       const y = this.drawnPositions[index * 3 + 1]!
       const z = this.drawnPositions[index * 3 + 2]!
@@ -807,7 +1132,7 @@ export class PaperArchiveScene {
   private flushHover(): void {
     const sample = this.pendingHover
     this.pendingHover = null
-    if (sample && !this.drag && !this.momentum) this.setHover(this.pickCell(sample.x, sample.y))
+    if (sample && !this.drag && !this.momentum && !this.targetDetail) this.setHover(this.pickCell(sample.x, sample.y))
   }
 
   /** Screen-space pixels per lane and per row around the selection, inverted for dragging. */
@@ -845,7 +1170,8 @@ export class PaperArchiveScene {
         startX: event.clientX,
         startY: event.clientY,
         start,
-        inverse: this.dragInverse(),
+        // The plane does not move while a paper is extracted; the pointer only clicks.
+        inverse: this.targetDetail ? null : this.dragInverse(),
         active: false,
         samples: [{ value: start, time: event.timeStamp }]
       }
@@ -901,8 +1227,14 @@ export class PaperArchiveScene {
       }
       if (cancelled) return
       const cell = this.pickCell(event.clientX, event.clientY)
+      if (this.targetDetail) {
+        // Clicking the extracted paper opens it; clicking anywhere else puts it back.
+        if (cell && sameCell(cell, this.selected)) this.activate()
+        else this.closeDetail()
+        return
+      }
       if (!cell) return
-      if (sameCell(cell, this.selected)) this.activate()
+      if (sameCell(cell, this.selected)) this.openDetail()
       else this.select(cell)
     }
     canvas.addEventListener('pointerup', (event) => release(event, false), { signal })
@@ -917,6 +1249,7 @@ export class PaperArchiveScene {
     canvas.addEventListener('wheel', (event) => {
       if (event.ctrlKey || this.drag || !this.loaded) return
       event.preventDefault()
+      if (this.targetDetail) return
       this.stopMomentum()
       const unit = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? canvas.clientHeight : 1
       const horizontal = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)
