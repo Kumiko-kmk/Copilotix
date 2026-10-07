@@ -147,9 +147,11 @@ pnpm desktop:release:from-built
 
 此節是所有 Agent 共享的目前進度，不是私人記錄。後續 Agent 可直接更新；若已過時，可整段刪除此節，無須保留舊進度或額外審批。`AGENTS.md` 文件及其他長期協作規則仍須保留。
 
-- 維護工作目錄為 `Copilotix-master-updated`。1.1.0 源自 `ui/reader-workbench`，包含此前聊天分支的問答和 PDF 修正；使用者已授權合併到 `master`，通過合併檢查後清理本地及遠端工作台分支。其他 worktree 未改動；跨分支傳遞仍依協作規則。
+- 維護工作目錄為 `Copilotix-master-updated`。1.1.0 源自 `ui/reader-workbench`，包含此前聊天分支的問答和 PDF 修正；已經 PR #8 合併到 `master`，來源、合併結果及 master 的 Windows CI 均通過。其他 worktree 未改動；跨分支傳遞仍依協作規則。
 - 已完成：DeepSeek／Qwen 預設問答模型，按文獻原子保存並恢復對話、草稿、選區和模型；取消自訂模型，保留歷史記錄；移除 JSON 閱讀視圖。詳見第 7 節及 `docs/READER_AI_CHAT_PLAN_ZH.md`。
 - 閱讀器：PDF 外圍、右側、底部和頁間無額外 gutter，浮動捲動條不佔版面；欄寬／縮放保留頁碼及頁內位置；正文間距和工作台頂部緊湊化。編輯器式工作台的分組、拆分、拖曳、最大化、快捷鍵、段落同步及引用定位已完成，契約見第 7 節。
 - 1.1.0 已正式發布，完整簡體中文說明為 `docs/releases/1.1.0.zh-CN.md`，包含 Setup、ZIP、SHA256SUMS 和 manifest。使用者授權的 **僅本次 1.1.0 未簽章例外** 已使用；發布後已移除 `COPILOTIX_UNSIGNED_RELEASE_TAG` 變量，其他版本仍要求受信任簽章。發布 tag 及已發布文件保持不變。
 - 1.1.0 tag 的 Windows CI（run `37606519266`）通過：lint、typecheck、600 項單元測試及覆蓋率、21 項 Electron 測試、安裝／升級／卸載／重裝、下載解壓及遠端四個文件哈希校驗；保留既定跳過項目。付費模型及個人硬體仍需真人驗收；後續合併仍須通過最新合併結果的檢查，不沿用舊版本綠燈。
-- 聊天分支全部提交已包含在 1.1.0 tag，已依使用者授權清理兩端 `codex/reader-ai-chat`。合併工作台後保留 `master` 與仍有獨立開發工作的 `codex/rag-review-20260923`；不得清理其他 worktree 的未提交內容。
+- 已依使用者授權清理兩端 `codex/reader-ai-chat` 和 `ui/reader-workbench`，保留 `master` 與仍有獨立開發工作的 `codex/rag-review-20260923`；不得清理其他 worktree 的未提交內容。
+- README／Wiki 已按 1.1.0 整理四視圖工作台、DeepSeek／Qwen 問答、本地聊天恢復、PDF 與排版、導出／備份及安裝。四張實際運行截圖用真實公開論文的獨立示例文庫采集，無真人聊天或 API 憑據；問答圖僅未發送草稿，不代表付費模型回答驗收。兩張藍白示意圖與截圖分開標示。
+- Wiki 的版本化源文件在 `docs/wiki/`，先合併主倉庫圖片與文檔，再同步到獨立 Wiki；此目錄提交不會自動發布 Wiki。用戶已明確授權本次遠端 README 與 Wiki 更新，其他任務仍遵守第 8 節上傳授權與最新 CI 門禁。
