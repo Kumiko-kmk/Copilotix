@@ -107,8 +107,10 @@ pnpm desktop:release:from-built
 - PDF 閱讀區無外圍 padding／邊框／陰影，100% 按完整 clientWidth 貼合。原生捲動條必須完全隱藏以免佔用右側／底部空間，使用不佔位且可拖曳／鍵盤操作的浮動捲動條；頁間及末頁底部無額外 gap，DOM 與虛擬頁高計算保持一致。欄寬分隔器透明並覆蓋右欄，不留固定寬度空白條。寬度、縮放及延遲頁面尺寸改變時，在 layout effect 中按 PDF 頁號與頁內比例立即恢復位置；禁用原生 overflow anchoring，並取消舊滾動 frame，避免用舊像素偏移重新判斷頁碼。真人滾動及明確翻頁／引用定位仍正常更新頁碼。
 - 單篇論文 AI 問答的維護與交接見 `docs/READER_AI_CHAT_PLAN_ZH.md`（所有 Agent 的共享入口）。2026-10-07 已加入文獻目錄 `chat/` 下的原子持久化、歷史分頁、草稿／選區／模型恢復；不新增 migration，不合併 demo 分支的 schema 5–7。清空、文獻刪除、文庫維護及退出前必須等待對應問答取消並落盤，防止晚到寫入復活記錄或破壞快照。
 - 問答共用「服務連接」的 API／憑據，默認沿用翻譯服務商，但面板可選已啟用的 Qwen／DeepSeek 及獨立問答模型；不修改翻譯模型。舊 request 省略 provider 保持兼容，舊 chatProvider 設定不參與路由。Key、valid 狀態及 consent 仍分別驗證；不得在聊天文件中保存 Key。
-- 閱讀器右側只有原文 Markdown、中文 Markdown、AI 問答三個頁籤，移除 JSON 展示但保留底層 layout 產物與 ZIP。問答只支持共享預設模型清單，IPC／Main 按服務商校驗；舊 session／設定的自訂型號回退到預設值，不損壞历史 turn。首次進入才掛載及建索引；「添加到對話」只加入選區，不切換頁籤。已恢復引用必須再核對 revision。構建 bundle 使用 Node 24.19.0，系統 Node 24.11.1 會靜默崩潰並留下舊 out/。
+- 閱讀器只有 PDF、原文 Markdown、中文 Markdown、AI 問答四個視圖，移除 JSON 展示但保留底層 layout 產物與 ZIP。問答只支持共享預設模型清單，IPC／Main 按服務商校驗；舊 session／設定的自訂型號回退到預設值，不損壞历史 turn。首次進入才掛載及建索引；「添加到對話」只加入選區，不切換頁籤。已恢復引用必須再核對 revision。構建 bundle 使用 Node 24.19.0，系統 Node 24.11.1 會靜默崩潰並留下舊 out/。
 
+- 閱讀器為編輯器式工作台（2026-10-07，分支 `ui/reader-workbench`）：四個視圖以分組頁籤呈現，可經頁籤右鍵、分組「⋯」選單左右／上下拆分、移動到其他分組、關閉後由「+」重開；每個視圖同時只出現一次（移動而非複製），最後一個可見視圖不可關閉。佈局是 `readerLayout.ts` 的純函式樹（split／group），全局保存於 localStorage `copilotix.reader.layout.v1`，讀取時校驗修復（未知或重複視圖、空分組、單子節點 split、尺寸）並回退預設；預設等同舊版「PDF｜原文·中文·問答」，首次載入沿用舊的 sessionStorage 欄寬。分隔器只受最小尺寸（寬 240px／高 140px）限制，拖曳期間僅本地狀態更新、放開才提交。
+- 工作台掛載規則：Markdown 視圖只在成為分組選中頁籤時掛載並以 `initialScrollTop` 恢復；PDF 與問答首次顯示後保持掛載（問答仍首次進入才建索引）。視圖專屬控件（PDF 頁碼／縮放、翻譯狀態、問答工具列）經 portal 渲染到所在分組頁籤欄；`PdfPane` 新增可選 `toolbarHost`、`initialViewState`／`onViewStateChange`，移動或重開時按頁內錨點恢復位置。標頭複製／另存作用於「聚焦分組」的選中視圖。拖曳頁籤拆分、快捷鍵、捲動同步屬後續階段。
 
 ## 8. 遠端 CI 驗證與預設不跑本地測試
 
@@ -147,4 +149,5 @@ pnpm desktop:release:from-built
 - 閱讀器：正文段落上下間距 3px；PDF 無外圍留白、邊框與陰影；欄寬／縮放改變保留頁號及頁內位置；只保留原文 Markdown、中文 Markdown、AI 問答三個頁籤，移除 JSON 展示。最新修正清除了原生捲動條右側／底部佔位、24px 頁間及末頁留白、8px 分隔器佔位，保留浮動捲動條拖曳。
 - 最新本地驗證（使用者明確要求測試）：typecheck、PDF／分隔器／聊天儲存 20 項單元測試、四個 bundle 和 Utility smoke 通過。兩項 Electron E2E 通過：反覆欄寬拖曳／鍵盤调整及縮放保持頁碼與頁內位置；真實 15 頁論文在 100%／120% 無右側／底部 gutter、無頁間 gap、兩軸浮動捲動條可拖曳、末頁底邊貼合。已人工檢查測試截圖。未執行完整 CI，付費 API 仍待真人驗收。
 - 使用者此次明確要求不打包，現有 `release-artifacts/muxofbtq-39548-6096bb0c/program/Copilotix.exe` 及 `release/setup.exe` 保持原樣，**不含最新 PDF 邊緣修正**；不可把它們當成最新已測版本交付。此前打包 smoke 結果只對此前產物有效。
+- 2026-10-07 另開 `ui/reader-workbench`（基於 `codex/reader-ai-chat` 1f6c18f）完成編輯器式閱讀工作台第一階段，見第 7 節；僅本地 commit，未 push；依第 8 節未跑本地測試，只以 Node 24.19.0 build 四個 bundle 並人工檢查 Electron 截圖（預設佈局、右鍵拆分、向下拆分、關閉／重開、原文｜中文並排點選聯動）。
 - 遠端唯讀核對後只有 `master`、`codex/reader-ai-chat`、`codex/rag-review-20260923`；兩個開發分支均未合併，使用者明確選擇保留三個分支，因此未刪遠端分支。本次程式及產物沒有 push／上傳；後續遠端修改仍需符合當時的使用者授權。

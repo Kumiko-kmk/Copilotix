@@ -317,10 +317,12 @@ test('provides an interactive minimap for original and translated Markdown', asy
     const separator = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
     await expect(scroller).toHaveAttribute('data-render-state', 'ready')
     await expect(window.locator('.reader-header')).toHaveCSS('height', '44px')
-    await expect(window.locator('.pdf-toolbar')).toHaveCSS('height', '48px')
-    await expect(window.locator('.text-toolbar')).toHaveCSS('height', '48px')
-    await expect(separator).toHaveAttribute('aria-valuemin', '40')
-    await expect(separator).toHaveAttribute('aria-valuemax', '60')
+    // Each workbench group has one 48px tab bar; PDF page/zoom controls live inside it.
+    await expect(window.locator('.reader-group-bar').first()).toHaveCSS('height', '48px')
+    await expect(window.locator('.reader-group-bar').last()).toHaveCSS('height', '48px')
+    await expect(window.locator('.reader-group-bar .pdf-toolbar')).toBeVisible()
+    await expect.poll(async () => Number(await separator.getAttribute('aria-valuemin'))).toBeLessThan(40)
+    await expect.poll(async () => Number(await separator.getAttribute('aria-valuemax'))).toBeGreaterThan(60)
     await expect(minimap).toBeVisible()
     await expect(minimap).toHaveCSS('width', '60px')
     await expect(minimap).toHaveCSS('background-color', 'rgb(247, 242, 232)')
@@ -336,7 +338,8 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await window.mouse.down()
     await window.mouse.move(splitBounds.x + splitBounds.width * 0.75, separatorBounds.y + 120)
     await window.mouse.up()
-    await expect(separator).toHaveAttribute('aria-valuenow', '60')
+    // Groups only stop at their minimum size, so 75% is honoured.
+    await expect(separator).toHaveAttribute('aria-valuenow', '75')
     await expect(minimap).toHaveCSS('width', '60px')
     // The fixture includes a custom-protocol image, so Chromium correctly
     // prevents getImageData on this canvas. Compare rendered pixels instead.

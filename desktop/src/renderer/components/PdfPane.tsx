@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { LeftOutlined, MinusOutlined, PlusOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons'
 import { Alert, Button, Progress, Space } from 'antd'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
@@ -35,16 +36,34 @@ interface ScrollMetrics {
 }
 const EMPTY_SCROLL_METRICS: ScrollMetrics = { width: 0, height: 0, contentWidth: 0, contentHeight: 0, left: 0, top: 0 }
 
+/** Reading position and zoom, so a remounted pane (moved or reopened) resumes where it was. */
+export interface PdfViewState {
+  zoom: number
+  anchor: PdfScrollAnchor | null
+}
+
 export default function PdfPane(props: {
   url: string
   mappings: BlockMapping[]
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
+  /**
+   * When set, page and zoom controls render into this element (a workbench
+   * tab bar) instead of the pane's own toolbar row. `null` hides them.
+   */
+  toolbarHost?: HTMLElement | null
+  initialViewState?: PdfViewState | null
+  onViewStateChange?(state: PdfViewState): void
 }): React.JSX.Element {
   const [document, setDocument] = React.useState<PDFDocumentProxy | null>(null)
   const [loadingState, setLoadingState] = React.useState<LoadingState>({ status: 'loading', progress: null })
   const [currentPage, setCurrentPage] = React.useState(1)
-  const [zoom, setZoom] = React.useState(1)
+  const [zoom, setZoom] = React.useState(() => props.initialViewState?.zoom ?? 1)
+  const restoreAnchorRef = React.useRef(props.initialViewState?.anchor ?? null)
+  const onViewStateChangeRef = React.useRef(props.onViewStateChange)
+  onViewStateChangeRef.current = props.onViewStateChange
+  const zoomRef = React.useRef(zoom)
+  zoomRef.current = zoom
   const [contentWidth, setContentWidth] = React.useState(0)
   const [pageSizes, setPageSizes] = React.useState<readonly PdfBaseSize[]>([])
   const [reloadKey, setReloadKey] = React.useState(0)
@@ -154,7 +173,8 @@ export default function PdfPane(props: {
       .then((value) => {
         if (cancelled) return
         setDocument(value)
-        setCurrentPage(1)
+        const restorePage = restoreAnchorRef.current?.pageIndex
+        setCurrentPage(restorePage !== undefined && restorePage < value.numPages ? restorePage + 1 : 1)
         setPageSizes(Array.from({ length: value.numPages }, () => DEFAULT_PDF_PAGE_SIZE))
         setLoadingState({ status: 'ready' })
       })
@@ -200,7 +220,14 @@ export default function PdfPane(props: {
       // Preserve a PDF point, rather than interpreting the old pixel offset
       // against resized pages. Instant scrolling also stops stale smooth motion.
       if (documentChanged) {
-        scroller.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+        const restore = document ? restoreAnchorRef.current : null
+        if (restore && restore.pageIndex < pageLayout.pages.length) {
+          // Resume a moved or reopened pane; later page-size updates keep this anchor.
+          restoreAnchorRef.current = null
+          scroller.scrollTo({ top: pdfScrollTopForAnchor(pageLayout, restore, scroller.clientHeight), left: 0, behavior: 'instant' })
+        } else {
+          scroller.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+        }
       } else if (scrollAnchorRef.current) {
         scroller.scrollTo({
           top: pdfScrollTopForAnchor(pageLayout, scrollAnchorRef.current, scroller.clientHeight),
@@ -212,6 +239,10 @@ export default function PdfPane(props: {
   }, [document, pageLayout])
 
   React.useLayoutEffect(updateScrollMetrics, [pageLayout, currentPage, updateScrollMetrics])
+
+  React.useEffect(() => {
+    if (document) onViewStateChangeRef.current?.({ zoom, anchor: scrollAnchorRef.current })
+  }, [currentPage, document, zoom])
 
   React.useEffect(() => {
     const selection = props.selection
@@ -269,6 +300,7 @@ export default function PdfPane(props: {
       if (!scroller || pageLayoutRef.current.pages.length === 0) return
       const pageIndex = pageIndexAtOffset(pageLayoutRef.current, scroller.scrollTop + scroller.clientHeight * PDF_VIEWPORT_FOCUS)
       setCurrentPage((current) => current === pageIndex + 1 ? current : pageIndex + 1)
+      onViewStateChangeRef.current?.({ zoom: zoomRef.current, anchor: scrollAnchorRef.current })
     })
   }, [updateScrollMetrics])
   const retry = React.useCallback(() => setReloadKey((value) => value + 1), [])
@@ -277,10 +309,8 @@ export default function PdfPane(props: {
     props.onSelect({ mappingId, blockPosition, origin: 'pdf' })
   }, [props.onSelect])
 
-  return (
-    <div className="pdf-pane">
-      <div className="pdf-toolbar">
-        <strong>原文件</strong>
+  const embedded = props.toolbarHost !== undefined
+  const controls = (
         <Space size="small">
           <Button disabled={!document} type="text" icon={<LeftOutlined />} onClick={() => goToPage(currentPage - 1)} aria-label="上一页" />
           <span>{currentPage} / {document?.numPages ?? '-'}</span>
@@ -289,7 +319,13 @@ export default function PdfPane(props: {
           <span>{Math.round(zoom * 100)}%</span>
           <Button disabled={!document} type="text" icon={<PlusOutlined />} onClick={() => setZoom((value) => Math.min(2, value + 0.1))} aria-label="放大" />
         </Space>
-      </div>
+  )
+
+  return (
+    <div className={embedded ? 'pdf-pane embedded' : 'pdf-pane'}>
+      {embedded
+        ? props.toolbarHost ? createPortal(<div className="pdf-toolbar">{controls}</div>, props.toolbarHost) : null
+        : <div className="pdf-toolbar"><strong>原文件</strong>{controls}</div>}
       <div className="pdf-viewport" onPointerMove={revealScrollbarsNearEdge} onPointerLeave={scheduleScrollbarHide}>
         <div
           className={`pdf-scroll${scrollbars.vertical ? ' pdf-scrollbar-y-visible' : ''}${scrollbars.horizontal ? ' pdf-scrollbar-x-visible' : ''}`}

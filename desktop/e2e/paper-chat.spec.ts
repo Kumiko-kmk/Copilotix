@@ -45,8 +45,8 @@ test('reuses the translation API and switches chat models without a second setti
     await window.getByRole('button', { name: '展开主导航' }).click()
     await window.getByRole('button', { name: '任务管理' }).click()
     await window.locator(`tr[data-row-key="${documentId}"] .task-link`).click()
-    // Chat is the reader's third tab, sized exactly like the Markdown reader.
-    const chatTab = window.locator('.text-toolbar .ant-segmented-item', { hasText: 'AI 问答' })
+    // Chat is the third tab of the reader's text group, sized exactly like the Markdown reader.
+    const chatTab = window.locator('.reader-tab', { hasText: 'AI 问答' })
     const model = window.locator('.reader-chat-model .ant-select-selection-item')
     await chatTab.click()
     await expect(window.getByRole('region', { name: '论文 AI 问答' })).toBeVisible()
