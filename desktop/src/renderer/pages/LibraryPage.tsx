@@ -41,6 +41,19 @@ export default function LibraryPage(props: {
     return searchIndex.filter((item) => terms.every((term) => item.text.includes(term)))
   }, [query, searchIndex])
   const restoredRef = React.useRef(false)
+  const [stats, setStats] = React.useState<ReturnType<PaperArchiveScene['getStats']> | null>(null)
+  const [statsOpen, setStatsOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!statsOpen) {
+      setStats(null)
+      return
+    }
+    const read = (): void => { if (sceneRef.current) setStats(sceneRef.current.getStats()) }
+    read()
+    const timer = window.setInterval(read, 500)
+    return () => window.clearInterval(timer)
+  }, [statsOpen])
 
   React.useEffect(() => {
     const host = hostRef.current
@@ -92,6 +105,11 @@ export default function LibraryPage(props: {
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const scene = sceneRef.current
+      if (event.ctrlKey && event.shiftKey && !event.altKey && event.code === 'KeyF') {
+        event.preventDefault()
+        setStatsOpen((open) => !open)
+        return
+      }
       if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented || event.isComposing) return
       const target = event.target as HTMLElement | null
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
@@ -139,6 +157,11 @@ export default function LibraryPage(props: {
     <section ref={pageRef} tabIndex={-1} className="paper-archive-page" aria-label="文库">
       <div ref={hostRef} className="paper-archive-stage" />
       <div className="paper-archive-veil" aria-hidden="true" />
+      {stats ? (
+        <output className="paper-archive-stats" aria-label="文库渲染诊断">
+          {stats.fps} fps · DPR {stats.pixelRatio} × {stats.resolutionScale} · {stats.drawn} 卡 · {(stats.triangles / 1e6).toFixed(2)}M 三角形<br />{stats.gpu}
+        </output>
+      ) : null}
 
       <header className="paper-archive-brand">
         <span className="paper-archive-eyebrow">PAPER ARCHIVE</span>

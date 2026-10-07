@@ -172,7 +172,6 @@ export class PaperArchiveScene {
   private hoverCell: ArchiveCell | null = null
   private pendingHover: { x: number; y: number } | null = null
   private pulses: Pulse[] = []
-  private pendingPulse: ArchiveCell | null = null
   private momentum: ArchivePlaneMomentum | null = null
   private drag: {
     pointerId: number
@@ -191,7 +190,8 @@ export class PaperArchiveScene {
   private clock = 0
   private entryTime = 0
   private idleGain = 0
-  private lastInteraction = 0
+  /** Wall-clock ms; the animation clock stops while the scene sleeps, so idle timing cannot use it. */
+  private lastInteraction = performance.now()
   private lastVsync = 0
   private lastPresented = 0
   private vsyncDeltas: number[] = []
@@ -201,6 +201,7 @@ export class PaperArchiveScene {
   private lateFrames = 0
   private onTimeFrames = 0
   private lastDownscale = -Infinity
+  private presentedTimes: number[] = []
   private frame = 0
   private idleTimer = 0
   private disposed = false
@@ -301,10 +302,16 @@ export class PaperArchiveScene {
       if (!this.surfaces.has('Frosted_Polymer')) throw new Error('archive shell is missing its cover')
       this.applyPalette()
       this.applyPerformanceMode()
+      // Compile every program (transmission cover, shadow depth) and draw one warm-up frame before
+      // the entry starts; lazily compiling them stalled the first animated frames on the desktop.
+      this.layout(0)
+      await this.renderer.compileAsync(this.scene, this.camera)
+      if (this.disposed) return
+      this.renderer.render(this.scene, this.camera)
       this.loaded = true
       this.renderer.domElement.dataset.archiveState = 'ready'
       this.entryTime = this.reduced ? this.clock - ENTRY_DURATION - 2 : this.clock
-      this.lastInteraction = this.clock
+      this.lastInteraction = performance.now()
       this.wake()
     } catch (error) {
       if (!this.disposed) this.options.onError?.(error)
@@ -436,11 +443,17 @@ export class PaperArchiveScene {
     this.renderer.domElement.remove()
   }
 
-  private select(cell: ArchiveCell, options: { pulse?: boolean } = {}): void {
-    this.lastInteraction = this.clock
+  private select(cell: ArchiveCell): void {
+    this.lastInteraction = performance.now()
     if (sameCell(cell, this.selected)) return
+    this.hoverCell = null
     this.selected = { ...cell }
-    this.pendingPulse = options.pulse === false || this.reduced ? null : { ...cell }
+    // As in the original, every selected cell, including each one crossed while dragging,
+    // starts its ripple at once; deferring it made a late bump after the plane settled.
+    if (!this.reduced) {
+      this.pulses.push({ ...cell, time: this.clock })
+      if (this.pulses.length > 6) this.pulses.splice(0, this.pulses.length - 6)
+    }
     this.emitSelection()
     this.wake()
   }
@@ -456,7 +469,6 @@ export class PaperArchiveScene {
     this.lifts.clear()
     this.hoverLifts.clear()
     this.pulses = []
-    this.pendingPulse = null
   }
 
   private emitSelection(): void {
@@ -494,6 +506,22 @@ export class PaperArchiveScene {
     this.wake()
   }
 
+  /** Diagnostics for testers (Ctrl+Shift+F on the archive page). */
+  getStats(): { fps: number; pixelRatio: number; resolutionScale: number; drawn: number; triangles: number; gpu: string } {
+    const now = performance.now()
+    const recent = this.presentedTimes.filter((time) => now - time <= 1000)
+    const gl = this.renderer.getContext()
+    const debug = gl.getExtension('WEBGL_debug_renderer_info')
+    return {
+      fps: recent.length,
+      pixelRatio: Math.round(this.renderer.getPixelRatio() * 100) / 100,
+      resolutionScale: Math.round(this.resolutionScale * 100) / 100,
+      drawn: this.drawnCount,
+      triangles: this.renderer.info.render.triangles,
+      gpu: debug ? String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : 'unknown'
+    }
+  }
+
   /** Device pixels are capped by ratio and by total count, then scaled down further if frames run late. */
   private applyResolution(): void {
     const { clientWidth: width, clientHeight: height } = this.options.container
@@ -511,7 +539,10 @@ export class PaperArchiveScene {
   }
 
   private readonly tick = (now: number): void => {
-    this.frame = 0
+    // Keep `frame` non-zero for the whole tick: selections and hover changes made during the
+    // update call wake(), which must not start a second loop (that rendered several frames per
+    // vsync while dragging or hovering and stalled the GPU).
+    this.frame = -1
     if (this.disposed) return
     // Pace to ~60 fps: on 120/144 Hz displays only every second vsync is drawn.
     if (!this.justWoke) {
@@ -537,21 +568,25 @@ export class PaperArchiveScene {
     this.clock += dt
     const motion = this.loaded && this.update(dt)
     this.renderer.render(this.scene, this.camera)
-    if (continuous && period < LATE_FRAME_MS - 1) this.adaptResolution(elapsedMs, now)
+    this.presentedTimes.push(now)
+    if (this.presentedTimes.length > 240) this.presentedTimes.splice(0, this.presentedTimes.length - 240)
+    if (continuous && period < LATE_FRAME_MS - 1) this.adaptResolution(elapsedMs, Math.max(LATE_FRAME_MS, stride * period * 1.5), now)
     if (motion || this.idleGain > 0.001 || this.idleEligible()) {
       this.frame = requestAnimationFrame(this.tick)
       return
     }
+    this.frame = 0
     // Asleep: come back when breathing should begin.
     if (this.idleFeatureEnabled()) {
-      const delay = Math.max(0, IDLE_DELAY - (this.clock - this.lastInteraction))
+      const delay = Math.max(0, IDLE_DELAY - (performance.now() - this.lastInteraction) / 1000)
       this.idleTimer = window.setTimeout(() => this.wake(), delay * 1000 + 30)
     }
   }
 
   /** Lower the drawing resolution while frames keep missing 60 fps; recover slowly once they keep up. */
-  private adaptResolution(elapsedMs: number, now: number): void {
-    if (elapsedMs > LATE_FRAME_MS) {
+  private adaptResolution(elapsedMs: number, lateMs: number, now: number): void {
+    // Late means at least half a paced interval was missed, not a single stray vsync.
+    if (elapsedMs > lateMs) {
       this.lateFrames++
       this.onTimeFrames = 0
     } else {
@@ -575,8 +610,8 @@ export class PaperArchiveScene {
   }
 
   private idleEligible(): boolean {
-    return this.idleFeatureEnabled() && !this.drag?.active && !this.momentum && !this.pendingPulse &&
-      this.pulses.length === 0 && this.clock - this.lastInteraction > IDLE_DELAY
+    return this.idleFeatureEnabled() && !this.drag?.active && !this.momentum &&
+      this.pulses.length === 0 && (performance.now() - this.lastInteraction) / 1000 > IDLE_DELAY
   }
 
   /** Advance the simulation; returns whether anything besides idle breathing is still moving. */
@@ -591,12 +626,9 @@ export class PaperArchiveScene {
       this.laneTrack.value = value.lane
       this.rowTrack.value = value.row
       this.followTrack()
-      if (this.momentum.phase === 'idle') {
-        this.momentum = null
-        this.pendingPulse = reduced ? null : { ...this.selected }
-      }
+      if (this.momentum.phase === 'idle') this.momentum = null
       moving = true
-      this.lastInteraction = this.clock
+      this.lastInteraction = performance.now()
     } else if (!this.drag?.active) {
       const rate = reduced ? 35 : 3.7
       damp(this.laneTrack, this.selected.lane, rate, dt)
@@ -612,7 +644,7 @@ export class PaperArchiveScene {
     if (this.shelves.length && !this.lifts.has(selectedKey)) this.lifts.set(selectedKey, { value: 0, velocity: 0 })
     for (const [key, spring] of this.lifts) {
       const target = key === selectedKey && this.shelves.length ? PREVIEW_LIFT : 0
-      const rate = reduced ? 35 : target ? (spring.value < PREVIEW_LIFT ? 7.6 : 4.2) : 4.5
+      const rate = reduced ? 35 : target ? 4.2 : 4.5
       damp(spring, target, rate, dt)
       if (springSettled(spring, target)) {
         spring.value = target
@@ -635,12 +667,6 @@ export class PaperArchiveScene {
       }
     }
 
-    // The new paper causes the wave: it finishes most of its rise before the ripple leaves it.
-    if (this.pendingPulse && (this.lifts.get(selectedKey)?.value ?? 0) >= 0.35) {
-      this.pulses.push({ ...this.pendingPulse, time: this.clock })
-      this.pendingPulse = null
-    }
-    if (this.pendingPulse) moving = true
     this.pulses = this.pulses.filter((pulse) => this.clock - pulse.time < 3.2)
     if (this.pulses.length) moving = true
 
@@ -655,10 +681,21 @@ export class PaperArchiveScene {
     return moving
   }
 
-  /** While dragging or coasting, the nearest cell under the track becomes the selection. */
+  /**
+   * While dragging or coasting, the cell under the track becomes the selection. Like the
+   * original's navigatePlane, every cell along the travelled segment is selected in turn.
+   */
   private followTrack(): void {
     const goal = { lane: Math.round(this.laneTrack.value), row: Math.round(this.rowTrack.value) }
-    if (!sameCell(goal, this.selected)) this.select(goal, { pulse: false })
+    if (sameCell(goal, this.selected)) return
+    const from = { ...this.selected }
+    const steps = Math.min(64, Math.max(Math.abs(goal.lane - from.lane), Math.abs(goal.row - from.row)))
+    for (let step = 1; step <= steps; step++) {
+      this.select({
+        lane: Math.round(from.lane + ((goal.lane - from.lane) * step) / steps),
+        row: Math.round(from.row + ((goal.row - from.row) * step) / steps)
+      })
+    }
   }
 
   private field(row: number, lane: number, entry: number): number {
@@ -814,7 +851,7 @@ export class PaperArchiveScene {
     canvas.addEventListener('pointerdown', (event) => {
       if ((event.pointerType === 'mouse' && event.button !== 0) || this.drag || !this.loaded) return
       this.stopMomentum()
-      this.lastInteraction = this.clock
+      this.lastInteraction = performance.now()
       this.pendingHover = null
       this.setHover(null)
       const start = { lane: this.laneTrack.value, row: this.rowTrack.value }
@@ -858,7 +895,7 @@ export class PaperArchiveScene {
       drag.samples.push({ value, time: event.timeStamp })
       drag.samples = drag.samples.filter((sample) => event.timeStamp - sample.time <= 120).slice(-32)
       this.followTrack()
-      this.lastInteraction = this.clock
+      this.lastInteraction = performance.now()
       this.wake()
     }, { signal })
     const release = (event: PointerEvent, cancelled: boolean): void => {

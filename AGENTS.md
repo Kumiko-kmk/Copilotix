@@ -112,7 +112,9 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - RhineLabUI（MIT，LBEILC）來源與許可見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`。GLB 僅五個外殼網格，以 `?inline`／`parseAsync` 解析，CSP 不變；不包含原專案品牌、音頻、字體或正文。**不改 `archiveMotion.ts` 已校準曲線**，手感調整使用 Scene 彈簧速率。
 - `archiveShelves.ts` 按本地月份分組、新月新論文在前、無效日期在末；`buildArchiveColumns` 再把長月份均分成多列（每列 4–8 篇，按總數取 `ceil(n/5)`），保證只有一個月份時←→仍可橫向切列，HUD 顯示「月份 · 第幾列」。列／行循環取最近位置、記住每列論文，資料變更保持選中 ID。Index_Inlay 狀態色：完成原色、處理中主色、部分完成琥珀、失敗紅色。
 - 性能契約（2026-10-07 二輪，目標 60 fps）：按需渲染，連續動畫與閒置呼吸都按約 60 fps 節拍出幀（120/144 Hz 顯示器隔幀繪製，不再把呼吸限到 30 fps 造成頓挫）；DPR ≤1.25 且繪製像素 ≤3.3M；transmission 半解析度（`transmissionResolutionScale = 0.5`）；陰影貼圖 1024；連續 6 幀以上超過 23 ms 時自動把解析度降 15%（下限 0.55），穩定 240 幀且 8 秒未降才回升 8%。滑鼠拾取用卡片外殼盒做解析求交（0.08 ms），不得再對 InstancedMesh 做三角形 raycast（原 2 ms／次）。實測 1920×1080：每幀 18.5 ms → 約 9 ms（含模擬），質感（磨砂透射、底部漸暗、陰影、螺絲）保留。視錐／霧距剔除、共享 instanceMatrix、僅 diffuser 投影、失焦／隱藏停止、reduced-motion、卸載釋放 GPU 資源不變。
-- 已補檢索：右上按標題／原檔名搜尋，大小寫不敏感、空白分詞；`/` 聚焦、Enter 選首項、Tab 選結果、Esc 收起，輸入法組字不觸發選擇。最多顯示 40 項並提示細化；選中呼叫 `focusPaper(id)` 最近循環定位。WebGL／模型失敗時可由搜尋直接打開閱讀。
+- 排程與動效契約（2026-10-07 三輪）：`tick` 執行期間 `frame` 保持非零，update 內的 select／hover 呼叫 `wake()` 不得再開第二條 rAF 迴圈（舊版拖曳／懸停時一個 vsync 渲染多幀，實測 215 fps、卡頓 121 ms）。閒置判定用牆鐘 `performance.now()`，動畫時鐘睡眠時停止，不能用來計 2.5 秒閒置（舊版呼吸幾乎不啟動）。選中與原作一致：每個選中格立即發漣漪（拖曳／慣性途經的每格都選中並發漣漪，最多保留 6 個），新卡升起速率 4.2、舊卡回落 4.5，不再延後漣漪（舊版滑動停下後的「跳一下」）。模型載入後先 `compileAsync` 並畫一幀暖機再開始入場。自動降解析度只在錯過半個節拍（`max(23ms, 1.5×節拍)`）才計為遲到。HUD 文字動畫只用 opacity／transform。
+- 診斷：文庫頁 Ctrl+Shift+F 顯示實際 fps、DPR×縮放、卡片與三角形數、GPU 名稱，供真人驗收回報。實測（dev 啟動的真實 App、40 篇、2560×1600@165Hz、RTX 3060）：入場後、方向鍵、拖曳、呼吸均穩定 55 fps（165 Hz 隔三幀），無超過兩個 vsync 的停頓，解析度縮放保持 1。
+右上按標題／原檔名搜尋，大小寫不敏感、空白分詞；`/` 聚焦、Enter 選首項、Tab 選結果、Esc 收起，輸入法組字不觸發選擇。最多顯示 40 項並提示細化；選中呼叫 `focusPaper(id)` 最近循環定位。WebGL／模型失敗時可由搜尋直接打開閱讀。
 - 已補「流暢模式」：localStorage `copilotix.library.performance.v1` 保存選項，原場景原位切換 Frosted_Polymer transmission 0／0.78，低畫質顏色 `#e9dfd2`，保留底部漸暗與動效曲線，不重建場景或重置選中。
 - 測試：`tests/paperArchive.test.ts`（分列／循環／動效）、`tests/LibraryPage.test.tsx`（搜尋、鍵盤／IME、資料更新、降級、畫質保存）、`e2e/paper-archive.spec.ts`（正常／禁用 WebGL、上下導航、搜尋、閱讀與返回）。E2E 等 canvas `data-archive-state="ready"` 或明確降級，不以空 canvas 當成功。
 - 本輪四個 bundle 構建及內建 Utility smoke 通過，未重新打包 EXE；遵守第 8 節，未執行本地 lint／typecheck／單元／E2E，未 push 或觸發 CI。真實顯卡性能與視覺效果仍待真人驗收。
@@ -126,4 +128,11 @@ Astra，謝謝你補的檢索、流暢模式和測試～使用者反饋實機「
 3. 搜尋結果的月份改用 `shelf.month`（列標籤會帶「· 1/5」）。
 
 想請你接手：在 E2E 或單元測試裡補一條「單一月份 37 篇 → 5 列、按 → 後 HUD 顯示 COLUMN 02 / 05」的斷言；以及若 CI 的 Playwright 能讀 `renderer.info`，可加一個寬鬆的性能守門（例如三角形數量不超過 3M），防止以後有人把 DPR 或陰影改回去。曲線常數仍請勿改。
+
+### 給 Astra 的話（Claude，2026-10-07 三輪）
+
+使用者反饋桌面端比瀏覽器卡、滑動後會跳一下。根因不是 GPU（打包版也在 RTX 3060 上），而是兩個排程 bug 和一處與原作不一致，詳見上方「排程與動效契約」。如果方便，想請你：
+
+1. 把 E2E 文庫用例加一段性能守門：按 Ctrl+Shift+F 後讀 `.paper-archive-stats`，在支援 WebGL 時，拖曳期間 fps 應 ≤ 70（防止重複迴圈再出現），連續按↓時 ≥ 30；CI 若無 GPU 會走降級分支，請跳過此斷言。
+2. 若後續要改 `PaperArchiveScene.tick`／`wake`，請保留「tick 中 frame 非零」與「閒置用牆鐘」兩條，並在單元測試裡用假 rAF／`performance.now` 覆蓋。
 

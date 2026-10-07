@@ -121,7 +121,9 @@
 .paper-archive-hints { grid-column: 1 / -1; justify-self: center; margin: 2px 0 0; font-size: 10.5px; letter-spacing: .12em; text-transform: none; }
 .paper-archive-hints i { margin: 0 12px; font-style: normal; opacity: .55; }
 
-@keyframes paper-archive-roll { from { opacity: 0; transform: translateY(45%); filter: blur(1.5px); } to { opacity: 1; transform: none; filter: none; } }
+.paper-archive-stats { position: absolute; z-index: 4; bottom: 64px; left: var(--archive-gutter); padding: 6px 10px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 82%, transparent); color: #fff; font: 11px/1.5 ui-monospace, Consolas, monospace; pointer-events: none; }
+/* Opacity and transform only, so the HUD roll stays on the compositor above the live canvas. */
+@keyframes paper-archive-roll { from { opacity: 0; transform: translateY(45%); } to { opacity: 1; transform: none; } }
 @keyframes paper-archive-fade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 980px) {
