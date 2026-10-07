@@ -1,4 +1,5 @@
 import type { PaperChatAskRequest, PaperChatStatus } from './paperChatSchemas'
+import type { PaperChatLoadRequest, PaperChatPage, PaperChatSession } from './paperChatStorageSchemas'
 import type { RagStreamEvent } from './ragSchemas'
 import type { LibraryRequest, LibraryResult } from './librarySchemas'
 import type {
@@ -71,6 +72,7 @@ export interface AppSettings {
   chatProvider: 'qwen' | 'deepseek' | null
   qwenChatModel: string
   deepseekChatModel: string
+  chatConsentProvider: 'qwen' | 'deepseek' | null
   chatConsentVersion: number | null
   credentials: CredentialStatuses
 }
@@ -220,6 +222,10 @@ export interface WindowState {
 
 export interface CopilotixDesktopApi {
   paperChat: {
+    load(request: PaperChatLoadRequest): Promise<PaperChatPage>
+    session(request: { documentId: string }): Promise<PaperChatSession>
+    saveSession(request: { documentId: string; session: PaperChatSession }): Promise<{ saved: true }>
+    clear(request: { documentId: string }): Promise<{ cleared: true }>
     ask(request: PaperChatAskRequest): Promise<{ requestId: string }>
     cancel(request: { requestId: string }): Promise<{ cancelled: boolean }>
     ensureIndex(request: { documentId: string }): Promise<PaperChatStatus>

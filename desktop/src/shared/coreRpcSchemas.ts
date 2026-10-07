@@ -1,4 +1,5 @@
 import { paperChatStatusRequestSchema, paperChatStatusSchema, paperContextRequestSchema, paperContextResultSchema } from './paperChatSchemas'
+import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from './paperChatStorageSchemas'
 import { z } from 'zod'
 import { libraryCoreRequestSchema, libraryResultSchema } from './librarySchemas'
 import {
@@ -194,6 +195,7 @@ const coreOperationNames = [
   'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:record-revision',
   'knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed',
   'chat:ensure-index', 'chat:build-context',
+  'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear',
   'annotations:list-snapshot', 'annotations:mutate',
   'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
   'compute:rag-content-index',
@@ -450,6 +452,11 @@ export const coreTranslationPlanFinalizeResultSchema = translationPlanFinalizeRe
  * compute operations must add one entry here with strict schemas on both sides.
  */
 export const coreOperationRegistry = {
+  'chat:load': { payload: paperChatLoadRequestSchema, result: paperChatPageSchema },
+  'chat:save-turn': { payload: paperChatSaveTurnSchema, result: paperChatSavedSchema },
+  'chat:session': { payload: paperChatDocumentRequestSchema, result: paperChatSessionSchema },
+  'chat:save-session': { payload: paperChatSaveSessionSchema, result: paperChatSavedSchema },
+  'chat:clear': { payload: paperChatDocumentRequestSchema, result: paperChatClearedSchema },
   'chat:ensure-index': { payload: paperChatStatusRequestSchema, result: paperChatStatusSchema },
   'chat:build-context': { payload: paperContextRequestSchema, result: paperContextResultSchema },
   'library:check': { payload: emptyPayloadSchema, result: z.object({ idle: z.literal(true) }).strict() },

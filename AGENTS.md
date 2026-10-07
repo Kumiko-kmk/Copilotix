@@ -102,9 +102,10 @@ pnpm desktop:release:from-built
 - JobScheduler 事件為 `job-changed(job)`、`job-notification(job)`；通知與 UI 均以 `job.documentId` 定位文檔，job id 與 document id 不同。
 - Main 對文檔變更用 `createCoalescedRefresh` 合併刷新；新的高頻事件源（例如 RAG 索引進度）應走同一路徑，不得每個事件都全量查詢。
 - Reader 傳給 `MarkdownPane` 的 `blocks`、`annotations` 必須保持引用穩定（`useMemo`），否則滾動聯動會反覆重建長論文的高亮與小地圖。
-- 單篇論文 AI 問答的實施計劃與交接說明見 `docs/READER_AI_CHAT_PLAN_ZH.md`（負責人 astra）。v1 不新增 migration、不持久化聊天；階段 A–D 已在 `codex/reader-ai-chat` 實作並接通「添加到對話」，驗證與尚待真人驗收的範圍見計劃第 10 節。
-- 問答現依使用者最新要求共用目前翻譯服務的 API 與憑據；模型在對話面板切換，不保留獨立問答 API 設定入口。舊 chatProvider 僅供資料相容，不參與路由；給 Claude 的最新交接與門禁結果見上述計劃第 11 節。
-- 問答 UI 是閱讀器右側第四個頁籤（與 Markdown／中文／JSON 並列，不使用 Drawer），設計與交互細則見計劃第 12 節；「添加到對話」只加入選區標籤，不切換頁籤。構建 bundle 請用 Node 24.19.0，系統 Node 24.11.1 會靜默崩潰並留下舊的 out/。
+- 單篇論文 AI 問答的維護與交接見 `docs/READER_AI_CHAT_PLAN_ZH.md`（負責人 astra）。2026-10-07 已加入文獻目錄 `chat/` 下的原子持久化、歷史分頁、草稿／選區／模型恢復；不新增 migration，不合併 demo 分支的 schema 5–7。清空、文獻刪除、文庫維護及退出前必須等待對應問答取消並落盤，防止晚到寫入復活記錄或破壞快照。
+- 問答共用「服務連接」的 API／憑據，默認沿用翻譯服務商，但面板可選已啟用的 Qwen／DeepSeek 及獨立問答模型；不修改翻譯模型。舊 request 省略 provider 保持兼容，舊 chatProvider 設定不參與路由。Key、valid 狀態及 consent 仍分別驗證；不得在聊天文件中保存 Key。
+- 問答是閱讀器右側第四個頁籤，首次進入才掛載及建索引；「添加到對話」只加入選區，不切換頁籤。已恢復引用必須再核對 revision。構建 bundle 使用 Node 24.19.0，系統 Node 24.11.1 會靜默崩潰並留下舊 out/。
+
 
 ## 8. 遠端 CI 驗證與預設不跑本地測試
 
@@ -115,16 +116,14 @@ pnpm desktop:release:from-built
 - 在 Actions 下載 `Copilotix-Windows-x64-Bundle` 供真人安裝驗收；`Copilotix-Windows-verification-reports` 保存單元 JUnit、覆蓋率摘要及 E2E 失敗證據。不要將 CI 未通過的包稱為已驗證版本。
 - 此規則只改變自動化驗證的執行位置；真實 API、視覺效果、硬體／系統差異仍按需求由使用者驗收。CI 不持有個人 API 憑據，不能聲稱付費模型或每台機器都已驗證。
 
-## 9. CI 工作流與測試夾具變更記錄（2026-10-06）
+## 9. CI 與夾具維護要點
 
-- **觸發與並發**：`desktop-windows.yml` 在所有分支 push、PR、`desktop-v*` tag 及手動觸發時執行；同一工作分支的舊運行會被新 push 取消，master 與 tag 的運行不會取消。
-- **測試資源**：CI 中 Vitest 最多 2 個 worker（`vitest.config.ts`），Windows 上 Playwright 為單 worker。單元測試的 JUnit 輸出到 `desktop/unit-test-results/`，避免被 Playwright 清除。
-- **打包失敗即停**：Windows 原子 rename 遇到 EPERM／EACCES／EBUSY 這類臨時鎖時，最多有界重試約 6.3 秒；永久錯誤照常失敗，不改用 copy／delete 替代。打包 CLI 出現致命錯誤時必須以 exit 1 退出。CI 在跑 E2E 前會先確認 `release/setup.exe`、`release/uninstall.exe`、`release/advanced/release-manifest.json` 和 ZIP 都存在。
-- **E2E 憑據隔離**：只有在「未打包 + `NODE_ENV=test` + 有 `COPILOTIX_E2E_USER_DATA`」時，`credentialServiceForRuntime` 才為每個夾具派生獨立的系統憑據 service；打包版本一律使用正式 service。測試不得讀寫真人憑據，也不得依賴本機已保存的 Key。問答 E2E 透過真實的設定 IPC 保存假 Key，只模擬 Main 端 provider 的 HTTP 回應。
-- **閱讀器 E2E 就緒等待**：打開論文後，先等 `.reader-header` 可見（最長 30 秒），再斷言 Markdown 的 `data-render-state` 為 ready。不加全局 timeout 或 retry，也不放寬原有斷言、截圖閾值和覆蓋率門檻。論文一律從「任務管理」列表進入（底部論文切換已刪除）。
-- **縮略圖截圖**：截圖期間把外層 app-shell 暫時設為直角，並截取完整 CSS 像素，以消除窗口圓角的抗鋸齒差異。保持 channel delta ≤ 1、changedRatio ≤ 0.001 的閾值；失敗時保存 expected／actual PNG。
-- **問答面板與索引**：問答頁籤在第一次被打開時才掛載。掛載時會請 Utility 建立內容索引，而建索引是吃 CPU 的同步計算；只打開論文不得觸發它，否則會拖慢 PDF 和圖片資源的加載。
-- **驗收邊界**：CI 綠燈只代表已推送的那個 SHA。歷史紅燈要對照最新運行再判斷，不能直接當作當前缺陷；CI 不持有付費 API，真實問答質量仍需人工驗收。完整的失敗分析記錄在 `docs/READER_AI_CHAT_PLAN_ZH.md` 第 13 節。
+- Vitest CI 最多 2 workers，Windows Playwright 單 worker；JUnit 放 desktop/unit-test-results，避免被 Playwright 清除。
+- Windows 原子 rename 遇 EPERM／EACCES／EBUSY 最多約 6.3 秒有界重試；永久錯誤失敗，CLI exit 1，不用 copy／delete 替代。E2E 前要求 Setup、uninstaller、release-manifest 和 ZIP 均存在。
+- 僅「未打包 + NODE_ENV=test + COPILOTIX_E2E_USER_DATA」使用夾具獨立 native vault service；打包版一律用正式 service。夾具只清理自己的六種 account，不讀寫真人或其他夾具憑據。問答 E2E 經真實設定 IPC 保存假 Key，只模擬 provider HTTP。
+- 閱讀器從任務列表進入，等 reader-header（最長 30 秒）與 Markdown ready 後再互動；error 不算 ready，不加全局 retry／timeout 或降低原斷言。
+- 縮略圖截圖期間 app-shell 用直角及完整 CSS 像素裁切，保持 channel delta ≤1、changedRatio ≤0.001；失敗保留 expected／actual PNG。
+- 最新 CI 證據必須對應最新提交；付費 API 回答、視覺效果及每台機器的實際驗收不能由假 HTTP 或其他分支綠燈替代。
 
 ## 10. Markdown 公共格式修复（2026-10-06）
 

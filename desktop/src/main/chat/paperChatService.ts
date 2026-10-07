@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto'
-import { CHAT_CONSENT_VERSION, PAPER_CHAT_DEFAULT_BUDGET, paperChatAskRequestSchema, paperContextResultSchema, resolvePaperChatProvider, type PaperChatAskRequest, type PaperChatProvider, type PaperContext, type PaperContextRequest } from '@shared/paperChatSchemas'
+import { PAPER_CHAT_DEFAULT_BUDGET, paperChatAskRequestSchema, paperContextResultSchema, resolvePaperChatProvider, hasPaperChatConsent, type PaperChatAskRequest, type PaperChatProvider, type PaperContext, type PaperContextRequest } from '@shared/paperChatSchemas'
 import { canTransitionRagStreamEvent, citationSchema, ragErrorCodeSchema, ragStreamEventSchema, RAG_MAX_STREAM_DELTA_CHARS, type RagStreamEvent, type RagStreamEventType, type RagErrorCode } from '@shared/ragSchemas'
 import type { AppSettings } from '@shared/types'
+import type { StoredPaperChatTurn, PaperChatLoadRequest, PaperChatPage, PaperChatSession } from '@shared/paperChatStorageSchemas'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
 import type { ChatMessage } from './chatProvider'
 import { abortable, ChatProviderError } from './chatProvider'
 
 type EventBody = RagStreamEvent extends infer E ? E extends RagStreamEvent ? Omit<E, 'requestId' | 'sequence'> : never : never
-type Run = { requestId: string; documentId: string; controller: AbortController; emit(event: EventBody): void; finish(): void }
+type Run = { requestId: string; documentId: string; controller: AbortController; done: Promise<void>; emit(event: EventBody): void; finish(): void; turn: StoredPaperChatTurn }
 export interface PaperChatDependencies {
+  saveTurn(documentId: string, turn: StoredPaperChatTurn): Promise<unknown>
+  load(request: PaperChatLoadRequest): Promise<PaperChatPage>
+  session(documentId: string): Promise<PaperChatSession>
+  saveSession(documentId: string, session: PaperChatSession): Promise<{ saved: true }>
+  clear(documentId: string): Promise<{ cleared: true }>
   settings(): Promise<AppSettings>
   key(provider: PaperChatProvider): Promise<string | null>
   buildContext(request: PaperContextRequest, signal: AbortSignal): Promise<PaperContext>
@@ -38,20 +44,29 @@ export class PaperChatService {
     const request = paperChatAskRequestSchema.parse(raw)
     if (this.destroyed) throw new ChatProviderError('RAG_CANCELLED', '问答窗口已关闭')
     const settings = await this.deps.settings()
-    const provider = resolvePaperChatProvider(settings)
-    if (!provider) throw new ChatProviderError('CHAT_PROVIDER_REQUIRED', '请在翻译设置中启用并选择 Qwen 或 DeepSeek；问答沿用翻译 API')
-    if (settings.chatConsentVersion !== CHAT_CONSENT_VERSION) throw new ChatProviderError('CHAT_CONSENT_REQUIRED', '请先同意向服务商发送论文片段')
+    const provider = resolvePaperChatProvider(settings, request.provider)
+    if (!provider) throw new ChatProviderError('CHAT_PROVIDER_REQUIRED', '请启用 Qwen 或 DeepSeek，并在问答中选择服务商')
+    if (!hasPaperChatConsent(settings, provider)) throw new ChatProviderError('CHAT_CONSENT_REQUIRED', '请先同意向服务商发送论文片段')
     const key = await this.deps.key(provider)
     if (!key) throw new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '请先保存模型 API Key')
     if (settings.credentials[provider].state !== 'valid') throw new ChatProviderError('CHAT_CREDENTIAL_UNVERIFIED', '请先验证模型 API Key')
     if (this.destroyed) throw new ChatProviderError('RAG_CANCELLED', '问答窗口已关闭')
-    this.byDocument.get(request.documentId)?.controller.abort()
+    let previousRun = this.byDocument.get(request.documentId)
+    while (previousRun) {
+      previousRun.controller.abort(); await previousRun.done
+      previousRun = this.byDocument.get(request.documentId)
+    }
+    if (this.destroyed) throw new ChatProviderError('RAG_CANCELLED', '问答窗口已关闭')
     if (this.active.size >= 8) throw new ChatProviderError('RAG_LIMIT_EXCEEDED', '进行中的问答过多')
     const requestId = randomUUID()
+    const model = request.model ?? (provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
+    let resolveDone!: () => void
+    const done = new Promise<void>((resolve) => { resolveDone = resolve })
     let sequence = 0
     let previous: RagStreamEventType | null = null
     const run: Run = {
-      requestId, documentId: request.documentId, controller: new AbortController(),
+      requestId, documentId: request.documentId, controller: new AbortController(), done,
+      turn: { id: requestId, createdAt: new Date().toISOString(), provider, model, question: request.question, answer: '', citations: {}, status: 'pending' },
       emit: (body) => {
         if (previous && ['completed', 'failed', 'cancelled'].includes(previous)) return
         if (!canTransitionRagStreamEvent(previous, body.type)) throw new Error('Invalid chat transition')
@@ -62,10 +77,13 @@ export class PaperChatService {
       finish: () => {
         this.active.delete(requestId)
         if (this.byDocument.get(request.documentId) === run) this.byDocument.delete(request.documentId)
+        resolveDone()
       }
     }
     this.active.set(requestId, run)
     this.byDocument.set(request.documentId, run)
+    try { await this.deps.saveTurn(request.documentId, run.turn) }
+    catch { run.finish(); throw new ChatProviderError('CHAT_STORAGE_FAILED', '对话无法保存到本地，请检查文献目录后重试') }
     // Defer until ask has returned its identity over IPC. Renderer also handles early accepted events.
     setTimeout(() => { void this.execute(run, request, settings, provider, key) }, 0)
     return { requestId }
@@ -80,16 +98,47 @@ export class PaperChatService {
 
   cancelAll(): void { for (const run of this.active.values()) run.controller.abort() }
   dispose(): void { this.destroyed = true; this.cancelAll() }
+  async settle(): Promise<void> { this.cancelAll(); await Promise.all([...this.active.values()].map((run) => run.done)) }
+  async settleDocument(documentId: string): Promise<void> {
+    const runs = [...this.active.values()].filter((run) => run.documentId === documentId)
+    for (const run of runs) run.controller.abort()
+    await Promise.all(runs.map((run) => run.done))
+  }
+  async load(request: PaperChatLoadRequest): Promise<PaperChatPage> {
+    if (!request.before) await this.settleDocument(request.documentId)
+    return this.deps.load(request)
+  }
+  session(documentId: string): Promise<PaperChatSession> { return this.deps.session(documentId) }
+  saveSession(documentId: string, session: PaperChatSession): Promise<{ saved: true }> { return this.deps.saveSession(documentId, session) }
+  async clear(documentId: string): Promise<{ cleared: true }> {
+    await this.settleDocument(documentId)
+    return this.deps.clear(documentId)
+  }
 
   private async execute(run: Run, request: PaperChatAskRequest, settings: AppSettings, provider: PaperChatProvider, key: string): Promise<void> {
     const signal = run.controller.signal
-    const model = request.model ?? (provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
+    const model = run.turn.model
     const start = Date.now()
     let code = 'completed'
     let totalTokens = 0
     let answer = ''
     let pending = ''
     let timer: ReturnType<typeof setTimeout> | undefined
+    let checkpoint: Promise<unknown> = Promise.resolve()
+    let checkpointBusy = false
+    const checkpointTimer = setInterval(() => {
+      if (checkpointBusy) return
+      checkpointBusy = true
+      const snapshot = { ...run.turn, answer, citations: { ...run.turn.citations } }
+      checkpoint = checkpoint.then(() => this.deps.saveTurn(request.documentId, snapshot))
+      void checkpoint.catch(() => run.controller.abort(new ChatProviderError('CHAT_STORAGE_FAILED', '本地对话保存失败'))).finally(() => { checkpointBusy = false })
+    }, 1_000)
+    const persist = async (status: StoredPaperChatTurn['status']): Promise<void> => {
+      clearInterval(checkpointTimer)
+      await checkpoint.catch(() => undefined)
+      run.turn = { ...run.turn, answer, status }
+      await this.deps.saveTurn(request.documentId, run.turn)
+    }
     const flush = (): void => {
       clearTimeout(timer); timer = undefined
       if (signal.aborted) { pending = ''; return }
@@ -100,7 +149,10 @@ export class PaperChatService {
         run.emit({ type: 'delta', delta })
       }
     }
-    const stop = (): void => { clearTimeout(timer); pending = ''; run.emit({ type: 'cancelled' }) }
+    const stop = (): void => {
+      clearTimeout(timer); pending = ''
+      if (!(signal.reason instanceof ChatProviderError && signal.reason.code === 'CHAT_STORAGE_FAILED')) run.emit({ type: 'cancelled' })
+    }
     try {
       run.emit({ type: 'accepted' })
       signal.addEventListener('abort', stop, { once: true })
@@ -112,7 +164,7 @@ export class PaperChatService {
       run.emit({ type: 'evidence-ready', resultCount: context.evidence.length })
       // Recheck authorization after asynchronous retrieval / queueing.
       const latest = await abortable(this.deps.settings(), signal)
-      if (latest.chatConsentVersion !== CHAT_CONSENT_VERSION || resolvePaperChatProvider(latest) !== provider) throw new ChatProviderError('CHAT_CONSENT_REQUIRED', '翻译服务商或问答授权已变更，请重新确认')
+      if (!hasPaperChatConsent(latest, provider) || resolvePaperChatProvider(latest, request.provider) !== provider) throw new ChatProviderError('CHAT_CONSENT_REQUIRED', '服务商或问答授权已变更，请重新确认')
       if (latest.credentials[provider].state !== 'valid') throw new ChatProviderError('CHAT_CREDENTIAL_UNVERIFIED', '模型凭据已变更，请重新验证')
       const usage = await abortable(this.deps.stream({
         provider, baseUrl: provider === 'qwen' ? settings.qwenBaseUrl : settings.deepseekBaseUrl, model, key,
@@ -122,6 +174,7 @@ export class PaperChatService {
           if (answer.length + delta.length > 32_768) throw new ChatProviderError('RAG_LIMIT_EXCEEDED', '模型回答超过长度上限')
           for (let i = 0; i < delta.length; i += RAG_MAX_STREAM_DELTA_CHARS) ragStreamEventSchema.parse({ requestId: run.requestId, sequence: 0, type: 'delta', delta: delta.slice(i, i + RAG_MAX_STREAM_DELTA_CHARS) })
           answer += delta; pending += delta
+          run.turn.answer = answer
           if (pending.length >= RAG_MAX_STREAM_DELTA_CHARS) flush()
           else if (!timer) timer = setTimeout(flush, 50)
         }
@@ -139,6 +192,7 @@ export class PaperChatService {
         const evidence = issued.get(id)!
         const citation = citationSchema.parse({ citationId: randomUUID(), evidenceId: id, documentId: context.documentId, chunkId: evidence.chunkId, excerpt: evidence.text.slice(0, 2_048), locator: evidence.locator, scoreProvenance: evidence.scoreProvenance })
         citationIds.push(citation.citationId)
+        run.turn.citations[id] = citation
         run.emit({ type: 'citation', citation })
       }
       if (usage) {
@@ -147,18 +201,23 @@ export class PaperChatService {
         await this.deps.recordUsage(provider, usage).catch(() => undefined)
       }
       signal.throwIfAborted()
+      await persist('completed')
+      signal.throwIfAborted()
       run.emit({ type: 'completed', answer, citationIds })
     } catch (error) {
-      if (signal.aborted) { code = 'RAG_CANCELLED'; run.emit({ type: 'cancelled' }) }
+      try { await persist(signal.aborted ? 'cancelled' : 'failed') }
+      catch { error = new ChatProviderError('CHAT_STORAGE_FAILED', '本地对话保存失败') }
+      if (signal.aborted && !(signal.reason instanceof ChatProviderError && signal.reason.code === 'CHAT_STORAGE_FAILED')) { code = 'RAG_CANCELLED'; run.emit({ type: 'cancelled' }) }
       else {
         const candidate = error && typeof error === 'object' && 'code' in error ? error.code : undefined
         const valid = ragErrorCodeSchema.safeParse(candidate)
         code = valid.success ? valid.data : 'PROVIDER_UNAVAILABLE'
         // Never forward arbitrary exception bodies (providers can echo user data).
-        const messages: Partial<Record<RagErrorCode, string>> = { CONTENT_NOT_READY: '论文索引尚未就绪，请稍后重试', SELECTION_STALE: '选区来源已更新，请重新选择', RAG_TIMEOUT: '模型响应超时，请重试', RAG_LIMIT_EXCEEDED: '问答内容超过预算，请减少选区', CHAT_CREDENTIALS_REQUIRED: '模型凭据已失效，请重新验证', CHAT_CREDENTIAL_UNVERIFIED: '请先验证模型凭据', CHAT_CONSENT_REQUIRED: '问答授权已变更，请重新确认', EMBEDDING_RATE_LIMITED: '问答服务限流，请稍后重试', INSUFFICIENT_EVIDENCE: '论文中没有找到依据' }
+        const messages: Partial<Record<RagErrorCode, string>> = { CHAT_STORAGE_FAILED: '本地对话保存失败，请检查文献目录后重试', CONTENT_NOT_READY: '论文索引尚未就绪，请稍后重试', SELECTION_STALE: '选区来源已更新，请重新选择', RAG_TIMEOUT: '模型响应超时，请重试', RAG_LIMIT_EXCEEDED: '问答内容超过预算，请减少选区', CHAT_CREDENTIALS_REQUIRED: '模型凭据已失效，请重新验证', CHAT_CREDENTIAL_UNVERIFIED: '请先验证模型凭据', CHAT_CONSENT_REQUIRED: '问答授权已变更，请重新确认', EMBEDDING_RATE_LIMITED: '问答服务限流，请稍后重试', INSUFFICIENT_EVIDENCE: '论文中没有找到依据' }
         run.emit({ type: 'failed', error: { code: valid.success ? valid.data : 'PROVIDER_UNAVAILABLE', message: messages[code as keyof typeof messages] ?? '问答失败，请稍后重试', retryable: !['SELECTION_STALE', 'QUERY_SCOPE_INVALID'].includes(code), ...(error instanceof ChatProviderError && error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}) } })
       }
     } finally {
+      clearInterval(checkpointTimer)
       clearTimeout(timer)
       signal.removeEventListener('abort', stop)
       run.finish()

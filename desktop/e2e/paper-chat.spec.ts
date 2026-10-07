@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { createE2EWorkspace, seedReaderTask } from './helpers'
 
 test('reuses the translation API and switches chat models without a second settings page', async () => {
-  test.setTimeout(30_000)
+  test.setTimeout(60_000)
   const workspace = await createE2EWorkspace()
   const documentId = await seedReaderTask(workspace)
   let app: Awaited<ReturnType<typeof electron.launch>> | undefined
@@ -18,11 +18,12 @@ test('reuses the translation API and switches chat models without a second setti
     await app.evaluate(({ net }) => {
       Reflect.set(globalThis, '__chatCredentialProbeCount', 0)
       net.fetch = async (input, init) => {
-        const body = JSON.parse(String(init?.body)) as { model?: string }
+        const body = JSON.parse(String(init?.body)) as { model?: string; stream?: boolean }
         if (input !== 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
           || init?.method !== 'POST'
           || new Headers(init.headers).get('Authorization') !== 'Bearer copilotix-e2e-not-a-real-api-key'
-          || body.model !== 'qwen-mt-plus') throw new Error('Unexpected provider request in chat fixture')
+          || !['qwen-mt-plus', 'qwen3.8-flash'].includes(body.model ?? '')) throw new Error('Unexpected provider request in chat fixture')
+        if (body.stream) return new Response('data: {"choices":[{"delta":{"content":"持久保存的测试回答"}}]}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } })
         Reflect.set(globalThis, '__chatCredentialProbeCount', Number(Reflect.get(globalThis, '__chatCredentialProbeCount')) + 1)
         return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), {
           status: 200, headers: { 'Content-Type': 'application/json' }
@@ -33,6 +34,7 @@ test('reuses the translation API and switches chat models without a second setti
       const { credentials: _credentials, ...settings } = await window.copilotix.getSettings()
       return window.copilotix.saveSettings({
         ...settings,
+        chatConsentVersion: 2,
         credentialMutations: { qwen: { action: 'set', value: 'copilotix-e2e-not-a-real-api-key' } }
       })
     })
@@ -60,6 +62,24 @@ test('reuses the translation API and switches chat models without a second setti
     await expect(window.getByRole('region', { name: '论文 AI 问答' })).toBeHidden()
     await chatTab.click()
     await expect(model).toHaveAttribute('title', 'qwen3.8-flash')
+    await window.getByLabel('向当前论文提问').fill('记住这个问题')
+    await expect(window.getByRole('button', { name: '发送', exact: true })).toBeEnabled({ timeout: 30_000 })
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.getByRole('log', { name: '问答记录' })).toContainText('持久保存的测试回答')
+    await expect(window.getByLabel('正在生成', { exact: true })).toHaveCount(0)
+    await window.getByLabel('向当前论文提问').fill('未发送草稿')
+    // Wait for the durable session write, then reload through the real preload/Main/Utility path.
+    await expect.poll(() => window.evaluate((documentId) => window.copilotix.paperChat.session({ documentId }), documentId)).toMatchObject({ draft: '未发送草稿' })
+    await window.reload()
+    await window.getByRole('button', { name: '展开主导航' }).click()
+    await window.getByRole('button', { name: '任务管理' }).click()
+    await window.locator(`tr[data-row-key="${documentId}"] .task-link`).click()
+    await chatTab.click()
+    await expect(window.getByRole('log', { name: '问答记录' })).toContainText('记住这个问题')
+    await expect(window.getByRole('log', { name: '问答记录' })).toContainText('持久保存的测试回答')
+    await expect(window.getByLabel('向当前论文提问')).toHaveValue('未发送草稿')
+    await expect(model).toHaveAttribute('title', 'qwen3.8-flash')
+    expect((await window.evaluate((documentId) => window.copilotix.paperChat.load({ documentId }), documentId)).turns).toEqual([expect.objectContaining({ question: '记住这个问题', answer: '持久保存的测试回答', status: 'completed' })])
     await expect(window.locator('.ant-drawer')).toHaveCount(0)
     await window.locator('[data-edge-dock="top"]').hover()
     await expect(window.getByRole('navigation', { name: '主导航' })).toBeVisible()

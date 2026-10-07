@@ -51,7 +51,10 @@ export class ChatProvider {
       const response = await abortable(this.fetcher(`${input.baseUrl.replace(/\/$/u, '')}/chat/completions`, {
         method: 'POST', redirect: 'error', signal,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${input.key}` },
-        body: JSON.stringify({ model: input.model, messages: input.messages, stream: true, stream_options: { include_usage: true }, max_tokens: 8_192 })
+        body: JSON.stringify({ model: input.model, messages: input.messages, stream: true, stream_options: { include_usage: true },
+          max_tokens: input.provider === 'deepseek' && input.model === 'deepseek-v4-pro' ? 32_768 : 8_192,
+          ...(input.provider === 'deepseek' && ['deepseek-flash', 'deepseek-v4-pro'].includes(input.model)
+            ? { thinking: { type: input.model === 'deepseek-flash' ? 'disabled' : 'enabled' } } : {}) })
       }), signal)
       if (response.status === 401 || response.status === 403) {
         await response.body?.cancel().catch(() => undefined)

@@ -2,7 +2,7 @@ import React from 'react'
 import { Button, Dropdown, Empty, Input, Progress, Select, message } from 'antd'
 import { ArrowUpOutlined, BorderOutlined, CloseOutlined, MoreOutlined } from '@ant-design/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CHAT_CONSENT_VERSION, PAPER_CHAT_MODELS, chatModelSchema, resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
+import { CHAT_CONSENT_VERSION, PAPER_CHAT_MODELS, chatModelSchema, resolvePaperChatProvider, hasPaperChatConsent, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { Citation } from '@shared/ragSchemas'
 import type { AppSettings, BlockSelection } from '@shared/types'
 import type { PaperChatController, PaperChatTurn } from '../usePaperChat'
@@ -17,20 +17,20 @@ const SUGGESTIONS = ['总结这篇论文的主要贡献', '解释论文的核心
 function useChatRouting(chat: PaperChatController) {
   const settingsQuery = useQuery<AppSettings>({ queryKey: ['settings'], queryFn: () => window.copilotix.getSettings() })
   const settings = settingsQuery.data
-  const provider = settings ? resolvePaperChatProvider(settings) : null
+  const provider = settings ? resolvePaperChatProvider(settings, chat.selectedModel?.provider) : null
   const configured = Boolean(settings && provider && settings.credentials[provider].state === 'valid')
   const defaultModel = provider === 'qwen' ? settings?.qwenChatModel ?? 'qwen-plus' : settings?.deepseekChatModel ?? 'deepseek-flash'
   const model = chat.selectedModel?.provider === provider ? chat.selectedModel.model : defaultModel
   const models = provider ? PAPER_CHAT_MODELS[provider] : []
   const customModel = chat.selectedModel?.provider === provider ? chat.selectedModel.custom : !models.includes(model)
   const validModel = chatModelSchema.safeParse(model).success
-  const consented = settings?.chatConsentVersion === CHAT_CONSENT_VERSION
+  const consented = Boolean(settings && provider && hasPaperChatConsent(settings, provider))
   return { settings, provider, configured, model, models, customModel, validModel, consented }
 }
 
-async function saveConsent(version: number | null): Promise<AppSettings> {
+async function saveConsent(version: number | null, provider: PaperChatProvider | null = null): Promise<AppSettings> {
   const { credentials: _credentials, ...update } = await window.copilotix.getSettings()
-  return (await window.copilotix.saveSettings({ ...update, chatConsentVersion: version })).settings
+  return (await window.copilotix.saveSettings({ ...update, chatConsentVersion: version, chatConsentProvider: provider })).settings
 }
 
 /** Lives in the reader's shared tab toolbar while the chat tab is active. */
@@ -52,7 +52,7 @@ export function ReaderChatToolbar(props: { chat: PaperChatController }): React.J
     }
   }
   const menuItems = [
-    { key: 'clear', label: '清空对话', disabled: props.chat.turns.length === 0 },
+    { key: 'clear', label: '清空对话', disabled: props.chat.loading || props.chat.turns.length === 0 },
     ...(routing.consented ? [{ key: 'revoke', label: '撤销发送授权', disabled: revoking }] : [])
   ]
   return (
@@ -63,7 +63,7 @@ export function ReaderChatToolbar(props: { chat: PaperChatController }): React.J
         menu={{
           items: menuItems,
           onClick: ({ key }) => {
-            if (key === 'clear') props.chat.clear()
+            if (key === 'clear') void props.chat.clear()
             else if (key === 'revoke') void revoke()
           }
         }}
@@ -78,10 +78,14 @@ export function ReaderChatToolbar(props: { chat: PaperChatController }): React.J
 function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType<typeof useChatRouting>; locked: boolean }): React.JSX.Element | null {
   const { chat, routing } = props
   const provider = routing.provider
-  if (!provider) return null
   return (
     <div className="reader-chat-model-picker">
-      <span className="reader-chat-provider" title="与翻译服务共用 API">{PROVIDER_LABELS[provider]}</span>
+      <Select
+        size="small" variant="borderless" aria-label="问答服务商" className="reader-chat-provider"
+        value={provider} disabled={props.locked} popupMatchSelectWidth={false} placement="topLeft" placeholder="服务商"
+        options={(Object.keys(PROVIDER_LABELS) as PaperChatProvider[]).map((value) => ({ value, label: PROVIDER_LABELS[value], disabled: !routing.settings?.enabledTranslationProviders.includes(value) }))}
+        onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: value === 'qwen' ? routing.settings?.qwenChatModel ?? 'qwen-plus' : routing.settings?.deepseekChatModel ?? 'deepseek-flash', custom: false })}
+      />
       <Select
         size="small"
         variant="borderless"
@@ -90,11 +94,11 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
         popupMatchSelectWidth={false}
         placement="topLeft"
         value={routing.customModel ? CUSTOM_MODEL : routing.model}
-        disabled={props.locked}
+        disabled={props.locked || !provider}
         options={[...routing.models.map((name) => ({ value: name, label: name })), { value: CUSTOM_MODEL, label: '自定义模型…' }]}
-        onChange={(value: string) => chat.setSelectedModel({ provider, model: value === CUSTOM_MODEL ? '' : value, custom: value === CUSTOM_MODEL })}
+        onChange={(value: string) => { if (provider) chat.setSelectedModel({ provider, model: value === CUSTOM_MODEL ? '' : value, custom: value === CUSTOM_MODEL }) }}
       />
-      {routing.customModel ? (
+      {routing.customModel && provider ? (
         <Input
           size="small"
           aria-label="模型名称"
@@ -134,7 +138,7 @@ export default function ReaderChatPanel(props: {
   })
   const ready = indexQuery.data?.state === 'ready'
   const question = chat.draft.trim()
-  const canSend = routing.configured && ready && routing.validModel && !consentSaving && !chat.busy && question.length > 0
+  const canSend = routing.configured && ready && routing.validModel && !consentSaving && !chat.busy && !chat.loading && chat.loaded && question.length > 0
 
   React.useEffect(() => { setConsentOpen(false) }, [props.documentId])
 
@@ -150,7 +154,7 @@ export default function ReaderChatPanel(props: {
   // it and offers retry, so the draft can be cleared up front.
   const submit = React.useCallback(async (): Promise<void> => {
     chat.setDraft('')
-    await chat.ask(question, routing.model.trim())
+    await chat.ask(question, routing.model.trim(), routing.provider ?? undefined)
   }, [chat, question, routing.model])
 
   const send = (): void => {
@@ -164,8 +168,8 @@ export default function ReaderChatPanel(props: {
     setConsentSaving(true); setLocalError('')
     try {
       const current = await window.copilotix.getSettings()
-      if (resolvePaperChatProvider(current) !== routing.provider) throw new Error('翻译服务商已变更，请重新确认')
-      queryClient.setQueryData(['settings'], await saveConsent(CHAT_CONSENT_VERSION))
+      if (resolvePaperChatProvider(current, chat.selectedModel?.provider) !== routing.provider) throw new Error('服务商已变更，请重新确认')
+      queryClient.setQueryData(['settings'], await saveConsent(CHAT_CONSENT_VERSION, routing.provider))
       setConsentOpen(false)
       await submit()
     } catch (error) {
@@ -212,7 +216,9 @@ export default function ReaderChatPanel(props: {
   return (
     <section className="paper-chat" aria-label="论文 AI 问答">
       <div className="paper-chat-scroll" ref={scrollRef}>
-        {chat.turns.length === 0 ? (
+        {chat.loading ? <p role="status">正在读取本地对话…</p> : null}
+        {chat.next ? <Button size="small" loading={chat.loadingOlder} onClick={() => void chat.loadOlder()}>查看更早的对话</Button> : null}
+        {chat.loading ? null : chat.turns.length === 0 ? (
           <ChatEmptyState
             provider={routing.provider}
             configured={routing.configured}
@@ -229,7 +235,7 @@ export default function ReaderChatPanel(props: {
                 key={index}
                 turn={turn}
                 retryable={!chat.busy && index === chat.turns.length - 1}
-                onRetry={() => void chat.ask(turn.question, routing.model.trim())}
+                onRetry={() => void chat.ask(turn.question, routing.model.trim(), routing.provider ?? undefined)}
                 onCitation={cite}
               />
             ))}
@@ -280,7 +286,7 @@ export default function ReaderChatPanel(props: {
             }}
           />
           <div className="paper-chat-input-footer">
-            <ChatModelPicker chat={chat} routing={routing} locked={chat.busy || consentOpen || consentSaving} />
+            <ChatModelPicker chat={chat} routing={routing} locked={chat.busy || chat.loading || consentOpen || consentSaving} />
             {chat.busy ? (
               <Button shape="circle" size="small" icon={<BorderOutlined />} aria-label="停止" onClick={chat.stop} />
             ) : (
@@ -323,7 +329,7 @@ function ChatEmptyState(props: {
   }
   return (
     <div className="paper-chat-empty paper-chat-welcome">
-      <p>只依据当前论文回答，回答中的引用可以点击定位到原文。对话仅保留在本次阅读中。</p>
+      <p>只依据当前论文回答，回答中的引用可以点击定位到原文。对话随论文保存在本地，下次打开时继续保留。</p>
       <div className="paper-chat-suggestions">
         {SUGGESTIONS.map((text) => <button type="button" key={text} onClick={() => props.onSuggest(text)}>{text}</button>)}
       </div>

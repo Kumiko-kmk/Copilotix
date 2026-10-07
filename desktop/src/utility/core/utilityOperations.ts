@@ -1,4 +1,6 @@
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
+import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
+import { PaperChatStore } from './persistence/paperChatStore'
 import { PaperContextBuilder, PaperContextError } from './paperContextBuilder'
 import { assertLibraryIdle, manageLibrary } from './libraryMaintenance'
 import { libraryCoreRequestSchema } from '@shared/librarySchemas'
@@ -132,7 +134,13 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     }
     return state.translationPlanManager
   }
+  const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const handlers: UtilityHandlerMap = {
+    'chat:load': (request) => { const { documentId, before } = paperChatLoadRequestSchema.parse(request.payload); return chatStore.load(documentId, before) },
+    'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
+    'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),
+    'chat:save-session': (request) => { const { documentId, session } = paperChatSaveSessionSchema.parse(request.payload); return chatStore.saveSession(documentId, session) },
+    'chat:clear': (request) => chatStore.clear(paperChatDocumentRequestSchema.parse(request.payload).documentId),
     'chat:ensure-index': (request, signal) => {
       signal.throwIfAborted()
       const { documentId } = paperChatStatusRequestSchema.parse(request.payload)

@@ -154,6 +154,11 @@ async function bootstrap(): Promise<void> {
   const usageAnalytics = new UsageAnalyticsService(join(userData, 'usage-analytics-v1.json'))
   const chatProvider = new ChatProvider(fetcher, { invalidate: (provider) => settings.invalidateCredential(provider) })
   paperChat = new PaperChatService({
+    saveTurn: (documentId, turn) => utilitySupervisor!.request('chat:save-turn', { documentId, turn }),
+    load: (request) => utilitySupervisor!.request('chat:load', request),
+    session: (documentId) => utilitySupervisor!.request('chat:session', { documentId }),
+    saveSession: (documentId, session) => utilitySupervisor!.request('chat:save-session', { documentId, session }),
+    clear: (documentId) => utilitySupervisor!.request('chat:clear', { documentId }),
     settings: () => settings.get(),
     key: (provider) => vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
     buildContext: (request, signal) => utilitySupervisor!.request('chat:build-context', request, { signal, timeoutMs: 10_000 }),
@@ -377,6 +382,7 @@ function registerIpc(
       if (confirmation.response !== 1) return { status: 'cancelled' as const, restartRequired: false }
     }
     await utilitySupervisor.request('library:check', {})
+    await paperChat?.settle()
     await jobScheduler.shutdown()
     try {
       const result = await utilitySupervisor.request('library:manage', { ...request, path: selected.filePaths[0] }, { timeoutMs: 2 * 60 * 60 * 1000 })
@@ -393,7 +399,7 @@ function registerIpc(
   registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, async (_event, update) => {
     const before = await settings.get()
     const result = await settings.save(update)
-    if (before.translationProvider !== result.settings.translationProvider || before.chatConsentVersion !== result.settings.chatConsentVersion || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
+    if (before.translationProvider !== result.settings.translationProvider || before.chatConsentVersion !== result.settings.chatConsentVersion || before.chatConsentProvider !== result.settings.chatConsentProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
     return result
   }, validationOptions)
   registerValidatedHandler('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, (_event, request) => settings.validateCredential(request.name, request.value), validationOptions)
@@ -461,7 +467,8 @@ function registerIpc(
   registerValidatedHandler('documents:retry', documentIdRequestSchema, voidResponseSchema, (_event, documentId) => {
     return tasks.retry(documentId)
   }, validationOptions)
-  registerValidatedHandler('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, (_event, request) => {
+  registerValidatedHandler('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, async (_event, request) => {
+    await paperChat?.settleDocument(request.documentId)
     return tasks.delete(request.documentId, request.deleteFiles)
   }, validationOptions)
   registerValidatedHandler('documents:get', documentIdRequestSchema, documentDetailsSchema, async (_event, documentId) => {
@@ -526,7 +533,7 @@ function startNormalApp(): void {
     isQuitting = true
     if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
     event.preventDefault()
-    utilityShutdownPromise = (jobScheduler?.shutdown() ?? Promise.resolve()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
+    utilityShutdownPromise = (paperChat?.settle() ?? Promise.resolve()).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
       app.quit()
     })
   })

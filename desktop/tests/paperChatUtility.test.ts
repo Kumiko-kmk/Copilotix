@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
+import { paperChatPageSchema, paperChatSessionSchema } from '@shared/paperChatStorageSchemas'
 import { paperChatStatusSchema, paperContextResultSchema } from '@shared/paperChatSchemas'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { SqliteRagRepository } from '../src/utility/core/persistence/sqliteRagRepository'
@@ -52,6 +53,14 @@ describe('paper chat Utility integration', () => {
       expect(settings).toMatchObject({ chatProvider: null, qwenChatModel: DEFAULT_SETTINGS.qwenChatModel, chatConsentVersion: null })
       repository.saveSettings({ ...settings, chatProvider: 'qwen', qwenChatModel: 'custom-chat', chatConsentVersion: 1 })
       expect(repository.getSettings(root)).toMatchObject({ chatProvider: 'qwen', qwenChatModel: 'custom-chat', chatConsentVersion: 1 })
+      const turn = { id: randomUUID(), createdAt: now, provider: 'qwen', model: 'qwen-plus', question: 'saved question', answer: 'saved answer', citations: {}, status: 'completed' }
+      await operations.handlers['chat:save-turn']!({ payload: { documentId, turn } } as never, signal)
+      await operations.handlers['chat:save-session']!({ payload: { documentId, session: { draft: 'next question', pinned: [], selectedModel: null } } } as never, signal)
+      const reopened = createUtilityOperationHandlers({ database, repository })
+      expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([turn])
+      expect(paperChatSessionSchema.parse(await reopened.handlers['chat:session']!({ payload: { documentId } } as never, signal)).draft).toBe('next question')
+      await reopened.handlers['chat:clear']!({ payload: { documentId } } as never, signal)
+      expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([])
       const migration = database.connection.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as { version: number }
       expect(migration.version).toBe(4)
       const cancelled = new AbortController(); cancelled.abort()

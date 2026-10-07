@@ -190,6 +190,7 @@ export class V2TaskRepositoryCompat {
       chatProvider: stored.chatProvider ?? DEFAULT_SETTINGS.chatProvider,
       qwenChatModel: stored.qwenChatModel ?? DEFAULT_SETTINGS.qwenChatModel,
       deepseekChatModel: stored.deepseekChatModel ?? DEFAULT_SETTINGS.deepseekChatModel,
+      chatConsentProvider: stored.chatConsentProvider ?? null,
       chatConsentVersion: stored.chatConsentVersion ?? null,
       credentials: DEFAULT_SETTINGS.credentials
     }

@@ -1,4 +1,5 @@
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
+import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
@@ -57,6 +58,10 @@ async function invokeValidated<Request, Response>(
 
 const api: CopilotixDesktopApi = {
   paperChat: {
+    load: (request) => invokeValidated('paper-chat:load', paperChatLoadRequestSchema, paperChatPageSchema, request),
+    session: (request) => invokeValidated('paper-chat:session', paperChatDocumentRequestSchema, paperChatSessionSchema, request),
+    saveSession: (request) => invokeValidated('paper-chat:save-session', paperChatSaveSessionSchema, paperChatSavedSchema, request),
+    clear: (request) => invokeValidated('paper-chat:clear', paperChatDocumentRequestSchema, paperChatClearedSchema, request),
     ask: (request) => invokeValidated('paper-chat:ask', paperChatAskRequestSchema, paperChatAskResultSchema, request),
     cancel: (request) => invokeValidated('paper-chat:cancel', paperChatCancelRequestSchema, paperChatCancelResultSchema, request),
     ensureIndex: (request) => invokeValidated('paper-chat:ensure-index', paperChatStatusRequestSchema, paperChatStatusSchema, request),

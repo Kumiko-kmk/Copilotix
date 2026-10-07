@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   chatProvider: null,
   qwenChatModel: 'qwen-plus',
   deepseekChatModel: 'deepseek-flash',
+  chatConsentProvider: null,
   chatConsentVersion: null,
   credentials: {
     parser: { state: 'missing' },

@@ -17,7 +17,7 @@ const pin = { view: 'original', text: 'text', contentRevisionId: 'revision1', fr
 describe('paper chat wire contracts', () => {
   it('bounds questions, pins, history, provider choices and model names', () => {
     expect(paperChatAskRequestSchema.parse(request)).toEqual(request)
-    for (const invalid of [{ question: '' }, { question: ' ' }, { question: 'a'.repeat(2001) }, { pinned: Array(9).fill(pin) }, { history: Array(13).fill({ role: 'user', content: 'x' }) }, { history: Array(4).fill({ role: 'user', content: 'x'.repeat(8192) }) }, { pinned: [{ ...pin, fragments: [{ ...pin.fragments[0], endOffset: 0 }] }] }, { baseUrl: 'https://attacker.test' }, { documentId: 'path/to/paper' }, { model: '' }, { model: 'bad\nmodel' }, { model: 'a'.repeat(129) }, { provider: 'deepseek' }]) {
+    for (const invalid of [{ question: '' }, { question: ' ' }, { question: 'a'.repeat(2001) }, { pinned: Array(9).fill(pin) }, { history: Array(13).fill({ role: 'user', content: 'x' }) }, { history: Array(4).fill({ role: 'user', content: 'x'.repeat(8192) }) }, { pinned: [{ ...pin, fragments: [{ ...pin.fragments[0], endOffset: 0 }] }] }, { baseUrl: 'https://attacker.test' }, { documentId: 'path/to/paper' }, { model: '' }, { model: 'bad\nmodel' }, { model: 'a'.repeat(129) }, { provider: 'bing' }]) {
       expect(() => paperChatAskRequestSchema.parse({ ...request, ...invalid })).toThrow()
     }
     const { credentials: _credentials, ...update } = DEFAULT_SETTINGS
@@ -38,7 +38,8 @@ describe('paper chat wire contracts', () => {
   })
   it('checks trusted IPC senders, payload bounds and unknown request IDs through the actual registrations', async () => {
     const handlers = new Map<string, (event: IpcInvokeEventLike, request: unknown) => Promise<unknown>>()
-    const service = new PaperChatService({ settings: vi.fn(async () => DEFAULT_SETTINGS), key: vi.fn(), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
+    const service = new PaperChatService({
+      saveTurn: vi.fn(), load: vi.fn(), session: vi.fn(), saveSession: vi.fn(), clear: vi.fn(), settings: vi.fn(async () => DEFAULT_SETTINGS), key: vi.fn(), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
     const owner = { isDestroyed: () => false }
     const entry = resolve('renderer/index.html')
     const url = pathToFileURL(entry).href
@@ -46,7 +47,7 @@ describe('paper chat wire contracts', () => {
     const event: IpcInvokeEventLike = { sender: { mainFrame: frame, getURL: () => url, isDestroyed: () => false, send: vi.fn() }, senderFrame: frame }
     const ensureIndex = vi.fn(async () => ({ state: 'queued' as const, progress: 0, contentRevisionId: null }))
     registerPaperChatHandlers(service, ensureIndex, { getMainWindow: () => owner, fromWebContents: () => owner, rendererEntryPath: entry, ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } })
-    expect([...handlers.keys()]).toEqual(['paper-chat:ask', 'paper-chat:cancel', 'paper-chat:ensure-index'])
+    expect([...handlers.keys()]).toEqual(['paper-chat:load', 'paper-chat:session', 'paper-chat:save-session', 'paper-chat:clear', 'paper-chat:ask', 'paper-chat:cancel', 'paper-chat:ensure-index'])
     const ask = handlers.get('paper-chat:ask')!
     await expect(ask({ ...event, senderFrame: { url } }, request)).resolves.toMatchObject({ ok: false, error: { code: 'UNTRUSTED_SENDER' } })
     for (const invalid of [{ question: 'a'.repeat(2001) }, { pinned: Array(9).fill(pin) }]) await expect(ask(event, { ...request, ...invalid })).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } })

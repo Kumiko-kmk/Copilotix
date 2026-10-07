@@ -99,6 +99,7 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   chatProvider: paperChatProviderSchema.nullable().default(null),
   qwenChatModel: chatModelSchema.default('qwen-plus'),
   deepseekChatModel: chatModelSchema.default('deepseek-flash'),
+  chatConsentProvider: paperChatProviderSchema.nullable().default(null),
   chatConsentVersion: z.number().int().min(1).max(1000).nullable().default(null),
   credentials: credentialStatusesSchema
 }).strict().refine(
@@ -120,6 +121,7 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
   chatProvider: paperChatProviderSchema.nullable().default(null),
   qwenChatModel: chatModelSchema.default('qwen-plus'),
   deepseekChatModel: chatModelSchema.default('deepseek-flash'),
+  chatConsentProvider: paperChatProviderSchema.nullable().default(null),
   chatConsentVersion: z.number().int().min(1).max(1000).nullable().default(null),
   credentialMutations: z.object({
     parser: credentialMutationSchema.optional(),

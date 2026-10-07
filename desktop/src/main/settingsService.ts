@@ -174,6 +174,7 @@ export class SettingsService {
     const candidateSettings = {
       ...current,
       ...publicUpdate,
+      chatConsentProvider: enabledTranslationProviders[0] !== current.translationProvider ? null : publicUpdate.chatConsentProvider,
       chatConsentVersion: enabledTranslationProviders[0] !== current.translationProvider ? null : publicUpdate.chatConsentVersion,
       qwenBaseUrl: DEFAULT_SETTINGS.qwenBaseUrl,
       qwenModel: DEFAULT_SETTINGS.qwenModel,

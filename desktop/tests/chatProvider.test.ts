@@ -103,4 +103,12 @@ describe('ChatProvider', () => {
     await expect(abortable(Promise.resolve(1), controller.signal)).rejects.toThrow()
     await expect(new ChatProvider(async () => new Response(new Uint8Array([255]))).stream(input())).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
   })
+  it.each([['deepseek-flash', 'disabled', 8192], ['deepseek-v4-pro', 'enabled', 32768]])('sets the documented thinking mode for %s and ignores reasoning packets', async (model, thinking, maxTokens) => {
+    const fetcher = vi.fn<ChatFetcher>(async () => response('data: {"choices":[{"delta":{"reasoning_content":"internal reasoning"}}]}\n\n' + packet('final answer') + done))
+    const onDelta = vi.fn()
+    await new ChatProvider(fetcher).stream({ ...input(onDelta), provider: 'deepseek', baseUrl: DEFAULT_SETTINGS.deepseekBaseUrl, model })
+    expect(JSON.parse(String(fetcher.mock.calls[0]![1].body))).toMatchObject({ model, thinking: { type: thinking }, max_tokens: maxTokens })
+    expect(onDelta.mock.calls).toEqual([['final answer']])
+  })
+
 })

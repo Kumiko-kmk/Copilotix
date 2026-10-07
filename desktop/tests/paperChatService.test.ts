@@ -14,6 +14,11 @@ const context: PaperContext = {
 function setup() {
   const settings = { ...DEFAULT_SETTINGS, chatProvider: 'qwen' as const, chatConsentVersion: CHAT_CONSENT_VERSION, credentials: { ...DEFAULT_SETTINGS.credentials, qwen: { state: 'valid' as const } } }
   const deps = {
+    saveTurn: vi.fn<PaperChatDependencies['saveTurn']>(async () => ({ saved: true })),
+    load: vi.fn<PaperChatDependencies['load']>(async () => ({ turns: [], next: null })),
+    session: vi.fn<PaperChatDependencies['session']>(async () => ({ draft: '', pinned: [], selectedModel: null })),
+    saveSession: vi.fn<PaperChatDependencies['saveSession']>(async () => ({ saved: true })),
+    clear: vi.fn<PaperChatDependencies['clear']>(async () => ({ cleared: true })),
     settings: vi.fn(async () => settings), key: vi.fn(async () => 'private key'), buildContext: vi.fn(async () => context),
     stream: vi.fn<PaperChatDependencies['stream']>(async ({ onDelta }) => { onDelta('private answer [E1] [E99]'); return { promptTokens: 3, completionTokens: 4, totalTokens: 7 } }),
     recordUsage: vi.fn(async () => undefined), log: vi.fn()
@@ -166,4 +171,41 @@ describe('PaperChatService', () => {
     expect(f.events.at(-1)).toMatchObject({ type: 'failed', error: { code: 'CHAT_CONSENT_REQUIRED' } })
     expect(f.deps.stream).not.toHaveBeenCalled()
   })
+  it('routes an explicitly selected DeepSeek model while keeping Qwen translation unchanged', async () => {
+    const f = setup()
+    Object.assign(f.settings.credentials, { deepseek: { state: 'valid' } }); f.settings.chatConsentProvider = 'deepseek'
+    await f.service.ask({ ...request, provider: 'deepseek', model: 'deepseek-v4-pro' }, f.send); await f.terminal()
+    expect(f.deps.key).toHaveBeenCalledWith('deepseek')
+    expect(f.deps.stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-pro', baseUrl: DEFAULT_SETTINGS.deepseekBaseUrl }))
+    expect(f.settings.translationProvider).toBe('qwen')
+    expect(f.deps.saveTurn.mock.calls.at(-1)).toEqual([doc, expect.objectContaining({ question: request.question, answer: 'private answer [E1] ', provider: 'deepseek', model: 'deepseek-v4-pro', status: 'completed', citations: { E1: expect.objectContaining({ documentId: doc, locator: context.evidence[0]!.locator }) } })])
+    expect(f.deps.saveTurn.mock.invocationCallOrder[0]).toBeLessThan(f.deps.stream.mock.invocationCallOrder[0]!)
+  })
+  it('requires durable question storage before starting a billable request and reports final save failures', async () => {
+    const f = setup()
+    f.deps.saveTurn.mockRejectedValueOnce(new Error('disk full'))
+    await expect(f.service.ask(request, f.send)).rejects.toMatchObject({ code: 'CHAT_STORAGE_FAILED' })
+    expect(f.deps.stream).not.toHaveBeenCalled()
+    expect(f.deps.buildContext).not.toHaveBeenCalled()
+    f.deps.saveTurn.mockResolvedValueOnce({ saved: true }).mockRejectedValue(new Error('disk full'))
+    await f.service.ask(request, f.send); await f.terminal()
+    expect(f.events.at(-1)).toMatchObject({ type: 'failed', error: { code: 'CHAT_STORAGE_FAILED' } })
+    expect(f.events.some((e) => e.type === 'completed')).toBe(false)
+  })
+  it('persists partial cancelled output before a clear and exposes session and paged history', async () => {
+    const f = setup()
+    f.deps.stream.mockImplementation(({ onDelta }) => { onDelta('partial output'); return new Promise(() => undefined) })
+    await f.service.ask(request, f.send)
+    await vi.waitFor(() => expect(f.deps.stream).toHaveBeenCalled())
+    await f.service.clear(doc)
+    expect(f.deps.saveTurn.mock.calls.at(-1)).toEqual([doc, expect.objectContaining({ answer: 'partial output', status: 'cancelled' })])
+    expect(f.deps.clear).toHaveBeenCalledWith(doc)
+    expect(f.deps.saveTurn.mock.invocationCallOrder.at(-1)!).toBeLessThan(f.deps.clear.mock.invocationCallOrder[0]!)
+    expect(await f.service.load({ documentId: doc })).toEqual({ turns: [], next: null })
+    expect(await f.service.session(doc)).toEqual({ draft: '', pinned: [], selectedModel: null })
+    await f.service.saveSession(doc, { draft: 'draft', pinned: [], selectedModel: null })
+    expect(f.deps.saveSession).toHaveBeenCalledWith(doc, { draft: 'draft', pinned: [], selectedModel: null })
+    await f.service.settle()
+  })
+
 })
