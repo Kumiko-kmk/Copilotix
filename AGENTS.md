@@ -40,7 +40,7 @@ release-artifacts/<build-id>/program/Copilotix.exe
 同目錄的 DLL、PAK、`resources/` 等文件是運行所必需的，不要把 EXE 單獨移出。完整 ZIP 位於：
 
 ```text
-release-artifacts/<build-id>/Copilotix-1.0.0-win-x64.zip
+release-artifacts/<build-id>/Copilotix-<version>-win-x64.zip
 ```
 
 ### 僅重新打包
@@ -145,13 +145,11 @@ pnpm desktop:release:from-built
 
 ## 12. 共享開發進度（2026-10-07，可直接清理）
 
-此節是所有 Agent 共享的目前進度，不是某位 Agent 的私人記錄。後續 Agent 可直接更新；若已過時，可整段刪除此節，無須保留舊進度或額外審批。只刪除這個進度區塊；`AGENTS.md` 文件及其他長期協作規則仍須保留。跨 worktree 查閱的本次實作位置為 `Copilotix-master-updated`／`codex/reader-ai-chat`，Git 傳遞仍依協作規則。
+此節是所有 Agent 共享的目前進度，不是私人記錄。後續 Agent 可直接更新；若已過時，可整段刪除此節，無須保留舊進度或額外審批。`AGENTS.md` 文件及其他長期協作規則仍須保留。
 
-- 已完成：DeepSeek／Qwen 預設問答模型、按文獻保存並恢復聊天／草稿／選區；取消自訂模型支援，舊選擇回退預設而保留歷史對話。
-- 閱讀器：正文段落上下間距 3px；PDF 無外圍留白、邊框與陰影；欄寬／縮放改變保留頁號及頁內位置；只保留原文 Markdown、中文 Markdown、AI 問答三個頁籤，移除 JSON 展示。最新修正清除了原生捲動條右側／底部佔位、24px 頁間及末頁留白、8px 分隔器佔位，保留浮動捲動條拖曳。
-- 最新本地驗證（使用者明確要求測試）：typecheck、PDF／分隔器／聊天儲存 20 項單元測試、四個 bundle 和 Utility smoke 通過。兩項 Electron E2E 通過：反覆欄寬拖曳／鍵盤调整及縮放保持頁碼與頁內位置；真實 15 頁論文在 100%／120% 無右側／底部 gutter、無頁間 gap、兩軸浮動捲動條可拖曳、末頁底邊貼合。已人工檢查測試截圖。未執行完整 CI，付費 API 仍待真人驗收。
-- 使用者此次明確要求不打包，現有 `release-artifacts/muxofbtq-39548-6096bb0c/program/Copilotix.exe` 及 `release/setup.exe` 保持原樣，**不含最新 PDF 邊緣修正**；不可把它們當成最新已測版本交付。此前打包 smoke 結果只對此前產物有效。
-- 2026-10-07 另開 `ui/reader-workbench`（基於 `codex/reader-ai-chat` 1f6c18f）完成編輯器式閱讀工作台第一至三階段（分組／拆分／拖曳／最大化／快捷鍵／捲動同步／引用顯示），見第 7 節；僅本地 commit，未 push；依第 8 節未跑本地測試，只以 Node 24.19.0 build 四個 bundle 並人工檢查 Electron 截圖（預設佈局、右鍵拆分、向下拆分、關閉／重開、原文｜中文並排點選聯動）。
-- 2026-10-07 閱讀器版面緊湊化：視窗標題列 32→28px、閱讀器資訊列 44→36px、工作台頁籤列 48→40px，閱讀區多出 20px；e2e 高度斷言同步更新。最新本地包 `release-artifacts/muxvhkb6-3084-bb0c9178/`（含工作台三階段與緊湊版面），舊產物目錄已按使用者要求清理；僅通過打包內建校驗，未跑 CI。
-- 遠端唯讀核對後只有 `master`、`codex/reader-ai-chat`、`codex/rag-review-20260923`；兩個開發分支均未合併，使用者明確選擇保留三個分支，因此未刪遠端分支。本次程式及產物沒有 push／上傳；後續遠端修改仍需符合當時的使用者授權。
-- 1.1.0 發布：使用者已明確授權同步現有分支及發布，並明確同意 **僅本次 1.1.0 未簽章發布**。目前分支 `ui/reader-workbench`，簡體中文說明為 `docs/releases/1.1.0.zh-CN.md`，發布工作流讀取同版號說明；未簽章例外須同時匹配 `desktop-v1.1.0` 與 `COPILOTIX_UNSIGNED_RELEASE_TAG=desktop-v1.1.0`，完成後移除變量，未放寬後續版本簽章要求。以本輪最新 CI／產物結果為準。
+- 目前實作位置為 `Copilotix-master-updated`／`ui/reader-workbench`，包含此前 `codex/reader-ai-chat` 的問答和 PDF 修正。其他 worktree 未改動；跨分支傳遞仍依協作規則。
+- 已完成：DeepSeek／Qwen 預設問答模型，按文獻原子保存並恢復對話、草稿、選區和模型；取消自訂模型，保留歷史記錄；移除 JSON 閱讀視圖。詳見第 7 節及 `docs/READER_AI_CHAT_PLAN_ZH.md`。
+- 閱讀器：PDF 外圍、右側、底部和頁間無額外 gutter，浮動捲動條不佔版面；欄寬／縮放保留頁碼及頁內位置；正文間距和工作台頂部緊湊化。編輯器式工作台的分組、拆分、拖曳、最大化、快捷鍵、段落同步及引用定位已完成，契約見第 7 節。
+- 1.1.0：使用者已明確授權提交、同步現有分支及發布，並同意 **僅本次 1.1.0 未簽章發布**。完整簡體中文說明為 `docs/releases/1.1.0.zh-CN.md`；工作流讀取同版號說明，發布 Setup、ZIP、SHA256SUMS 和 manifest。未簽章例外同時要求 `desktop-v1.1.0` 與 `COPILOTIX_UNSIGNED_RELEASE_TAG=desktop-v1.1.0`，成功發布後移除變量，其他版本仍要求受信任簽章。
+- 本輪本地 build、打包內建校驗及 bundle／ASAR 一致性檢查已完成；完整 lint、typecheck、覆蓋率、Electron、安裝生命週期和下載驗收由遠端 CI 執行。修正了過時的版本、錯誤碼、草稿斷言及 E2E 佔位 artifact 哈希；未降低覆蓋率或移除門禁。最終驗證和下載以 `desktop-v1.1.0` 對應 Actions／Release 為準；付費模型及個人硬體仍需真人驗收。
+- 使用者此前選擇保留 `master`、`codex/reader-ai-chat`、`codex/rag-review-20260923`；本次同步另加入現有工作台分支，未刪除任何需保留或尚未合併的分支。
