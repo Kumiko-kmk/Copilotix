@@ -204,6 +204,92 @@ test('fits PDF pages without an outer frame and preserves the current page while
   }
 })
 
+test('uses the entire PDF viewport without scrollbar gutters or page gaps on a real paper', async ({}, testInfo) => {
+  const workspace = await createE2EWorkspace()
+  const taskId = await seedReaderTask(workspace, { sourcePdf: join(__dirname, '../resources/tutorial/Attention Is All You Need.pdf') })
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await openPaper(window, taskId)
+    const scroller = window.locator('.pdf-scroll')
+    await expect(window.getByText('1 / 15')).toBeVisible()
+    await expect.poll(() => window.locator('[data-pdf-page="1"] canvas').evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
+    const expectNoGutters = async (): Promise<void> => {
+      const dimensions = await scroller.evaluate((element) => {
+        const parent = element.parentElement!.getBoundingClientRect()
+        const bounds = element.getBoundingClientRect()
+        return { rightGutter: element.offsetWidth - element.clientWidth, bottomGutter: element.offsetHeight - element.clientHeight,
+          rightInset: parent.right - bounds.right, bottomInset: parent.bottom - bounds.bottom }
+      })
+      expect(dimensions).toEqual({ rightGutter: 0, bottomGutter: 0, rightInset: 0, bottomInset: 0 })
+    }
+    await expectNoGutters()
+    expect(await window.locator('.reader-split').evaluate((element) => {
+      const panes = element.querySelectorAll('.reader-split-pane')
+      return Math.abs(panes[1]!.getBoundingClientRect().left - panes[0]!.getBoundingClientRect().right)
+    })).toBeLessThan(0.1)
+    await expect(window.locator('.reader-split-handle')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect.poll(() => scroller.evaluate((element) => {
+      const page = element.querySelector('.pdf-page')!.getBoundingClientRect()
+      return Math.abs(page.right - element.getBoundingClientRect().right)
+    })).toBeLessThan(1)
+    await expect.poll(() => window.locator('[data-pdf-page="0"]').evaluate((page) => {
+      const next = page.parentElement!.querySelector('[data-pdf-page="1"]')!
+      return Math.abs(next.getBoundingClientRect().top - page.getBoundingClientRect().bottom)
+    })).toBeLessThan(0.1)
+    await scroller.evaluate((element) => {
+      const next = element.querySelector('[data-pdf-page="1"]')!.getBoundingClientRect()
+      element.scrollTo({ top: element.scrollTop + next.top - element.getBoundingClientRect().top - element.clientHeight * 0.7, behavior: 'instant' })
+    })
+    await window.mouse.move(20, 20)
+    await window.locator('.pdf-viewport').screenshot({ path: testInfo.outputPath('pdf-no-frame-100.png') })
+    await window.getByLabel('放大', { exact: true }).click()
+    await window.getByLabel('放大', { exact: true }).click()
+    await expect(window.getByText('120%')).toBeVisible()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    await expectNoGutters()
+    const viewport = (await scroller.boundingBox())!
+    await window.mouse.move(viewport.x + viewport.width - 1, viewport.y + viewport.height - 1)
+    const vertical = window.getByRole('scrollbar', { name: 'PDF 垂直滚动' })
+    const horizontal = window.getByRole('scrollbar', { name: 'PDF 水平滚动' })
+    await expect(vertical).toHaveClass(/visible/)
+    await expect(horizontal).toHaveClass(/visible/)
+    await expectNoGutters()
+    const oldLeft = await scroller.evaluate((element) => element.scrollLeft)
+    const horizontalThumb = (await horizontal.locator('.pdf-scrollbar-thumb').boundingBox())!
+    await window.mouse.move(horizontalThumb.x + horizontalThumb.width / 2, horizontalThumb.y + horizontalThumb.height / 2)
+    await window.mouse.down()
+    await window.mouse.move(horizontalThumb.x + horizontalThumb.width / 2 + 25, horizontalThumb.y + horizontalThumb.height / 2, { steps: 5 })
+    await window.mouse.up()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(oldLeft)
+    await window.mouse.move(viewport.x + viewport.width - 1, viewport.y + viewport.height / 2)
+    const oldTop = await scroller.evaluate((element) => element.scrollTop)
+    const verticalThumb = (await vertical.locator('.pdf-scrollbar-thumb').boundingBox())!
+    await window.mouse.move(verticalThumb.x + verticalThumb.width / 2, verticalThumb.y + verticalThumb.height / 2)
+    await window.mouse.down()
+    await window.mouse.move(verticalThumb.x + verticalThumb.width / 2, verticalThumb.y + verticalThumb.height / 2 + 25, { steps: 5 })
+    await window.mouse.up()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(oldTop)
+    await window.mouse.move(20, 20)
+    await expect(vertical).not.toHaveClass(/visible/)
+    await expect(horizontal).not.toHaveClass(/visible/)
+    await expect(vertical).toHaveCSS('opacity', '0')
+    await expect(horizontal).toHaveCSS('opacity', '0')
+    await expectNoGutters()
+    await window.locator('.pdf-viewport').screenshot({ path: testInfo.outputPath('pdf-no-frame-120.png') })
+    await vertical.press('End')
+    await expect(window.getByText('15 / 15')).toBeVisible()
+    await expect.poll(() => scroller.evaluate((element) => {
+      const last = element.querySelector('[data-pdf-page="14"]')!.getBoundingClientRect()
+      return Math.abs(last.bottom - element.getBoundingClientRect().bottom)
+    })).toBeLessThan(1)
+    await expectNoGutters()
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
 test('renders a local PDF with range requests before parsing succeeds', async () => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {

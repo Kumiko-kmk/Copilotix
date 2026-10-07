@@ -53,6 +53,7 @@ beforeEach(() => {
     configurable: true,
     value: scrollIntoView
   })
+  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { configurable: true, value: vi.fn() })
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
     configurable: true,
     value(this: HTMLElement, options: ScrollToOptions) {
@@ -189,7 +190,7 @@ describe('PdfPane mapping navigation', () => {
       expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(false)
 
       fireEvent.pointerMove(scroller, { clientX: 390, clientY: 150 })
-      fireEvent.pointerDown(scroller)
+      fireEvent.pointerDown(view.getByRole('scrollbar', { name: 'PDF 垂直滚动' }), { button: 0, pointerId: 1 })
       fireEvent.pointerMove(scroller, { clientX: 200, clientY: 150 })
       act(() => vi.advanceTimersByTime(500))
       expect(scroller.classList.contains('pdf-scrollbar-y-visible')).toBe(true)
@@ -333,9 +334,9 @@ describe('PDF long-document indexing', () => {
 
   it('locates pages by binary-searchable cumulative geometry', () => {
     const layout = buildPdfPageLayout(Array.from({ length: 1000 }, () => ({ width: 600, height: 800 })), 600, 1)
-    expect(layout.totalHeight).toBe(824_000)
+    expect(layout.totalHeight).toBe(800_000)
     expect(pageIndexAtOffset(layout, 0)).toBe(0)
-    expect(pageIndexAtOffset(layout, 824 * 500 + 20)).toBe(500)
+    expect(pageIndexAtOffset(layout, 800 * 500 + 20)).toBe(500)
     expect(pageIndexAtOffset(layout, layout.totalHeight)).toBe(999)
   })
 

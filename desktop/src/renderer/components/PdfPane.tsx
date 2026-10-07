@@ -13,7 +13,6 @@ type LoadingState =
   | { status: 'error'; message: string }
 
 const PAGE_RENDER_RADIUS = 1
-const PDF_PAGE_GAP = 24
 const PDF_VIEWPORT_FOCUS = 0.45
 const PDF_MAX_CANVAS_PIXELS = 8 * 1024 * 1024
 const PDF_MAX_CANVAS_DIMENSION = 8192
@@ -26,6 +25,15 @@ interface ScrollbarVisibility {
 }
 
 const HIDDEN_SCROLLBARS: ScrollbarVisibility = { horizontal: false, vertical: false }
+interface ScrollMetrics {
+  width: number
+  height: number
+  contentWidth: number
+  contentHeight: number
+  left: number
+  top: number
+}
+const EMPTY_SCROLL_METRICS: ScrollMetrics = { width: 0, height: 0, contentWidth: 0, contentHeight: 0, left: 0, top: 0 }
 
 export default function PdfPane(props: {
   url: string
@@ -42,6 +50,18 @@ export default function PdfPane(props: {
   const [reloadKey, setReloadKey] = React.useState(0)
   const [scrollbars, setScrollbars] = React.useState<ScrollbarVisibility>(HIDDEN_SCROLLBARS)
   const scrollerRef = React.useRef<HTMLDivElement>(null)
+  const scrollerId = React.useId()
+  const [scrollMetrics, setScrollMetrics] = React.useState(EMPTY_SCROLL_METRICS)
+  const updateScrollMetrics = React.useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const next: ScrollMetrics = {
+      width: scroller.clientWidth, height: scroller.clientHeight,
+      contentWidth: scroller.scrollWidth, contentHeight: scroller.scrollHeight,
+      left: scroller.scrollLeft, top: scroller.scrollTop
+    }
+    setScrollMetrics((current) => Object.keys(next).every((key) => current[key as keyof ScrollMetrics] === next[key as keyof ScrollMetrics]) ? current : next)
+  }, [])
   const scrollbarHideTimerRef = React.useRef<number | null>(null)
   const scrollbarDraggingRef = React.useRef(false)
   const scrollFrameRef = React.useRef<number | null>(null)
@@ -74,6 +94,7 @@ export default function PdfPane(props: {
     if (scrollbarDraggingRef.current) return
     const scroller = scrollerRef.current
     if (!scroller) return
+    updateScrollMetrics()
     const bounds = scroller.getBoundingClientRect()
     const hasHorizontalOverflow = scroller.scrollWidth > scroller.clientWidth
     const hasVerticalOverflow = scroller.scrollHeight > scroller.clientHeight
@@ -94,13 +115,12 @@ export default function PdfPane(props: {
     }
     cancelScrollbarHide()
     setScrollbars((current) => current.horizontal === next.horizontal && current.vertical === next.vertical ? current : next)
-  }, [cancelScrollbarHide, hideScrollbars, scheduleScrollbarHide])
+  }, [cancelScrollbarHide, hideScrollbars, scheduleScrollbarHide, updateScrollMetrics])
 
   const startScrollbarDrag = React.useCallback(() => {
-    if (!scrollbars.horizontal && !scrollbars.vertical) return
     cancelScrollbarHide()
     scrollbarDraggingRef.current = true
-  }, [cancelScrollbarHide, scrollbars.horizontal, scrollbars.vertical])
+  }, [cancelScrollbarHide])
 
   const finishScrollbarDrag = React.useCallback(() => {
     if (!scrollbarDraggingRef.current) return
@@ -157,12 +177,13 @@ export default function PdfPane(props: {
     const measure = (): void => {
       const next = readPdfContentWidth(scroller)
       setContentWidth((current) => current === next ? current : next)
+      updateScrollMetrics()
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(scroller)
     return () => observer.disconnect()
-  }, [])
+  }, [updateScrollMetrics])
 
   React.useLayoutEffect(() => {
     const scroller = scrollerRef.current
@@ -189,6 +210,8 @@ export default function PdfPane(props: {
     }
     scrollAnchorRef.current = capturePdfScrollAnchor(pageLayout, scroller.scrollTop, scroller.clientHeight)
   }, [document, pageLayout])
+
+  React.useLayoutEffect(updateScrollMetrics, [pageLayout, currentPage, updateScrollMetrics])
 
   React.useEffect(() => {
     const selection = props.selection
@@ -241,12 +264,13 @@ export default function PdfPane(props: {
     if (scrollFrameRef.current !== null) return
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null
+      updateScrollMetrics()
       const scroller = scrollerRef.current
       if (!scroller || pageLayoutRef.current.pages.length === 0) return
       const pageIndex = pageIndexAtOffset(pageLayoutRef.current, scroller.scrollTop + scroller.clientHeight * PDF_VIEWPORT_FOCUS)
       setCurrentPage((current) => current === pageIndex + 1 ? current : pageIndex + 1)
     })
-  }, [])
+  }, [updateScrollMetrics])
   const retry = React.useCallback(() => setReloadKey((value) => value + 1), [])
   const onPageError = React.useCallback((message: string) => setLoadingState({ status: 'error', message }), [])
   const onPdfBlock = React.useCallback((mappingId: string, blockPosition: string) => {
@@ -266,60 +290,122 @@ export default function PdfPane(props: {
           <Button disabled={!document} type="text" icon={<PlusOutlined />} onClick={() => setZoom((value) => Math.min(2, value + 0.1))} aria-label="放大" />
         </Space>
       </div>
-      <div
-        className={`pdf-scroll${scrollbars.vertical ? ' pdf-scrollbar-y-visible' : ''}${scrollbars.horizontal ? ' pdf-scrollbar-x-visible' : ''}`}
-        ref={scrollerRef}
-        aria-live="polite"
-        onPointerMove={revealScrollbarsNearEdge}
-        onPointerLeave={scheduleScrollbarHide}
-        onPointerDown={startScrollbarDrag}
-        onScroll={onPdfScroll}
-      >
-        {loadingState.status === 'loading' ? (
-          <div className="pdf-loading">
-            <span>正在加载 PDF…</span>
-            {loadingState.progress === null ? null : <Progress percent={loadingState.progress} size="small" />}
-          </div>
-        ) : null}
-        {loadingState.status === 'error' ? (
-          <Alert
-            className="pdf-error"
-            type="error"
-            showIcon
-            message="PDF 无法打开"
-            description={loadingState.message}
-            action={<Button icon={<ReloadOutlined />} onClick={retry}>重新加载</Button>}
-          />
-        ) : null}
-        {document && loadingState.status === 'ready'
-          ? <>
-            {renderWindow.start > 0 ? <div className="pdf-page-spacer" style={{ height: pageLayout.pages[renderWindow.start]?.top ?? 0 }} aria-hidden="true" /> : null}
-            {Array.from({ length: renderWindow.end - renderWindow.start }, (_, offset) => {
-              const pageIndex = renderWindow.start + offset
-              const baseSize = pageSizes[pageIndex] ?? DEFAULT_PDF_PAGE_SIZE
-              return (
-            <PdfPage
-              key={pageIndex}
-              document={document}
-              pageIndex={pageIndex}
-              renderPriority={Math.abs(pageIndex - (currentPage - 1))}
-              zoom={zoom}
-              contentWidth={contentWidth}
-              baseSize={baseSize}
-              mappings={mappingsByPage[pageIndex] ?? EMPTY_PAGE_MAPPINGS}
-              selection={props.selection}
-              onSelect={onPdfBlock}
-              onPageSize={onPageSize}
-              onError={onPageError}
+      <div className="pdf-viewport" onPointerMove={revealScrollbarsNearEdge} onPointerLeave={scheduleScrollbarHide}>
+        <div
+          className={`pdf-scroll${scrollbars.vertical ? ' pdf-scrollbar-y-visible' : ''}${scrollbars.horizontal ? ' pdf-scrollbar-x-visible' : ''}`}
+          ref={scrollerRef}
+          id={scrollerId}
+          aria-live="polite"
+          onScroll={onPdfScroll}
+        >
+          {loadingState.status === 'loading' ? (
+            <div className="pdf-loading">
+              <span>正在加载 PDF…</span>
+              {loadingState.progress === null ? null : <Progress percent={loadingState.progress} size="small" />}
+            </div>
+          ) : null}
+          {loadingState.status === 'error' ? (
+            <Alert
+              className="pdf-error"
+              type="error"
+              showIcon
+              message="PDF 无法打开"
+              description={loadingState.message}
+              action={<Button icon={<ReloadOutlined />} onClick={retry}>重新加载</Button>}
             />
-              )
-            })}
-            {renderWindow.end < pageSizes.length ? <div className="pdf-page-spacer" style={{ height: remainingPdfLayoutHeight(pageLayout, renderWindow.end) }} aria-hidden="true" /> : null}
-          </>
-          : null}
+          ) : null}
+          {document && loadingState.status === 'ready'
+            ? <>
+              {renderWindow.start > 0 ? <div className="pdf-page-spacer" style={{ height: pageLayout.pages[renderWindow.start]?.top ?? 0 }} aria-hidden="true" /> : null}
+              {Array.from({ length: renderWindow.end - renderWindow.start }, (_, offset) => {
+                const pageIndex = renderWindow.start + offset
+                const baseSize = pageSizes[pageIndex] ?? DEFAULT_PDF_PAGE_SIZE
+                return (
+              <PdfPage
+                key={pageIndex}
+                document={document}
+                pageIndex={pageIndex}
+                renderPriority={Math.abs(pageIndex - (currentPage - 1))}
+                zoom={zoom}
+                contentWidth={contentWidth}
+                baseSize={baseSize}
+                mappings={mappingsByPage[pageIndex] ?? EMPTY_PAGE_MAPPINGS}
+                selection={props.selection}
+                onSelect={onPdfBlock}
+                onPageSize={onPageSize}
+                onError={onPageError}
+              />
+                )
+              })}
+              {renderWindow.end < pageSizes.length ? <div className="pdf-page-spacer" style={{ height: remainingPdfLayoutHeight(pageLayout, renderWindow.end) }} aria-hidden="true" /> : null}
+            </>
+            : null}
+        </div>
+        {(['vertical', 'horizontal'] as const).map((axis) => (
+          <PdfScrollbar key={axis} axis={axis} visible={scrollbars[axis]} metrics={scrollMetrics}
+            scrollerRef={scrollerRef} scrollerId={scrollerId} onDragStart={startScrollbarDrag} onDragEnd={finishScrollbarDrag} />
+        ))}
       </div>
     </div>
   )
+}
+
+function PdfScrollbar(props: {
+  axis: 'vertical' | 'horizontal'
+  visible: boolean
+  metrics: ScrollMetrics
+  scrollerRef: React.RefObject<HTMLDivElement | null>
+  scrollerId: string
+  onDragStart(): void
+  onDragEnd(): void
+}): React.JSX.Element | null {
+  const vertical = props.axis === 'vertical'
+  const viewport = vertical ? props.metrics.height : props.metrics.width
+  const content = vertical ? props.metrics.contentHeight : props.metrics.contentWidth
+  const offset = vertical ? props.metrics.top : props.metrics.left
+  const maximum = Math.max(0, content - viewport)
+  const thumbLength = Math.min(viewport, Math.max(32, viewport * viewport / content))
+  const travel = viewport - thumbLength
+  const drag = React.useRef<{ pointerId: number; coordinate: number; offset: number } | null>(null)
+  if (maximum <= 0 || travel <= 0) return null
+  const move = (position: number): void => {
+    props.scrollerRef.current?.scrollTo({ [vertical ? 'top' : 'left']: Math.max(0, Math.min(maximum, position)), behavior: 'instant' })
+  }
+  const finish = (): void => {
+    drag.current = null
+    props.onDragEnd()
+  }
+  return <div className={`pdf-scrollbar pdf-scrollbar-${props.axis}${props.visible ? ' visible' : ''}`}
+    role="scrollbar" tabIndex={0} aria-label={vertical ? 'PDF 垂直滚动' : 'PDF 水平滚动'}
+    aria-controls={props.scrollerId} aria-orientation={props.axis} aria-valuemin={0} aria-valuemax={maximum} aria-valuenow={offset}
+    onPointerDown={(event) => {
+      if (event.button !== 0) return
+      event.preventDefault()
+      const coordinate = vertical ? event.clientY : event.clientX
+      if (event.target === event.currentTarget) {
+        const bounds = event.currentTarget.getBoundingClientRect()
+        move((coordinate - (vertical ? bounds.top : bounds.left) - thumbLength / 2) * maximum / travel)
+      }
+      drag.current = { pointerId: event.pointerId, coordinate, offset: vertical ? props.scrollerRef.current?.scrollTop ?? 0 : props.scrollerRef.current?.scrollLeft ?? 0 }
+      event.currentTarget.setPointerCapture(event.pointerId)
+      props.onDragStart()
+    }}
+    onPointerMove={(event) => {
+      const origin = drag.current
+      if (!origin || origin.pointerId !== event.pointerId) return
+      move(origin.offset + ((vertical ? event.clientY : event.clientX) - origin.coordinate) * maximum / travel)
+    }}
+    onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish}
+    onKeyDown={(event) => {
+      const change = ({ ArrowUp: -40, ArrowDown: 40, ArrowLeft: -40, ArrowRight: 40, PageUp: -viewport * 0.9, PageDown: viewport * 0.9 } as Record<string, number>)[event.key]
+      if (change === undefined && event.key !== 'Home' && event.key !== 'End') return
+      event.preventDefault()
+      move(event.key === 'Home' ? 0 : event.key === 'End' ? maximum : offset + (change ?? 0))
+    }}>
+    <div className="pdf-scrollbar-thumb" style={vertical
+      ? { height: thumbLength, top: offset / maximum * travel }
+      : { width: thumbLength, left: offset / maximum * travel }} />
+  </div>
 }
 
 const PdfPage = React.memo(function PdfPage(props: {
@@ -522,7 +608,7 @@ export function buildPdfPageLayout(
   const pages = pageSizes.map((size) => {
     const top = consumed
     const metrics = pdfPageMetrics(size, contentWidth, zoom)
-    consumed += metrics.height + PDF_PAGE_GAP
+    consumed += metrics.height
     return { top, width: metrics.width, height: metrics.height }
   })
   return { pages, totalHeight: consumed }

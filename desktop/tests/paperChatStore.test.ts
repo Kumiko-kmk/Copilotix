@@ -11,7 +11,7 @@ const roots: string[] = []
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'copilotix-chat-store-')); roots.push(root)
-  const ids = [randomUUID(), randomUUID()]
+  const ids: string[] = [randomUUID(), randomUUID()]
   for (const id of ids) await mkdir(join(root, id))
   const store = () => new PaperChatStore((id) => ids.includes(id) ? join(root, id) : null)
   const turn = (index = 0): StoredPaperChatTurn => ({ id: randomUUID(), createdAt: new Date(1_790_000_000_000 + index).toISOString(), provider: 'deepseek', model: 'deepseek-flash', question: `问题 ${index}`, answer: `回答 ${index}`, citations: {}, status: 'completed' })
