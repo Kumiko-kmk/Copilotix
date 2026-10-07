@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   LAYOUT_STORAGE_KEY,
   activateView,
+  adjacentGroup,
   defaultReaderLayout,
   equalizeSplit,
   groupOfView,
@@ -87,6 +88,23 @@ describe('reader layout model', () => {
       hidden: []
     })
     expect(listGroups(moved.root)).toHaveLength(1)
+  })
+
+  it('reorders tabs when a view is dropped back into its own group', () => {
+    const layout = defaultReaderLayout()
+    // Slot 3 = after the last tab; slot 0 = before the first.
+    expect(moveView(layout, 'original', 'g2', 3).root).toMatchObject({ children: [{}, { views: ['translated', 'chat', 'original'], active: 'original' }] })
+    expect(moveView(layout, 'chat', 'g2', 0).root).toMatchObject({ children: [{}, { views: ['chat', 'original', 'translated'], active: 'chat' }] })
+    // Dropping a tab next to itself only selects it.
+    expect(moveView(layout, 'translated', 'g2', 2).root).toMatchObject({ children: [{}, { views: ['original', 'translated', 'chat'], active: 'translated' }] })
+  })
+
+  it('finds neighbouring groups in reading order', () => {
+    const layout = splitView(defaultReaderLayout(), 'chat', 'g2', 'bottom')
+    const order = listGroups(layout.root).map((group) => group.id)
+    expect(adjacentGroup(layout, order[0]!, 1)?.id).toBe(order[1])
+    expect(adjacentGroup(layout, order[0]!, -1)).toBeUndefined()
+    expect(adjacentGroup(layout, order.at(-1)!, 1)).toBeUndefined()
   })
 
   it('hides and reopens views but never hides the last visible one', () => {

@@ -116,12 +116,24 @@ export function revealView(layout: ReaderLayout, view: ReaderViewId, targetGroup
   return normalizeLayout({ ...layout, root, hidden: layout.hidden.filter((item) => item !== view) })
 }
 
-/** Move a visible view into another group as its active tab. */
+/**
+ * Move a visible view into a group as its active tab. `index` is the insertion
+ * slot among the target's current tabs (0…length), so dropping a tab within its
+ * own group reorders it.
+ */
 export function moveView(layout: ReaderLayout, view: ReaderViewId, targetGroupId: string, index?: number): ReaderLayout {
   const source = groupOfView(layout, view)
   const target = findGroup(layout, targetGroupId)
   if (!source || !target) return layout
-  if (source.id === target.id) return activateView(layout, view)
+  if (source.id === target.id) {
+    if (index === undefined) return activateView(layout, view)
+    const current = source.views.indexOf(view)
+    const at = Math.max(0, Math.min(source.views.length - 1, index > current ? index - 1 : index))
+    if (at === current) return activateView(layout, view)
+    const views = source.views.filter((item) => item !== view)
+    views.splice(at, 0, view)
+    return withRoot(layout, mapGroups(layout.root, (group) => group.id === source.id ? { ...group, views, active: view } : group))
+  }
   const removed = removeView(layout.root, view)
   if (!removed) return layout
   const root = mapGroups(removed, (group) => {
@@ -185,6 +197,13 @@ export function equalizeSplit(layout: ReaderLayout, splitId: string): ReaderLayo
   return withRoot(layout, mapSplits(layout.root, (split) => split.id === splitId
     ? { ...split, sizes: split.children.map(() => 100 / split.children.length) }
     : split))
+}
+
+/** The group before/after `groupId` in reading order (left-to-right, top-to-bottom). */
+export function adjacentGroup(layout: ReaderLayout, groupId: string, offset: -1 | 1): LayoutGroup | undefined {
+  const groups = listGroups(layout.root)
+  const index = groups.findIndex((group) => group.id === groupId)
+  return index < 0 ? undefined : groups[index + offset]
 }
 
 /** The split that directly contains a node, if any. */

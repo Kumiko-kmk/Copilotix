@@ -4,9 +4,9 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@shared/readerDocument'
-import ReaderWorkbench from '../src/renderer/components/ReaderWorkbench'
+import ReaderWorkbench, { dropVerdict, dropZoneAt } from '../src/renderer/components/ReaderWorkbench'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../src/renderer/components/ReaderViews'
-import { normalizeLayout, type ReaderLayout } from '../src/renderer/readerLayout'
+import { defaultReaderLayout, normalizeLayout, type ReaderLayout } from '../src/renderer/readerLayout'
 import type { PaperChatController } from '../src/renderer/usePaperChat'
 
 vi.mock('../src/renderer/components/ReaderChatPanel', () => ({
@@ -171,6 +171,70 @@ describe('ReaderWorkbench', () => {
     fireEvent.doubleClick(separator)
     expect(separator.getAttribute('aria-valuenow')).toBe('50')
     expect(onLayout).toHaveBeenCalled()
+  })
+})
+
+describe('tab drop targets', () => {
+  const bounds = { left: 100, top: 50, width: 800, height: 600 }
+
+  it('maps the edge quarters to splits and the middle to a merge', () => {
+    expect(dropZoneAt(bounds, 500, 350)).toBe('center')
+    expect(dropZoneAt(bounds, 120, 350)).toBe('left')
+    expect(dropZoneAt(bounds, 880, 350)).toBe('right')
+    expect(dropZoneAt(bounds, 500, 60)).toBe('top')
+    expect(dropZoneAt(bounds, 500, 640)).toBe('bottom')
+    expect(dropZoneAt({ left: 0, top: 0, width: 0, height: 0 }, 1, 1)).toBe('center')
+  })
+
+  it('rejects drops that would change nothing or leave a group too small', () => {
+    const layout = defaultReaderLayout()
+    expect(dropVerdict(layout, 'translated', 'g2', 'center')).toEqual({ allowed: false, reason: '已在此分组' })
+    expect(dropVerdict(layout, 'pdf', 'g1', 'right')).toEqual({ allowed: false, reason: '已在此分组' })
+    expect(dropVerdict(layout, 'translated', 'g2', 'right', bounds)).toEqual({ allowed: true })
+    expect(dropVerdict(layout, 'translated', 'g2', 'right', { ...bounds, width: 400 })).toEqual({ allowed: false, reason: '空间不足' })
+    expect(dropVerdict(layout, 'translated', 'g2', 'bottom', { ...bounds, height: 250 })).toEqual({ allowed: false, reason: '空间不足' })
+    expect(dropVerdict(layout, 'pdf', 'g2', 'center')).toEqual({ allowed: true })
+  })
+})
+
+describe('workbench keyboard shortcuts and maximize', () => {
+  it('switches, closes, restores and splits views from the keyboard', async () => {
+    const view = render(<Harness />)
+    const selected = (): string | null => view.container.querySelector('[role="tab"][aria-selected="true"] .reader-tab-label')?.textContent ?? null
+
+    fireEvent.keyDown(window, { key: '3', ctrlKey: true })
+    expect(selected()).toBe('Markdown（中文）')
+    fireEvent.keyDown(window, { key: 'w', ctrlKey: true })
+    expect(view.queryByRole('tab', { name: /Markdown（中文）/u })).toBeNull()
+    fireEvent.keyDown(window, { key: 'T', ctrlKey: true, shiftKey: true })
+    expect(selected()).toBe('Markdown（中文）')
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true })
+    await waitFor(() => expect(view.container.querySelectorAll('.reader-group')).toHaveLength(2))
+    // The moved view's new group takes focus, so Ctrl+Alt+← sends it back.
+    fireEvent.keyDown(window, { key: 'ArrowLeft', ctrlKey: true, altKey: true })
+    await waitFor(() => expect(view.container.querySelectorAll('.reader-group')).toHaveLength(1))
+  })
+
+  it('maximizes a group on tab double-click and restores with Escape', () => {
+    const twoGroups = normalizeLayout({
+      version: 1,
+      hidden: ['pdf', 'chat'],
+      root: {
+        kind: 'split', id: 's1', direction: 'row', sizes: [50, 50],
+        children: [
+          { kind: 'group', id: 'g1', views: ['original'], active: 'original' },
+          { kind: 'group', id: 'g2', views: ['translated'], active: 'translated' }
+        ]
+      }
+    })
+    const view = render(<Harness layout={twoGroups} />)
+    fireEvent.doubleClick(view.getByRole('tab', { name: /Markdown（中文）/u }))
+    expect(view.container.querySelector('[data-reader-group="g2"]')?.classList.contains('maximized')).toBe(true)
+    expect(view.getByRole('button', { name: '还原分组' })).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(view.container.querySelector('.reader-group.maximized')).toBeNull()
+    // Both groups stayed mounted throughout.
+    expect(view.container.querySelectorAll('.reader-group')).toHaveLength(2)
   })
 })
 
