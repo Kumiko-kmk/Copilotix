@@ -47,6 +47,8 @@ function setup(consented = true, configured = true) {
   const view = render(<QueryClientProvider client={client}><Harness documentId={doc} /></QueryClientProvider>)
   const emit = (event: RagStreamEvent): void => { act(() => listener?.(event)) }
   const input = async (): Promise<void> => {
+    // A reopened paper may already contain a sendable persisted draft.
+    fireEvent.change(screen.getByLabelText('向当前论文提问'), { target: { value: '' } })
     await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(true))
     fireEvent.change(screen.getByLabelText('向当前论文提问'), { target: { value: '论文主要贡献？' } })
     await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
@@ -239,6 +241,7 @@ describe('ReaderChatPanel and local paper sessions', () => {
     expect((screen.getByLabelText('向当前论文提问') as HTMLTextAreaElement).value).toBe('待发送草稿')
     expect(shownModel()).toBe('qwen3.8-flash')
     expect(screen.getByRole('button', { name: '引用 1' })).toBeTruthy()
+    await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
     await f.input()
     await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ history: [{ role: 'user', content: stored.question }, { role: 'assistant', content: stored.answer }] })))
   })

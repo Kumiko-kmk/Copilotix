@@ -13,7 +13,7 @@ const builderRoot = dirname(require.resolve('app-builder-lib/package.json', {
 
 describe('Windows installer safety policy', () => {
   it('offers a desktop shortcut checkbox selected by default and honors opting out', () => {
-    expect(packageJson.version).toBe('1.0.0')
+    expect(packageJson.version).toBe('1.1.0')
     expect(installer).toContain('StrCpy $copilotixDesktopShortcut ${BST_CHECKED}')
     expect(installer).toContain('Page custom copilotixInstallOptions copilotixInstallOptionsLeave')
     expect(installer).toContain('${NSD_SetState} $copilotixDesktopShortcutCheckbox $copilotixDesktopShortcut')

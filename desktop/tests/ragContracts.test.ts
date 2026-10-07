@@ -594,7 +594,8 @@ describe('RAG bounded answer stream and stable errors', () => {
   })
 
   it('accepts every stable error code and rejects unknown or unbounded errors', () => {
-    expect(RAG_ERROR_CODES).toHaveLength(24)
+    expect(RAG_ERROR_CODES).toHaveLength(25)
+    expect(RAG_ERROR_CODES).toContain('CHAT_STORAGE_FAILED')
     for (const code of RAG_ERROR_CODES) {
       expect(ragErrorCodeSchema.parse(code)).toBe(code)
       expect(ragErrorSchema.parse({ ...ragError, code })).toMatchObject({ code })
