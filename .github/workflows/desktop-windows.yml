@@ -17,8 +17,9 @@ permissions:
   contents: read
 
 env:
-  # One explicit first-release exception; all other public tags require signing.
-  COPILOTIX_INITIAL_UNSIGNED_RELEASE: ${{ github.ref == 'refs/tags/desktop-v1.0.0' && vars.COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE == 'desktop-v1.0.0' }}
+  # Maintainer-authorized exceptions require an exact tag and repository variable.
+  # Every other public tag still requires trusted signing.
+  COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE: ${{ (github.ref == 'refs/tags/desktop-v1.0.0' && vars.COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE == 'desktop-v1.0.0') || (github.ref == 'refs/tags/desktop-v1.1.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.1.0') }}
 
 jobs:
   build:
@@ -42,7 +43,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/desktop-v')
         run: node desktop/scripts/verify-release-license.mjs
       - name: Require a signing certificate for a production release
-        if: startsWith(github.ref, 'refs/tags/desktop-v') && env.COPILOTIX_INITIAL_UNSIGNED_RELEASE != 'true'
+        if: startsWith(github.ref, 'refs/tags/desktop-v') && env.COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE != 'true'
         run: node desktop/scripts/verify-release-signing.mjs
         env:
           COPILOTIX_RELEASE_MODE: production
@@ -56,7 +57,7 @@ jobs:
       - name: Package verified compact Windows installation bundle
         run: pnpm desktop:release:from-built
         env:
-          COPILOTIX_RELEASE_MODE: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && env.COPILOTIX_INITIAL_UNSIGNED_RELEASE != 'true' && 'production' || 'development' }}
+          COPILOTIX_RELEASE_MODE: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && env.COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE != 'true' && 'production' || 'development' }}
           WIN_CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_LINK || '' }}
           WIN_CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && secrets.WIN_CSC_KEY_PASSWORD || '' }}
       - name: Verify published release and select compact archive
@@ -172,7 +173,7 @@ jobs:
           [IO.File]::WriteAllText($publicChecksums, $checksums + "`n", [Text.UTF8Encoding]::new($false))
           $files = @($installers[0].FullName, $archives[0].FullName, $publicChecksums, (Join-Path 'release/advanced' 'release-manifest.json'))
           foreach ($file in $files) { if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Required release asset missing: $file" } }
-          if ($env:COPILOTIX_INITIAL_UNSIGNED_RELEASE -ne 'true') {
+          if ($env:COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE -ne 'true') {
             foreach ($installer in $installers) {
               $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
               if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Setup Authenticode signature is not valid: $($signature.Status)" }
@@ -211,7 +212,7 @@ jobs:
             $localHash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
             $remoteHash = (Get-FileHash -LiteralPath $remotePath -Algorithm SHA256).Hash
             if ($localHash -ne $remoteHash) { throw "Uploaded release asset hash mismatch: $assetName" }
-            if ($assetName -like 'setup.exe' -and $env:COPILOTIX_INITIAL_UNSIGNED_RELEASE -ne 'true') {
+            if ($assetName -like 'setup.exe' -and $env:COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE -ne 'true') {
               $signature = Get-AuthenticodeSignature -LiteralPath $remotePath
               if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Downloaded Setup Authenticode signature is not valid: $($signature.Status)" }
             }

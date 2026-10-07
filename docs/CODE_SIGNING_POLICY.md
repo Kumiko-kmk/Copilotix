@@ -18,6 +18,13 @@ If accepted, the signing publisher will be SignPath Foundation. The required
 provider attribution will be added when the service is approved and active.
 No SignPath sponsorship or signed release is claimed at this stage.
 
+On 2026-10-07 the maintainer explicitly authorized one additional unsigned
+release, `desktop-v1.1.0`. The workflow requires that exact tag and the matching
+repository variable `COPILOTIX_UNSIGNED_RELEASE_TAG=desktop-v1.1.0`; this is not a
+blanket exemption for future releases. Release notes must clearly state that the
+binaries are unsigned. All build, test, integrity and installation checks remain
+required. Remove the variable after publication; other tags require trusted signing.
+
 ## Network use and privacy
 
 When a user starts parsing, PDF content is uploaded to the configured parsing
