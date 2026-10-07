@@ -151,13 +151,13 @@ async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<vo
 
 test('fits PDF pages without an outer frame and preserves the current page while resizing', async () => {
   const workspace = await createE2EWorkspace()
-  const taskId = await seedReaderTask(workspace)
+  const taskId = await seedReaderTask(workspace, { sourcePdf: join(__dirname, '../resources/tutorial/Attention Is All You Need.pdf') })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)
     const scroller = window.locator('.pdf-scroll')
-    await expect(window.getByText('1 / 2')).toBeVisible()
+    await expect(window.getByText('1 / 15')).toBeVisible()
     await expect.poll(() => window.locator('[data-pdf-page="1"] canvas').evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
     await expect(scroller).toHaveCSS('padding', '0px')
     await expect(scroller).toHaveCSS('border-left-width', '0px')
@@ -170,9 +170,9 @@ test('fits PDF pages without an outer frame and preserves the current page while
       const viewport = element.getBoundingClientRect()
       element.scrollTo({ top: element.scrollTop + page.top - viewport.top + page.height * 0.35 - element.clientHeight * 0.45, behavior: 'instant' })
     })
-    await expect(window.getByText('2 / 2')).toBeVisible()
+    await expect(window.getByText('2 / 15')).toBeVisible()
     const expectReadingPosition = async (): Promise<void> => {
-      await expect(window.getByText('2 / 2')).toBeVisible()
+      await expect(window.getByText('2 / 15')).toBeVisible()
       await expect.poll(() => scroller.evaluate((element) => {
         const page = element.querySelector('[data-pdf-page="1"]')!.getBoundingClientRect()
         const viewport = element.getBoundingClientRect()

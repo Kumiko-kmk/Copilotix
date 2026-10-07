@@ -158,12 +158,6 @@ export default function ReaderWorkbench(props: {
       const group = view ? groupOfView(next, view) : undefined
       if (group) focusRef.current(group.id)
     }
-    const currentGroup = (): LayoutGroup => {
-      const layout = layoutRef.current
-      return (focusedRef.current ? findGroup(layout, focusedRef.current) : undefined)
-        ?? groupOfView(layout, 'original')
-        ?? listGroups(layout.root)[0]!
-    }
     const hitTest = (x: number, y: number, view: ReaderViewId): DropTarget | null => {
       const element = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(x, y) : null
       const groupElement = element?.closest<HTMLElement>('[data-reader-group]')

@@ -206,16 +206,17 @@ export class PaperChatService {
       signal.throwIfAborted()
       run.emit({ type: 'completed', answer, citationIds })
     } catch (error) {
+      let failure = error
       try { await persist(signal.aborted ? 'cancelled' : 'failed') }
-      catch { error = new ChatProviderError('CHAT_STORAGE_FAILED', '本地对话保存失败') }
+      catch { failure = new ChatProviderError('CHAT_STORAGE_FAILED', '本地对话保存失败') }
       if (signal.aborted && !(signal.reason instanceof ChatProviderError && signal.reason.code === 'CHAT_STORAGE_FAILED')) { code = 'RAG_CANCELLED'; run.emit({ type: 'cancelled' }) }
       else {
-        const candidate = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+        const candidate = failure && typeof failure === 'object' && 'code' in failure ? failure.code : undefined
         const valid = ragErrorCodeSchema.safeParse(candidate)
         code = valid.success ? valid.data : 'PROVIDER_UNAVAILABLE'
         // Never forward arbitrary exception bodies (providers can echo user data).
         const messages: Partial<Record<RagErrorCode, string>> = { CHAT_STORAGE_FAILED: '本地对话保存失败，请检查文献目录后重试', CONTENT_NOT_READY: '论文索引尚未就绪，请稍后重试', SELECTION_STALE: '选区来源已更新，请重新选择', RAG_TIMEOUT: '模型响应超时，请重试', RAG_LIMIT_EXCEEDED: '问答内容超过预算，请减少选区', CHAT_CREDENTIALS_REQUIRED: '模型凭据已失效，请重新验证', CHAT_CREDENTIAL_UNVERIFIED: '请先验证模型凭据', CHAT_CONSENT_REQUIRED: '问答授权已变更，请重新确认', EMBEDDING_RATE_LIMITED: '问答服务限流，请稍后重试', INSUFFICIENT_EVIDENCE: '论文中没有找到依据' }
-        run.emit({ type: 'failed', error: { code: valid.success ? valid.data : 'PROVIDER_UNAVAILABLE', message: messages[code as keyof typeof messages] ?? '问答失败，请稍后重试', retryable: !['SELECTION_STALE', 'QUERY_SCOPE_INVALID'].includes(code), ...(error instanceof ChatProviderError && error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}) } })
+        run.emit({ type: 'failed', error: { code: valid.success ? valid.data : 'PROVIDER_UNAVAILABLE', message: messages[code as keyof typeof messages] ?? '问答失败，请稍后重试', retryable: !['SELECTION_STALE', 'QUERY_SCOPE_INVALID'].includes(code), ...(failure instanceof ChatProviderError && failure.retryAfterMs !== undefined ? { retryAfterMs: failure.retryAfterMs } : {}) } })
       }
     } finally {
       clearInterval(checkpointTimer)
