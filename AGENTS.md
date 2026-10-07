@@ -138,3 +138,13 @@ pnpm desktop:release:from-built
 
 - 使用者要求阅读器保留 HTML/LaTeX 丰富结构；解析、翻译发布与阅读器不得将合并表格展平。`prepareReaderMarkdown` 只做非结构性准备和可选图片路径修正；`normalizeMarkdown` 仅用于 Markdown/ZIP 导出投影，不回写源资料。
 - 新翻译计划为 v6，读取合法的 v4/v5/v6 manifest；已有 v5 平面表格无法自动恢复合并结构，不应自动重解析或重翻译。映射、标注、资源与原子发布契约不变。详细契约和测试见 `docs/MARKDOWN_FORMAT_ZH.md`。
+
+## 12. 共享開發進度（2026-10-07，可直接清理）
+
+此節是所有 Agent 共享的目前進度，不是某位 Agent 的私人記錄。後續 Agent 可直接更新；若已過時，可整段刪除此節，無須保留舊進度或額外審批。只刪除這個進度區塊；`AGENTS.md` 文件及其他長期協作規則仍須保留。跨 worktree 查閱的本次實作位置為 `Copilotix-master-updated`／`codex/reader-ai-chat`，Git 傳遞仍依協作規則。
+
+- 已完成：DeepSeek／Qwen 預設問答模型、按文獻保存並恢復聊天／草稿／選區；取消自訂模型支援，舊選擇回退預設而保留歷史對話。
+- 閱讀器：正文段落上下間距 3px；PDF 無外圍留白、邊框與陰影；欄寬／縮放改變保留頁號及頁內位置；只保留原文 Markdown、中文 Markdown、AI 問答三個頁籤，移除 JSON 展示。程式提交 `69a32b7`、`916b542`。
+- 驗證：四個 bundle、Utility smoke、打包內建 ASAR／fuses／資源／體積／ZIP／雜湊及 packaged smoke 通過；核對最終 ASAR 含上述改動。回歸程式已更新，但依使用者偏好未執行本地 lint／typecheck／單元／E2E 或完整 CI；真人 PDF 拖曳與付費 API 效果仍待驗收。
+- 最終本地測試入口：`release-artifacts/muxofbtq-39548-6096bb0c/program/Copilotix.exe`（完整目錄保留）；獨立安裝包 `release/setup.exe`。不用舊包代替本次版本。
+- 遠端唯讀核對後只有 `master`、`codex/reader-ai-chat`、`codex/rag-review-20260923`；兩個開發分支均未合併，使用者明確選擇保留三個分支，因此未刪遠端分支。本次程式及產物沒有 push／上傳；後續遠端修改仍需符合當時的使用者授權。
