@@ -1,4 +1,5 @@
 import { splitMarkdownMath } from '@shared/mathDelimiters'
+import { repairMathSizing } from '@shared/standardMarkdown'
 
 interface HastNode {
   type: string
@@ -42,7 +43,7 @@ function mathNodes(value: string): HastNode[] {
         type: 'element',
         tagName: 'code',
         properties: { className: [segment.display ? 'math-display' : 'math-inline'] },
-        children: [{ type: 'text', value: segment.content }]
+        children: [{ type: 'text', value: repairMathSizing(segment.content) }]
       })
 }
 

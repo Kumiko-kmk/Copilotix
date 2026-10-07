@@ -5,6 +5,7 @@ import { libraryCoreRequestSchema } from '@shared/librarySchemas'
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { prepareReaderMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdown'
 import { dirname, extname, isAbsolute, join, relative } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -552,7 +553,12 @@ async function normalizeParserOutput(
     const layoutData = JSON.parse(await readFile(layoutStaged, 'utf8')) as unknown
     const mappings = buildBlockMappings(task.id, layoutData)
     const pageCount = mappings.reduce((maximum, mapping) => Math.max(maximum, ...mapping.boxes.map((box) => box.pageIndex + 1), 0), 0)
-    const markdownText = await readFile(markdownStaged, 'utf8')
+    const markdownText = prepareReaderMarkdown(await readFile(markdownStaged, 'utf8'), (url) => {
+      if (!isLocalMarkdownImage(url)) return url
+      const asset = pathPolicy.resolveChild(extractedRoot, join(dirname(markdown), decodeURIComponent(url.split(/[?#]/u)[0]!)))
+      return relative(extractedRoot, asset).replace(/\\/gu, '/').split('/').map(encodeURIComponent).join('/')
+    })
+    await writeFile(markdownStaged, markdownText, 'utf8')
     const extractedTitle = extractPaperTitle(markdownText, mappings)
     const displayTitle = extractedTitle ? displayPaperTitle(extractedTitle) : null
     const blockStaged = pathPolicy.resolveChild(stagingRoot, 'block_list.json')

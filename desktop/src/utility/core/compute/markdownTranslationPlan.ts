@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { prepareReaderMarkdown, READER_MARKDOWN_FORMAT_VERSION } from '@shared/standardMarkdown'
 import { lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { unified } from 'unified'
@@ -330,7 +331,7 @@ export class MarkdownTranslationPlanManager {
       for (let index = 0; index < unit.blockIds.length; index += 1) {
         const blockId = unit.blockIds[index]!
         const resultPath = unit.blockResultPaths[index]!
-        const markdown = await readFile(this.resolvePlanPath(state, resultPath), 'utf8')
+        const markdown = prepareReaderMarkdown(await readFile(this.resolvePlanPath(state, resultPath), 'utf8')).trimEnd()
         const sourceIndex = unit.sourceIndexes[index]
         if (sourceIndex !== undefined) orderedMarkdown[sourceIndex] = markdown
         manifestBlocks.push({
@@ -357,6 +358,7 @@ export class MarkdownTranslationPlanManager {
     const manifest = {
       version: 2,
       mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
+      markdownFormat: READER_MARKDOWN_FORMAT_VERSION,
       blockMappingVersion: this.blockMappingVersion,
       taskId,
       jobId,

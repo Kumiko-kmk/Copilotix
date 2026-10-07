@@ -7,7 +7,7 @@ import { verifiedTutorialPaperPath } from './tutorialSample'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
 import { LibraryAccessGate } from './libraryAccessGate'
 import { acquirePrimaryInstance } from './singleInstance'
-import { copyFile, mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import {
@@ -478,12 +478,6 @@ function registerIpc(
   registerValidatedHandler('documents:save-as', saveDocumentAsRequestSchema, saveDocumentAsResultSchema, async (_event, request) => {
     const task = await repository?.getTask(request.documentId)
     if (!task) throw new Error('文档不存在')
-    const source =
-      request.kind === 'original-markdown'
-        ? join(task.outputDir, 'full.md')
-        : request.kind === 'translated-markdown'
-          ? join(task.outputDir, 'full.zh-CN.md')
-          : null
     const extension = request.kind === 'result-zip' ? 'zip' : 'md'
     const exportStem = sanitizeTitleStem(task.title?.trim() || task.name.replace(/\.pdf$/i, '')) ?? `paper-${task.id.slice(0, 8)}`
     const result = await dialog.showSaveDialog(mainWindow!, {
@@ -491,8 +485,8 @@ function registerIpc(
       filters: [{ name: extension.toUpperCase(), extensions: [extension] }]
     })
     if (result.canceled || !result.filePath) return { saved: false }
-    if (source) await copyFile(source, result.filePath)
-    else await tasks.createResultZip(task.id, result.filePath)
+    if (request.kind === 'result-zip') await tasks.createResultZip(task.id, result.filePath)
+    else await tasks.exportMarkdown(task.id, request.kind, result.filePath)
     return { saved: true }
   }, validationOptions)
   registerValidatedHandler('reader-annotations:list', listReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, async (_event, request) => {

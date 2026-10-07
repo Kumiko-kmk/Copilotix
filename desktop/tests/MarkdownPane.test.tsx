@@ -4,6 +4,7 @@ import React from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@shared/readerDocument'
+import { buildReaderDocumentBlocks } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
 import type { ReaderFigureGroup } from '../src/renderer/readerFigureGroups'
 import MarkdownPane, { MARKDOWN_BLOCKS_PER_FRAME, MARKDOWN_INITIAL_BLOCKS } from '../src/renderer/components/MarkdownPane'
@@ -55,6 +56,18 @@ afterEach(() => {
 })
 
 describe('MarkdownPane', () => {
+  it('renders preserved merged HTML cells, superscripts, and repaired cell math through the reader model', async () => {
+    const source = '<table><tr><td rowspan="2">Group<sup>12</sup></td><td colspan="2">$\\left.{x}$</td></tr><tr><td>A<sub>i</sub></td><td>B</td></tr></table>'
+    const blocks = buildReaderDocumentBlocks(source, '', null, []).original
+    const view = renderPane(blocks, null, vi.fn())
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    expect(view.container.querySelector('td[rowspan="2"]')?.textContent).toBe('Group12')
+    expect(view.container.querySelector('td[colspan="2"] .katex')).not.toBeNull()
+    expect(view.container.querySelector('sup')?.textContent).toBe('12')
+    expect(view.container.querySelector('sub')?.textContent).toBe('i')
+    expect(view.container.querySelector('.katex-error')).toBeNull()
+  })
+
   it('reveals content only after images decode and does not rebuild images for selection changes', async () => {
     const blocks = [block('image', 'Before\n\n![figure](images/figure.png)\n\nAfter')]
     const onSelect = vi.fn()

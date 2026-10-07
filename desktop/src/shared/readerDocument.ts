@@ -1,5 +1,6 @@
 import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from './markdownBlocks'
 import type { BlockMapping, TranslatedMarkdownBlock } from './types'
+import { prepareReaderMarkdown } from './standardMarkdown'
 
 export type ReaderBlockRole =
   | 'content'
@@ -79,7 +80,7 @@ export function mergeReaderBlocks(
   const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]))
   const content = contentBlocks.map((block, sequence): ReaderBlock => ({
     role: 'content',
-    markdown: block.markdown,
+    markdown: prepareReaderMarkdown(block.markdown),
     annotationKey: `content:${sequence}`,
     mappingIds: block.mappingIds,
     order: sequence
