@@ -1,6 +1,6 @@
 {
   "name": "copilotix-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Copilotix desktop PDF reader with Markdown translation",
   "main": "./out/main/index.js",
   "author": "Kumiko-kmk",

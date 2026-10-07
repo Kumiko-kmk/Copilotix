@@ -142,21 +142,10 @@ jobs:
             if (-not $existing.isDraft) { throw "Release $tag already exists and is published; refusing to replace it." }
           } else {
             $version = $tag.Substring('desktop-v'.Length)
-            $notesPath = Join-Path $env:RUNNER_TEMP 'copilotix-release-notes.md'
-            $notes = @(
-              "Windows x64: download **Copilotix-$version-win-x64.zip**, extract the entire folder, then run **setup.exe**.",
-              '',
-              "The compact ZIP contains Setup, uninstall.exe and installation instructions. The complete program is already embedded in Setup. Setup is also available separately.",
-              '',
-              'Wait for tasks to finish and exit Copilotix from the tray before upgrading. Uninstall preserves data by default; the uninstall wizard offers optional library, settings and credential removal with a second confirmation.',
-              '',
-              'See docs/WINDOWS_INSTALLATION_ZH.md in the release source for installation and removal details. Verify downloads against SHA256SUMS.txt.'
-            ) -join "`n"
-            if ($env:COPILOTIX_INITIAL_UNSIGNED_RELEASE -eq 'true') {
-              $notes = "**Unsigned initial release:** Copilotix 1.0.0 is published before trusted Windows code signing is available. These binaries are not signed. Later releases require trusted signing.`n`n" + $notes
-            }
-            [IO.File]::WriteAllText($notesPath, $notes, [Text.UTF8Encoding]::new($false))
-            & gh release create $tag --repo $repo --draft --verify-tag --generate-notes --notes-file $notesPath --title "Copilotix $tag"
+            $notesPath = Join-Path 'docs/releases' "$version.zh-CN.md"
+            if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) { throw "Missing Simplified Chinese release notes: $notesPath" }
+            $releaseTitle = (Get-Content -LiteralPath $notesPath -Encoding utf8 -TotalCount 1) -replace '^#\s*(?:🎉\s*)?', ''
+            & gh release create $tag --repo $repo --draft --verify-tag --notes-file $notesPath --title $releaseTitle
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
       - name: Upload the complete release asset set to the draft
