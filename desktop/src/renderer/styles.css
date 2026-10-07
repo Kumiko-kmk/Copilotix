@@ -574,7 +574,7 @@ button, input, select { font: inherit; }
 .markdown-body ul, .markdown-body ol, .markdown-body dl,
 .markdown-body blockquote, .markdown-body pre { margin-block: .5em; }
 .markdown-body hr { margin-block: .25em; }
-.markdown-body .markdown-block > p { text-indent: 2em; }
+.markdown-body .markdown-block > p { margin-block: 3px; text-indent: 2em; }
 .markdown-body img { display: block; max-width: 100%; height: auto; margin: 8px auto; object-fit: contain; }
 .reader-figure-hidden-source { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .reader-figure-snapshot { position: relative; width: 100%; max-width: 900px; margin: 7px auto 4px; overflow: hidden; background: white; user-select: none; }

@@ -29,6 +29,8 @@ pnpm desktop:release:from-built
 
 第一條命令重建 Main、Preload、Renderer 和 Utility 四個 bundle；第二條直接使用剛生成的 `desktop/out/` 打包，省略重複 build，但仍會完成 ASAR、資源、fuses、體積、ZIP、雜湊和 packaged smoke 驗證，並原子更新發布目錄。
 
+工具版本：Node 24.19.0；打包必須實際使用根 `packageManager` 指定的 pnpm 11.19.0。Codex 的 fallback pnpm 可能是其他版本，此時可用 Node 執行本機 Corepack 快取中 11.19.0 的 `bin/pnpm.mjs --dir desktop package:directory:from-built`；不得偽造 user-agent 繞過版本檢查。
+
 可供測試的入口為：
 
 ```text
@@ -53,9 +55,9 @@ pnpm desktop:release:from-built
 
 ### 正式交付前的驗證路徑
 
-依使用者 2026-10-06 的要求，日常開發預設不再執行本地 lint、typecheck、單元／覆蓋率或 E2E 測試；改由 GitHub Actions 驗證（詳見第 8 節）。完成修改後 commit 並 push 工作分支，等待最新版本的 `Desktop Windows / build` 成功，再合併或交付。只在本地 commit 不會觸發遠端測試。
+依使用者要求，日常開發預設不執行本地 lint、typecheck、單元／覆蓋率或 E2E 測試。2026-10-07 補充：未經使用者明確允許，不得 push、上傳產物或觸發遠端發布。允許本地 commit；只有授權上傳後，才可用 GitHub Actions 驗證最新提交（詳見第 8 節）。
 
-需要供真人驗收的本地 EXE 時，仍可按上面的快速路徑 build／打包；打包內建的產物校驗不能移除。`pnpm desktop:release` 會重新 build，不能與 `desktop:release:from-built` 同時並行執行。打包失敗時保留 `.release-next-*` 供排查；確認不再需要後才能清理。
+需要供真人驗收的本地 EXE 時，可按上面的快速路徑 build／打包並本地交付，不以 push 為前提；打包內建的產物校驗不能移除，亦不能聲稱已通過完整 CI。`pnpm desktop:release` 會重新 build，不能與 `desktop:release:from-built` 同時並行執行。打包失敗時保留 `.release-next-*` 供排查；確認不再需要後才能清理。
 
 ## 2. 文檔格式接口（PDF / Markdown）
 
@@ -110,7 +112,7 @@ pnpm desktop:release:from-built
 ## 8. 遠端 CI 驗證與預設不跑本地測試
 
 - 日常開發不再預設跑本地自動化測試及 lint/typecheck；測試程式仍須隨行為修改一同維護，由遠端執行。只有使用者另行要求本地驗證時才執行。
-- 正常流程為修改 → commit → push 工作分支 → 查看該版本 Actions → 修復失敗並再次 push → `build` 成功後才合併／交付。必須確認檢查對應最新 push；PR 還須通過最新合併結果的檢查。不得用舊版本成功、取消、跳過或未觸發代替成功，也不得為變綠刪掉斷言、降低覆蓋率門檻或關閉安全門禁。
+- 未經使用者明確允許不得 push 或上傳遠端。預設流程為修改 → 本地 commit → 按要求本地 build／打包交付；完整 CI 未執行時如實說明。獲授權上傳後才 push 工作分支並查看該版本 Actions；合併前 `build` 必須成功，PR 還須通過最新合併結果的檢查。不得用舊版本成功、取消、跳過或未觸發代替成功，也不得為變綠刪掉斷言、降低覆蓋率門檻或關閉安全門禁。
 - `.github/workflows/desktop-windows.yml` 對所有分支 push、PR 和 `desktop-v*` tag 執行，並提供手動觸發。新分支必須包含這份工作流與 CI 設定；基於舊版本的分支要先同步修復。只 commit、不 push 不會執行 GitHub Actions。
 - 保持主分支必需檢查名稱 `build`。CI 包含 frozen-lockfile 安裝、lint、typecheck、覆蓋率、四個 bundle、真實打包 smoke、Electron E2E、安装／升级／卸载／重装及下载解压验收；tag 發布另受版本、許可與簽章門禁約束。
 - 在 Actions 下載 `Copilotix-Windows-x64-Bundle` 供真人安裝驗收；`Copilotix-Windows-verification-reports` 保存單元 JUnit、覆蓋率摘要及 E2E 失敗證據。不要將 CI 未通過的包稱為已驗證版本。
