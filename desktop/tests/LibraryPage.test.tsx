@@ -3,26 +3,33 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import type { PaperArchiveSceneOptions } from '../src/renderer/paperArchive/PaperArchiveScene'
-import type { ArchiveShelf } from '../src/renderer/paperArchive/archiveShelves'
+import { laneStep, paperAt, type ArchiveCell, type ArchiveShelf } from '../src/renderer/paperArchive/archiveShelves'
 import LibraryPage from '../src/renderer/pages/LibraryPage'
 
 const scene = vi.hoisted(() => ({
   focusPaper: vi.fn(), navigate: vi.fn(), activate: vi.fn(), dispose: vi.fn(),
-  setPerformanceMode: vi.fn(), fail: false
+  fail: false
 }))
 vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
   PaperArchiveScene: class {
+    private shelves: ArchiveShelf[] = []
+    private cell: ArchiveCell = { lane: 0, row: 0 }
     constructor(private options: PaperArchiveSceneOptions) {
       if (scene.fail) throw new Error('WebGL unavailable')
     }
     setShelves(shelves: ArchiveShelf[]): void {
+      this.shelves = shelves
       this.options.onSelect({ lane: 0, row: 0 }, shelves[0]?.papers[0] ?? null)
     }
     focusPaper = scene.focusPaper
-    navigate = scene.navigate
+    navigate(axis: 'lane' | 'row', direction: number): void {
+      scene.navigate(axis, direction)
+      this.cell = axis === 'lane' ? laneStep(this.shelves, this.cell, direction, new Map())
+        : { ...this.cell, row: this.cell.row + direction }
+      this.options.onSelect(this.cell, paperAt(this.shelves, this.cell))
+    }
     activate = scene.activate
     dispose = scene.dispose
-    setPerformanceMode = scene.setPerformanceMode
     setReducedMotion = vi.fn()
   }
 }))
@@ -107,19 +114,15 @@ describe('LibraryPage', () => {
     fireEvent.change(search, { target: { value: 'Alpha' } })
     fireEvent.keyDown(search, { key: 'Enter' })
     expect(onOpen).toHaveBeenCalledWith(alpha.id)
-    expect(screen.getByRole('checkbox', { name: '流畅模式' })).toHaveProperty('disabled', true)
   })
 
-  it('persists quality across page mounts and changes the existing scene', () => {
-    const props = { documents: [paper('Alpha')], onOpen: vi.fn(), onCreate: vi.fn() }
-    const view = render(<LibraryPage {...props} />)
-    fireEvent.click(screen.getByRole('checkbox', { name: '流畅模式' }))
-    expect(scene.setPerformanceMode).toHaveBeenLastCalledWith(true)
-    expect(scene.dispose).not.toHaveBeenCalled()
-    view.unmount()
-    expect(scene.dispose).toHaveBeenCalledTimes(1)
-    render(<LibraryPage {...props} />)
-    expect(screen.getByRole('checkbox', { name: '流畅模式' })).toHaveProperty('checked', true)
-    expect(scene.setPerformanceMode).toHaveBeenLastCalledWith(true)
+  it('shows five columns for 37 papers in one month and advances the HUD with ArrowRight', () => {
+    render(<LibraryPage documents={Array.from({ length: 37 }, (_, index) => paper(`Paper ${index}`))} onOpen={vi.fn()} onCreate={vi.fn()} />)
+    expect(screen.getByText('COLUMN 01 / 05')).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(scene.navigate).toHaveBeenCalledWith('lane', 1)
+    expect(screen.getByText('COLUMN 02 / 05')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '下一列' })).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: '流畅模式' })).toBeNull()
   })
 })

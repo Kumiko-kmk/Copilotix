@@ -32,8 +32,8 @@ describe('paper archive shelves', () => {
     const august = paper('2026-08-12T10:00:00.000Z')
     const shelves = groupPapersByMonth([august, october, octoberLater])
     expect(shelves.map((shelf) => shelf.key)).toEqual(['2026-10', '2026-08'])
-    expect(shelves[0].label).toBe('2026 年 10 月')
-    expect(shelves[0].papers.map((item) => item.id)).toEqual([octoberLater.id, october.id])
+    expect(shelves[0]!.label).toBe('2026 年 10 月')
+    expect(shelves[0]!.papers.map((item) => item.id)).toEqual([octoberLater.id, october.id])
   })
 
   it('puts papers with unreadable dates on a final shelf', () => {
@@ -46,8 +46,8 @@ describe('paper archive shelves', () => {
       paper('2026-10-10T10:00:00.000Z'), paper('2026-10-11T10:00:00.000Z'), paper('2026-09-10T10:00:00.000Z')
     ])
     expect(wrap(-1, 3)).toBe(2)
-    expect(paperAt(shelves, { lane: 0, row: 2 })).toBe(shelves[0].papers[0])
-    expect(paperAt(shelves, { lane: -1, row: -5 })).toBe(shelves[1].papers[0])
+    expect(paperAt(shelves, { lane: 0, row: 2 })).toBe(shelves[0]!.papers[0]!)
+    expect(paperAt(shelves, { lane: -1, row: -5 })).toBe(shelves[1]!.papers[0]!)
     expect(paperIndexAt(shelves, { lane: 2, row: -1 })).toBe(1)
     expect(paperAt([], { lane: 0, row: 0 })).toBeNull()
   })
@@ -56,7 +56,7 @@ describe('paper archive shelves', () => {
     expect(nearestOccurrence(0, 7, 8)).toBe(8)
     expect(nearestOccurrence(3, -6, 8)).toBe(-5)
     const shelves = groupPapersByMonth([paper('2026-10-10T10:00:00.000Z'), paper('2026-10-11T10:00:00.000Z')])
-    expect(cellForPaper(shelves, shelves[0].papers[1].id, { lane: 4, row: 9 })).toEqual({ lane: 4, row: 9 })
+    expect(cellForPaper(shelves, shelves[0]!.papers[1]!.id, { lane: 4, row: 9 })).toEqual({ lane: 4, row: 9 })
     expect(cellForPaper(shelves, 'missing', { lane: 0, row: 0 })).toBeNull()
   })
 
@@ -65,12 +65,12 @@ describe('paper archive shelves', () => {
       paper('2026-10-10T10:00:00.000Z'),
       paper('2026-09-10T10:00:00.000Z'), paper('2026-09-11T10:00:00.000Z'), paper('2026-09-12T10:00:00.000Z')
     ])
-    const remembered = shelves[1].papers[2]
-    const next = laneStep(shelves, { lane: 0, row: 10 }, 1, new Map([[shelves[1].key, remembered.id]]))
+    const remembered = shelves[1]!.papers[2]!
+    const next = laneStep(shelves, { lane: 0, row: 10 }, 1, new Map([[shelves[1]!.key, remembered.id]]))
     expect(next.lane).toBe(1)
     expect(paperAt(shelves, next)).toBe(remembered)
     expect(Math.abs(next.row - 10)).toBeLessThanOrEqual(1)
-    expect(paperAt(shelves, laneStep(shelves, { lane: 0, row: 0 }, -1, new Map()))).toBe(shelves[1].papers[0])
+    expect(paperAt(shelves, laneStep(shelves, { lane: 0, row: 0 }, -1, new Map()))).toBe(shelves[1]!.papers[0]!)
   })
 })
 
@@ -81,7 +81,7 @@ describe('paper archive columns', () => {
     expect(columns).toHaveLength(5)
     expect(columns.every((column) => column.month === '2026 年 10 月')).toBe(true)
     expect(columns.map((column) => column.papers.length)).toEqual([8, 8, 8, 8, 5])
-    expect(columns[0].label).toBe('2026 年 10 月 · 1/5')
+    expect(columns[0]!.label).toBe('2026 年 10 月 · 1/5')
     expect(new Set(columns.map((column) => column.key)).size).toBe(5)
     expect(columns.flatMap((column) => column.papers)).toHaveLength(37)
   })

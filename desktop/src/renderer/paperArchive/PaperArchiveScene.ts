@@ -184,7 +184,6 @@ export class PaperArchiveScene {
   } | null = null
 
   private reduced: boolean
-  private performanceMode = false
   private loaded = false
   private focused = document.hasFocus()
   private clock = 0
@@ -301,7 +300,6 @@ export class PaperArchiveScene {
       })
       if (!this.surfaces.has('Frosted_Polymer')) throw new Error('archive shell is missing its cover')
       this.applyPalette()
-      this.applyPerformanceMode()
       // Compile every program (transmission cover, shadow depth) and draw one warm-up frame before
       // the entry starts; lazily compiling them stalled the first animated frames on the desktop.
       this.layout(0)
@@ -375,22 +373,6 @@ export class PaperArchiveScene {
     this.wake()
   }
 
-  /** Change cover quality in place, preserving the current selection and motion. */
-  setPerformanceMode(enabled: boolean): void {
-    this.performanceMode = enabled
-    this.applyPerformanceMode()
-    this.wake()
-  }
-
-  private applyPerformanceMode(): void {
-    const cover = this.surfaces.get('Frosted_Polymer')
-    if (!cover) return
-    const material = cover.material as MeshPhysicalMaterial
-    material.transmission = this.performanceMode ? 0 : 0.78
-    material.color.set(this.performanceMode ? '#e9dfd2' : '#ffffff')
-    material.needsUpdate = true
-  }
-
   /** Replace the archive contents, keeping the current paper in view when it still exists. */
   setShelves(shelves: ArchiveShelf[]): void {
     const current = paperAt(this.shelves, this.selected)
@@ -407,6 +389,7 @@ export class PaperArchiveScene {
   focusPaper(paperId: string, options: { instant?: boolean } = {}): boolean {
     const cell = cellForPaper(this.shelves, paperId, this.selected)
     if (!cell) return false
+    this.stopMomentum()
     if (options.instant) {
       this.jumpTo(cell)
       this.emitSelection()
@@ -759,7 +742,7 @@ export class PaperArchiveScene {
         const selectedAmount = Math.min(1, selectedLift / PREVIEW_LIFT)
         this.tint.copy(this.palette.card).lerp(this.palette.cardSelected, selectedAmount)
         cover.setColorAt(count, this.tint)
-        const paper = shelf ? shelf.papers[wrap(row, shelf.papers.length)] : null
+        const paper = shelf ? shelf.papers[wrap(row, shelf.papers.length)] ?? null : null
         index?.setColorAt(count, this.palette.index.get(indexTone(paper))!)
         if (lane === this.selected.lane && row === this.selected.row && shelf) {
           this.strip.position.copy(this.position)
@@ -767,7 +750,7 @@ export class PaperArchiveScene {
           ;(this.strip.material as MeshBasicMaterial).opacity = selectedAmount
           this.strip.visible = selectedAmount > 0.01
         }
-        const cell = this.drawn[count]
+        const cell = this.drawn[count]!
         cell.lane = lane
         cell.row = row
         this.drawnPositions[count * 3] = this.position.x
@@ -796,9 +779,9 @@ export class PaperArchiveScene {
     let hit = -1
     // The wave tilt is under 2°, so each card is tested as its upright shell box.
     for (let index = 0; index < this.drawnCount; index++) {
-      const x = this.drawnPositions[index * 3]
-      const y = this.drawnPositions[index * 3 + 1]
-      const z = this.drawnPositions[index * 3 + 2]
+      const x = this.drawnPositions[index * 3]!
+      const y = this.drawnPositions[index * 3 + 1]!
+      const z = this.drawnPositions[index * 3 + 2]!
       this.pickBox.min.set(x - CARD_HALF_WIDTH, y, z + CARD_BACK)
       this.pickBox.max.set(x + CARD_HALF_WIDTH, y + CARD_HEIGHT, z + CARD_FRONT)
       if (!ray.intersectBox(this.pickBox, this.pickPoint)) continue
@@ -808,7 +791,8 @@ export class PaperArchiveScene {
         hit = index
       }
     }
-    return hit < 0 ? null : { ...this.drawn[hit] }
+    const cell = this.drawn[hit]
+    return cell ? { ...cell } : null
   }
 
   private setHover(cell: ArchiveCell | null): void {
@@ -907,8 +891,8 @@ export class PaperArchiveScene {
       if (drag.active) {
         const first = drag.samples[0]
         const last = drag.samples[drag.samples.length - 1]
-        const span = last.time - first.time
-        const velocity = cancelled || this.reduced || span < 8 || event.timeStamp - last.time > 80
+        const span = first && last ? last.time - first.time : 0
+        const velocity = !first || !last || cancelled || this.reduced || span < 8 || event.timeStamp - last.time > 80
           ? { lane: 0, row: 0 }
           : { lane: (last.value.lane - first.value.lane) * 1000 / span, row: (last.value.row - first.value.row) * 1000 / span }
         this.momentum = new ArchivePlaneMomentum({ lane: this.laneTrack.value, row: this.rowTrack.value }, velocity)

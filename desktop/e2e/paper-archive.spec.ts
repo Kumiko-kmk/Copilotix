@@ -1,21 +1,41 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { join } from 'node:path'
+import { writeFile } from 'node:fs/promises'
 import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
 
 for (const disableWebGL of [false, true]) {
-  test(`paper archive search, navigation and reader return${disableWebGL ? ' without WebGL' : ''}`, async () => {
+  test(`paper archive search, navigation and reader return${disableWebGL ? ' without WebGL' : ''}`, async ({}, testInfo) => {
     const workspace = await createE2EWorkspace()
     let app: Awaited<ReturnType<typeof launchElectron>> | null = null
     try {
-      await seedReaderTask(workspace, { englishTitle: 'Archive Alpha' })
-      await seedReaderTask(workspace, { alignmentRegression: true, englishTitle: 'Archive Beta' })
+      for (let index = 0; index < 37; index++) {
+        await seedReaderTask(workspace, {
+          taskId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+          createdAt: '2026-10-07T12:00:00Z',
+          englishTitle: index === 36 ? 'Archive Alpha' : `Archive Paper ${index}`
+        })
+      }
       app = await launchElectron({
-        args: [...(disableWebGL ? ['--disable-webgl'] : []), join(__dirname, '../out/main/index.js')],
+        args: [join(__dirname, '../out/main/index.js')],
         env: workspace.env
       })
       const window = await app.firstWindow()
+      if (disableWebGL) {
+        // Electron builds may ignore Chromium's --disable-webgl switch. Deny only WebGL
+        // contexts in this isolated renderer, leaving the reader's 2D canvas operational.
+        await window.evaluate(() => {
+          const original = HTMLCanvasElement.prototype.getContext
+          Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+            configurable: true,
+            value: function (this: HTMLCanvasElement, kind: string, ...args: unknown[]) {
+              return kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl'
+                ? null : Reflect.apply(original, this, [kind, ...args])
+            }
+          })
+        })
+      }
       await window.locator('[data-edge-dock="top"]').hover()
-      const navigation = window.getByRole('button', { name: '文库', exact: true })
+      const navigation = window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u })
       await expect(navigation).toBeVisible()
       await navigation.click()
       const archive = window.getByRole('region', { name: '文库', exact: true })
@@ -26,8 +46,14 @@ for (const disableWebGL of [false, true]) {
       await expect(canvas.or(fallback)).toBeVisible({ timeout: 15_000 })
       if (disableWebGL) await expect(fallback).toBeVisible()
       const supported = !await fallback.isVisible()
-      const quality = archive.getByRole('checkbox', { name: '流畅模式' })
+      await expect(archive.getByRole('checkbox', { name: '流畅模式' })).toHaveCount(0)
       if (supported) {
+        await expect(archive.getByText('COLUMN 01 / 05', { exact: true })).toBeVisible()
+        await archive.focus()
+        await window.keyboard.press('ArrowRight')
+        await expect(archive.getByText('COLUMN 02 / 05', { exact: true })).toBeVisible()
+        await window.keyboard.press('ArrowLeft')
+        await expect(archive.getByText('COLUMN 01 / 05', { exact: true })).toBeVisible()
         const index = archive.locator('.paper-archive-index strong')
         const first = await index.innerText()
         await archive.focus()
@@ -35,10 +61,12 @@ for (const disableWebGL of [false, true]) {
         await expect(index).not.toHaveText(first)
         await window.keyboard.press('ArrowUp')
         await expect(index).toHaveText(first)
-        await quality.check()
-        await expect(quality).toBeChecked()
+        const performance = await measureArchivePerformance(window)
+        const performancePath = testInfo.outputPath('archive-performance.json')
+        await writeFile(performancePath, JSON.stringify(performance, null, 2))
+        await testInfo.attach('archive-performance.json', { path: performancePath, contentType: 'application/json' })
       } else {
-        await expect(quality).toBeDisabled()
+        testInfo.annotations.push({ type: 'WebGL fallback', description: '3D navigation and performance assertions are unavailable; search and reader return still run.' })
       }
 
       await archive.focus()
@@ -64,7 +92,6 @@ for (const disableWebGL of [false, true]) {
       await expect(archive).toBeVisible()
       if (supported) {
         await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha.pdf')
-        await expect(quality).toBeChecked()
       } else {
         await expect(fallback).toBeVisible()
         await expect(search).toBeVisible()
@@ -74,4 +101,50 @@ for (const disableWebGL of [false, true]) {
       await workspace.cleanup()
     }
   })
+}
+
+async function measureArchivePerformance(window: Page): Promise<object> {
+  await window.keyboard.press('Control+Shift+F')
+  const stats = window.locator('.paper-archive-stats')
+  await expect(stats).toBeVisible()
+  const read = async (): Promise<{ fps: number; triangles: number; text: string }> => {
+    const text = await stats.innerText()
+    const match = /^(\d+) fps.*?([\d.]+)M 三角形/u.exec(text)
+    expect(match, text).not.toBeNull()
+    return { fps: Number(match![1]), triangles: Number(match![2]) * 1e6, text }
+  }
+  const keys = []
+  for (let index = 0; index < 24; index++) {
+    await window.keyboard.press('ArrowDown')
+    await window.waitForTimeout(125)
+    if (index >= 12 && index % 4 === 0) keys.push(await read())
+  }
+  for (const sample of keys) {
+    expect(sample.fps, sample.text).toBeGreaterThanOrEqual(30)
+    expect(sample.fps, sample.text).toBeLessThanOrEqual(70)
+    expect(sample.triangles, sample.text).toBeLessThanOrEqual(3_000_000)
+  }
+  const box = await window.locator('.paper-archive-canvas').boundingBox()
+  expect(box).not.toBeNull()
+  const x = box!.x + box!.width * 0.25
+  const y = box!.y + box!.height * 0.55
+  await window.mouse.move(x, y)
+  await window.mouse.down()
+  const drag = []
+  try {
+    for (let index = 0; index < 24; index++) {
+      await window.mouse.move(x + Math.sin(index / 3) * 100, y + Math.cos(index / 3) * 40)
+      await window.waitForTimeout(125)
+      if (index >= 12 && index % 4 === 0) drag.push(await read())
+    }
+  } finally {
+    await window.mouse.up()
+  }
+  for (const sample of drag) {
+    expect(sample.fps, sample.text).toBeGreaterThan(0)
+    expect(sample.fps, sample.text).toBeLessThanOrEqual(70)
+    expect(sample.triangles, sample.text).toBeLessThanOrEqual(3_000_000)
+  }
+  await window.keyboard.press('Control+Shift+F')
+  return { keys, drag }
 }

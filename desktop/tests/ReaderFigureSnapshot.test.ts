@@ -11,7 +11,7 @@ afterEach(() => vi.restoreAllMocks())
 describe('reader figure PDF snapshot', () => {
   it('renders only the mapped crop at a bounded pixel width', async () => {
     const context = {}
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as CanvasRenderingContext2D)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => context) as unknown as HTMLCanvasElement['getContext'])
     const render = vi.fn(() => ({ promise: Promise.resolve() }))
     const getViewport = vi.fn(({ scale }: { scale: number }) => ({ width: 612 * scale, height: 792 * scale }))
     const document = {

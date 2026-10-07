@@ -8,7 +8,6 @@ import '../paperArchive/paperArchive.css'
 
 // Survives page switches so returning from the reader lands on the same paper.
 let lastPaperId: string | null = null
-const PERFORMANCE_KEY = 'copilotix.library.performance.v1'
 const SEARCH_LIMIT = 40
 
 type Selection = { cell: ArchiveCell; paper: ArchivePaper | null }
@@ -28,9 +27,6 @@ export default function LibraryPage(props: {
   const [unsupported, setUnsupported] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [searchOpen, setSearchOpen] = React.useState(false)
-  const [performanceMode, setPerformanceMode] = React.useState(() => {
-    try { return localStorage.getItem(PERFORMANCE_KEY) === 'true' } catch { return false }
-  })
   const shelves = React.useMemo(() => buildArchiveColumns(props.documents), [props.documents])
   const monthCount = React.useMemo(() => new Set(shelves.map((shelf) => shelf.month)).size, [shelves])
   const searchIndex = React.useMemo(() => shelves.flatMap((shelf) => shelf.papers.map((paper) => ({
@@ -90,17 +86,13 @@ export default function LibraryPage(props: {
   React.useEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
+    const restoreId = !restoredRef.current ? lastPaperId : null
     scene.setShelves(shelves)
     if (!restoredRef.current && shelves.length) {
       restoredRef.current = true
-      if (lastPaperId) scene.focusPaper(lastPaperId, { instant: true })
+      if (restoreId) scene.focusPaper(restoreId, { instant: true })
     }
   }, [shelves])
-
-  React.useEffect(() => {
-    sceneRef.current?.setPerformanceMode(performanceMode)
-    try { localStorage.setItem(PERFORMANCE_KEY, String(performanceMode)) } catch { /* Session-only when storage is unavailable. */ }
-  }, [performanceMode])
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -111,7 +103,7 @@ export default function LibraryPage(props: {
         return
       }
       if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented || event.isComposing) return
-      const target = event.target as HTMLElement | null
+      const target = event.target instanceof HTMLElement ? event.target : null
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
       if (document.querySelector('.ant-modal-wrap')) return
       if (event.key === '/') {
@@ -208,10 +200,6 @@ export default function LibraryPage(props: {
             </div>
           ) : null}
         </div>
-        <label className="paper-archive-quality" title="关闭半透明材质，降低显卡负担">
-          <input type="checkbox" checked={performanceMode} disabled={unsupported}
-            onChange={(event) => setPerformanceMode(event.target.checked)} />流畅模式
-        </label>
       </div>
 
       {unsupported ? (
@@ -225,7 +213,7 @@ export default function LibraryPage(props: {
           <h2>文库还是空的</h2>
           <p>解析第一篇论文后，它会作为档案出现在这里。</p>
           <button type="button" className="paper-archive-action" onClick={props.onCreate}>
-            <span>去新解析</span><ArrowRightOutlined />
+            <span>去新解析</span><ArrowRightOutlined aria-hidden="true" />
           </button>
         </div>
       ) : paper ? (
@@ -239,7 +227,7 @@ export default function LibraryPage(props: {
             <div><dt>创建</dt><dd>{formatTaskCreatedAt(paper.createdAt)}</dd></div>
           </dl>
           <button type="button" className="paper-archive-action" onClick={() => props.onOpen(paper.id)}>
-            <span>打开阅读</span><ArrowRightOutlined />
+            <span>打开阅读</span><ArrowRightOutlined aria-hidden="true" />
           </button>
         </article>
       ) : null}

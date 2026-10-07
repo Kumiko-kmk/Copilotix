@@ -71,6 +71,8 @@ export async function createE2EWorkspace(): Promise<E2EWorkspace> {
 export async function seedReaderTask(
   workspace: E2EWorkspace,
   options?: {
+    taskId?: string
+    createdAt?: string
     missingPdf?: boolean
     sourcePdf?: string
     sourceTaskDir?: string
@@ -82,7 +84,7 @@ export async function seedReaderTask(
     englishTitle?: string
   }
 ): Promise<string> {
-  const taskId = options?.missingPdf
+  const taskId = options?.taskId ?? (options?.missingPdf
     ? '00000000-0000-4000-8000-000000000001'
     : options?.sourceTaskDir
       ? '00000000-0000-4000-8000-000000000002'
@@ -90,7 +92,7 @@ export async function seedReaderTask(
         ? '00000000-0000-4000-8000-000000000003'
         : options?.alignmentRegression
           ? '00000000-0000-4000-8000-000000000004'
-          : '00000000-0000-4000-8000-000000000005'
+          : '00000000-0000-4000-8000-000000000005')
   const outputDir = join(workspace.root, 'documents-v2', taskId)
   const originalName = options?.missingPdf
     ? 'missing.pdf'
@@ -177,7 +179,7 @@ export async function seedReaderTask(
     remoteDataId: null,
     remoteResultUrl: null,
     error: options?.missingPdf ? 'fixture missing file' : null,
-    createdAt: now,
+    createdAt: options?.createdAt ?? now,
     updatedAt: now
   })
   repository.updateTask(taskId, {

@@ -78,7 +78,7 @@ function monthLabel(key: string): string {
 }
 
 export function shelfAt(shelves: readonly ArchiveShelf[], lane: number): ArchiveShelf | null {
-  return shelves.length ? shelves[wrap(lane, shelves.length)] : null
+  return shelves.length ? shelves[wrap(lane, shelves.length)] ?? null : null
 }
 
 export function paperIndexAt(shelves: readonly ArchiveShelf[], cell: ArchiveCell): number {
@@ -88,13 +88,13 @@ export function paperIndexAt(shelves: readonly ArchiveShelf[], cell: ArchiveCell
 
 export function paperAt(shelves: readonly ArchiveShelf[], cell: ArchiveCell): ArchivePaper | null {
   const shelf = shelfAt(shelves, cell.lane)
-  return shelf ? shelf.papers[wrap(cell.row, shelf.papers.length)] : null
+  return shelf?.papers.length ? shelf.papers[wrap(cell.row, shelf.papers.length)] ?? null : null
 }
 
 /** Where a paper sits, or null once it has left the archive. */
 export function locatePaper(shelves: readonly ArchiveShelf[], paperId: string): { shelf: number; index: number } | null {
-  for (let shelf = 0; shelf < shelves.length; shelf++) {
-    const index = shelves[shelf].papers.findIndex((paper) => paper.id === paperId)
+  for (const [shelf, column] of shelves.entries()) {
+    const index = column.papers.findIndex((paper) => paper.id === paperId)
     if (index >= 0) return { shelf, index }
   }
   return null
@@ -104,9 +104,11 @@ export function locatePaper(shelves: readonly ArchiveShelf[], paperId: string): 
 export function cellForPaper(shelves: readonly ArchiveShelf[], paperId: string, current: ArchiveCell): ArchiveCell | null {
   const location = locatePaper(shelves, paperId)
   if (!location) return null
+  const shelf = shelves[location.shelf]
+  if (!shelf?.papers.length) return null
   return {
     lane: nearestOccurrence(location.shelf, current.lane, shelves.length),
-    row: nearestOccurrence(location.index, current.row, shelves[location.shelf].papers.length)
+    row: nearestOccurrence(location.index, current.row, shelf.papers.length)
   }
 }
 
