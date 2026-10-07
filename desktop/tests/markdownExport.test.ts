@@ -8,7 +8,7 @@ import { PathPolicy } from '../src/main/pathPolicy'
 import type { TaskRepositoryCompat } from '../src/main/taskRepositoryCompat'
 import type { TaskComputePort } from '../src/core/ports'
 import type { CopilotixTask } from '../src/shared/types'
-import { LEGACY_TRANSLATION_PIPELINE_VERSION, TABLE_TRANSLATION_PROTOCOL } from '../src/shared/translationPlanProtocol'
+import { LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION, TRANSLATION_PIPELINE_VERSION, TABLE_TRANSLATION_PROTOCOL } from '../src/shared/translationPlanProtocol'
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'copilotix-markdown-export-'))
@@ -47,11 +47,11 @@ describe('standard Markdown export and transfer', () => {
     } finally { await rm(f.root, { recursive: true, force: true }) }
   })
 
-  it('exports recovered legacy manifest blocks instead of a missing/stale projection', async () => {
+  it.each([LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION, TRANSLATION_PIPELINE_VERSION])('exports recovered %s manifest blocks instead of a missing/stale projection', async (version) => {
     const f = await fixture()
     try {
       await writeFile(join(f.outputDir, 'translation.manifest.json'), JSON.stringify({
-        version: 2, taskId: f.task.id, translationPipelineVersion: LEGACY_TRANSLATION_PIPELINE_VERSION,
+        version: 2, taskId: f.task.id, translationPipelineVersion: version,
         tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
         blocks: [{ sourceIndex: 0, markdown: '<table><tr><td>模型</td></tr><tr><td>基线</td></tr></table>', mappingIds: [] }]
       }))
@@ -104,6 +104,8 @@ describe('standard Markdown export and transfer', () => {
       expect(await readFile(join(unpacked, 'full.zh-CN.md'), 'utf8')).toContain('| 译文')
       expect(await readdir(unpacked)).not.toContain('.translation')
       expect(await readFile(join(unpacked, 'images/a.png'), 'utf8')).toBe('image')
+      expect(await readFile(join(f.outputDir, 'full.md'), 'utf8')).toBe('<table><tr><td>Source</td></tr></table>')
+      expect(await readFile(join(f.outputDir, 'full.zh-CN.md'), 'utf8')).toBe('<table><tr><td>译文</td></tr></table>')
       expect((await readdir(f.exports)).some((name) => name.includes('.partial'))).toBe(false)
     } finally { await rm(f.root, { recursive: true, force: true }) }
   })

@@ -4,7 +4,7 @@ import { copyFile, lstat, mkdir, open, readFile, realpath, rename, rm, writeFile
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import archiver from 'archiver'
 import type { BlockMapping, DocumentPayload, CopilotixTask, TranslatedMarkdownBlock } from '@shared/types'
-import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
+import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
 import { normalizeMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdown'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
@@ -188,7 +188,7 @@ export class ArtifactService {
     try {
       const manifest = JSON.parse(await readFile(join(task.outputDir, 'translation.manifest.json'), 'utf8')) as unknown
       if (!isRecord(manifest) || manifest.version !== 2 || manifest.taskId !== task.id ||
-        ![TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION].includes(manifest.translationPipelineVersion as typeof TRANSLATION_PIPELINE_VERSION) ||
+        ![TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION].includes(manifest.translationPipelineVersion as typeof TRANSLATION_PIPELINE_VERSION) ||
         manifest.tableTranslationProtocol !== TABLE_TRANSLATION_PROTOCOL ||
         !Array.isArray(manifest.blocks)) return null
       const blocks = manifest.blocks.map((block) => {

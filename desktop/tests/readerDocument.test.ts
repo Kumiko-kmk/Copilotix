@@ -8,17 +8,17 @@ import {
 import type { BlockMapping, TranslatedMarkdownBlock } from '@shared/types'
 
 describe('reader document model', () => {
-  it('normalizes old HTML and translated HTML without changing annotation identities or source indexes', () => {
-    const markdown = '# Title\n\n<table><tr><td>Model</td></tr><tr><td>Baseline</td></tr></table>'
+  it('preserves rich original and translated tables without changing annotation identities or source indexes', () => {
+    const markdown = '# Title\n\n<table><tr><td rowspan="2">Model</td></tr><tr><td>Baseline</td></tr></table>'
     const result = buildReaderDocumentBlocks(markdown, '# 标题\n\n译文', [
       { sourceIndex: 0, markdown: '# 标题', mappingIds: [] },
-      { sourceIndex: 1, markdown: '<table><tr><td>模型</td></tr><tr><td>基线</td></tr></table>', mappingIds: [] }
+      { sourceIndex: 1, markdown: '<table><tr><td rowspan="2">模型</td></tr><tr><td>基线</td></tr></table>', mappingIds: [] }
     ], [])
     expect(result.original.map((block) => block.annotationKey)).toEqual(['content:0', 'content:1'])
     expect(result.translated.map((block) => block.annotationKey)).toEqual(['content:0', 'content:1'])
-    expect(result.original[1]?.markdown).toContain('| Model')
-    expect(result.translated[1]?.markdown).toContain('| 模型')
-    expect(result.translated[1]?.markdown).not.toContain('<table')
+    expect(result.original[1]?.markdown).toContain('<td rowspan="2">Model</td>')
+    expect(result.translated[1]?.markdown).toContain('<td rowspan="2">模型</td>')
+    expect(result.translated[1]?.markdown).not.toContain('| 模型')
   })
   it('restores headers, footnotes and page dividers while hiding printed page numbers', () => {
     const mappings = [

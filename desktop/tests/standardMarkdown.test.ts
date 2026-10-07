@@ -3,11 +3,36 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import { normalizeMarkdown, isLocalMarkdownImage } from '../src/shared/standardMarkdown'
+import { normalizeMarkdown, prepareReaderMarkdown, isLocalMarkdownImage } from '../src/shared/standardMarkdown'
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
 const flatten = (node: any): any[] => [node, ...(node.children ?? []).flatMap(flatten)]
 const nodes = (markdown: string): any[] => flatten(parser.parse(markdown))
+
+describe('rich reader format', () => {
+  it('retains merged cells, superscripts, spacing, and code while canonicalizing alternate math', () => {
+    const rich = '<table class="results"><tr><td rowspan="2" colspan="3"><sup>12</sup><sub>i</sub><br>  Text</td></tr></table>'
+    const code = '`\\(example\\)`\n\n```html\n<img src="code.png">\n```'
+    const source = `\uFEFF${rich}\r\n\r\n\\(x^2\\)\n\n${code}\n\n$\\left.{x}$\u000F`
+    const result = prepareReaderMarkdown(source)
+    expect(result).toContain(rich)
+    expect(result).toContain(code)
+    expect(result).toContain('$x^2$')
+    expect(result).toContain('${x}$�')
+    expect(prepareReaderMarkdown(result)).toBe(result)
+    expect(normalizeMarkdown(result).markdown).not.toContain('<table')
+  })
+
+  it('rebases Markdown, reference, and HTML images without rewriting other HTML or protected examples', () => {
+    const source = '<table class="result"><tr><td colspan="2"><img alt="A" src=\'old.png\'><img alt="empty"></td></tr></table>\n\n![plot](old.png)\n\n![ref][a]\n\n[a]: old.png\n\n<pre><img src="old.png"></pre>\n\n`![code](old.png)`'
+    const result = prepareReaderMarkdown(source, (url) => url === 'old.png' ? 'paper/a&b".png' : url)
+    expect(result).toContain('<table class="result"><tr><td colspan="2"><img alt="A" src="paper/a&amp;b&quot;.png"><img alt="empty"></td></tr></table>')
+    expect(nodes(result).filter((node) => node.type === 'image').map((node) => node.url)).toEqual(['paper/a&b".png', 'paper/a&b".png'])
+    expect(result).toContain('<pre><img src="old.png"></pre>')
+    expect(result).toContain('`![code](old.png)`')
+    expect(prepareReaderMarkdown('![same](old.png)', (url) => url)).toBe('![same](old.png)')
+  })
+})
 
 describe('public Markdown format', () => {
   it('repairs invalid delimiter sizing only when removing sizing produces valid TeX', () => {

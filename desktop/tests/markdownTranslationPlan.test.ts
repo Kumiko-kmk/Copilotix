@@ -192,11 +192,14 @@ describe('utility markdown translation plan manager', () => {
       expect(result).toContain('译:Other')
       await manager.finalize(fixture.task.id, fixture.jobId)
       const published = await readFile(join(fixture.outputDir, 'full.zh-CN.md'), 'utf8')
-      expect(published).not.toContain('<table')
-      expect(published).toContain('| 译:Head')
+      expect(published).toContain('<table')
+      expect(published).toContain('rowspan="2"')
+      expect(published).toContain('colspan="2"')
+      expect(published).toContain('译:Head')
       const manifest = await readJson(join(fixture.outputDir, 'translation.manifest.json'))
-      expect(manifest.markdownFormat).toBe('commonmark-gfm-math-v1')
-      expect(manifest.blocks[0].markdown).not.toContain('<table')
+      expect(manifest.markdownFormat).toBe('markdown-html-math-v1')
+      expect(manifest.blocks[0].markdown).toContain('<table')
+      expect(manifest.blocks[0].markdown).toBe(published.trimEnd())
     } finally {
       closeFixture(fixture)
     }

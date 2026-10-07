@@ -131,3 +131,8 @@ pnpm desktop:release:from-built
 - 格式、v4/v5 翻译计划兼容、旧文档映射、原子导出和真实论文验证边界见 `docs/MARKDOWN_FORMAT_ZH.md`。共享规范化入口为 `standardMarkdown.ts`，格式是 CommonMark + GFM + 明确数学扩展；不得把公式降级为代码来冒充修复。
 - Markdown 导出须带相邻图片目录并使用相对链接；图片复制失败时不得覆盖已有导出。任务目录里的原始资料不可作为导出目标。结果 ZIP 也须规范化两份 Markdown。
 - 对比交付只保留用户要求的两份 Markdown；Notion 桌面验收不能用浏览器或 CI 成功替代。
+
+## 11. 丰富阅读与标准导出分离（2026-10-07）
+
+- 使用者要求阅读器保留 HTML/LaTeX 丰富结构；解析、翻译发布与阅读器不得将合并表格展平。`prepareReaderMarkdown` 只做非结构性准备和可选图片路径修正；`normalizeMarkdown` 仅用于 Markdown/ZIP 导出投影，不回写源资料。
+- 新翻译计划为 v6，读取合法的 v4/v5/v6 manifest；已有 v5 平面表格无法自动恢复合并结构，不应自动重解析或重翻译。映射、标注、资源与原子发布契约不变。详细契约和测试见 `docs/MARKDOWN_FORMAT_ZH.md`。

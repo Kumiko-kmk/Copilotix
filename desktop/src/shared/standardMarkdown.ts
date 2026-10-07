@@ -9,6 +9,7 @@ import { renderToString } from 'katex'
 
 /** Public artifacts use CommonMark + GFM tables and the explicit $ / $$ math extension. */
 export const MARKDOWN_FORMAT_VERSION = 'commonmark-gfm-math-v1'
+export const READER_MARKDOWN_FORMAT_VERSION = 'markdown-html-math-v1'
 
 interface Node {
   type: string
@@ -236,7 +237,7 @@ function walk(node: Node, visit: (node: Node) => void): void {
 }
 
 /** Automatic delimiter sizing is typography, not a mathematical operator. */
-function repairMathSizing(value: string): string {
+export function repairMathSizing(value: string): string {
   if (!/\\(?:left|right)\b/u.test(value)) return value
   try {
     renderToString(value, { trust: false, throwOnError: true, strict: 'ignore' })
@@ -249,6 +250,53 @@ function repairMathSizing(value: string): string {
       return candidate
     } catch { return value }
   }
+}
+
+/** Preserve rich layout; patch only math and image URLs without serializing HTML. */
+export function prepareReaderMarkdown(source: string, rewriteImage?: (url: string) => string): string {
+  const clean = canonicalDelimiters(source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
+    .replace(/\p{Cc}/gu, (character) => character === '\t' || character === '\n' ? character : '\uFFFD'))
+  const root = processor.parse(clean) as unknown as Node
+  if (rewriteImage) resolveMarkdownReferences(root)
+  const patches: Array<{ start: number; end: number; value: string }> = []
+  walk(root, (node) => {
+    const start = node.position?.start.offset
+    const end = node.position?.end.offset
+    if (start === undefined || end === undefined) return
+    if (['math', 'inlineMath'].includes(node.type) && node.value) {
+      const repaired = repairMathSizing(node.value)
+      if (repaired !== node.value) {
+        node.value = repaired
+        patches.push({ start, end, value: String(processor.stringify({ type: 'root', children: [node] } as Parameters<typeof processor.stringify>[0])).trimEnd() })
+      }
+    }
+    if (!rewriteImage) return
+    if (node.type === 'image') {
+      const url = rewriteImage(node.url ?? '')
+      if (url !== node.url) {
+        node.url = url
+        patches.push({ start, end, value: String(processor.stringify({ type: 'root', children: [node] } as Parameters<typeof processor.stringify>[0])).trimEnd() })
+      }
+    }
+    if (node.type === 'html' && node.value) {
+      const visit = (html: Html): void => {
+        if (['pre', 'code', 'script', 'style'].includes(tag(html))) return
+        if (tag(html) === 'img' && 'sourceCodeLocation' in html) {
+          const location = html.sourceCodeLocation?.attrs?.src
+          const original = attribute(html, 'src')
+          if (location && original !== undefined) {
+            const url = rewriteImage(original)
+            if (url !== original) patches.push({ start: start + location.startOffset, end: start + location.endOffset,
+              value: `src="${url.replace(/&/gu, '&amp;').replace(/"/gu, '&quot;').replace(/</gu, '&lt;')}"` })
+          }
+        }
+        children(html).forEach(visit)
+      }
+      visit(parseFragment(node.value, { sourceCodeLocationInfo: true }))
+    }
+  })
+  return patches.sort((left, right) => right.start - left.start)
+    .reduce((markdown, patch) => markdown.slice(0, patch.start) + patch.value + markdown.slice(patch.end), clean)
 }
 
 export function normalizeMarkdown(source: string, rewriteImage?: (url: string) => string): MarkdownNormalization {

@@ -160,14 +160,14 @@ describe('utility persistence lifecycle', () => {
     }
   })
 
-  it('publishes standard Markdown and rebases nested parser images before recording checksums', async () => {
+  it('preserves rich parser tables and rebases nested parser images before recording checksums', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-parser-format-'))
     try {
       const outputDir = join(root, 'document')
       const extractedDir = join(outputDir, '.parsed.partial-format')
       const nested = join(extractedDir, 'paper')
       await mkdir(join(nested, 'images'), { recursive: true })
-      await writeFile(join(nested, 'paper.md'), '# Paper\n\n<table><tr><td>Model</td></tr><tr><td>$x^2$</td></tr></table>\n\n![plot](images/a%20b.png)')
+      await writeFile(join(nested, 'paper.md'), '# Paper\n\n<table><tr><td rowspan="2">Model</td><td><img src="images/a%20b.png"></td></tr><tr><td>$x^2$</td></tr></table>\n\n![plot](images/a%20b.png)')
       await writeFile(join(nested, 'images/a b.png'), 'image bytes')
       await writeFile(join(nested, 'layout.json'), JSON.stringify({ pdf_info: [] }))
       const revisions: Array<{ kind: string; checksum: string }> = []
@@ -176,10 +176,10 @@ describe('utility persistence lifecycle', () => {
       } } as never)
       await operations.handlers['compute:normalize-parser']!({ payload: { task: { id: 'paper', outputDir }, extractedDir, jobId: 'format' } } as never, new AbortController().signal)
       const markdown = await readFile(join(outputDir, 'full.md'), 'utf8')
-      expect(markdown).toContain('| Model')
+      expect(markdown).toContain('<td rowspan="2">Model</td>')
       expect(markdown).toContain('$x^2$')
       expect(markdown).toContain('![plot](paper/images/a%20b.png)')
-      expect(markdown).not.toContain('<table')
+      expect(markdown).toContain('<img src="paper/images/a%20b.png">')
       expect(await readFile(join(outputDir, 'paper/images/a b.png'), 'utf8')).toBe('image bytes')
       expect(revisions.find((item) => item.kind === 'parsed_markdown')?.checksum).toBe(createHash('sha256').update(markdown).digest('hex'))
     } finally { await rm(root, { recursive: true, force: true }) }
