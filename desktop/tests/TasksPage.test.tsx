@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import TasksPage, { documentTypeLabel, formatTaskCreatedAt } from '../src/renderer/pages/TasksPage'
@@ -83,6 +83,46 @@ describe('TasksPage', () => {
     expect(documentTypeLabel('paper.markdown')).toBe('Markdown')
     expect(documentTypeLabel('legacy-record')).toBe('PDF')
     expect(formatTaskCreatedAt('not-a-date')).toBe('not-a-date')
+  })
+
+  it('counts tasks per status group and filters by the overview chips', () => {
+    const onCreate = vi.fn()
+    render(<TasksPage
+      documents={[
+        document('a.pdf', 'Running', 'translating', '2026-09-20T22:19:16'),
+        document('b.pdf', 'Waiting', 'queued', '2026-09-20T22:19:16'),
+        document('c.pdf', 'Done', 'completed', '2026-09-20T22:19:16'),
+        document('d.pdf', 'Broken', 'failed', '2026-09-20T22:19:16')
+      ]}
+      onOpen={() => undefined}
+      onCreate={onCreate}
+    />)
+    // Scope role queries to four chips instead of repeatedly walking Ant Design's table.
+    const overview = within(screen.getByRole('group', { name: '按状态筛选' }))
+    const chip = (name: RegExp): HTMLElement => overview.getByRole('button', { name })
+    expect(chip(/^全部 4$/u).getAttribute('aria-pressed')).toBe('true')
+    expect(chip(/^处理中 2$/u)).toBeTruthy()
+    expect(chip(/^完成 1$/u)).toBeTruthy()
+
+    fireEvent.click(chip(/^需处理 1$/u))
+    expect(screen.getByText('Broken', { selector: 'button' })).toBeTruthy()
+    expect(screen.queryByText('Running', { selector: 'button' })).toBeNull()
+
+    fireEvent.click(chip(/^处理中 2$/u))
+    expect(screen.getByText('Running', { selector: 'button' })).toBeTruthy()
+    expect(screen.getByText('Waiting', { selector: 'button' })).toBeTruthy()
+    expect(screen.queryByText('Done', { selector: 'button' })).toBeNull()
+
+    fireEvent.change(screen.getByPlaceholderText('请输入任务名称'), { target: { value: 'zzz' } })
+    fireEvent.click(screen.getByRole('button', { name: '清除筛选' }))
+    expect(screen.getAllByText(/^(Running|Waiting|Done|Broken)$/u, { selector: 'button' })).toHaveLength(4)
+  })
+
+  it('offers a shortcut to create the first task when the list is empty', () => {
+    const onCreate = vi.fn()
+    render(<TasksPage documents={[]} onOpen={() => undefined} onCreate={onCreate} />)
+    fireEvent.click(screen.getByRole('button', { name: '去新解析' }))
+    expect(onCreate).toHaveBeenCalled()
   })
 
   it('selects local file deletion by default when opening the delete dialog', () => {

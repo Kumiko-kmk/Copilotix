@@ -100,6 +100,9 @@ export default function App(): React.JSX.Element {
         {view.name === 'new' && settings ? (
           <NewParsePage
             settings={settings}
+            documents={documents}
+            onOpenDocument={openDocument}
+            onOpenTasks={() => setView({ name: 'tasks' })}
             onCreated={() => {
               void queryClient.invalidateQueries({ queryKey: ['documents'] })
               setView({ name: 'tasks' })
@@ -108,7 +111,7 @@ export default function App(): React.JSX.Element {
             onOpenTutorial={() => setView({ name: 'tutorial' })}
           />
         ) : null}
-        {view.name === 'tasks' ? <TasksPage documents={documents} onOpen={openDocument} /> : null}
+        {view.name === 'tasks' ? <TasksPage documents={documents} onOpen={openDocument} onCreate={() => setView({ name: 'new' })} /> : null}
         {view.name === 'tutorial' && settings ? <TutorialPage
           settings={settings}
           documents={documents}

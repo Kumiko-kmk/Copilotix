@@ -16,6 +16,26 @@ export default function WindowControls(): React.JSX.Element {
     }
   }, [])
 
+  // Expose window state to CSS: maximized windows lose their rounded corners and an
+  // unfocused window greys out its traffic lights, matching macOS behaviour.
+  React.useEffect(() => {
+    document.documentElement.dataset.windowMaximized = String(maximized)
+  }, [maximized])
+
+  React.useEffect(() => {
+    const root = document.documentElement
+    const sync = (): void => { root.dataset.windowFocused = String(document.hasFocus()) }
+    sync()
+    window.addEventListener('focus', sync)
+    window.addEventListener('blur', sync)
+    return () => {
+      window.removeEventListener('focus', sync)
+      window.removeEventListener('blur', sync)
+      delete root.dataset.windowFocused
+      delete root.dataset.windowMaximized
+    }
+  }, [])
+
   const perform = React.useCallback((action: WindowAction) => {
     void window.copilotix.performWindowAction(action)
       .then((state) => setMaximized(state.maximized))
@@ -38,7 +58,7 @@ export default function WindowControls(): React.JSX.Element {
         aria-pressed={maximized}
         onClick={() => perform('toggle-maximize')}
       >
-        <span aria-hidden="true"><svg viewBox="0 0 12 12"><path d={maximized ? 'M5 2.5V5H2.5M7 9.5V7h2.5' : 'M2.5 5V2.5H5M9.5 7v2.5H7'} /></svg></span>
+        <span aria-hidden="true"><svg viewBox="0 0 12 12"><path className="filled" d={maximized ? 'M5.6 2.6v3H2.6ZM6.4 9.4v-3h3Z' : 'M3 3h3.8L3 6.8ZM9 9H5.2L9 5.2Z'} /></svg></span>
       </button>
     </div>
   )

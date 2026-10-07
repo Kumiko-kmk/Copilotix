@@ -37,7 +37,7 @@ test('opens the minimal new parse page', async () => {
     await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
     const uploadEntry = window.getByTestId('pdf-upload-entry')
     await expect(uploadEntry).toBeVisible()
-    await expect(uploadEntry).toHaveCSS('border-radius', '16px')
+    await expect(uploadEntry).toHaveCSS('border-radius', '20px')
     await expect(uploadEntry).toHaveCSS('border-style', 'solid')
     await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
     await window.getByRole('button', { name: '任务管理' }).click()
