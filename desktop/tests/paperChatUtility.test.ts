@@ -52,7 +52,7 @@ describe('paper chat Utility integration', () => {
       const settings = repository.getSettings(root)
       expect(settings).toMatchObject({ chatProvider: null, qwenChatModel: DEFAULT_SETTINGS.qwenChatModel, chatConsentVersion: null })
       repository.saveSettings({ ...settings, chatProvider: 'qwen', qwenChatModel: 'custom-chat', chatConsentVersion: 1 })
-      expect(repository.getSettings(root)).toMatchObject({ chatProvider: 'qwen', qwenChatModel: 'custom-chat', chatConsentVersion: 1 })
+      expect(repository.getSettings(root)).toMatchObject({ chatProvider: 'qwen', qwenChatModel: 'qwen-plus', chatConsentVersion: 1 })
       const turn = { id: randomUUID(), createdAt: now, provider: 'qwen', model: 'qwen-plus', question: 'saved question', answer: 'saved answer', citations: {}, status: 'completed' }
       await operations.handlers['chat:save-turn']!({ payload: { documentId, turn } } as never, signal)
       await operations.handlers['chat:save-session']!({ payload: { documentId, session: { draft: 'next question', pinned: [], selectedModel: null } } } as never, signal)

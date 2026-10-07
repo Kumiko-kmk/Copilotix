@@ -304,8 +304,8 @@ describe('paper chat settings authorization', () => {
   it('keeps models independent and revokes consent whenever the recipient changes', async () => {
     const repository = new SettingsRepository()
     const service = new SettingsService(repository, new MemoryVault({}), 'C:/papers')
-    const selected = await service.save({ ...publicUpdate(), chatProvider: null, qwenChatModel: 'custom-chat', chatConsentVersion: 2 })
-    expect(selected.settings).toMatchObject({ chatProvider: null, chatConsentVersion: 2, qwenChatModel: 'custom-chat', qwenModel: DEFAULT_SETTINGS.qwenModel })
+    const selected = await service.save({ ...publicUpdate(), chatProvider: null, qwenChatModel: 'qwen3.8-flash', chatConsentVersion: 2 })
+    expect(selected.settings).toMatchObject({ chatProvider: null, chatConsentVersion: 2, qwenChatModel: 'qwen3.8-flash', qwenModel: DEFAULT_SETTINGS.qwenModel })
     const changed = await service.save({ ...publicUpdate(), translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart'], chatConsentVersion: 2 })
     expect(changed.settings.translationProvider).toBe('deepseek')
     expect(changed.settings.chatConsentVersion).toBeNull()

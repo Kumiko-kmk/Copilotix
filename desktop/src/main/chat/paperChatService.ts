@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { PAPER_CHAT_DEFAULT_BUDGET, paperChatAskRequestSchema, paperContextResultSchema, resolvePaperChatProvider, hasPaperChatConsent, type PaperChatAskRequest, type PaperChatProvider, type PaperContext, type PaperContextRequest } from '@shared/paperChatSchemas'
+import { PAPER_CHAT_DEFAULT_BUDGET, PAPER_CHAT_MODELS, paperChatAskRequestSchema, paperContextResultSchema, resolvePaperChatProvider, resolvePaperChatModel, hasPaperChatConsent, type PaperChatAskRequest, type PaperChatProvider, type PaperContext, type PaperContextRequest } from '@shared/paperChatSchemas'
 import { canTransitionRagStreamEvent, citationSchema, ragErrorCodeSchema, ragStreamEventSchema, RAG_MAX_STREAM_DELTA_CHARS, type RagStreamEvent, type RagStreamEventType, type RagErrorCode } from '@shared/ragSchemas'
 import type { AppSettings } from '@shared/types'
 import type { StoredPaperChatTurn, PaperChatLoadRequest, PaperChatPage, PaperChatSession } from '@shared/paperChatStorageSchemas'
@@ -46,6 +46,8 @@ export class PaperChatService {
     const settings = await this.deps.settings()
     const provider = resolvePaperChatProvider(settings, request.provider)
     if (!provider) throw new ChatProviderError('CHAT_PROVIDER_REQUIRED', '请启用 Qwen 或 DeepSeek，并在问答中选择服务商')
+    const model = request.model ?? resolvePaperChatModel(provider, provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
+    if (!PAPER_CHAT_MODELS[provider].includes(model)) throw new ChatProviderError('RAG_INVALID_STATE', '请选择当前服务商支持的问答模型')
     if (!hasPaperChatConsent(settings, provider)) throw new ChatProviderError('CHAT_CONSENT_REQUIRED', '请先同意向服务商发送论文片段')
     const key = await this.deps.key(provider)
     if (!key) throw new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '请先保存模型 API Key')
@@ -59,7 +61,6 @@ export class PaperChatService {
     if (this.destroyed) throw new ChatProviderError('RAG_CANCELLED', '问答窗口已关闭')
     if (this.active.size >= 8) throw new ChatProviderError('RAG_LIMIT_EXCEEDED', '进行中的问答过多')
     const requestId = randomUUID()
-    const model = request.model ?? (provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
     let resolveDone!: () => void
     const done = new Promise<void>((resolve) => { resolveDone = resolve })
     let sequence = 0

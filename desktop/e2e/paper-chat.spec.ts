@@ -45,7 +45,7 @@ test('reuses the translation API and switches chat models without a second setti
     await window.getByRole('button', { name: '展开主导航' }).click()
     await window.getByRole('button', { name: '任务管理' }).click()
     await window.locator(`tr[data-row-key="${documentId}"] .task-link`).click()
-    // Chat is the reader's fourth tab, sized exactly like the Markdown reader.
+    // Chat is the reader's third tab, sized exactly like the Markdown reader.
     const chatTab = window.locator('.text-toolbar .ant-segmented-item', { hasText: 'AI 问答' })
     const model = window.locator('.reader-chat-model .ant-select-selection-item')
     await chatTab.click()
@@ -58,7 +58,7 @@ test('reuses the translation API and switches chat models without a second setti
     await window.locator('.ant-select-item-option[title="qwen3.8-flash"]').click()
     await expect(model).toHaveAttribute('title', 'qwen3.8-flash')
     // Leaving and returning to the tab keeps the session's model choice.
-    await window.locator('.text-toolbar .ant-segmented-item', { hasText: 'JSON' }).click()
+    await window.getByText('Markdown', { exact: true }).click()
     await expect(window.getByRole('region', { name: '论文 AI 问答' })).toBeHidden()
     await chatTab.click()
     await expect(model).toHaveAttribute('title', 'qwen3.8-flash')

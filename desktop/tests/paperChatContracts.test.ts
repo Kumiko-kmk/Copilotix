@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { paperChatAskRequestSchema, paperContextRequestSchema, paperContextResultSchema } from '@shared/paperChatSchemas'
 import { appSettingsSchema, settingsUpdateSchema } from '@shared/ipcSchemas'
+import { paperChatSessionSchema, paperChatTurnSchema } from '@shared/paperChatStorageSchemas'
 import { coreRequestSchema, validateCoreOperationResult, serializeCoreMessage, makeCoreEvent } from '@shared/coreRpcSchemas'
 import { CoreClient } from '@core/coreClient'
 import { registerPaperChatHandlers } from '../src/main/chat/paperChatIpc'
@@ -23,9 +24,17 @@ describe('paper chat wire contracts', () => {
     const { credentials: _credentials, ...update } = DEFAULT_SETTINGS
     expect(() => settingsUpdateSchema.parse({ ...update, chatProvider: 'bing' })).toThrow()
     expect(() => settingsUpdateSchema.parse({ ...update, qwenChatModel: 'bad\nmodel' })).toThrow()
+    expect(() => settingsUpdateSchema.parse({ ...update, qwenChatModel: 'custom-chat' })).toThrow()
+    expect(() => paperChatAskRequestSchema.parse({ ...request, model: 'custom-chat' })).toThrow()
     expect(() => settingsUpdateSchema.parse({ ...update, chatConsentVersion: -1 })).toThrow()
     const { chatProvider: _provider, qwenChatModel: _qwen, deepseekChatModel: _deepseek, chatConsentVersion: _consent, ...old } = DEFAULT_SETTINGS
     expect(appSettingsSchema.parse({ ...old, outputRoot: 'C:/papers' })).toMatchObject({ chatProvider: null, qwenChatModel: 'qwen-plus', chatConsentVersion: null })
+  })
+  it('recovers legacy custom selections while preserving old conversation metadata', () => {
+    const restored = paperChatSessionSchema.parse({ draft: 'keep draft', pinned: [], selectedModel: { provider: 'deepseek', model: 'custom-chat', custom: true } })
+    expect(restored).toEqual({ draft: 'keep draft', pinned: [], selectedModel: { provider: 'deepseek', model: 'deepseek-flash' } })
+    expect(appSettingsSchema.parse({ ...DEFAULT_SETTINGS, outputRoot: 'C:/papers', qwenChatModel: 'custom-chat' }).qwenChatModel).toBe('qwen-plus')
+    expect(paperChatTurnSchema.parse({ id: doc, createdAt: '2026-10-07T00:00:00.000Z', provider: 'qwen', model: 'custom-chat', question: 'old question', answer: 'old answer', citations: {}, status: 'completed' }).model).toBe('custom-chat')
   })
   it('enforces explicit, bounded Core RPC input/result contracts on both operations', () => {
     const payload = { documentId: doc, question: 'question', pinned: [], budgetChars: 48000 }

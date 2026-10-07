@@ -12,6 +12,7 @@ import type {
   SettingsUpdate
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
+import { resolvePaperChatModel } from '@shared/paperChatSchemas'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 
 /** The only persistence SettingsService needs. */
@@ -311,6 +312,8 @@ export function maskCredential(value: string): string {
 function internalProviderSettings(settings: AppSettings): AppSettings {
   return {
     ...settings,
+    qwenChatModel: resolvePaperChatModel('qwen', settings.qwenChatModel),
+    deepseekChatModel: resolvePaperChatModel('deepseek', settings.deepseekChatModel),
     qwenBaseUrl: DEFAULT_SETTINGS.qwenBaseUrl,
     qwenModel: DEFAULT_SETTINGS.qwenModel,
     deepseekBaseUrl: DEFAULT_SETTINGS.deepseekBaseUrl,

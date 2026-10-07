@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { resolvePaperChatModel } from '@shared/paperChatSchemas'
 import { existsSync, realpathSync } from 'node:fs'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
@@ -188,8 +189,8 @@ export class V2TaskRepositoryCompat {
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
       deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
       chatProvider: stored.chatProvider ?? DEFAULT_SETTINGS.chatProvider,
-      qwenChatModel: stored.qwenChatModel ?? DEFAULT_SETTINGS.qwenChatModel,
-      deepseekChatModel: stored.deepseekChatModel ?? DEFAULT_SETTINGS.deepseekChatModel,
+      qwenChatModel: resolvePaperChatModel('qwen', stored.qwenChatModel),
+      deepseekChatModel: resolvePaperChatModel('deepseek', stored.deepseekChatModel),
       chatConsentProvider: stored.chatConsentProvider ?? null,
       chatConsentVersion: stored.chatConsentVersion ?? null,
       credentials: DEFAULT_SETTINGS.credentials

@@ -105,9 +105,9 @@ pnpm desktop:release:from-built
 - Main 對文檔變更用 `createCoalescedRefresh` 合併刷新；新的高頻事件源（例如 RAG 索引進度）應走同一路徑，不得每個事件都全量查詢。
 - Reader 傳給 `MarkdownPane` 的 `blocks`、`annotations` 必須保持引用穩定（`useMemo`），否則滾動聯動會反覆重建長論文的高亮與小地圖。
 - PDF 閱讀區無外圍 padding／邊框／陰影，100% 按完整 clientWidth 貼合。寬度、縮放及延遲頁面尺寸改變時，在 layout effect 中按 PDF 頁號與頁內比例立即恢復位置；禁用原生 overflow anchoring，並取消舊滾動 frame，避免用舊像素偏移重新判斷頁碼。真人滾動及明確翻頁／引用定位仍正常更新頁碼。
-- 單篇論文 AI 問答的維護與交接見 `docs/READER_AI_CHAT_PLAN_ZH.md`（負責人 astra）。2026-10-07 已加入文獻目錄 `chat/` 下的原子持久化、歷史分頁、草稿／選區／模型恢復；不新增 migration，不合併 demo 分支的 schema 5–7。清空、文獻刪除、文庫維護及退出前必須等待對應問答取消並落盤，防止晚到寫入復活記錄或破壞快照。
+- 單篇論文 AI 問答的維護與交接見 `docs/READER_AI_CHAT_PLAN_ZH.md`（所有 Agent 的共享入口）。2026-10-07 已加入文獻目錄 `chat/` 下的原子持久化、歷史分頁、草稿／選區／模型恢復；不新增 migration，不合併 demo 分支的 schema 5–7。清空、文獻刪除、文庫維護及退出前必須等待對應問答取消並落盤，防止晚到寫入復活記錄或破壞快照。
 - 問答共用「服務連接」的 API／憑據，默認沿用翻譯服務商，但面板可選已啟用的 Qwen／DeepSeek 及獨立問答模型；不修改翻譯模型。舊 request 省略 provider 保持兼容，舊 chatProvider 設定不參與路由。Key、valid 狀態及 consent 仍分別驗證；不得在聊天文件中保存 Key。
-- 問答是閱讀器右側第四個頁籤，首次進入才掛載及建索引；「添加到對話」只加入選區，不切換頁籤。已恢復引用必須再核對 revision。構建 bundle 使用 Node 24.19.0，系統 Node 24.11.1 會靜默崩潰並留下舊 out/。
+- 閱讀器右側只有原文 Markdown、中文 Markdown、AI 問答三個頁籤，移除 JSON 展示但保留底層 layout 產物與 ZIP。問答只支持共享預設模型清單，IPC／Main 按服務商校驗；舊 session／設定的自訂型號回退到預設值，不損壞历史 turn。首次進入才掛載及建索引；「添加到對話」只加入選區，不切換頁籤。已恢復引用必須再核對 revision。構建 bundle 使用 Node 24.19.0，系統 Node 24.11.1 會靜默崩潰並留下舊 out/。
 
 
 ## 8. 遠端 CI 驗證與預設不跑本地測試

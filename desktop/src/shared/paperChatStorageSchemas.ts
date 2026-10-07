@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { citationSchema, ragUuidSchema, ragWireByteLength } from './ragSchemas'
-import { chatModelSchema, paperChatPinnedSchema, paperChatProviderSchema, PAPER_CHAT_MAX_BYTES } from './paperChatSchemas'
+import { chatModelSchema, paperChatPinnedSchema, paperChatProviderSchema, resolvePaperChatModel, PAPER_CHAT_MAX_BYTES } from './paperChatSchemas'
 
 // File format lives beside each paper; no database migration or credentials.
 export const paperChatTurnSchema = z.object({
@@ -16,7 +16,8 @@ export const paperChatTurnSchema = z.object({
 export const paperChatSessionSchema = z.object({
   draft: z.string().max(2_000),
   pinned: z.array(paperChatPinnedSchema).max(8),
-  selectedModel: z.object({ provider: paperChatProviderSchema, model: z.string().max(128), custom: z.boolean() }).strict().nullable()
+  selectedModel: z.object({ provider: paperChatProviderSchema, model: z.string().max(128), custom: z.boolean().optional() }).strict()
+    .transform(({ provider, model }) => ({ provider, model: resolvePaperChatModel(provider, model) })).nullable()
 }).strict().refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES - 1024, 'Session exceeds byte budget')
 export const emptyPaperChatSession = (): PaperChatSession => ({ draft: '', pinned: [], selectedModel: null })
 export const paperChatDocumentRequestSchema = z.object({ documentId: ragUuidSchema }).strict()

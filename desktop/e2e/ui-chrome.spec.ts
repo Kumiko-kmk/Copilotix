@@ -377,9 +377,10 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await expect(translatedMinimap).toHaveCSS('width', '60px')
     await capture(window, 'reader-minimap-1440x900-translated.png')
 
-    await window.getByText('JSON', { exact: true }).click()
+    await expect(window.getByText('JSON', { exact: true })).toHaveCount(0)
+    await window.getByText('AI 问答', { exact: true }).click()
     await expect(window.locator('.reader-tab-panel.active .markdown-minimap')).toHaveCount(0)
-    await expect(window.locator('.reader-tab-panel.active .json-view')).toBeVisible()
+    await expect(window.locator('.reader-tab-panel.active .paper-chat')).toBeVisible()
   } finally {
     await app.close()
     await workspace.cleanup()

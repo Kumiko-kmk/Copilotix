@@ -294,12 +294,8 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     const afterPassiveScroll = await window.locator('.pdf-scroll').evaluate((element) => element.scrollTop)
     expect(afterPassiveScroll).toBe(beforePassiveScroll)
 
-    await window.getByText('JSON', { exact: true }).click()
-    await expect(activeTextPanel.locator('.json-view')).toBeVisible()
-    await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(0)
-    await window.locator('[data-block-position="1-0"]').click()
-    await expect(activeTextPanel.locator('.json-view')).toBeVisible()
-    await window.getByText('Markdown（中文）').click()
+    await expect(window.getByText('JSON', { exact: true })).toHaveCount(0)
+    await expect(window.locator('[data-reader-tab-panel="json"]')).toHaveCount(0)
     await expect(activeTextPanel.locator('.markdown-block', { hasText: '第二段落包含' })).toBeVisible()
 
     const rangeResult = await window.evaluate(async (url) => {

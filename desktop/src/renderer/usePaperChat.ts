@@ -1,6 +1,6 @@
 import React from 'react'
 import { canTransitionRagStreamEvent, type Citation, type RagStreamEventType, type RagStreamEvent } from '@shared/ragSchemas'
-import { paperChatPinnedSchema, type PaperChatProvider } from '@shared/paperChatSchemas'
+import { paperChatPinnedSchema, supportedChatModelSchema, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ReaderChatSelection } from '@shared/types'
 import { emptyPaperChatSession, type PaperChatSession } from '@shared/paperChatStorageSchemas'
 
@@ -149,7 +149,7 @@ export function usePaperChat(documentId: string) {
       { role: 'assistant' as const, content: t.answer.slice(0, 2_000) }
     ])
     try {
-      const { requestId } = await window.copilotix.paperChat.ask({ documentId, question, pinned, history, ...(model ? { model } : {}), ...(provider ? { provider } : {}) })
+      const { requestId } = await window.copilotix.paperChat.ask({ documentId, question, pinned, history, ...(model ? { model: supportedChatModelSchema.parse(model) } : {}), ...(provider ? { provider } : {}) })
       if (epoch !== state.epoch) { void window.copilotix.paperChat.cancel({ requestId }).catch(() => undefined); return }
       if (state.pending) {
         state.requestId = requestId

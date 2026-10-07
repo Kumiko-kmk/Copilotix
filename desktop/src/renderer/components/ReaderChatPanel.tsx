@@ -2,14 +2,13 @@ import React from 'react'
 import { Button, Dropdown, Empty, Input, Progress, Select, message } from 'antd'
 import { ArrowUpOutlined, BorderOutlined, CloseOutlined, MoreOutlined } from '@ant-design/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CHAT_CONSENT_VERSION, PAPER_CHAT_MODELS, chatModelSchema, resolvePaperChatProvider, hasPaperChatConsent, type PaperChatProvider } from '@shared/paperChatSchemas'
+import { CHAT_CONSENT_VERSION, PAPER_CHAT_MODELS, resolvePaperChatModel, resolvePaperChatProvider, hasPaperChatConsent, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { Citation } from '@shared/ragSchemas'
 import type { AppSettings, BlockSelection } from '@shared/types'
 import type { PaperChatController, PaperChatTurn } from '../usePaperChat'
 import SafeMarkdown from './SafeMarkdown'
 import './paperChat.css'
 
-const CUSTOM_MODEL = '__custom'
 const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek' }
 const SUGGESTIONS = ['总结这篇论文的主要贡献', '解释论文的核心方法', '实验得出了哪些结论？']
 
@@ -20,12 +19,12 @@ function useChatRouting(chat: PaperChatController) {
   const provider = settings ? resolvePaperChatProvider(settings, chat.selectedModel?.provider) : null
   const configured = Boolean(settings && provider && settings.credentials[provider].state === 'valid')
   const defaultModel = provider === 'qwen' ? settings?.qwenChatModel ?? 'qwen-plus' : settings?.deepseekChatModel ?? 'deepseek-flash'
-  const model = chat.selectedModel?.provider === provider ? chat.selectedModel.model : defaultModel
+  const selectedModel = chat.selectedModel?.provider === provider ? chat.selectedModel.model : defaultModel
+  const model = provider ? resolvePaperChatModel(provider, selectedModel) : ''
   const models = provider ? PAPER_CHAT_MODELS[provider] : []
-  const customModel = chat.selectedModel?.provider === provider ? chat.selectedModel.custom : !models.includes(model)
-  const validModel = chatModelSchema.safeParse(model).success
+  const validModel = Boolean(provider && models.includes(model))
   const consented = Boolean(settings && provider && hasPaperChatConsent(settings, provider))
-  return { settings, provider, configured, model, models, customModel, validModel, consented }
+  return { settings, provider, configured, model, models, validModel, consented }
 }
 
 async function saveConsent(version: number | null, provider: PaperChatProvider | null = null): Promise<AppSettings> {
@@ -84,7 +83,7 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
         size="small" variant="borderless" aria-label="问答服务商" className="reader-chat-provider"
         value={provider} disabled={props.locked} popupMatchSelectWidth={false} placement="topLeft" placeholder="服务商"
         options={(Object.keys(PROVIDER_LABELS) as PaperChatProvider[]).map((value) => ({ value, label: PROVIDER_LABELS[value], disabled: !routing.settings?.enabledTranslationProviders.includes(value) }))}
-        onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: value === 'qwen' ? routing.settings?.qwenChatModel ?? 'qwen-plus' : routing.settings?.deepseekChatModel ?? 'deepseek-flash', custom: false })}
+        onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: resolvePaperChatModel(value, value === 'qwen' ? routing.settings?.qwenChatModel : routing.settings?.deepseekChatModel) })}
       />
       <Select
         size="small"
@@ -93,24 +92,11 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
         className="reader-chat-model"
         popupMatchSelectWidth={false}
         placement="topLeft"
-        value={routing.customModel ? CUSTOM_MODEL : routing.model}
+        value={routing.model}
         disabled={props.locked || !provider}
-        options={[...routing.models.map((name) => ({ value: name, label: name })), { value: CUSTOM_MODEL, label: '自定义模型…' }]}
-        onChange={(value: string) => { if (provider) chat.setSelectedModel({ provider, model: value === CUSTOM_MODEL ? '' : value, custom: value === CUSTOM_MODEL }) }}
+        options={routing.models.map((name) => ({ value: name, label: name }))}
+        onChange={(model: string) => { if (provider) chat.setSelectedModel({ provider, model }) }}
       />
-      {routing.customModel && provider ? (
-        <Input
-          size="small"
-          aria-label="模型名称"
-          className="reader-chat-custom-model"
-          placeholder="模型名称"
-          value={routing.model}
-          maxLength={128}
-          disabled={props.locked}
-          status={routing.model && !routing.validModel ? 'error' : undefined}
-          onChange={(event) => chat.setSelectedModel({ provider, model: event.target.value, custom: true })}
-        />
-      ) : null}
     </div>
   )
 }
@@ -155,7 +141,7 @@ export default function ReaderChatPanel(props: {
   const submit = React.useCallback(async (): Promise<void> => {
     chat.setDraft('')
     await chat.ask(question, routing.model.trim(), routing.provider ?? undefined)
-  }, [chat, question, routing.model])
+  }, [chat, question, routing.model, routing.provider])
 
   const send = (): void => {
     if (!canSend) return

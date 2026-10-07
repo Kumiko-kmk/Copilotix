@@ -22,7 +22,6 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
   const chat = usePaperChat(props.documentId)
   const [tab, setTab] = React.useState<ReaderTab>('original')
   const [selection, setSelection] = React.useState<BlockSelection | null>(null)
-  const [jsonQuery, setJsonQuery] = React.useState('')
   const [messageApi, contextHolder] = message.useMessage()
   const [, startTransition] = React.useTransition()
 
@@ -47,7 +46,6 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
   React.useEffect(() => {
     setTab('original')
     setSelection(null)
-    setJsonQuery('')
   }, [props.documentId])
 
   const markdown = document?.markdown ?? ''
@@ -148,9 +146,6 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
           translatedBlocks={translatedBlocks}
           translatedReady={translatedReady}
           taskStatus={document.summary.workflow.status}
-          layoutJson={document.layoutJson}
-          jsonQuery={jsonQuery}
-          onJsonQueryChange={setJsonQuery}
           assetBaseUrl={document.assetBaseUrl}
           pdfUrl={document.pdfUrl}
           mappings={document.mappings}
@@ -249,8 +244,7 @@ async function copyCurrent(
 ): Promise<void> {
   const value = tab === 'original' ? document.markdown
     : tab === 'translated' ? document.translatedMarkdown
-      : tab === 'chat' ? chatTranscript(turns)
-        : document.layoutJson
+      : chatTranscript(turns)
   await navigator.clipboard.writeText(value)
   messageApi.success('已复制')
 }

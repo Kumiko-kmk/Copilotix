@@ -164,13 +164,12 @@ describe('ReaderChatPanel and local paper sessions', () => {
     expect(window.copilotix.saveSettings).not.toHaveBeenCalled()
     expect(document.querySelector('.reader-chat-model')?.classList.contains('ant-select-disabled')).toBe(true)
   })
-  it('accepts custom model names, blocks invalid names, and revokes consent directly in chat', async () => {
+  it('offers only preset models and revokes consent directly in chat', async () => {
     const f = setup()
-    await chooseModel('自定义模型…')
-    fireEvent.change(await screen.findByLabelText('模型名称'), { target: { value: 'invalid model' } })
+    await chooseModel('qwen3.8-flash')
+    expect(screen.queryByText('自定义模型…')).toBeNull()
+    expect(screen.queryByLabelText('模型名称')).toBeNull()
     fireEvent.change(screen.getByLabelText('向当前论文提问'), { target: { value: '问题' } })
-    expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText('模型名称'), { target: { value: 'custom-chat-model' } })
     await openMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: '撤销发送授权' }))
     await waitFor(() => expect(window.copilotix.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ chatConsentVersion: null })))
@@ -178,7 +177,7 @@ describe('ReaderChatPanel and local paper sessions', () => {
     await waitFor(() => expect(screen.queryByRole('menuitem', { name: '撤销发送授权' })).toBeNull())
     fireEvent.click(screen.getByRole('button', { name: /^发\s*送$/u }))
     fireEvent.click(await screen.findByRole('button', { name: '同意并发送' }))
-    await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ model: 'custom-chat-model' })))
+    await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ model: 'qwen3.8-flash' })))
   })
   it('keeps the model when reopening chat and resets it when switching papers', async () => {
     const f = setup()

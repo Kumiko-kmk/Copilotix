@@ -26,7 +26,7 @@ describe('paper-local chat storage', () => {
     turn.citations.E1 = { citationId: randomUUID(), evidenceId: 'E1', documentId: f.doc, chunkId: 'chunk1', excerpt: '论文原文',
       locator: { documentId: f.doc, artifactId: randomUUID(), contentRevisionId: 'revision1', contentHash: 'a'.repeat(64), mappingIds: ['m1'], pageStart: 0, pageEnd: 0, sourceStartOffset: 0, sourceEndOffset: 4, offsetUnit: 'utf16' }, scoreProvenance: [{ source: 'full-text', rank: 1, score: 1 }] }
     await first.saveTurn(f.doc, turn)
-    const session = { ...emptyPaperChatSession(), draft: '下一個問題', selectedModel: { provider: 'deepseek' as const, model: 'deepseek-v4-pro', custom: false }, pinned: [{ view: 'original' as const, text: '论文原文', contentRevisionId: 'revision1', fragments: [{ mappingIds: ['m1'], quote: '论文原文', startOffset: 0, endOffset: 4 }] }] }
+    const session = { ...emptyPaperChatSession(), draft: '下一個問題', selectedModel: { provider: 'deepseek' as const, model: 'deepseek-v4-pro' }, pinned: [{ view: 'original' as const, text: '论文原文', contentRevisionId: 'revision1', fragments: [{ mappingIds: ['m1'], quote: '论文原文', startOffset: 0, endOffset: 4 }] }] }
     await first.saveSession(f.doc, session)
     expect(await f.store().load(f.doc)).toEqual({ turns: [turn], next: null })
     expect(await f.store().session(f.doc)).toEqual(session)

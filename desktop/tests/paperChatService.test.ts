@@ -142,10 +142,10 @@ describe('PaperChatService', () => {
   })
   it('uses the independent DeepSeek model and completes even if usage persistence fails', async () => {
     const f = setup()
-    Object.assign(f.settings, { translationProvider: 'deepseek', chatProvider: 'qwen', deepseekChatModel: 'custom-chat', credentials: { ...f.settings.credentials, deepseek: { state: 'valid' } } })
+    Object.assign(f.settings, { translationProvider: 'deepseek', chatProvider: 'qwen', deepseekChatModel: 'deepseek-v4-pro', credentials: { ...f.settings.credentials, deepseek: { state: 'valid' } } })
     f.deps.recordUsage.mockRejectedValue(new Error('disk failed'))
     await f.service.ask(request, f.send); await f.terminal()
-    expect(f.deps.stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'deepseek', model: 'custom-chat', baseUrl: DEFAULT_SETTINGS.deepseekBaseUrl }))
+    expect(f.deps.stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-pro', baseUrl: DEFAULT_SETTINGS.deepseekBaseUrl }))
     expect(f.events.at(-1)!.type).toBe('completed')
   })
   it('uses the translation Key and endpoint, ignores legacy chatProvider, and accepts a per-request model', async () => {
@@ -155,6 +155,14 @@ describe('PaperChatService', () => {
     expect(f.deps.key).toHaveBeenCalledWith('qwen')
     expect(f.deps.stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'qwen', key: 'private key', baseUrl: DEFAULT_SETTINGS.qwenBaseUrl, model: 'qwen3.8-flash' }))
     expect(f.settings.qwenModel).toBe('qwen-mt-plus')
+  })
+  it('rejects custom models and models belonging to a different provider before reading credentials', async () => {
+    const f = setup()
+    await expect(f.service.ask({ ...request, model: 'custom-model' } as never, f.send)).rejects.toThrow()
+    await expect(f.service.ask({ ...request, provider: 'qwen', model: 'deepseek-flash' }, f.send)).rejects.toMatchObject({ code: 'RAG_INVALID_STATE' })
+    expect(f.deps.key).not.toHaveBeenCalled()
+    expect(f.deps.saveTurn).not.toHaveBeenCalled()
+    expect(f.deps.stream).not.toHaveBeenCalled()
   })
   it('rejects disabled translation providers and consent from the previous routing version', async () => {
     const f = setup()

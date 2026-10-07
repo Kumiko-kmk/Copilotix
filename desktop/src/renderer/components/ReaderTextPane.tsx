@@ -1,5 +1,5 @@
 import React from 'react'
-import { Badge, Empty, Input, Segmented, Tag } from 'antd'
+import { Badge, Empty, Segmented, Tag } from 'antd'
 import type { ReaderBlock } from '@shared/readerDocument'
 import type {
   BlockMapping,
@@ -10,13 +10,12 @@ import type {
   ReaderChatSelection,
 } from '@shared/types'
 import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
-import JsonPane from './JsonPane'
 import MarkdownPane from './MarkdownPane'
 import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
 import type { PaperChatController } from '../usePaperChat'
 import { buildReaderFigureGeometries, projectReaderFigureGroups } from '../readerFigureGroups'
 
-export type ReaderTab = 'original' | 'translated' | 'json' | 'chat'
+export type ReaderTab = 'original' | 'translated' | 'chat'
 
 /** AI chat lives in the same frame as the readers; it is optional so the reader works without it. */
 export interface ReaderChatOptions {
@@ -32,9 +31,6 @@ export default function ReaderTextPane(props: {
   translatedBlocks: ReaderBlock[]
   translatedReady: boolean
   taskStatus: DocumentWorkflowStatus
-  layoutJson: string
-  jsonQuery: string
-  onJsonQueryChange(query: string): void
   assetBaseUrl: string
   pdfUrl?: string
   mappings?: BlockMapping[]
@@ -95,21 +91,11 @@ export default function ReaderTextPane(props: {
           options={[
             { value: 'original', label: 'Markdown' },
             { value: 'translated', label: 'Markdown（中文）' },
-            { value: 'json', label: 'JSON' },
             ...(props.chat ? [{ value: 'chat' as const, label: <ChatTabLabel controller={props.chat.controller} /> }] : [])
           ]}
         />
         {props.tab === 'translated' ? (
           <Tag color={translationColor(props.taskStatus)}>{translationLabel(props.taskStatus)}</Tag>
-        ) : null}
-        {props.tab === 'json' ? (
-          <Input
-            allowClear
-            size="small"
-            placeholder="搜索 JSON"
-            value={props.jsonQuery}
-            onChange={(event) => props.onJsonQueryChange(event.target.value)}
-          />
         ) : null}
         {props.tab === 'chat' && props.chat ? <ReaderChatToolbar chat={props.chat.controller} /> : null}
       </div>
@@ -156,9 +142,6 @@ export default function ReaderTextPane(props: {
         ) : props.translatedReady ? null : (
           <Empty className="translation-empty" description={translationLabel(props.taskStatus)} />
         )}
-      </ReaderPanel>
-      <ReaderPanel tab="json" activeTab={props.tab}>
-        {props.tab === 'json' ? <JsonPane json={props.layoutJson} query={props.jsonQuery} active /> : null}
       </ReaderPanel>
       {props.chat ? (
         // Mounts on first visit only: the panel asks the Utility to build the

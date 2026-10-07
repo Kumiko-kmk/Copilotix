@@ -1,4 +1,4 @@
-import { paperChatProviderSchema, chatModelSchema } from './paperChatSchemas'
+import { paperChatProviderSchema, qwenChatModelSchema, deepseekChatModelSchema } from './paperChatSchemas'
 import { z } from 'zod'
 import type {
   AppSettings,
@@ -97,8 +97,8 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
   chatProvider: paperChatProviderSchema.nullable().default(null),
-  qwenChatModel: chatModelSchema.default('qwen-plus'),
-  deepseekChatModel: chatModelSchema.default('deepseek-flash'),
+  qwenChatModel: qwenChatModelSchema.default('qwen-plus').catch('qwen-plus'),
+  deepseekChatModel: deepseekChatModelSchema.default('deepseek-flash').catch('deepseek-flash'),
   chatConsentProvider: paperChatProviderSchema.nullable().default(null),
   chatConsentVersion: z.number().int().min(1).max(1000).nullable().default(null),
   credentials: credentialStatusesSchema
@@ -119,8 +119,8 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
   chatProvider: paperChatProviderSchema.nullable().default(null),
-  qwenChatModel: chatModelSchema.default('qwen-plus'),
-  deepseekChatModel: chatModelSchema.default('deepseek-flash'),
+  qwenChatModel: qwenChatModelSchema.default('qwen-plus'),
+  deepseekChatModel: deepseekChatModelSchema.default('deepseek-flash'),
   chatConsentProvider: paperChatProviderSchema.nullable().default(null),
   chatConsentVersion: z.number().int().min(1).max(1000).nullable().default(null),
   credentialMutations: z.object({

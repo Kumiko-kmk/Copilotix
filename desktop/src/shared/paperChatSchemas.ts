@@ -8,6 +8,9 @@ export const PAPER_CHAT_MAX_BYTES = 256 * 1024
 export const paperChatProviderSchema = z.enum(['qwen', 'deepseek'])
 export type PaperChatProvider = z.infer<typeof paperChatProviderSchema>
 export const chatModelSchema = z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9_.:/-]+$/u)
+export const qwenChatModelSchema = z.enum(['qwen-plus', 'qwen3.8-flash', 'qwen3.8-max'])
+export const deepseekChatModelSchema = z.enum(['deepseek-flash', 'deepseek-v4-pro'])
+export const supportedChatModelSchema = z.union([qwenChatModelSchema, deepseekChatModelSchema])
 export const contentIdentitySchema = citationLocatorSchema.shape.contentRevisionId
 // Follow the existing translation configuration; the legacy chatProvider is ignored.
 export function resolvePaperChatProvider(settings: Pick<AppSettings, 'translationProvider' | 'enabledTranslationProviders'>, selected?: PaperChatProvider): PaperChatProvider | null {
@@ -18,8 +21,13 @@ export function hasPaperChatConsent(settings: Pick<AppSettings, 'chatConsentVers
   return settings.chatConsentVersion === CHAT_CONSENT_VERSION && (settings.chatConsentProvider ?? resolvePaperChatProvider(settings)) === provider
 }
 export const PAPER_CHAT_MODELS: Record<PaperChatProvider, readonly string[]> = {
-  qwen: ['qwen-plus', 'qwen3.8-flash', 'qwen3.8-max'],
-  deepseek: ['deepseek-flash', 'deepseek-v4-pro']
+  qwen: qwenChatModelSchema.options,
+  deepseek: deepseekChatModelSchema.options
+}
+// Old custom selections fall back without discarding the paper's saved chat.
+export function resolvePaperChatModel(provider: PaperChatProvider, model?: string | null): string {
+  const models = PAPER_CHAT_MODELS[provider]
+  return model && models.includes(model) ? model : models[0]!
 }
 const content = (max: number) => z.string().min(1).max(max).refine((s) => !Array.from(s).some((c) => { const n = c.codePointAt(0)!; return (n < 32 && n !== 9 && n !== 10 && n !== 13) || (n >= 127 && n <= 159) }))
 export const paperChatPinnedSchema = z.object({
@@ -35,7 +43,7 @@ export const paperChatAskRequestSchema = z.object({
   question: ragQuerySchema,
   pinned: z.array(paperChatPinnedSchema).max(8),
   history: paperChatHistorySchema,
-  model: chatModelSchema.optional(),
+  model: supportedChatModelSchema.optional(),
   provider: paperChatProviderSchema.optional()
 }).strict().refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES, 'Request exceeds byte budget')
 export const paperChatAskResultSchema = z.object({ requestId: ragUuidSchema }).strict()

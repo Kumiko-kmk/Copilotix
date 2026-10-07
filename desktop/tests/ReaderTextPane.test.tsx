@@ -42,25 +42,20 @@ describe('ReaderTextPane', () => {
     originalScroller.scrollTop = 360
     fireEvent.scroll(originalScroller)
     expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeNull()
-    expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBeNull()
+    expect(view.queryByText('JSON', { exact: true })).toBeNull()
 
     fireEvent.click(view.getByText('Markdown（中文）'))
     expect(view.container.querySelector('[data-reader-tab-panel="translated"]')?.classList.contains('active')).toBe(true)
     expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBeNull()
     await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
 
-    fireEvent.click(view.getByText('JSON', { exact: true }))
-    expect(view.container.querySelector('[data-reader-tab-panel="json"]')?.classList.contains('active')).toBe(true)
-    expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeNull()
-    expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBeTruthy()
-
     fireEvent.click(view.getByText('Markdown', { exact: true }))
     await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     expect(view.container.querySelector<HTMLElement>('[data-reader-tab-panel="original"] .markdown-scroll')?.scrollTop).toBe(360)
-    expect(view.container.querySelector('[data-reader-tab-panel="json"] .json-view')).toBeNull()
+    expect(view.container.querySelector('[data-reader-tab-panel="json"]')).toBeNull()
   })
 
-  it('adds AI chat as a fourth tab that keeps its panel mounted while readers stay lazy', async () => {
+  it('adds AI chat as a third tab that keeps its panel mounted while readers stay lazy', async () => {
     const chat: ReaderChatOptions = {
       controller: { pinned: [{}, {}], busy: true } as unknown as PaperChatController,
       onOpenSettings: vi.fn(),
@@ -121,9 +116,6 @@ function TranslationArrivalHarness(): React.JSX.Element {
         translatedBlocks={translatedReady ? [content('source', '中文段落')] : []}
         translatedReady={translatedReady}
         taskStatus={translatedReady ? 'completed' : 'translating'}
-        layoutJson='{"needle":true}'
-        jsonQuery=""
-        onJsonQueryChange={() => undefined}
         assetBaseUrl="copilotix-asset://task/"
         taskId="task"
         annotations={[]}
@@ -145,9 +137,6 @@ function Harness(props: { chat?: ReaderChatOptions }): React.JSX.Element {
       translatedBlocks={[content('source', '中文段落')]}
       translatedReady
       taskStatus="completed"
-      layoutJson='{"needle":true}'
-      jsonQuery=""
-      onJsonQueryChange={() => undefined}
       assetBaseUrl="copilotix-asset://task/"
       taskId="task"
       annotations={[]}
