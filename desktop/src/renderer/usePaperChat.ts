@@ -165,7 +165,7 @@ export function usePaperChat(documentId: string) {
   }, [documentId, pinned, turns])
 
   const clear = React.useCallback(async () => {
-    const epoch = documentEpoch.current
+    const epoch = ++documentEpoch.current
     if (active.current.pending) stop()
     setLoading(true)
     try {

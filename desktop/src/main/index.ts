@@ -399,7 +399,7 @@ function registerIpc(
   registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, async (_event, update) => {
     const before = await settings.get()
     const result = await settings.save(update)
-    if (before.translationProvider !== result.settings.translationProvider || before.chatConsentVersion !== result.settings.chatConsentVersion || before.chatConsentProvider !== result.settings.chatConsentProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
+    if (before.enabledTranslationProviders.join(',') !== result.settings.enabledTranslationProviders.join(',') || before.translationProvider !== result.settings.translationProvider || before.chatConsentVersion !== result.settings.chatConsentVersion || before.chatConsentProvider !== result.settings.chatConsentProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
     return result
   }, validationOptions)
   registerValidatedHandler('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, (_event, request) => settings.validateCredential(request.name, request.value), validationOptions)
