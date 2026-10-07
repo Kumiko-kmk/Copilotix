@@ -58,7 +58,7 @@ afterEach(() => {
 describe('MarkdownPane', () => {
   it('renders preserved merged HTML cells, superscripts, and repaired cell math through the reader model', async () => {
     const source = '<table><tr><td rowspan="2">Group<sup>12</sup></td><td colspan="2">$\\left.{x}$</td></tr><tr><td>A<sub>i</sub></td><td>B</td></tr></table>'
-    const blocks = buildReaderDocumentBlocks(source, null, null, []).original
+    const blocks = buildReaderDocumentBlocks(source, '', null, []).original
     const view = renderPane(blocks, null, vi.fn())
     await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     expect(view.container.querySelector('td[rowspan="2"]')?.textContent).toBe('Group12')
