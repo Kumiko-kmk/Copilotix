@@ -30,6 +30,8 @@ Copilotix 是面向论文阅读的 Windows 桌面应用。导入 PDF，经 Miner
 
 > **1.1.0 经授权以未签章形式发布。** 请从本仓库 Release 下载，并用同页 `SHA256SUMS.txt` 核对文件；后续正式签章要求仍保留。安装、覆盖升级及资料保留见 [Wiki 安装指南](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade)。
 
+<a id="api-keys"></a>
+
 ## 🔑 服务与模型
 
 程序不附带 API Key。问答和翻译共用对应服务凭据，分别选择模型，切换问答模型不会修改翻译配置。
