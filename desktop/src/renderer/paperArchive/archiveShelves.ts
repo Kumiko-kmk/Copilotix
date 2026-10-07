@@ -3,11 +3,16 @@ import type { DocumentSummary } from '@shared/ipcSchemas'
 export type ArchivePaper = Pick<DocumentSummary, 'id' | 'displayName' | 'originalName' | 'createdAt' | 'workflow'>
 
 export interface ArchiveShelf {
-  /** Stable key, `YYYY-MM` or `undated`. */
+  /** Stable key: `YYYY-MM` or `undated`, with `#n` when a month spans several columns. */
   key: string
   label: string
+  /** Month label shared by every column of the same month. */
+  month: string
   papers: ArchivePaper[]
 }
+
+/** RhineLabUI's array holds eight files per column. */
+export const COLUMN_CAPACITY = 8
 
 /** Physical position in the unbounded, looping archive plane. */
 export type ArchiveCell = { lane: number; row: number }
@@ -35,8 +40,29 @@ export function groupPapersByMonth(papers: readonly ArchivePaper[]): ArchiveShel
     .map(([key, items]) => ({
       key,
       label: monthLabel(key),
+      month: monthLabel(key),
       papers: items.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
     }))
+}
+
+/**
+ * Archive columns: months in order, long months split into balanced columns so the
+ * plane always has neighbouring columns to slide to. Small libraries keep at least
+ * four papers per column; large ones at most eight.
+ */
+export function buildArchiveColumns(papers: readonly ArchivePaper[]): ArchiveShelf[] {
+  const capacity = Math.min(COLUMN_CAPACITY, Math.max(4, Math.ceil(papers.length / 5)))
+  return groupPapersByMonth(papers).flatMap((month) => {
+    const parts = Math.ceil(month.papers.length / capacity)
+    if (parts <= 1) return [month]
+    const size = Math.ceil(month.papers.length / parts)
+    return Array.from({ length: parts }, (_, part) => ({
+      key: `${month.key}#${part + 1}`,
+      label: `${month.label} · ${part + 1}/${parts}`,
+      month: month.label,
+      papers: month.papers.slice(part * size, (part + 1) * size)
+    }))
+  })
 }
 
 function monthKey(value: string): string {

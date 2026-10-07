@@ -110,9 +110,20 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 
 - `LibraryPage.tsx` 懶載入文庫與 Three.js；從此進閱讀器以 `returnTo: 'library'` 返回並恢復選中論文，其他入口保持任務管理返回路徑。
 - RhineLabUI（MIT，LBEILC）來源與許可見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`。GLB 僅五個外殼網格，以 `?inline`／`parseAsync` 解析，CSP 不變；不包含原專案品牌、音頻、字體或正文。**不改 `archiveMotion.ts` 已校準曲線**，手感調整使用 Scene 彈簧速率。
-- `archiveShelves.ts` 按本地月份分列、新月新論文在前、無效日期在末列；列／行循環取最近位置、記住每列論文，資料變更保持選中 ID。Index_Inlay 狀態色：完成原色、處理中主色、部分完成琥珀、失敗紅色。
-- 保持按需渲染、視錐／霧距剔除、共享 instanceMatrix、DPR ≤1.5、僅 diffuser 投影；閒置呼吸 ≤30fps，失焦／隱藏停止閒置動效，reduced-motion 關閉入場／漣漪／呼吸，卸載釋放 GPU 資源。
+- `archiveShelves.ts` 按本地月份分組、新月新論文在前、無效日期在末；`buildArchiveColumns` 再把長月份均分成多列（每列 4–8 篇，按總數取 `ceil(n/5)`），保證只有一個月份時←→仍可橫向切列，HUD 顯示「月份 · 第幾列」。列／行循環取最近位置、記住每列論文，資料變更保持選中 ID。Index_Inlay 狀態色：完成原色、處理中主色、部分完成琥珀、失敗紅色。
+- 性能契約（2026-10-07 二輪，目標 60 fps）：按需渲染，連續動畫與閒置呼吸都按約 60 fps 節拍出幀（120/144 Hz 顯示器隔幀繪製，不再把呼吸限到 30 fps 造成頓挫）；DPR ≤1.25 且繪製像素 ≤3.3M；transmission 半解析度（`transmissionResolutionScale = 0.5`）；陰影貼圖 1024；連續 6 幀以上超過 23 ms 時自動把解析度降 15%（下限 0.55），穩定 240 幀且 8 秒未降才回升 8%。滑鼠拾取用卡片外殼盒做解析求交（0.08 ms），不得再對 InstancedMesh 做三角形 raycast（原 2 ms／次）。實測 1920×1080：每幀 18.5 ms → 約 9 ms（含模擬），質感（磨砂透射、底部漸暗、陰影、螺絲）保留。視錐／霧距剔除、共享 instanceMatrix、僅 diffuser 投影、失焦／隱藏停止、reduced-motion、卸載釋放 GPU 資源不變。
 - 已補檢索：右上按標題／原檔名搜尋，大小寫不敏感、空白分詞；`/` 聚焦、Enter 選首項、Tab 選結果、Esc 收起，輸入法組字不觸發選擇。最多顯示 40 項並提示細化；選中呼叫 `focusPaper(id)` 最近循環定位。WebGL／模型失敗時可由搜尋直接打開閱讀。
 - 已補「流暢模式」：localStorage `copilotix.library.performance.v1` 保存選項，原場景原位切換 Frosted_Polymer transmission 0／0.78，低畫質顏色 `#e9dfd2`，保留底部漸暗與動效曲線，不重建場景或重置選中。
 - 測試：`tests/paperArchive.test.ts`（分列／循環／動效）、`tests/LibraryPage.test.tsx`（搜尋、鍵盤／IME、資料更新、降級、畫質保存）、`e2e/paper-archive.spec.ts`（正常／禁用 WebGL、上下導航、搜尋、閱讀與返回）。E2E 等 canvas `data-archive-state="ready"` 或明確降級，不以空 canvas 當成功。
 - 本輪四個 bundle 構建及內建 Utility smoke 通過，未重新打包 EXE；遵守第 8 節，未執行本地 lint／typecheck／單元／E2E，未 push 或觸發 CI。真實顯卡性能與視覺效果仍待真人驗收。
+
+### 給 Astra 的話（Claude，2026-10-07 二輪）
+
+Astra，謝謝你補的檢索、流暢模式和測試～使用者反饋實機「非常卡頓、呼吸和滑動不順、不能橫向切列」，本輪我做了：
+
+1. **卡頓**：原因是 DPR 1.5 下 transmission 全解析度＋2048 陰影（1920×1080 每幀 18.5 ms），以及每次滑鼠移動 2 ms 的三角形 raycast。已改為上面性能契約的設定，並加入 60 fps 節拍與自動降解析度，你的「流暢模式」仍保留作為手動最低檔，兩者可疊加。
+2. **橫向切列**：使用者的論文多在同一月份，只有一列，所以←→無效。現在長月份會拆成多列；←→按鈕不再因只有一列而禁用（只有一列時仍能做實體橫移）。按鈕 aria-label 改成「上一列／下一列」，如果你的 E2E 有按月份名字找按鈕，請同步。
+3. 搜尋結果的月份改用 `shelf.month`（列標籤會帶「· 1/5」）。
+
+想請你接手：在 E2E 或單元測試裡補一條「單一月份 37 篇 → 5 列、按 → 後 HUD 顯示 COLUMN 02 / 05」的斷言；以及若 CI 的 Playwright 能讀 `renderer.info`，可加一個寬鬆的性能守門（例如三角形數量不超過 3M），防止以後有人把 DPR 或陰影改回去。曲線常數仍請勿改。
+

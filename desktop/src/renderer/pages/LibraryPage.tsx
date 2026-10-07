@@ -2,7 +2,7 @@ import React from 'react'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import { PaperArchiveScene, type ArchivePalette } from '../paperArchive/PaperArchiveScene'
-import { groupPapersByMonth, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
+import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
 import { documentTypeLabel, formatTaskCreatedAt, statusLabels } from './TasksPage'
 import '../paperArchive/paperArchive.css'
 
@@ -31,9 +31,10 @@ export default function LibraryPage(props: {
   const [performanceMode, setPerformanceMode] = React.useState(() => {
     try { return localStorage.getItem(PERFORMANCE_KEY) === 'true' } catch { return false }
   })
-  const shelves = React.useMemo(() => groupPapersByMonth(props.documents), [props.documents])
+  const shelves = React.useMemo(() => buildArchiveColumns(props.documents), [props.documents])
+  const monthCount = React.useMemo(() => new Set(shelves.map((shelf) => shelf.month)).size, [shelves])
   const searchIndex = React.useMemo(() => shelves.flatMap((shelf) => shelf.papers.map((paper) => ({
-    paper, month: shelf.label, text: `${paper.displayName}\n${paper.originalName}`.toLowerCase()
+    paper, month: shelf.month, text: `${paper.displayName}\n${paper.originalName}`.toLowerCase()
   }))), [shelves])
   const matches = React.useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/u).filter(Boolean)
@@ -142,7 +143,7 @@ export default function LibraryPage(props: {
       <header className="paper-archive-brand">
         <span className="paper-archive-eyebrow">PAPER ARCHIVE</span>
         <h1>文库</h1>
-        <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${shelves.length} 个月份`}</p>
+        <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${monthCount} 个月份 · ${shelves.length} 列`}</p>
       </header>
 
       <div className="paper-archive-tools">
@@ -206,7 +207,7 @@ export default function LibraryPage(props: {
         </div>
       ) : paper ? (
         <article className="paper-archive-panel" aria-live="polite">
-          <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.label}</span>
+          <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.month}</span>
           <h2 key={paper.id} className="paper-archive-title" title={paper.displayName}>{paper.displayName}</h2>
           <div className="paper-archive-rule"><i /></div>
           <dl className="paper-archive-meta">
@@ -232,14 +233,14 @@ export default function LibraryPage(props: {
             <button type="button" aria-label="下一篇" onClick={() => navigate('row', 1)}><ArrowDownOutlined /></button>
           </div>
           <div className="paper-archive-shelves">
-            <button type="button" aria-label="上一个月份" disabled={shelves.length < 2} onClick={() => navigate('lane', -1)}><ArrowLeftOutlined /></button>
+            <button type="button" aria-label="上一列" onClick={() => navigate('lane', -1)}><ArrowLeftOutlined /></button>
             <div>
-              <small>SHELF {pad(shelfIndex + 1)} / {pad(shelves.length)}</small>
+              <small>COLUMN {pad(shelfIndex + 1)} / {pad(shelves.length)}</small>
               <span key={shelf?.key}>{shelf?.label}</span>
             </div>
-            <button type="button" aria-label="下一个月份" disabled={shelves.length < 2} onClick={() => navigate('lane', 1)}><ArrowRightOutlined /></button>
+            <button type="button" aria-label="下一列" onClick={() => navigate('lane', 1)}><ArrowRightOutlined /></button>
           </div>
-          <p className="paper-archive-hints">←→ 切换月份<i>/</i>↑↓ 前后论文<i>/</i>滚轮、拖拽 浏览<i>/</i>Enter 打开</p>
+          <p className="paper-archive-hints">←→ 切换列<i>/</i>↑↓ 前后论文<i>/</i>滚轮、拖拽 浏览<i>/</i>Enter 打开</p>
         </footer>
       ) : null}
     </section>

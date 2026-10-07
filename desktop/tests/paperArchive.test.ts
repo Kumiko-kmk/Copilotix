@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import { ArchiveMomentum, damp, settlingWave, SHOULDER_PEAK } from '../src/renderer/paperArchive/archiveMotion'
 import {
+  buildArchiveColumns,
   cellForPaper,
   groupPapersByMonth,
   laneStep,
@@ -70,6 +71,26 @@ describe('paper archive shelves', () => {
     expect(paperAt(shelves, next)).toBe(remembered)
     expect(Math.abs(next.row - 10)).toBeLessThanOrEqual(1)
     expect(paperAt(shelves, laneStep(shelves, { lane: 0, row: 0 }, -1, new Map()))).toBe(shelves[1].papers[0])
+  })
+})
+
+describe('paper archive columns', () => {
+  it('splits a long month into balanced columns so sideways browsing always has a neighbour', () => {
+    const papers = Array.from({ length: 37 }, (_, index) => paper(`2026-10-${String(1 + (index % 28)).padStart(2, '0')}T10:00:00.000Z`))
+    const columns = buildArchiveColumns(papers)
+    expect(columns).toHaveLength(5)
+    expect(columns.every((column) => column.month === '2026 年 10 月')).toBe(true)
+    expect(columns.map((column) => column.papers.length)).toEqual([8, 8, 8, 8, 5])
+    expect(columns[0].label).toBe('2026 年 10 月 · 1/5')
+    expect(new Set(columns.map((column) => column.key)).size).toBe(5)
+    expect(columns.flatMap((column) => column.papers)).toHaveLength(37)
+  })
+
+  it('keeps small months as a single column', () => {
+    const columns = buildArchiveColumns([paper('2026-10-10T10:00:00.000Z'), paper('2026-09-10T10:00:00.000Z')])
+    expect(columns.map((column) => [column.key, column.label])).toEqual([
+      ['2026-10', '2026 年 10 月'], ['2026-09', '2026 年 9 月']
+    ])
   })
 })
 

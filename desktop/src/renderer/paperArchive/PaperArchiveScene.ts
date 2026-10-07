@@ -1,5 +1,6 @@
 import {
   ACESFilmicToneMapping,
+  Box3,
   BoxGeometry,
   Color,
   DirectionalLight,
@@ -65,6 +66,9 @@ import {
 const COLUMN_SPACING = 5.2
 const ROW_SPACING = 0.62
 const CARD_HEIGHT = 3.7
+const CARD_HALF_WIDTH = 2.5
+const CARD_BACK = -0.13
+const CARD_FRONT = 0.21
 const BASE_Y = -4.6
 const RAIL_OFFSET = -2.17
 const PREVIEW_LIFT = 0.4
@@ -79,7 +83,13 @@ const ROW_RADIUS = 30
 const POOL_SIZE = (LANE_RADIUS * 2 + 1) * (ROW_RADIUS * 2 + 1)
 const CARD_RADIUS = 3.4
 const IDLE_DELAY = 2.5
-const IDLE_FRAME_INTERVAL = 1 / 30
+// Frame budget (measured on the reference machine at 1920×1080: 18.5 ms per frame at DPR 1.5
+// with full-resolution transmission, ~9 ms with the limits below).
+const TARGET_FRAME_MS = 1000 / 60
+const LATE_FRAME_MS = 23
+const MAX_PIXEL_RATIO = 1.25
+const MAX_DRAWING_PIXELS = 3.3e6
+const MIN_RESOLUTION_SCALE = 0.55
 const ENTRY_DURATION = 4.35
 const SHELL_SURFACES = ['Frosted_Polymer', 'Ivory_Edges', 'Index_Inlay', 'Titanium_Fasteners', 'Optical_Diffuser'] as const
 type ShellSurface = typeof SHELL_SURFACES[number]
@@ -149,6 +159,8 @@ export class PaperArchiveScene {
   /** Cells drawn this frame, in instance order; picking maps instance ids through it. */
   private drawn: ArchiveCell[] = Array.from({ length: POOL_SIZE }, () => ({ lane: 0, row: 0 }))
   private drawnCount = 0
+  /** Base positions of the drawn cards, for box picking without a triangle raycast. */
+  private readonly drawnPositions = new Float32Array(POOL_SIZE * 3)
 
   // Track position of the camera over the plane, in cell units.
   private laneTrack: Spring = { value: 0, velocity: 0 }
@@ -180,8 +192,15 @@ export class PaperArchiveScene {
   private entryTime = 0
   private idleGain = 0
   private lastInteraction = 0
-  private lastFrame = 0
-  private lastRender = -Infinity
+  private lastVsync = 0
+  private lastPresented = 0
+  private vsyncDeltas: number[] = []
+  private vsyncIndex = 0
+  private justWoke = true
+  private resolutionScale = 1
+  private lateFrames = 0
+  private onTimeFrames = 0
+  private lastDownscale = -Infinity
   private frame = 0
   private idleTimer = 0
   private disposed = false
@@ -191,11 +210,12 @@ export class PaperArchiveScene {
     this.reduced = options.reducedMotion
     this.renderer = new WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
     this.renderer.outputColorSpace = SRGBColorSpace
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = PCFSoftShadowMap
     this.renderer.toneMapping = ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.05
+    // The frosted covers blur what they transmit; half resolution is visually identical and saves ~40%.
+    this.renderer.transmissionResolutionScale = 0.5
     const canvas = this.renderer.domElement
     canvas.className = 'paper-archive-canvas'
     canvas.setAttribute('aria-hidden', 'true')
@@ -214,7 +234,7 @@ export class PaperArchiveScene {
     key.position.set(-6, 14, -5)
     key.castShadow = true
     Object.assign(key.shadow.camera, { left: -16, right: 16, top: 15, bottom: -15, near: 0.1, far: 45 })
-    key.shadow.mapSize.set(2048, 2048)
+    key.shadow.mapSize.set(1024, 1024)
     key.shadow.normalBias = 0.035
     key.shadow.bias = -0.0003
     key.shadow.radius = 4
@@ -455,7 +475,7 @@ export class PaperArchiveScene {
   private resize(): void {
     const { clientWidth: width, clientHeight: height } = this.options.container
     if (!width || !height) return
-    this.renderer.setSize(width, height, false)
+    this.applyResolution()
     const aspect = width / height
     // RhineLabUI's archiveFraming: wide windows extend sideways, narrow ones keep the 16:9 width.
     const span = Math.max(VIEW_SPAN, VIEW_SPAN * (16 / 9) / aspect)
@@ -471,30 +491,53 @@ export class PaperArchiveScene {
     this.camera.updateProjectionMatrix()
     this.camera.updateMatrixWorld()
     this.frustum.setFromProjectionMatrix(new Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse))
-    this.lastRender = -Infinity
     this.wake()
+  }
+
+  /** Device pixels are capped by ratio and by total count, then scaled down further if frames run late. */
+  private applyResolution(): void {
+    const { clientWidth: width, clientHeight: height } = this.options.container
+    if (!width || !height) return
+    const base = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO, Math.sqrt(MAX_DRAWING_PIXELS / (width * height)))
+    this.renderer.setPixelRatio(Math.max(0.5, base * this.resolutionScale))
+    this.renderer.setSize(width, height, false)
   }
 
   private wake(): void {
     if (this.disposed || this.frame || document.hidden) return
     window.clearTimeout(this.idleTimer)
-    this.lastFrame = performance.now()
+    this.justWoke = true
     this.frame = requestAnimationFrame(this.tick)
   }
 
   private readonly tick = (now: number): void => {
     this.frame = 0
     if (this.disposed) return
-    const elapsed = Math.max(0, (now - this.lastFrame) / 1000)
-    this.lastFrame = now
-    const dt = Math.min(elapsed, 0.05)
+    // Pace to ~60 fps: on 120/144 Hz displays only every second vsync is drawn.
+    if (!this.justWoke) {
+      const delta = now - this.lastVsync
+      if (delta > 1 && delta < 100) {
+        this.vsyncDeltas.push(delta)
+        if (this.vsyncDeltas.length > 30) this.vsyncDeltas.shift()
+      }
+    }
+    this.lastVsync = now
+    const period = this.vsyncDeltas.length ? Math.min(...this.vsyncDeltas) : TARGET_FRAME_MS
+    const stride = Math.max(1, Math.round(TARGET_FRAME_MS / period))
+    if (!this.justWoke && ++this.vsyncIndex < stride) {
+      this.frame = requestAnimationFrame(this.tick)
+      return
+    }
+    this.vsyncIndex = 0
+    const continuous = !this.justWoke
+    const elapsedMs = continuous ? now - this.lastPresented : TARGET_FRAME_MS
+    this.justWoke = false
+    this.lastPresented = now
+    const dt = Math.min(Math.max(0, elapsedMs) / 1000, 0.05)
     this.clock += dt
     const motion = this.loaded && this.update(dt)
-    const idleOnly = !motion && this.idleGain > 0.001
-    if (!idleOnly || this.clock - this.lastRender >= IDLE_FRAME_INTERVAL) {
-      this.renderer.render(this.scene, this.camera)
-      this.lastRender = this.clock
-    }
+    this.renderer.render(this.scene, this.camera)
+    if (continuous && period < LATE_FRAME_MS - 1) this.adaptResolution(elapsedMs, now)
     if (motion || this.idleGain > 0.001 || this.idleEligible()) {
       this.frame = requestAnimationFrame(this.tick)
       return
@@ -503,6 +546,27 @@ export class PaperArchiveScene {
     if (this.idleFeatureEnabled()) {
       const delay = Math.max(0, IDLE_DELAY - (this.clock - this.lastInteraction))
       this.idleTimer = window.setTimeout(() => this.wake(), delay * 1000 + 30)
+    }
+  }
+
+  /** Lower the drawing resolution while frames keep missing 60 fps; recover slowly once they keep up. */
+  private adaptResolution(elapsedMs: number, now: number): void {
+    if (elapsedMs > LATE_FRAME_MS) {
+      this.lateFrames++
+      this.onTimeFrames = 0
+    } else {
+      this.onTimeFrames++
+      this.lateFrames = Math.max(0, this.lateFrames - 0.5)
+    }
+    if (this.lateFrames >= 6 && this.resolutionScale > MIN_RESOLUTION_SCALE) {
+      this.resolutionScale = Math.max(MIN_RESOLUTION_SCALE, this.resolutionScale * 0.85)
+      this.lateFrames = 0
+      this.lastDownscale = now
+      this.applyResolution()
+    } else if (this.onTimeFrames > 240 && this.resolutionScale < 1 && now - this.lastDownscale > 8000) {
+      this.resolutionScale = Math.min(1, this.resolutionScale * 1.08)
+      this.onTimeFrames = 0
+      this.applyResolution()
     }
   }
 
@@ -669,6 +733,9 @@ export class PaperArchiveScene {
         const cell = this.drawn[count]
         cell.lane = lane
         cell.row = row
+        this.drawnPositions[count * 3] = this.position.x
+        this.drawnPositions[count * 3 + 1] = this.position.y
+        this.drawnPositions[count * 3 + 2] = this.position.z
         count++
       }
     }
@@ -679,15 +746,32 @@ export class PaperArchiveScene {
     if (index?.instanceColor) index.instanceColor.needsUpdate = true
   }
 
+  private readonly pickBox = new Box3()
+  private readonly pickPoint = new Vector3()
+
   private pickCell(clientX: number, clientY: number): ArchiveCell | null {
-    const cover = this.surfaces.get('Frosted_Polymer')
     const rect = this.renderer.domElement.getBoundingClientRect()
-    if (!cover || !rect.width || !rect.height || !this.drawnCount) return null
+    if (!rect.width || !rect.height || !this.drawnCount) return null
     const pointer = new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
     this.raycaster.setFromCamera(pointer, this.camera)
-    cover.computeBoundingSphere()
-    const hit = this.raycaster.intersectObject(cover, false)[0]
-    return hit?.instanceId === undefined || hit.instanceId >= this.drawnCount ? null : { ...this.drawn[hit.instanceId] }
+    const ray = this.raycaster.ray
+    let nearest = Infinity
+    let hit = -1
+    // The wave tilt is under 2°, so each card is tested as its upright shell box.
+    for (let index = 0; index < this.drawnCount; index++) {
+      const x = this.drawnPositions[index * 3]
+      const y = this.drawnPositions[index * 3 + 1]
+      const z = this.drawnPositions[index * 3 + 2]
+      this.pickBox.min.set(x - CARD_HALF_WIDTH, y, z + CARD_BACK)
+      this.pickBox.max.set(x + CARD_HALF_WIDTH, y + CARD_HEIGHT, z + CARD_FRONT)
+      if (!ray.intersectBox(this.pickBox, this.pickPoint)) continue
+      const distance = this.pickPoint.distanceToSquared(ray.origin)
+      if (distance < nearest) {
+        nearest = distance
+        hit = index
+      }
+    }
+    return hit < 0 ? null : { ...this.drawn[hit] }
   }
 
   private setHover(cell: ArchiveCell | null): void {
