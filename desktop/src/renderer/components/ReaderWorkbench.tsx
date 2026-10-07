@@ -183,8 +183,10 @@ export default function ReaderWorkbench(props: {
       if (!target) return
       const layout = layoutRef.current
       if (target.kind === 'tab') commit(moveView(layout, state.view, target.groupId, target.index), state.view)
-      else if (target.allowed && target.zone === 'center') commit(moveView(layout, state.view, target.groupId), state.view)
-      else if (target.allowed) commit(splitView(layout, state.view, target.groupId, target.zone), state.view)
+      else if (target.allowed) {
+        if (target.zone === 'center') commit(moveView(layout, state.view, target.groupId), state.view)
+        else commit(splitView(layout, state.view, target.groupId, target.zone), state.view)
+      }
     }
     return {
       activate: (view) => commit(activateView(layoutRef.current, view), view),
