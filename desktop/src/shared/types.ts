@@ -70,6 +70,7 @@ export interface AppSettings {
   deepseekModel: string
   /** Legacy persisted field, ignored by chat routing; use translationProvider. */
   chatProvider: 'qwen' | 'deepseek' | null
+  autoGeneratePaperInsight: boolean
   qwenChatModel: string
   deepseekChatModel: string
   chatConsentProvider: 'qwen' | 'deepseek' | null
@@ -221,6 +222,12 @@ export interface WindowState {
 }
 
 export interface CopilotixDesktopApi {
+  paperInsight: {
+    get(request: { documentId: string }): Promise<import('./paperInsight').PaperInsightState>
+    generate(request: { documentId: string }): Promise<void>
+    cancel(request: { documentId: string }): Promise<{ cancelled: boolean }>
+    onChanged(listener: (event: { documentId: string; state: import('./paperInsight').PaperInsightState }) => void): () => void
+  }
   paperChat: {
     load(request: PaperChatLoadRequest): Promise<PaperChatPage>
     session(request: { documentId: string }): Promise<PaperChatSession>

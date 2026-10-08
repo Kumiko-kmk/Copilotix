@@ -66,6 +66,7 @@ export default function SettingsPage(props: {
     const previous = previousSettingsRef.current
     setDraft((current) => ({
       ...props.settings,
+      autoGeneratePaperInsight: current.autoGeneratePaperInsight !== previous.autoGeneratePaperInsight ? current.autoGeneratePaperInsight : props.settings.autoGeneratePaperInsight,
       outputRoot: current.outputRoot !== previous.outputRoot ? current.outputRoot : props.settings.outputRoot,
       formulaEnabled: current.formulaEnabled !== previous.formulaEnabled ? current.formulaEnabled : props.settings.formulaEnabled,
       tableEnabled: current.tableEnabled !== previous.tableEnabled ? current.tableEnabled : props.settings.tableEnabled,
@@ -403,6 +404,10 @@ export default function SettingsPage(props: {
                   })}
                 </div>
                 <div className="model-request-order"><span>请求顺序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).map((provider) => MODEL_DETAILS[provider].label.replace(' / Qwen', '')).join(' → ')}</strong></div>
+              </div>
+              <div className="model-priority-card">
+                <Checkbox checked={draft.autoGeneratePaperInsight} onChange={(event) => setDraft((current) => ({ ...current, autoGeneratePaperInsight: event.target.checked }))}>翻译完成后自动生成 AI 解读</Checkbox>
+                <p>使用首选 Qwen 或 DeepSeek 的问答模型，需已验证密钥并同意发送论文片段。每篇解读会产生额外 API 费用；默认关闭，已有且未过期的解读不会重复生成。</p>
               </div>
             </section>
           ) : null}

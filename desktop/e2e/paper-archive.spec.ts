@@ -81,6 +81,8 @@ for (const disableWebGL of [false, true]) {
       await results.getByRole('button', { name: /Archive Alpha/u }).click()
       if (supported) {
         await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha.pdf')
+        await archive.getByRole('button', { name: '查看档案' }).click()
+        await expect(archive.getByRole('tab', { name: /摘要/u })).toBeVisible()
         await archive.getByRole('button', { name: '打开阅读' }).click()
       }
       await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })

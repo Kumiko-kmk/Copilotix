@@ -1,3 +1,4 @@
+import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightSaveSchema, paperInsightSavedSchema, paperInsightContextRequestSchema, paperInsightContextSchema } from './paperInsight'
 import { paperChatStatusRequestSchema, paperChatStatusSchema, paperContextRequestSchema, paperContextResultSchema } from './paperChatSchemas'
 import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from './paperChatStorageSchemas'
 import { z } from 'zod'
@@ -194,6 +195,7 @@ const coreOperationNames = [
   'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
   'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:record-revision',
   'knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed',
+  'insight:get', 'insight:save', 'insight:context',
   'chat:ensure-index', 'chat:build-context',
   'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear',
   'annotations:list-snapshot', 'annotations:mutate',
@@ -452,6 +454,9 @@ export const coreTranslationPlanFinalizeResultSchema = translationPlanFinalizeRe
  * compute operations must add one entry here with strict schemas on both sides.
  */
 export const coreOperationRegistry = {
+  'insight:get': { payload: paperInsightRequestSchema, result: paperInsightStateSchema },
+  'insight:save': { payload: paperInsightSaveSchema, result: paperInsightSavedSchema },
+  'insight:context': { payload: paperInsightContextRequestSchema, result: paperInsightContextSchema },
   'chat:load': { payload: paperChatLoadRequestSchema, result: paperChatPageSchema },
   'chat:save-turn': { payload: paperChatSaveTurnSchema, result: paperChatSavedSchema },
   'chat:session': { payload: paperChatDocumentRequestSchema, result: paperChatSessionSchema },

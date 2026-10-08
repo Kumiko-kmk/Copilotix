@@ -24,6 +24,12 @@ type View = { name: 'new' | 'tasks' | 'library' | 'settings' | 'tutorial' } | { 
 
 export default function App(): React.JSX.Element {
   const queryClient = useQueryClient()
+  const insights = React.useMemo<import('@shared/paperInsight').PaperInsightSource>(() => ({
+    get: (documentId) => window.copilotix.paperInsight.get({ documentId }),
+    cancel: (documentId) => window.copilotix.paperInsight.cancel({ documentId }),
+    generate: (documentId) => window.copilotix.paperInsight.generate({ documentId }),
+    subscribe: (listener) => window.copilotix.paperInsight.onChanged(({ documentId, state }) => listener(documentId, state))
+  }), [])
   const [view, setView] = React.useState<View>({ name: 'new' })
   const settingsQuery = useQuery<AppSettings>({
     queryKey: ['settings'],
@@ -117,7 +123,7 @@ export default function App(): React.JSX.Element {
         {view.name === 'tasks' ? <TasksPage documents={documents} onOpen={openDocument} onCreate={() => setView({ name: 'new' })} /> : null}
         {view.name === 'library' ? (
           <React.Suspense fallback={<div className="page-loading">正在加载文库…</div>}>
-            <LibraryPage documents={documents} onOpen={openFromLibrary} onCreate={() => setView({ name: 'new' })} />
+            <LibraryPage insights={insights} documents={documents} onOpen={openFromLibrary} onCreate={() => setView({ name: 'new' })} />
           </React.Suspense>
         ) : null}
         {view.name === 'tutorial' && settings ? <TutorialPage

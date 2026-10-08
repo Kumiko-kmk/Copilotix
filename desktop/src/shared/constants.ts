@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   deepseekBaseUrl: 'https://api.deepseek.com',
   deepseekModel: 'deepseek-flash',
   chatProvider: null,
+  autoGeneratePaperInsight: false,
   qwenChatModel: 'qwen-plus',
   deepseekChatModel: 'deepseek-flash',
   chatConsentProvider: null,

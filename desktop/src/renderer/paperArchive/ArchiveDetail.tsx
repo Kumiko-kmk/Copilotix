@@ -115,7 +115,7 @@ export default function ArchiveDetail(props: {
             profile?.sections.length
               ? <ol className="paper-archive-outline">{profile.sections.map((section) => <li key={section}>{section}</li>)}</ol>
               : <p className="paper-archive-abstract">{profile ? '未识别到章节标题。' : '正在读取…'}</p>
-          ) : props.insights ? <InsightPanel documentId={paper.id} source={props.insights} /> : null}
+          ) : props.insights ? <InsightPanel key={paper.id} documentId={paper.id} source={props.insights} /> : null}
         </section>
         <footer className="paper-archive-detail-actions">
           <button type="button" className="paper-archive-primary" onClick={props.onOpen}>
@@ -140,23 +140,27 @@ function InsightPanel(props: { documentId: string; source: PaperInsightSource })
   const [state, setState] = React.useState<PaperInsightState | null>(null)
   React.useEffect(() => {
     let cancelled = false
+    let updated = false
     setState(null)
-    props.source.get(props.documentId).then((next) => { if (!cancelled) setState(next) }, (error: unknown) => {
-      if (!cancelled) setState({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
+    const stop = props.source.subscribe((documentId, next) => {
+      if (!cancelled && documentId === props.documentId) { updated = true; setState(next) }
     })
-    const stop = props.source.subscribe((documentId, next) => { if (documentId === props.documentId) setState(next) })
-    return () => {
-      cancelled = true
-      stop()
-    }
+    props.source.get(props.documentId).then((next) => { if (!cancelled && !updated) setState(next) }, () => {
+      if (!cancelled && !updated) setState({ status: 'failed', error: '无法读取本地解读，请重试。' })
+    })
+    return () => { cancelled = true; stop() }
   }, [props.documentId, props.source])
+  const mounted = React.useRef(true)
+  React.useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const generate = (): void => {
     setState({ status: 'generating' })
-    props.source.generate(props.documentId).catch((error: unknown) => setState({ status: 'failed', error: error instanceof Error ? error.message : String(error) }))
+    props.source.generate(props.documentId).catch(() => {
+      if (mounted.current) setState({ status: 'failed', error: '无法开始生成，请稍后重试。' })
+    })
   }
   if (!state) return <p className="paper-archive-abstract">正在读取…</p>
   if (state.status === 'ready') return <InsightView insight={state.insight} stale={state.stale} onRegenerate={generate} />
-  if (state.status === 'generating') return <p className="paper-archive-abstract" role="status">AI 正在阅读这篇论文…</p>
+  if (state.status === 'generating') return <div><p className="paper-archive-abstract" role="status">AI 正在阅读这篇论文…</p>{props.source.cancel ? <button type="button" onClick={() => { void props.source.cancel?.(props.documentId).catch(() => undefined) }}>取消生成</button> : null}</div>
   if (state.status === 'unavailable') return <p className="paper-archive-abstract">{state.reason}</p>
   return (
     <div className="paper-archive-insight-empty">

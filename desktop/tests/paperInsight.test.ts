@@ -1,0 +1,181 @@
+import { randomUUID } from 'node:crypto'
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_SETTINGS } from '@shared/constants'
+import { paperInsightContentSchema, paperInsightRequestSchema, paperInsightSchema, paperInsightStateSchema, type PaperInsight, type PaperInsightContext, type PaperInsightState } from '@shared/paperInsight'
+import { PaperInsightService, buildInsightMessages, insightBudget, type PaperInsightDependencies } from '../src/main/chat/paperInsightService'
+import { PaperInsightStore } from '../src/utility/core/persistence/paperInsightStore'
+import { selectInsightExcerpts } from '../src/utility/core/paperInsightContext'
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const fs = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...fs, rename: vi.fn(fs.rename) }
+})
+
+const content = { summary: '仅依据摘录的概述', researchQuestion: '如何改进论文阅读？', method: '结构化分析方法', contributions: ['提出方法'], findings: ['效率改善'], limitations: [], keywords: ['论文'] }
+const insight = (sourceRevision = 'revision-1'): PaperInsight => ({ ...content, model: { provider: 'qwen', name: 'qwen-plus' }, generatedAt: new Date().toISOString(), sourceRevision })
+const roots: string[] = []
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
+function fixture() {
+  const id = randomUUID()
+  const states: PaperInsightState[] = []
+  const settings = structuredClone(DEFAULT_SETTINGS)
+  settings.chatConsentVersion = 2
+  settings.credentials.qwen = { state: 'valid' }
+  const stored = new Map<string, PaperInsight>()
+  const deps: PaperInsightDependencies = {
+    settings: vi.fn(async () => settings), key: vi.fn(async () => 'never-persist-this-key'),
+    get: vi.fn(async (documentId: string): Promise<PaperInsightState> => stored.has(documentId) ? { status: 'ready', insight: stored.get(documentId)!, stale: false } : { status: 'missing' }),
+    context: vi.fn(async (documentId: string): Promise<PaperInsightContext> => ({ documentId, sourceRevision: 'revision-1', language: 'translated', excerpts: [{ section: '摘要', text: '论文内容' }], truncated: false })),
+    save: vi.fn(async (documentId, value) => { stored.set(documentId, value) }),
+    stream: vi.fn(async ({ onDelta }) => { await onDelta(JSON.stringify(content)); return null }),
+    recordUsage: vi.fn(async () => undefined), changed: vi.fn((_id, state) => states.push(state)), canStart: () => true
+  }
+  return { id, deps, settings, states, stored, service: new PaperInsightService(deps) }
+}
+async function idle(f: ReturnType<typeof fixture>) { await vi.waitFor(() => expect(f.states.at(-1)?.status).not.toBe('generating')) }
+
+describe('structured paper insight', () => {
+  it('strictly bounds content, providers, models, IDs and state payloads', () => {
+    const value = insight()
+    expect(paperInsightSchema.parse(value)).toEqual(value)
+    for (const invalid of [{ ...content, extra: true }, { ...content, method: 'x'.repeat(4001) }, { ...content, keywords: Array(21).fill('x') }]) expect(paperInsightContentSchema.safeParse(invalid).success).toBe(false)
+    expect(paperInsightSchema.safeParse({ ...insight(), model: { provider: 'qwen', name: 'deepseek-flash' } }).success).toBe(false)
+    expect(paperInsightRequestSchema.safeParse({ documentId: '../escape' }).success).toBe(false)
+    expect(paperInsightStateSchema.safeParse({ status: 'missing', insight: insight() }).success).toBe(false)
+  })
+  it.each(['qwen', 'deepseek'] as const)('budgets mixed UTF-8 text and prioritizes conclusion for %s', (provider) => {
+    const markdown = '# 标题\n开篇\n# Abstract\n' + '摘要😀'.repeat(4000) + '\n# Method\n方法\n# Conclusion\n结论\n# References\nDO NOT SEND\n' + Array.from({ length: 40 }, (_, i) => `# Section ${i}\n${'x'.repeat(1000)}`).join('\n')
+    const selected = selectInsightExcerpts(markdown, insightBudget(provider))
+    const ctx: PaperInsightContext = { documentId: randomUUID(), sourceRevision: 'rev', language: 'translated', ...selected }
+    expect(Buffer.byteLength(JSON.stringify(selected))).toBeLessThan(10_000)
+    const messages = buildInsightMessages(ctx)
+    expect(Buffer.byteLength(JSON.stringify(messages))).toBeLessThan(16_384)
+    expect(JSON.stringify(messages)).toContain('Conclusion')
+    expect(JSON.stringify(messages)).not.toMatch(/DO NOT SEND|�/u)
+    expect(selected.truncated).toBe(true)
+  })
+  it.each(['key', 'consent', 'unverified', 'provider'])('does not send paper content when %s is unavailable', async (kind) => {
+    const f = fixture()
+    if (kind === 'key') f.deps.key = async () => null
+    if (kind === 'consent') f.settings.chatConsentVersion = null
+    if (kind === 'unverified') f.settings.credentials.qwen = { state: 'invalid' }
+    if (kind === 'provider') f.settings.enabledTranslationProviders = []
+    expect((await f.service.get(f.id)).status).toBe('unavailable')
+    await f.service.generate(f.id); await idle(f)
+    expect(f.states.at(-1)?.status).toBe('unavailable')
+    expect(f.deps.context).not.toHaveBeenCalled(); expect(f.deps.stream).not.toHaveBeenCalled()
+    await f.service.dispose()
+  })
+  it('retries invalid JSON exactly once and stores only validated content and provenance', async () => {
+    const f = fixture()
+    vi.mocked(f.deps.stream).mockImplementationOnce(async ({ onDelta }) => { await onDelta('```bad'); return null })
+    await f.service.generate(f.id); await idle(f)
+    expect(f.deps.stream).toHaveBeenCalledTimes(2)
+    expect(f.states.at(-1)).toMatchObject({ status: 'ready', stale: false })
+    expect(JSON.stringify(f.stored.get(f.id))).not.toContain('never-persist-this-key')
+    await f.service.dispose()
+  })
+  it('stops after a second invalid response and sanitizes provider errors', async () => {
+    const f = fixture()
+    vi.mocked(f.deps.stream).mockImplementation(async ({ onDelta }) => { await onDelta('{"apiKey":"never-persist-this-key"}'); return null })
+    await f.service.generate(f.id); await idle(f)
+    expect(f.deps.stream).toHaveBeenCalledTimes(2); expect(f.deps.save).not.toHaveBeenCalled()
+    expect(f.states.at(-1)?.status).toBe('failed'); expect(JSON.stringify(f.states)).not.toContain('never-persist')
+    await f.service.dispose()
+  })
+  it('single-flights each paper, limits two pipelines and drains queued work on cancellation', async () => {
+    const f = fixture()
+    let active = 0, peak = 0
+    vi.mocked(f.deps.stream).mockImplementation(async ({ signal }) => {
+      active++; peak = Math.max(peak, active)
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))
+      active--; signal.throwIfAborted(); return null
+    })
+    await f.service.generate(f.id); await f.service.generate(f.id)
+    await f.service.generate(randomUUID()); await f.service.generate(randomUUID())
+    await vi.waitFor(() => expect(active).toBe(2))
+    await f.service.pause()
+    expect(peak).toBe(2); expect(active).toBe(0); expect(f.deps.save).not.toHaveBeenCalled()
+    await expect(f.service.generate(f.id)).rejects.toThrow('维护')
+    f.service.resume(); await f.service.dispose()
+  })
+  it('waits for an in-flight atomic save before deleting and rejects new work during deletion', async () => {
+    const f = fixture()
+    let commit!: () => void
+    let started = false
+    f.deps.save = async () => { started = true; await new Promise<void>((resolve) => { commit = resolve }) }
+    await f.service.generate(f.id); await vi.waitFor(() => expect(started).toBe(true))
+    const remove = vi.fn(async () => undefined)
+    const deletion = f.service.deleteDocument(f.id, remove)
+    expect(remove).not.toHaveBeenCalled()
+    commit(); await deletion
+    expect(remove).toHaveBeenCalledOnce()
+    await f.service.dispose()
+  })
+  it('defaults automatic generation off, enables only translation completion and skips fresh results', async () => {
+    const f = fixture()
+    await f.service.onJobChanged({ kind: 'translate', status: 'succeeded', documentId: f.id })
+    expect(f.deps.stream).not.toHaveBeenCalled()
+    f.settings.autoGeneratePaperInsight = true
+    await f.service.onJobChanged({ kind: 'translate', status: 'succeeded', documentId: f.id }); await idle(f)
+    await vi.waitFor(async () => expect((await f.service.get(f.id)).status).toBe('ready'))
+    await f.service.onJobChanged({ kind: 'translate', status: 'succeeded', documentId: f.id }); await idle(f)
+    expect(f.deps.stream).toHaveBeenCalledOnce()
+    await f.service.dispose()
+  })
+})
+
+async function diskFixture() {
+  const root = await mkdtemp(join(tmpdir(), 'copilotix-insight-')); roots.push(root)
+  const id = randomUUID()
+  let revision = 1
+  const ref = (kind: string) => ({ id: kind, documentId: id, kind, revision, relativePath: kind === 'parsed_markdown' ? 'original.md' : 'translated.md', contentHash: 'a'.repeat(64), metadata: {} })
+  await writeFile(join(root, 'original.md'), '# English title\nOriginal content')
+  await writeFile(join(root, 'translated.md'), '# 中文标题\n# 摘要\n翻译内容\n# 结论\n结论内容')
+  const repository = { getTask: () => ({ outputDir: root }), getLatestArtifactReference: (_id: string, kind: string) => ref(kind) } as unknown as ConstructorParameters<typeof PaperInsightStore>[0]
+  const store = new PaperInsightStore(repository)
+  return { root, id, store, repository, revise: () => { revision++ } }
+}
+describe('paper insight atomic storage', () => {
+  it('supports old missing files, translated sources, durable reopen and revision staleness', async () => {
+    const f = await diskFixture()
+    expect(await f.store.get(f.id)).toEqual({ status: 'missing' })
+    const context = await f.store.context(f.id, 6144, new AbortController().signal)
+    expect(context.language).toBe('translated'); expect(JSON.stringify(context)).toContain('翻译内容'); expect(JSON.stringify(context)).not.toContain(f.root)
+    await f.store.save(f.id, insight(context.sourceRevision))
+    expect(await new PaperInsightStore(f.repository).get(f.id)).toMatchObject({ status: 'ready', stale: false })
+    f.revise(); expect(await f.store.get(f.id)).toMatchObject({ status: 'ready', stale: true })
+    expect(await readdir(join(f.root, 'insight'))).toEqual(['insight.v1.json'])
+  })
+  it('keeps the committed file when validation fails, ignores interrupted temps and rejects corruption', async () => {
+    const f = await diskFixture()
+    await f.store.save(f.id, insight())
+    const path = join(f.root, 'insight', 'insight.v1.json'), prior = await readFile(path, 'utf8')
+    await expect(f.store.save(f.id, { ...insight(), method: 'x'.repeat(4001) })).rejects.toThrow()
+    expect(await readFile(path, 'utf8')).toBe(prior)
+    await writeFile(join(f.root, 'insight', '.pending-interrupted'), 'partial')
+    expect((await f.store.get(f.id)).status).toBe('ready')
+    await writeFile(path, '{broken'); await expect(f.store.get(f.id)).rejects.toThrow()
+  })
+  it('preserves the prior committed file and removes the temp after a permanent rename failure', async () => {
+    const f = await diskFixture()
+    await f.store.save(f.id, insight())
+    const path = join(f.root, 'insight', 'insight.v1.json'), prior = await readFile(path, 'utf8')
+    vi.mocked(rename).mockRejectedValueOnce(Object.assign(new Error('disk failure'), { code: 'EIO' }))
+    await expect(f.store.save(f.id, { ...insight(), summary: 'replacement' })).rejects.toThrow('disk failure')
+    expect(await readFile(path, 'utf8')).toBe(prior)
+    expect(await readdir(join(f.root, 'insight'))).toEqual(['insight.v1.json'])
+  })
+  it('rejects an insight directory junction and cancelled content reads', async () => {
+    const f = await diskFixture(), outside = join(f.root, 'outside')
+    await mkdir(outside)
+    await symlink(outside, join(f.root, 'insight'), process.platform === 'win32' ? 'junction' : 'dir')
+    await expect(f.store.save(f.id, insight())).rejects.toThrow('目录')
+    expect(await readdir(outside)).toEqual([])
+    const controller = new AbortController(); controller.abort()
+    await expect(f.store.context(f.id, 6144, controller.signal)).rejects.toThrow()
+  })
+})

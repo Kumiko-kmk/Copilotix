@@ -189,6 +189,7 @@ export class V2TaskRepositoryCompat {
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
       deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
       chatProvider: stored.chatProvider ?? DEFAULT_SETTINGS.chatProvider,
+      autoGeneratePaperInsight: stored.autoGeneratePaperInsight === true,
       qwenChatModel: resolvePaperChatModel('qwen', stored.qwenChatModel),
       deepseekChatModel: resolvePaperChatModel('deepseek', stored.deepseekChatModel),
       chatConsentProvider: stored.chatConsentProvider ?? null,

@@ -1,3 +1,4 @@
+import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightCancelSchema, paperInsightChangedSchema } from '@shared/paperInsight'
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
 import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
@@ -57,6 +58,19 @@ async function invokeValidated<Request, Response>(
 }
 
 const api: CopilotixDesktopApi = {
+  paperInsight: {
+    get: (request) => invokeValidated('paperInsight:get', paperInsightRequestSchema, paperInsightStateSchema, request),
+    generate: (request) => invokeValidated('paperInsight:generate', paperInsightRequestSchema, voidResponseSchema, request),
+    cancel: (request) => invokeValidated('paperInsight:cancel', paperInsightRequestSchema, paperInsightCancelSchema, request),
+    onChanged: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const parsed = decodeIpcEvent(payload, paperInsightChangedSchema)
+        if (parsed) listener(parsed)
+      }
+      ipcRenderer.on('paperInsight:changed', handler)
+      return () => ipcRenderer.removeListener('paperInsight:changed', handler)
+    }
+  },
   paperChat: {
     load: (request) => invokeValidated('paper-chat:load', paperChatLoadRequestSchema, paperChatPageSchema, request),
     session: (request) => invokeValidated('paper-chat:session', paperChatDocumentRequestSchema, paperChatSessionSchema, request),

@@ -1,3 +1,6 @@
+import { PaperInsightService } from './chat/paperInsightService'
+import { registerPaperInsightHandlers } from './chat/paperInsightIpc'
+import { paperInsightChangedSchema } from '@shared/paperInsight'
 import { ChatProvider } from './chat/chatProvider'
 import { PaperChatService } from './chat/paperChatService'
 import { registerPaperChatHandlers } from './chat/paperChatIpc'
@@ -92,6 +95,7 @@ let documentSummaries = new Map<string, DocumentSummary>()
 let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
 let paperChat: PaperChatService | null = null
+let paperInsight: PaperInsightService | null = null
 let jobScheduler: JobScheduler | null = null
 let startupPhase = 'module-load'
 const libraryGate = new LibraryAccessGate()
@@ -166,6 +170,20 @@ async function bootstrap(): Promise<void> {
     recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
     log: (details) => logger.info('paper-chat', details)
   })
+  paperInsight = new PaperInsightService({
+    settings: () => settings.get(),
+    key: (provider) => vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    get: (documentId) => utilitySupervisor!.request('insight:get', { documentId }),
+    context: (documentId, budgetBytes, signal) => utilitySupervisor!.request('insight:context', { documentId, budgetBytes }, { signal, timeoutMs: 10_000 }),
+    save: (documentId, insight) => utilitySupervisor!.request('insight:save', { documentId, insight }),
+    stream: (input) => chatProvider.stream(input),
+    recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
+    canStart: () => !libraryGate.busy && !libraryGate.restarting && !isQuitting,
+    changed: (documentId, state) => {
+      if (mainWindow && !mainWindow.webContents.isDestroyed()) sendValidatedEvent(mainWindow.webContents, 'paperInsight:changed', paperInsightChangedSchema, { documentId, state })
+    }
+  })
+  jobScheduler.on('job-changed', (job) => { void paperInsight?.onJobChanged(job).catch(() => logger.info('paper-insight', { status: 'refresh-failed' })) })
   const compute = new RpcTaskCompute(utilitySupervisor)
   const pathPolicy = new PathPolicy()
   const tasks = new TaskService(repository, settings, compute, pathPolicy, {
@@ -347,6 +365,7 @@ function registerIpc(
     rendererOrigin: process.env.ELECTRON_RENDERER_URL
   }
 
+  registerPaperInsightHandlers(paperInsight!, validationOptions)
   registerPaperChatHandlers(paperChat!, async (documentId) => {
     const status = await utilitySupervisor!.request('chat:ensure-index', { documentId })
     jobScheduler?.wake()
@@ -382,9 +401,10 @@ function registerIpc(
       if (confirmation.response !== 1) return { status: 'cancelled' as const, restartRequired: false }
     }
     await utilitySupervisor.request('library:check', {})
-    await paperChat?.settle()
-    await jobScheduler.shutdown()
+    await paperInsight?.pause()
     try {
+      await paperChat?.settle()
+      await jobScheduler.shutdown()
       const result = await utilitySupervisor.request('library:manage', { ...request, path: selected.filePaths[0] }, { timeoutMs: 2 * 60 * 60 * 1000 })
       if (result.restartRequired) {
         libraryGate.requireRestart()
@@ -392,7 +412,7 @@ function registerIpc(
       }
       return result
     } finally {
-      if (!libraryGate.restarting) await jobScheduler.start()
+      if (!libraryGate.restarting) { await jobScheduler.start(); paperInsight?.resume() }
     }
   }, validationOptions)
   registerValidatedHandler('settings:get', noRequestSchema, appSettingsSchema, () => settings.get(), validationOptions)
@@ -400,6 +420,12 @@ function registerIpc(
     const before = await settings.get()
     const result = await settings.save(update)
     if (before.enabledTranslationProviders.join(',') !== result.settings.enabledTranslationProviders.join(',') || before.translationProvider !== result.settings.translationProvider || before.chatConsentVersion !== result.settings.chatConsentVersion || before.chatConsentProvider !== result.settings.chatConsentProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
+    const next = result.settings
+    if (before.enabledTranslationProviders.join(',') !== next.enabledTranslationProviders.join(',')
+      || before.translationProvider !== next.translationProvider || before.chatConsentVersion !== next.chatConsentVersion
+      || before.chatConsentProvider !== next.chatConsentProvider || before.qwenChatModel !== next.qwenChatModel
+      || before.deepseekChatModel !== next.deepseekChatModel || before.autoGeneratePaperInsight !== next.autoGeneratePaperInsight
+      || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperInsight?.cancelAll()
     return result
   }, validationOptions)
   registerValidatedHandler('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, (_event, request) => settings.validateCredential(request.name, request.value), validationOptions)
@@ -468,8 +494,10 @@ function registerIpc(
     return tasks.retry(documentId)
   }, validationOptions)
   registerValidatedHandler('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, async (_event, request) => {
-    await paperChat?.settleDocument(request.documentId)
-    return tasks.delete(request.documentId, request.deleteFiles)
+    return paperInsight!.deleteDocument(request.documentId, async () => {
+      await paperChat?.settleDocument(request.documentId)
+      return tasks.delete(request.documentId, request.deleteFiles)
+    })
   }, validationOptions)
   registerValidatedHandler('documents:get', documentIdRequestSchema, documentDetailsSchema, async (_event, documentId) => {
     const details = projectDocumentDetails(await tasks.getDocument(documentId))
@@ -533,7 +561,7 @@ function startNormalApp(): void {
     isQuitting = true
     if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
     event.preventDefault()
-    utilityShutdownPromise = (paperChat?.settle() ?? Promise.resolve()).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
+    utilityShutdownPromise = Promise.all([paperChat?.settle(), paperInsight?.dispose()]).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
       app.quit()
     })
   })

@@ -1,3 +1,5 @@
+import { PaperInsightStore } from './persistence/paperInsightStore'
+import { paperInsightRequestSchema, paperInsightSaveSchema, paperInsightContextRequestSchema } from '@shared/paperInsight'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
 import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
 import { PaperChatStore } from './persistence/paperChatStore'
@@ -135,7 +137,11 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     return state.translationPlanManager
   }
   const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
+  const insightStore = () => new PaperInsightStore(requireRepository())
   const handlers: UtilityHandlerMap = {
+    'insight:get': (request) => insightStore().get(paperInsightRequestSchema.parse(request.payload).documentId),
+    'insight:save': (request) => { const { documentId, insight } = paperInsightSaveSchema.parse(request.payload); return insightStore().save(documentId, insight) },
+    'insight:context': (request, signal) => { const { documentId, budgetBytes } = paperInsightContextRequestSchema.parse(request.payload); return insightStore().context(documentId, budgetBytes, signal) },
     'chat:load': (request) => { const { documentId, before } = paperChatLoadRequestSchema.parse(request.payload); return chatStore.load(documentId, before) },
     'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
     'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),
