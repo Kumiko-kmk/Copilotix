@@ -116,7 +116,7 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - 抽取沿用單一 hero、4.05 升起、原有 detail 鏡頭；鏡頭 >0.6、升起 >3 後掃描 0.9 秒。首頁 1600px／LRU 6，共享 document 查詢；PDF 首頁、文獻資訊與 AI 解讀按需載入，切文獻／卸載取消晚到結果與訂閱。
 - 互動契約：Enter 忽略 repeat，抽出／解密中不進閱讀，完全展開後再次 Enter 或點 hero 才進閱讀；「打开阅读」保留直接入口。移動 ≥8px 後不得視為點擊；pointercancel／lostpointercapture 不啟動點擊。詳情分頁左右／Home／End 導航並移焦，正文方向鍵保留捲動；僅文庫瀏覽區方向鍵換卡。瀏覽時 Esc 先收搜尋；抽出期間檢索沿橫線收起並 inert（結果清單同時關閉），Esc 直接關詳情並移焦回文庫。
 - `closing` 保留舊文獻、封面與模型，面板 180ms 淡出且 inert，模型／鏡頭 320ms 收回再卸載。換卡只保留一個待選目標，方向輸入累積、搜尋覆蓋；目標移除即取消，收回中重開同篇從當前姿態接續並清除待選。減弱動畫直接完成收回；不新增模型副本、動畫迴圈、IPC 或持久化格式。
-- 版面與入場（2026-10-09 晚，Claude）：入場以 `entryScanTime` 把原版掃描波去程與回程之間約 1.3 秒的平板段壓縮為約 0.25 秒，肩部按真實時間在滑入結束時升起，`archiveMotion.ts` 曲線不變。瀏覽鏡頭以 `ARRAY_SCREEN_SHIFT` 把選中卡移向左下（-4%／10% 視口）；瀏覽面板與詳情面板共用 `--archive-panel-left` 左緣。Scene 以 `onDetailFrame` 回報抽出卡最終的投影範圍，頁面寫入 `--archive-detail-top/height`；詳情面板頂端與左側品牌對齊（FILE NO. 對 PAPER ARCHIVE、標題對「文库」），底端到卡片下緣，各分頁高度固定，只有分頁內容捲動；卡片下緣以下由 `.paper-archive-floor-veil` 隨鏡頭轉向完全遮蓋陣列；抽出時面板上下框線由瀏覽面板範圍拉伸到卡片上下緣（WAAPI，僅 transform／clip-path），收回時反向。返回按鈕移到卡片下方。詳情完全展開（`open`）後渲染改用顯示器實際 DPR（≤2、≤8.3M 像素，靜止時不重繪），收回即恢復瀏覽上限；首頁貼圖按展開後的設備像素高度重採樣，避免 1600px 原圖跨 mip 取樣發糊。
+- 版面與入場（2026-10-09 晚，Claude）：入場以 `entryScanTime` 把原版掃描波去程與回程之間約 1.3 秒的平板段壓縮為約 0.25 秒，肩部按真實時間在滑入結束時升起，`archiveMotion.ts` 曲線不變。瀏覽鏡頭以 `ARRAY_SCREEN_SHIFT` 把選中卡移向左下（-4%／10% 視口）；瀏覽面板與詳情面板共用 `--archive-panel-left` 左緣。Scene 以 `onDetailFrame` 回報抽出卡最終的投影範圍，頁面寫入 `--archive-detail-top/height`；詳情面板頂端與左側品牌對齊（FILE NO. 對 PAPER ARCHIVE、標題對「文库」），底端到卡片下緣，各分頁高度固定，只有分頁內容捲動；卡片下緣以下由 `.paper-archive-floor-veil` 隨鏡頭轉向完全遮蓋陣列；詳情內容由瀏覽面板範圍以 clip-path 揭露／收回；上下裝飾框線已依使用者要求移除。返回按鈕移到卡片下方。詳情完全展開（`open`）後渲染改用顯示器實際 DPR（≤2、≤8.3M 像素，靜止時不重繪），收回即恢復瀏覽上限；首頁貼圖按展開後的設備像素高度重採樣，避免 1600px 原圖跨 mip 取樣發糊。
 - Paper Brief v2 已接入生成、校驗、保存與四分頁；一句話／類型／領域、證據基礎／檢驗方式取代低價值統計，無 v2 回退規則欄位與 v1。發現保留強度、需核對標記及可展開的來源摘錄；章節僅文字，暫不接閱讀器跳轉。設計及人工品質驗收邊界見 [Paper Brief v2](docs/PAPER_BRIEF_ZH.md)。
 - 授權、single-flight／併發、取消等待、原子落盤與備份卸載契約見 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md)。v2 寫 `insight/brief.v2.json`（≤256 KiB），保留 v1；只按 sourceRevision 標 stale，promptVersion 不同僅提示重新生成。新 Core RPC `insight:brief-context/save-brief` 與 ready v2 聯合類型隨 Main／Utility／Preload／Renderer 同版交付，不新增 migration／manifest。
 - 真實 DeepSeek 驗證已獲明確授權並完成：DeepONet、AlphaFold 各一次，結果已保存原文庫；具體數量與品質限制見上述專項文檔。其餘動畫候選仍待設計確認，不屬於未完成開發。
@@ -126,10 +126,12 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 
 文庫瀏覽面板已與詳情共用 `--archive-detail-width`；瀏覽標題固定兩行高度、單行垂直居中、超出兩行省略，顯示時移除末尾 `.pdf`（不改文件名或搜尋索引）。
 標題下方固定一行小字顯示已翻譯 Markdown 的中文標題，溢出省略；無譯文時留空，不另發 API。只在選中論文停留 180ms 後讀取內容，與詳情共享 query cache。
+文庫中間分隔線上下間距縮為原本三分之一；詳情移除上下裝飾框線及頁數／章節／圖表公式／參考文獻統計列。摘要只顯示譯文，無譯文時提示缺失，移除切原文與「/ 譯文」標籤，首行縮排兩字；「打开阅读」下移 16px，底部保留 24px 內容間距。保留進退場 clip-path 揭露，取消框線拉伸。
+後續計畫（使用者明確要求記錄，**本輪尚未實作**）：AI 檔案卡改為全部預設同意並自動生成。本輪僅移除文庫底部同意聲明（unavailable 狀態不顯示底部狀態列），服務授權、既有自動生成開關及生成流程維持現狀；後續接手時需同步相關設定、Main／IPC 授權與自動生成契約。
 本次已重建四 bundle／Utility smoke 並通過本地打包內建檢查；依使用者要求更新原 `release-artifacts/mv124gkn-2672-f431fb00/program`，外層 manifest 路徑同步，EXE／ASAR／ZIP 雜湊一致。未跑本輪 lint／typecheck／單元／E2E，也未完成實際畫面驗收；未 push。
 
 使用者驗收後提出的版面與入場調整已完成，契約見上方「版面與入場」一條；涉及 `PaperArchiveScene`（`entryScanTime`、`pointCamera`、`onDetailFrame`）、`LibraryPage`、`ArchiveDetail`（`stretchPanel`）、`paperArchive.css`，並改寫一項 LibraryPage 測試（詳情期間檢索不可用）、新增兩項 Scene 測試。依第 8 節未在本地執行，若全量測試或 E2E 有失敗請直接修正。請留意：
 
 1. 詳情面板改為固定高度後，720p 下分頁內容約剩 130px。v2 檔案卡標題、證據基礎／檢驗方式已限制為 2 行（完整內容在 tooltip），若你覺得資訊密度仍過高，可把「作者／單位」移入概覽分頁。
 2. `stretchPanel` 依賴瀏覽面板在 `onDetailPhase('opening')` 時仍掛載；如果之後調整詳情掛載時機，請保留這一捕捉點。
-3. 減弱動畫時拉伸、檢索收合全部跳過。
+3. 減弱動畫時 clip-path 揭露、檢索收合全部跳過。

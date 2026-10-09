@@ -37,33 +37,26 @@ export default function ArchiveDetail(props: {
     () => details.data ? extractPaperProfile(details.data.markdown, details.data.translatedMarkdown) : null,
     [details.data]
   )
-  const [pages, setPages] = React.useState<number | null>(null)
   const [tab, setTab] = React.useState<Tab>('abstract')
-  const [original, setOriginal] = React.useState(false)
   const revealed = props.phase !== 'opening'
   const insight = usePaperInsight(paper.id, props.insights)
   const ready = insight.ready
   const briefState = ready && 'brief' in ready ? ready : null
   const brief = briefState?.brief
   const articleRef = React.useRef<HTMLElement>(null)
-  const frameRef = React.useRef<HTMLDivElement>(null)
   const closing = props.phase === 'closing'
   const { morphFrom } = props
 
-  // Opening: the frame rules spread from the browse panel to the card's top and bottom and the
-  // content is uncovered between them. Closing: they draw back together while the layer fades.
+  // Reveal the content from the browse panel's bounds, without decorative frame rules.
   React.useLayoutEffect(() => {
     const article = articleRef.current
-    const frame = frameRef.current
-    if (!article || !frame || !morphFrom || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const animations = stretchPanel(article, frame, morphFrom, closing)
+    if (!article || !morphFrom || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const animations = stretchPanel(article, morphFrom, closing)
     return () => animations.forEach((animation) => animation.cancel())
   }, [closing, morphFrom])
 
   React.useEffect(() => {
-    setPages(null)
     setTab('abstract')
-    setOriginal(false)
     onPage(null)
   }, [paper.id, onPage])
 
@@ -81,7 +74,6 @@ export default function ArchiveDetail(props: {
       .then((page) => {
         if (cancelled) return
         onPage(page.canvas)
-        setPages(page.pages)
       })
       .catch(() => { /* The card stays frosted without a page; the fields still load. */ })
     return () => { cancelled = true }
@@ -89,8 +81,7 @@ export default function ArchiveDetail(props: {
 
   const title = profile?.title ?? paper.displayName
   const subtitle = profile?.translatedTitle && profile.translatedTitle !== title ? profile.translatedTitle : null
-  const abstract = original ? profile?.abstract : profile?.translatedAbstract ?? profile?.abstract
-  const counts = profile?.counts
+  const abstract = profile?.translatedAbstract
   const tabs: Array<[Tab, string]> = brief ? [['overview', '概览'], ['findings', '发现'], ['limits', '局限与前提'], ['reading', '阅读路线与术语']]
     : [['abstract', '摘要'], ['structure', '结构'], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
   const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
@@ -100,7 +91,6 @@ export default function ArchiveDetail(props: {
       <button type="button" className="paper-archive-detail-back" onClick={props.onClose}>
         <ArrowLeftOutlined aria-hidden="true" /><span>返回档案</span><kbd>Esc</kbd>
       </button>
-      <div ref={frameRef} className="paper-archive-detail-frame" aria-hidden="true"><i /><i /></div>
       <article ref={articleRef} className={`paper-archive-detail${revealed ? ' revealed' : ''}`} aria-label="论文档案" aria-busy={!revealed || details.isPending}>
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.month}</span>
@@ -116,10 +106,6 @@ export default function ArchiveDetail(props: {
             <Field index={4} half label="检验方式" value={brief.approach.evaluation} />
             <Field index={5} wide label="关键词" value={brief.keywords.join(' · ')} />
           </> : <>
-            <Field index={3} label="页数" value={pages ? `${pages} 页` : !profile ? null : /\.(?:md|markdown)$/iu.test(paper.originalName.trim()) ? 'Markdown 原文' : '—'} />
-            <Field index={4} label="章节" value={profile ? `${profile.sections.length} 节` : null} />
-            <Field index={5} label="图 · 表 · 公式" value={counts ? `${counts.figures} · ${counts.tables} · ${counts.equations}` : null} />
-            <Field index={6} label="参考文献" value={counts ? `${counts.references} 条` : null} />
             {profile?.keywords.length ? <Field index={7} wide label="关键词" value={profile.keywords.join(' · ')} /> : null}
           </>}
 
@@ -148,12 +134,9 @@ export default function ArchiveDetail(props: {
           {briefState ? <BriefContent brief={briefState.brief} anchors={briefState.anchors} tab={activeTab as BriefTab} /> : activeTab === 'abstract' ? (
             <>
               <div className="paper-archive-tabpanel-head">
-                <span className="paper-archive-eyebrow">ABSTRACT / {original ? '原文' : '译文'}</span>
-                {profile?.abstract && profile.translatedAbstract ? (
-                  <button type="button" onClick={() => setOriginal((value) => !value)}>{original ? '看译文' : '看原文'}</button>
-                ) : null}
+                <span className="paper-archive-eyebrow">ABSTRACT</span>
               </div>
-              <p className="paper-archive-abstract">{abstract ?? (profile ? '未找到摘要段落。' : '正在读取…')}</p>
+              <p className="paper-archive-abstract paper-archive-translated-abstract">{abstract ?? (profile ? '暂无译文摘要。' : '正在读取…')}</p>
             </>
           ) : activeTab === 'structure' ? (
             profile?.sections.length
@@ -161,13 +144,13 @@ export default function ArchiveDetail(props: {
               : <p className="paper-archive-abstract">{profile ? '未识别到章节标题。' : '正在读取…'}</p>
           ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} onRegenerate={insight.generate} /> : <p className="paper-archive-abstract">生成档案卡后可查看研究问题、证据、发现与阅读路线。</p>}
         </section>
-        {props.insights ? <div className="paper-archive-brief-status" role="status">
+        {props.insights && insight.state?.status !== 'unavailable' ? <div className="paper-archive-brief-status" role="status">
           {insight.state?.status === 'generating' ? <>AI 正在阅读这篇论文… <button type="button" onClick={() => { void props.insights?.cancel?.(paper.id).catch(() => undefined) }}>取消生成</button></>
             : <>
-              {insight.state?.status === 'unavailable' ? insight.state.reason : insight.state?.status === 'failed' ? insight.state.error
+              {insight.state?.status === 'failed' ? insight.state.error
                 : briefState ? `${briefState.brief.provenance.model.name} · ${briefState.stale ? '论文内容已更新' : briefState.promptOutdated ? '可用新版提示词重新生成' : 'AI 档案卡'}`
                   : ready ? '旧版解读可继续阅读，可升级为新版档案卡。' : '尚未生成 AI 档案卡。'}
-              {insight.state && insight.state.status !== 'unavailable' ? <button type="button" onClick={insight.generate}>{ready ? '重新生成档案卡' : '生成 AI 档案卡'}</button> : null}
+              {insight.state ? <button type="button" onClick={insight.generate}>{ready ? '重新生成档案卡' : '生成 AI 档案卡'}</button> : null}
             </>}
         </div> : null}
         <footer className="paper-archive-detail-actions">
@@ -183,27 +166,19 @@ export default function ArchiveDetail(props: {
 const OPEN_TIMING: KeyframeAnimationOptions = { duration: 440, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }
 const CLOSE_TIMING: KeyframeAnimationOptions = { duration: 180, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }
 
-/** Stretch the panel between the browse panel's box and its own (compositor-only: transform and clip-path). */
-function stretchPanel(article: HTMLElement, frame: HTMLElement, from: DOMRect, closing: boolean): Animation[] {
+/** Reveal between the browse panel's box and the detail bounds using clip-path. */
+function stretchPanel(article: HTMLElement, from: DOMRect, closing: boolean): Animation[] {
   const to = article.getBoundingClientRect()
   if (!to.width || !to.height) return []
   const top = Math.min(to.height, Math.max(0, from.top - to.top))
   const bottom = Math.min(to.height - top, Math.max(0, to.bottom - from.bottom))
   const left = Math.min(to.width, Math.max(0, from.left - to.left))
   const right = Math.min(to.width - left, Math.max(0, to.right - from.right))
-  const width = Math.max(0.05, (to.width - left - right) / to.width)
   const full = 'inset(0px 0px 0px 0px)'
   const narrow = `inset(${top}px ${right}px ${bottom}px ${left}px)`
-  const [rule, base] = [...frame.children] as HTMLElement[]
-  const edges: Array<[HTMLElement | undefined, string]> = [
-    [rule, `translate(${left}px, ${top}px) scaleX(${width})`],
-    [base, `translate(${left}px, ${-bottom}px) scaleX(${width})`]
-  ]
   const timing = closing ? CLOSE_TIMING : OPEN_TIMING
-  const between = (start: string, end: string): Keyframe[] => closing ? [{ transform: end }, { transform: start }] : [{ transform: start }, { transform: end }]
   return [
-    article.animate(closing ? [{ clipPath: full }, { clipPath: narrow }] : [{ clipPath: narrow }, { clipPath: full }], timing),
-    ...edges.flatMap(([edge, collapsed]) => edge ? [edge.animate(between(collapsed, 'none'), timing)] : [])
+    article.animate(closing ? [{ clipPath: full }, { clipPath: narrow }] : [{ clipPath: narrow }, { clipPath: full }], timing)
   ]
 }
 

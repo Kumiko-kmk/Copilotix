@@ -94,7 +94,7 @@
   color: var(--muted); font-size: 13px; line-height: 1.5;
   white-space: nowrap; text-overflow: ellipsis;
 }
-.paper-archive-rule { position: relative; height: 1px; margin: 22px 0 18px; background: color-mix(in srgb, var(--ink) 55%, transparent); }
+.paper-archive-rule { position: relative; height: 1px; margin: calc(22px / 3) 0 6px; background: color-mix(in srgb, var(--ink) 55%, transparent); }
 .paper-archive-rule i { position: absolute; top: -3px; left: -10px; width: 5px; height: 5px; background: var(--ink); }
 .paper-archive-meta { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 6px 30px; margin: 0 0 22px; }
 .paper-archive-meta dt { margin-bottom: 4px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
@@ -200,24 +200,20 @@
 .paper-archive-detail-back:hover { color: var(--archive-accent); }
 /* The file header lines up with the brand (eyebrow with eyebrow, title with 文库); the panel ends
    at the extracted card's foot and keeps that height on every tab. Only the tab panel scrolls. */
-.paper-archive-detail, .paper-archive-detail-frame {
+.paper-archive-detail {
   position: absolute; z-index: 2; top: var(--page-top); left: var(--archive-panel-left);
   width: var(--archive-detail-width); box-sizing: border-box;
   height: max(360px, calc(var(--archive-detail-top) + var(--archive-detail-height) - var(--page-top)));
 }
-.paper-archive-detail { display: flex; min-height: 0; padding: 18px 0 16px; flex-direction: column; animation: paper-archive-fade .18s var(--ease-out) both; }
+.paper-archive-detail { display: flex; min-height: 0; padding: 18px 0 0; flex-direction: column; animation: paper-archive-fade .18s var(--ease-out) both; }
 .paper-archive-detail > * { flex: none; }
-.paper-archive-detail-frame { pointer-events: none; }
-.paper-archive-detail-frame i { position: absolute; right: 0; left: 0; height: 1px; background: color-mix(in srgb, var(--ink) 34%, transparent); transform-origin: left; }
-.paper-archive-detail-frame i:first-child { top: 0; }
-.paper-archive-detail-frame i:last-child { bottom: 0; }
 .paper-archive-detail header h2 {
   display: -webkit-box; margin: 4px 0 0; overflow: hidden; color: var(--ink);
   font-size: clamp(20px, 2vw, 30px); font-weight: 760; letter-spacing: .005em; line-height: 1.22; overflow-wrap: anywhere;
   -webkit-box-orient: vertical; -webkit-line-clamp: 2; user-select: text;
 }
 .paper-archive-detail-subtitle { display: -webkit-box; margin: 8px 0 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: color-mix(in srgb, var(--ink) 78%, var(--muted)); font-size: 15px; font-weight: 600; line-height: 1.5; user-select: text; }
-.paper-archive-detail .paper-archive-rule { margin: 14px 0 12px; background: var(--ink); }
+.paper-archive-detail .paper-archive-rule { margin: calc(14px / 3) 0 4px; background: var(--ink); }
 .paper-archive-detail-error { margin: 0 0 12px; color: var(--archive-index-failed); font-size: 13px; }
 .paper-archive-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 22px; margin: 0 0 12px; }
 .paper-archive-fields > div.wide { grid-column: 1 / -1; }
@@ -249,6 +245,7 @@
   padding: 2px 0; border: 0; border-bottom: 1px solid currentColor; background: transparent; color: var(--archive-accent); font-size: 12px; cursor: pointer;
 }
 .paper-archive-abstract { margin: 0; color: var(--text); font-size: 14px; line-height: 1.85; text-align: justify; user-select: text; }
+.paper-archive-translated-abstract { text-indent: 2em; }
 .paper-archive-outline { margin: 0; padding-left: 0; list-style: none; counter-reset: section; }
 .paper-archive-outline li { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px dashed color-mix(in srgb, var(--ink) 14%, transparent); color: var(--text); font-size: 13.5px; counter-increment: section; }
 .paper-archive-outline li::before { min-width: 22px; color: var(--muted); content: counter(section, decimal-leading-zero); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.9; }
@@ -258,7 +255,7 @@
 .paper-archive-insight ul { margin: 0; padding-left: 18px; }
 .paper-archive-insight small { color: var(--muted); font-size: 11px; }
 .paper-archive-insight-empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.paper-archive-detail-actions { display: flex; align-items: center; gap: 22px; margin-top: 14px; }
+.paper-archive-detail-actions { display: flex; align-items: center; gap: 22px; margin-top: 24px; }
 .paper-archive-detail > .paper-archive-tabpanel { flex: 1 1 0; }
 .paper-archive-primary {
   display: inline-flex; min-width: 230px; height: 42px; padding: 0 18px; align-items: center; justify-content: space-between;
