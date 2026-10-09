@@ -119,4 +119,4 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - Paper Brief v2 已接入生成、校驗、保存與四分頁；一句話／類型／領域、證據基礎／檢驗方式取代低價值統計，無 v2 回退規則欄位與 v1。發現保留強度、需核對標記及可展開的來源摘錄；章節僅文字，暫不接閱讀器跳轉。設計及人工品質驗收邊界見 [Paper Brief v2](docs/PAPER_BRIEF_ZH.md)。
 - 授權、single-flight／併發、取消等待、原子落盤與備份卸載契約見 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md)。v2 寫 `insight/brief.v2.json`（≤256 KiB），保留 v1；只按 sourceRevision 標 stale，promptVersion 不同僅提示重新生成。新 Core RPC `insight:brief-context/save-brief` 與 ready v2 聯合類型隨 Main／Utility／Preload／Renderer 同版交付，不新增 migration／manifest。
 - 真實 DeepSeek 驗證已獲明確授權並完成：DeepONet、AlphaFold 各一次，結果已保存原文庫；具體數量與品質限制見上述專項文檔。其餘動畫候選仍待設計確認，不屬於未完成開發。
-- 本輪驗證：96 個單元測試檔，660 項通過／3 項既有跳過；typecheck 通過；lint 0 errors／63 項既有警告。四 bundle／Utility smoke、Electron 文庫正常／WebGL 降級／v2 檔案卡 3 項通過；已檢視 mock 結果截圖。真實 API 兩篇結果已落盤，少量樣本不等於跨學科品質驗收。未 push／遠端發布；本地包交付入口見最新 release manifest。
+- 本輪驗證：96 個單元測試檔，660 項通過／3 項既有跳過；typecheck 通過；lint 0 errors／63 項既有警告。四 bundle／Utility smoke、Electron 文庫正常／WebGL 降級／v2 檔案卡 3 項通過；已檢視 mock 結果截圖。真實 API 兩篇結果已落盤，少量樣本不等於跨學科品質驗收。本地打包與 packaged smoke／完整性／體積門禁通過（runtime 353.28 MiB、ZIP 94.05 MiB）；入口見 `release/advanced/release-manifest.json`。未跑本輪完整安裝生命週期／遠端 CI，未 push／遠端發布。
