@@ -1,4 +1,5 @@
-// Library map prototype: groups a folder of parsed papers into topics and lays them out as a map.
+// Library graph prototype: groups a folder of parsed papers by overall relatedness (content,
+// citations, shared references) for an Obsidian-style graph view.
 // Runs locally with Node 20+ and no dependencies, API keys or downloads, so the demo shows the
 // pipeline shape (chunk → vectorise → cluster → name → cite → lay out) rather than the final
 // model quality. Production would swap the TF-IDF/LSA step for an embedding model (see README).
@@ -18,7 +19,6 @@ if (!corpusDir || !manifestPath || !outPath) {
 
 const LSA_DIMENSIONS = 24
 const CHUNK_CHARS = 520
-const QUERY_VOCAB = 5000
 const SEED = 20261010
 
 // ───────────── Parsing and chunking ─────────────
@@ -276,12 +276,7 @@ const b = multiplyAt(q) // rows of B = Qᵀ A, each over terms
 const gram = b.map((x) => b.map((y) => dot(x, y)))
 const eigen = jacobiEigen(gram).slice(0, k)
 const singular = eigen.map(({ value }) => Math.sqrt(Math.max(value, 0)))
-// Term loadings V = Bᵀ U Σ⁻¹ and chunk coordinates U_A Σ = Q U Σ.
-const termLoadings = eigen.map(({ vector }, d) => {
-  const column = new Float64Array(vocab.length)
-  vector.forEach((weight, row) => { if (weight) b[row].forEach((value, index) => { column[index] += value * weight }) })
-  return Array.from(column, (value) => value / (singular[d] || 1))
-})
+// Chunk coordinates U_A Σ = Q U Σ.
 const chunkVectors = chunks.map((_, chunkIndex) => normalize(eigen.map(({ vector }, d) => vector.reduce((sum, weight, row) => sum + weight * q[row][chunkIndex], 0) * singular[d])))
 
 // Paper vectors: mean of chunk vectors (abstract and conclusion weighted up), centred on the
@@ -301,59 +296,160 @@ const libraryMean = new Array(k).fill(0).map((_, d) => rawPaperVectors.reduce((s
 const paperVectors = rawPaperVectors.map((vector) => normalize(vector.map((value, d) => value - libraryMean[d])))
 const similarity =paperVectors.map((a) => paperVectors.map((b) => dot(a, b)))
 
-// Agglomerative clustering (average linkage, cosine distance); k chosen by silhouette.
-function agglomerate(count) {
-  let groups = papers.map((_, index) => [index])
-  const distance = (a, b) => { let sum = 0; for (const i of a) for (const j of b) sum += 1 - similarity[i][j]; return sum / (a.length * b.length) }
-  while (groups.length > count) {
-    let best = [0, 1, Infinity]
-    for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) {
-      const d = distance(groups[i], groups[j])
-      if (d < best[2]) best = [i, j, d]
+// ───────────── Relatedness: content, citation and shared references in one score ─────────────
+
+// Direct citations between papers in the library: the cited paper's original title in one reference.
+const titleTokens = papers.map((paper) => (paper.original.toLowerCase().match(/[a-z0-9]{3,}/gu) ?? []).filter((word) => !STOP_LATIN.has(word)))
+const referenceEntries = papers.map((paper) => paper.references.split(/\n+/u).map((line) => line.trim()).filter((line) => line.length > 30))
+const citesLibraryPaper = (line, to) => {
+  const words = titleTokens[to]
+  const lineWords = (line.toLowerCase().match(/[a-z0-9]{3,}/gu) ?? []).filter((word) => !STOP_LATIN.has(word))
+  // Whole words only; a short title ("Deep learning") must appear as a phrase.
+  if (words.length >= 4) {
+    const set = new Set(lineWords)
+    return words.filter((word) => set.has(word)).length / words.length >= 0.85
+  }
+  return words.length >= 2 && lineWords.join(' ').includes(words.join(' '))
+}
+const cites = papers.map(() => new Set())
+const citations = []
+papers.forEach((_, from) => papers.forEach((__, to) => {
+  if (from !== to && referenceEntries[from].some((line) => citesLibraryPaper(line, to))) {
+    cites[from].add(to)
+    citations.push({ from, to })
+  }
+}))
+
+// Bibliographic coupling: two papers that cite the same outside work are related. A reference is
+// matched across papers by its word set (Jaccard ≥ 0.5) and, when both carry one, the same year.
+const referenceTitle = (line) => line.split(/\.\s+/u)
+  .map((part) => part.replace(/^\s*(?:\\?\[\d+\]|\d{1,3})\s*/u, '').trim())
+  // The title is the segment with the most lower-case words (author names are capitalised) and no
+  // venue or year.
+  .map((part) => [part, (part.match(/(?<![A-Za-z])[a-z]{4,}/gu) ?? []).length - 2 * (part.match(/\b[A-Z]\b/gu) ?? []).length -
+    (/\d{4}/u.test(part) ? 2 : 0) - (/^in\s|proceedings|conference|journal|arxiv|preprint|transactions|\bvol\b/iu.test(part) ? 8 : 0)])
+  .sort((a, b) => b[1] - a[1])[0]?.[0].slice(0, 90) ?? line.slice(0, 90)
+const referenceKey = (line) => ({
+  words: new Set((line.toLowerCase().match(/[a-z]{3,}/gu) ?? []).filter((word) => !STOP_LATIN.has(word))),
+  year: line.match(/\b(?:19|20)\d{2}\b/u)?.[0] ?? null
+})
+const outside = referenceEntries.map((entries) => entries
+  .filter((line) => !papers.some((_, to) => citesLibraryPaper(line, to)))
+  .map((line) => ({ line, ...referenceKey(line) })))
+const sameWork = (a, b) => {
+  if (a.year && b.year && a.year !== b.year) return false
+  let shared = 0
+  for (const word of a.words) if (b.words.has(word)) shared++
+  return shared >= 4 && shared / (a.words.size + b.words.size - shared) >= 0.5
+}
+const sharedWorks = [] // { title, papers: Set }
+outside.forEach((entries, paper) => entries.forEach((entry) => {
+  const work = sharedWorks.find((candidate) => candidate.keys.some((key) => sameWork(key, entry)))
+  if (work) { work.papers.add(paper); work.keys.push(entry) } else sharedWorks.push({ title: referenceTitle(entry.line), papers: new Set([paper]), keys: [entry] })
+}))
+const coCited = sharedWorks.filter((work) => work.papers.size >= 2)
+// A work most of the library cites (Adam, ImageNet) says little; one only two papers share says a
+// lot. Shared works are weighted like IDF and the sum is normalised as Salton's cosine.
+const specificity = (cited) => Math.log(papers.length / cited) / Math.log(papers.length / 2)
+const coupling = papers.map((_, i) => papers.map((__, j) => {
+  if (i === j || !outside[i].length || !outside[j].length) return 0
+  const shared = coCited.filter((work) => work.papers.has(i) && work.papers.has(j)).reduce((sum, work) => sum + specificity(work.papers.size), 0)
+  return shared / Math.sqrt(outside[i].length * outside[j].length)
+}))
+// Citing a paper half the library cites (Attention Is All You Need) is weaker evidence of a shared
+// topic than citing one nobody else does.
+const inDegree = papers.map((_, j) => citations.filter((c) => c.to === j).length)
+const citationStrength = (from, to) => (cites[from].has(to) ? 1 / Math.sqrt(inDegree[to]) : 0)
+
+// One score per pair. Content carries most of the weight; a direct citation or a strong overlap in
+// references pulls papers together even when their wording differs (a method and its application).
+const WEIGHTS = { content: 0.55, citation: 0.25, references: 0.2 }
+const COUPLING_FULL = 0.12 // specific shared references worth an eighth of the lists count as full overlap
+const relatedness = papers.map((_, i) => papers.map((__, j) => {
+  if (i === j) return null
+  const content = Math.max(0, similarity[i][j])
+  const citation = Math.max(citationStrength(i, j), citationStrength(j, i))
+  const references = Math.min(1, coupling[i][j] / COUPLING_FULL)
+  return { content, citation, references, total: WEIGHTS.content * content + WEIGHTS.citation * citation + WEIGHTS.references * references }
+}))
+console.log(`citations: ${citations.length}, shared outside references: ${coCited.length}`)
+
+// ───────────── Groups: Louvain communities on the relatedness graph ─────────────
+// Each paper keeps its strongest links (top 4, or any above 0.25), as the graph view shows them.
+const EDGE_KEEP = 4
+const edges = []
+papers.forEach((_, i) => {
+  const strongest = papers.map((__, j) => [j, relatedness[i][j]?.total ?? 0]).filter(([j]) => j !== i).sort((a, b) => b[1] - a[1])
+  strongest.forEach(([j, weight], rank) => {
+    if ((rank < EDGE_KEEP || weight >= 0.25) && weight > 0.05 && !edges.some((edge) => (edge.a === j && edge.b === i) || (edge.a === i && edge.b === j))) edges.push({ a: i, b: j, weight })
+  })
+})
+
+function louvain(count, links, resolution = 1) {
+  const weight = Array.from({ length: count }, () => new Map())
+  for (const { a, b, w } of links) { weight[a].set(b, (weight[a].get(b) ?? 0) + w); weight[b].set(a, (weight[b].get(a) ?? 0) + w) }
+  const degree = weight.map((map) => [...map.values()].reduce((s, v) => s + v, 0))
+  const total = degree.reduce((s, v) => s + v, 0) / 2 || 1
+  const community = Array.from({ length: count }, (_, i) => i)
+  const communityDegree = degree.slice()
+  let moved = true
+  for (let pass = 0; moved && pass < 50; pass++) {
+    moved = false
+    for (let node = 0; node < count; node++) {
+      const own = community[node]
+      const toCommunity = new Map()
+      for (const [other, w] of weight[node]) toCommunity.set(community[other], (toCommunity.get(community[other]) ?? 0) + w)
+      communityDegree[own] -= degree[node]
+      const gain = (target) => (toCommunity.get(target) ?? 0) - resolution * communityDegree[target] * degree[node] / (2 * total)
+      let best = own
+      let bestGain = gain(own)
+      for (const target of toCommunity.keys()) { const g = gain(target); if (g > bestGain + 1e-12) { best = target; bestGain = g } }
+      communityDegree[best] += degree[node]
+      if (best !== own) { community[node] = best; moved = true }
     }
-    groups[best[0]] = groups[best[0]].concat(groups[best[1]])
-    groups.splice(best[1], 1)
   }
-  return groups
+  return community
 }
-function silhouette(groups) {
-  const label = new Map(groups.flatMap((group, index) => group.map((paper) => [paper, index])))
-  let total = 0
-  for (const [paper, own] of label) {
-    const mean = (group) => group.filter((other) => other !== paper).reduce((sum, other) => sum + 1 - similarity[paper][other], 0) / Math.max(1, group.filter((other) => other !== paper).length)
-    const a = groups[own].length > 1 ? mean(groups[own]) : 0
-    const b = Math.min(...groups.filter((_, index) => index !== own).map(mean))
-    total += groups[own].length > 1 ? (b - a) / Math.max(a, b) : 0
+// Louvain's local moving at several resolutions; keep the partition with the best plain modularity
+// among those with 3–6 groups (a library page needs a handful of columns, not one or fourteen).
+const links = edges.map(({ a, b, weight }) => ({ a, b, w: weight }))
+const modularityOf = (community) => {
+  const degree = papers.map((_, i) => links.filter((e) => e.a === i || e.b === i).reduce((sum, e) => sum + e.w, 0))
+  const m = links.reduce((sum, e) => sum + e.w, 0) || 1
+  let q = 0
+  for (const e of links) if (community[e.a] === community[e.b]) q += e.w / m
+  for (const id of new Set(community)) {
+    const d = papers.reduce((sum, _, i) => sum + (community[i] === id ? degree[i] : 0), 0)
+    q -= (d / (2 * m)) ** 2
   }
-  return total / papers.length
+  return q
 }
-// Two levels from one dendrogram: islands (the best silhouette) and regions (a few broad topics
-// for the library's columns). Average linkage merges in a fixed order, so regions are unions of
-// islands.
-let islands = null
-let bestScore = -Infinity
-const tried = []
-for (let count = 3; count <= Math.max(3, Math.floor(papers.length / 2)); count++) {
-  const candidate = agglomerate(count)
-  const score = silhouette(candidate)
-  tried.push({ k: count, silhouette: +score.toFixed(3) })
-  if (score > bestScore) { bestScore = score; islands = candidate }
+let communityOf = louvain(papers.length, links)
+let modularity = modularityOf(communityOf)
+let found = false
+const resolutions = []
+for (let step = 0; step <= 22; step++) {
+  const resolution = 0.8 + step * 0.1
+  const candidate = louvain(papers.length, links, resolution)
+  const count = new Set(candidate).size
+  const q = modularityOf(candidate)
+  resolutions.push({ resolution: +resolution.toFixed(1), groups: count, modularity: +q.toFixed(3) })
+  if (count >= 3 && count <= 6 && (!found || q > modularity)) { found = true; modularity = q; communityOf = candidate }
 }
-const regionCount = Math.max(2, Math.min(islands.length - 1, Math.round(Math.sqrt(papers.length / 1.5))))
-const regions = agglomerate(regionCount)
-for (const level of [islands, regions]) level.sort((a, b) => b.length - a.length || a[0] - b[0])
-console.log('silhouette by k:', tried, `→ ${islands.length} islands, ${regions.length} regions`)
+const groupsList = [...new Set(communityOf)].map((id) => papers.map((_, i) => i).filter((i) => communityOf[i] === id)).sort((a, b) => b.length - a.length || a[0] - b[0])
+const groupOf = new Map(groupsList.flatMap((group, index) => group.map((paper) => [paper, index])))
+console.log(`groups: ${groupsList.length}, modularity ${modularity.toFixed(3)}`)
 
 const paperTermSets = papers.map((_, paper) => new Set(chunks.filter((chunk) => chunk.paper === paper).flatMap((chunk) => [...chunk.terms.keys()])))
 // Terms used by most of the library ("训练", "数据") cannot name one topic.
 const paperFrequency = (term) => paperTermSets.filter((set) => set.has(term)).length
 
-/** Topic labels: class-based TF-IDF over each group's chunks (BERTopic's c-TF-IDF). */
+/** Group labels: class-based TF-IDF over each group's chunks (BERTopic's c-TF-IDF). */
 function labelGroups(groups, limit) {
-  const groupOf = new Map(groups.flatMap((group, index) => group.map((paper) => [paper, index])))
+  const of = new Map(groups.flatMap((group, index) => group.map((paper) => [paper, index])))
   const groupTerms = groups.map(() => new Map())
   for (const chunk of chunks) {
-    const target = groupTerms[groupOf.get(chunk.paper)]
+    const target = groupTerms[of.get(chunk.paper)]
     for (const [term, count] of chunk.terms) if (termIndex.has(term)) target.set(term, (target.get(term) ?? 0) + count)
   }
   const totalTerms = new Map()
@@ -362,7 +458,7 @@ function labelGroups(groups, limit) {
   return groups.map((group, index) => {
     const map = groupTerms[index]
     const size = [...map.values()].reduce((a, b) => a + b, 0)
-    // A label must be shared by the topic's papers, not come from one of them.
+    // A label must be shared by the group's papers, not come from one of them.
     const spread = (term) => group.filter((paper) => paperTermSets[paper].has(term)).length
     const scored = [...map.entries()]
       .filter(([term]) => paperFrequency(term) <= Math.max(2, papers.length * 0.5))
@@ -377,69 +473,32 @@ function labelGroups(groups, limit) {
     return { id: index, papers: group, terms }
   })
 }
-const topics = labelGroups(islands, 6)
-// Each paper's own distinctive terms, used to explain why two papers sit together.
+const groups = labelGroups(groupsList, 5)
 const paperTerms = labelGroups(papers.map((_, index) => [index]), 8).map((label) => label.terms)
-const regionTopics = labelGroups(regions, 5).map((region) => ({ ...region, islands: topics.filter((island) => island.papers.every((paper) => region.papers.includes(paper))).map((island) => island.id) }))
-const groupOf = new Map(islands.flatMap((group, index) => group.map((paper) => [paper, index])))
-const regionOf = new Map(regions.flatMap((group, index) => group.map((paper) => [paper, index])))
 
-// Citations between papers in the library: the cited paper's original title inside one reference.
-const titleTokens = papers.map((paper) => (paper.original.toLowerCase().match(/[a-z0-9]{3,}/gu) ?? []).filter((word) => !STOP_LATIN.has(word)))
-const citations = []
-papers.forEach((paper, from) => {
-  const referenceLines = paper.references.toLowerCase().split(/\n+/u).filter((line) => line.length > 20)
-  papers.forEach((_, to) => {
-    if (from === to || titleTokens[to].length < 2) return
-    // Whole words only; a short title ("Deep learning") must appear as a phrase.
-    const words = titleTokens[to]
-    const phrase = words.join(' ')
-    const hit = referenceLines.some((line) => {
-      const lineWords = new Set(line.match(/[a-z0-9]{3,}/gu) ?? [])
-      return words.length >= 4
-        ? words.filter((word) => lineWords.has(word)).length / words.length >= 0.85
-        : (line.match(/[a-z0-9]{3,}/gu) ?? []).filter((word) => !STOP_LATIN.has(word)).join(' ').includes(phrase)
-    })
-    if (hit) citations.push({ from, to })
-  })
-})
-console.log(`citations: ${citations.length}`)
-
-// Cross-paper chunk neighbours: what RAG would retrieve from other papers for each chunk.
-const chunkNeighbours = chunkVectors.map((vector, index) => chunkVectors
-  .map((other, otherIndex) => [otherIndex, chunks[otherIndex].paper !== chunks[index].paper ? dot(vector, other) : -1])
-  .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([otherIndex, score]) => [otherIndex, +score.toFixed(3)]))
-
-// Query projection for the page: top terms by document frequency with their LSA loadings.
-const queryTerms = vocab.map((term, index) => [term, index]).sort((a, b) => df.get(b[0]) - df.get(a[0])).slice(0, QUERY_VOCAB)
 const round = (value) => Math.round(value * 1000) / 1000
-
 const output = {
   generatedAt: new Date().toISOString(),
-  method: { chunkChars: CHUNK_CHARS, lsaDimensions: k, vocabulary: vocab.length, silhouette: tried, islands: islands.length, regions: regions.length },
+  method: { chunkChars: CHUNK_CHARS, chunks: chunks.length, lsaDimensions: k, vocabulary: vocab.length, weights: WEIGHTS, couplingFull: COUPLING_FULL, modularity: round(modularity), resolutions },
   papers: papers.map((paper, index) => ({
-    id: paper.id, title: paper.title, original: paper.original, topic: groupOf.get(index), region: regionOf.get(index), bytes: paper.bytes,
-    chunks: paper.chunks.length, terms: paperTerms[index],
-    vector: paperVectors[index].map(round)
+    id: paper.id, title: paper.title, original: paper.original, group: groupOf.get(index),
+    chunks: paper.chunks.length, references: referenceEntries[index].length, terms: paperTerms[index]
   })),
-  similarity: similarity.map((row) => row.map(round)),
-  topics,
-  regions: regionTopics,
+  // Upper triangle as a list: [i, j, total, content, citation, references].
+  pairs: papers.flatMap((_, i) => papers.map((__, j) => j).filter((j) => j > i).map((j) => {
+    const r = relatedness[i][j]
+    return [i, j, round(r.total), round(r.content), round(r.citation), round(r.references)]
+  })),
+  edges: edges.map(({ a, b, weight }) => [a, b, round(weight)]),
+  groups,
   citations,
-  chunks: chunks.map((chunk, index) => ({
-    paper: chunk.paper, role: chunk.role, section: chunk.section.slice(0, 80),
-    text: chunk.text.slice(0, 220), vector: chunkVectors[index].map(round), neighbours: chunkNeighbours[index]
-  })),
-  query: {
-    terms: queryTerms.map(([term]) => term),
-    idf: queryTerms.map(([, index]) => round(idf[index])),
-    loadings: queryTerms.map(([, index]) => termLoadings.map((column) => round(column[index])))
-  }
+  // Outside works cited by two or more library papers (drawn like Obsidian's unresolved links).
+  sharedReferences: coCited.map((work) => ({ title: work.title, papers: [...work.papers] })).sort((a, b) => b.papers.length - a.papers.length)
 }
 writeFileSync(outPath, JSON.stringify(output))
 if (htmlPath) {
   // The page embeds its data; '<' is escaped so a passage cannot close the script element.
-  const template = readFileSync(new URL('./map.html', import.meta.url), 'utf8')
-  writeFileSync(htmlPath, template.replace('/*MAP_DATA*/', () => JSON.stringify(output).replace(/</gu, '\\u003c')))
+  const template = readFileSync(new URL('./graph.html', import.meta.url), 'utf8')
+  writeFileSync(htmlPath, template.replace('/*GRAPH_DATA*/', () => JSON.stringify(output).replace(/</gu, '\\u003c')))
 }
-console.log(`topics:\n${topics.map((topic) => `  ${topic.terms.join(' / ')}  ←  ${topic.papers.map((index) => papers[index].title).join('；')}`).join('\n')}`)
+console.log(`groups:\n${groups.map((group) => `  ${group.terms.join(' / ')}  ←  ${group.papers.map((index) => papers[index].title.slice(0, 16)).join('；')}`).join('\n')}`)
