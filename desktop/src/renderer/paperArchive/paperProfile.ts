@@ -60,7 +60,8 @@ function splitBlocks(markdown: string): Block[] {
 export function cleanInline(text: string): string {
   return text
     .replace(/<sup>.*?<\/sup>/giu, '')
-    .replace(/<[^>]+>/gu, '')
+    // Real tags only, so a bare `<` in maths cannot swallow the rest of the paragraph.
+    .replace(/<\/?[A-Za-z][^<>\n]{0,300}>/gu, '')
     .replace(/!\[[^\]]*\]\([^)]*\)/gu, '')
     .replace(/\[([^\]]*)\]\((?:mailto:)?[^)]*\)/gu, '$1')
     .replace(/[*_`]{1,3}([^*_`]+)[*_`]{1,3}/gu, '$1')

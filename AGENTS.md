@@ -118,3 +118,20 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - 本地驗證（使用者授權）：95 個單元測試檔、639 項通過／3 項既有跳過；其後補充原子 rename 失敗測試，17 項解讀／IPC 測試再次通過。typecheck 通過；lint 0 errors／63 項既有 any 警告；四 bundle／Utility smoke 通過。Electron E2E：文庫正常／WebGL 降級 2 項，AI 解讀 1 項（真實設定／憑據 IPC，僅 mock provider HTTP，驗證缺 Key、遮罩完全退開後顯示內容、重開持久化與自動生成設定保存）。付費 API、遠端 CI、安裝生命週期未驗證；未 push。
 - 性能診斷 Ctrl+Shift+F 顯示 fps、DPR×縮放、卡片／三角形與 GPU。此前 RTX 3060／2560×1600@165Hz 實測方向鍵 55 fps、拖曳 52–55 fps；Claude 的抽取實測約 1.35 秒。這些是本機歷史證據，不代表所有硬體。
 - 本地測試包已重建：`release-artifacts/muzkeczu-41844-6fb59349/program/Copilotix.exe`（須保留整個 program 目錄）；同層 `Copilotix-1.1.0-win-x64.zip` 為 compact Setup，入口亦在 `release/setup.exe`。ASAR 23.65 MiB、runtime 353.33 MiB、ZIP 94.11 MiB；packaged smoke、fuses、內容／雜湊／體積門禁通過。官方 Electron 44.1.1 SHA-256 核對後用本地 ZIP 打包，以避免鏡像 TLS 中斷；临时 electronDist 已還原，未更改發布安全政策。ZIP SHA-256：`5976B2ACC148F4002FE997C4F22ECA35E13F23785D9608FC6F29D6B38E39D14E`。
+
+### 給 Astra 的話（Claude，2026-10-09）
+
+使用者希望解析完成後讓模型生成**跨學科通用的結構化資訊**，取代解密頁的頁數、章節數、圖表數等閱讀價值低的欄位。我已完成演算法與契約（未接入管線／界面），設計說明見 `docs/PAPER_BRIEF_ZH.md`，代碼在 `desktop/src/shared/paperBrief/`（schema／context／prompt／grounding，全部純函式），測試 `desktop/tests/paperBrief.test.ts`（依第 8 節未在本地執行，跑全量時若失敗請直接修正）。
+
+設計要點：欄位對應 Keshav 五 C、Swales CARS、結構化摘要與 Toulmin 論證；每條結論帶 anchors（E1…）指回送出的摘錄，程式核對 anchors 與數字，未通過標「需核對」；局限區分作者自述與 AI 推斷。選段按 IMRaD 角色在 24 KB 預算內必選摘要／結論／貢獻陳述、保底方法／結果／討論／局限、按角色配額填充，並附完整目錄與覆蓋報告。14 篇真實論文實測見文檔第 4 節。順帶修正：`paperProfile` 與新選段器的 HTML 標籤清理不再被數學中的 `<` 吞掉正文；中文「參考文獻」等標題不能用 `\b` 判斷（JS 的 `\b` 不適用 CJK）。
+
+想請你接入（沿用你已驗證的 `PaperInsightService` 授權、single-flight、併發、取消與落盤，只替換「選段 → 提示詞 → 校驗 → 保存」）：
+
+1. **選段**：Utility 新增 v2 context operation，呼叫 `buildBriefContext(原文, 譯文, BRIEF_BUDGETS.standard)`；送出的整體請求以 `PAPER_BRIEF_MAX_REQUEST_BYTES`（48 KB）為上限，取代 v1 的 16 KB。
+2. **生成**：`buildBriefMessages` ＋ `PAPER_BRIEF_REQUEST`（temperature 0.2、max_tokens 3000、`response_format: json_object`；ChatProvider 需能傳這些參數，不支持時省略）。`parseBriefResponse` 失敗只重試一次：對話追加 assistant（`clipPreviousAnswer`）＋ `buildBriefRepairMessage(problems)`。成功後 `assembleBrief` 再保存。
+3. **存儲與兼容**：寫 `insight/brief.v2.json`（原子寫入、PathPolicy、≤256 KiB）；v1 保留可讀，按文檔第 8 節：sourceRevision 變更才算過期，promptVersion 不同只提示可重新生成。IPC 狀態需能攜帶 v2（例如在 ready 狀態加 `brief`，或新增版本化欄位），zod strict 校驗沿用 `paperBriefSchema`。備份／卸載清單測試加入 `brief.v2.json` 與臨時檔。
+4. **解密頁展示**：按文檔第 3 節的「解密頁建議」替換低價值欄位：tldr 作副標題，類型＋領域標籤，「證據基礎」「檢驗方式」取代「頁數」「圖·表·公式」；分頁建議「概覽（背景→缺口→問題、關鍵思路）／發現（強度徽章、需核對、anchors）／局限與前提／閱讀路線與術語」。沒有 v2 時退回現有規則欄位並提供生成入口。遵守你寫的詳情互動與遮罩契約。
+5. **跳轉（可選）**：anchors 與 reading.focus 帶章節名，若閱讀器能按標題定位，點擊後打開閱讀器並捲到該章；做不到時先只顯示章節名。
+6. **測試**：服務層覆蓋修復重試、checks 透傳、v1／v2 共存與過期規則；E2E 用 mock provider 回傳一份含一個捏造數字的 v2 JSON，驗證「需核對」與 anchors 顯示。
+
+品質評估（文檔第 9 節，跨學科 10–20 篇人工評分）需要真實 API，由使用者安排驗收，不要用 mock 結果宣稱品質。修改 `paperBrief` 的詞表、配額或提示詞時，請同步更新 `PAPER_BRIEF_PROMPT_VERSION` 與文檔。
