@@ -30,6 +30,17 @@ describe('ChatProvider', () => {
     await new ChatProvider(fetcher).stream({ ...input(), provider: 'deepseek', baseUrl: DEFAULT_SETTINGS.deepseekBaseUrl, model: 'deepseek-flash' })
     expect(fetcher.mock.calls.length).toBe(1)
   })
+  it('sends brief options, bounds the request and retries explicit unsupported options once', async () => {
+    const fetcher = vi.fn(async (_url: string, _init: RequestInit) => new Response('data: [DONE]\n\n'))
+    fetcher.mockResolvedValueOnce(new Response('{"error":{"message":"response_format is not supported"}}', { status: 400 }))
+    await new ChatProvider(fetcher).stream({ ...input(), temperature: 0.2, maxOutputTokens: 3000, responseFormat: { type: 'json_object' }, maxRequestBytes: 49152 })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(String(fetcher.mock.calls[0]![1].body))).toMatchObject({ temperature: 0.2, max_tokens: 3000, response_format: { type: 'json_object' } })
+    expect(JSON.parse(String(fetcher.mock.calls[1]![1].body))).not.toHaveProperty('response_format')
+    fetcher.mockClear()
+    await expect(new ChatProvider(fetcher).stream({ ...input(), maxRequestBytes: 10 })).rejects.toMatchObject({ code: 'RAG_LIMIT_EXCEEDED' })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
   it.each([401, 403])('invalidates the stored credential on %s without exposing provider bodies', async (status) => {
     const invalidate = vi.fn(async () => undefined)
     const provider = new ChatProvider(async () => new Response('question secret echoed', { status }), { invalidate })

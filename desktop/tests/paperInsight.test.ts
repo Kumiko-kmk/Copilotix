@@ -1,3 +1,6 @@
+import { briefContent } from './fixtures/paperBrief'
+import { assembleBrief, buildBriefContext, PAPER_BRIEF_REQUEST } from '@shared/paperBrief'
+import type { BriefContextResult } from '@shared/paperBrief/contracts'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -24,13 +27,13 @@ function fixture() {
   const settings = structuredClone(DEFAULT_SETTINGS)
   settings.chatConsentVersion = 2
   settings.credentials.qwen = { state: 'valid' }
-  const stored = new Map<string, PaperInsight>()
+  const stored = new Map<string, PaperInsightState>()
   const deps: PaperInsightDependencies = {
     settings: vi.fn(async () => settings), key: vi.fn(async () => 'never-persist-this-key'),
-    get: vi.fn(async (documentId: string): Promise<PaperInsightState> => stored.has(documentId) ? { status: 'ready', insight: stored.get(documentId)!, stale: false } : { status: 'missing' }),
-    context: vi.fn(async (documentId: string): Promise<PaperInsightContext> => ({ documentId, sourceRevision: 'revision-1', language: 'translated', excerpts: [{ section: '摘要', text: '论文内容' }], truncated: false })),
-    save: vi.fn(async (documentId, value) => { stored.set(documentId, value) }),
-    stream: vi.fn(async ({ onDelta }) => { await onDelta(JSON.stringify(content)); return null }),
+    get: vi.fn(async (documentId: string): Promise<PaperInsightState> => stored.get(documentId) ?? { status: 'missing' }),
+    context: vi.fn(async (documentId: string): Promise<BriefContextResult> => ({ documentId, sourceRevision: 'revision-1', context: buildBriefContext('# Title\n\n## Abstract\n\nPaper content.\n\n## Method\n\nStructured analysis.', '') })),
+    save: vi.fn(async (documentId, brief, anchors) => { stored.set(documentId, { status: 'ready', brief, anchors, stale: false, promptOutdated: false }) }),
+    stream: vi.fn(async ({ onDelta }) => { await onDelta(JSON.stringify(briefContent)); return null }),
     recordUsage: vi.fn(async () => undefined), changed: vi.fn((_id, state) => states.push(state)), canStart: () => true
   }
   return { id, deps, settings, states, stored, service: new PaperInsightService(deps) }
@@ -74,6 +77,11 @@ describe('structured paper insight', () => {
     vi.mocked(f.deps.stream).mockImplementationOnce(async ({ onDelta }) => { await onDelta('```bad'); return null })
     await f.service.generate(f.id); await idle(f)
     expect(f.deps.stream).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(f.deps.stream).mock.lastCall?.[0]).toMatchObject(PAPER_BRIEF_REQUEST)
+    const repair = vi.mocked(f.deps.stream).mock.lastCall![0].messages
+    expect(repair.at(-2)).toEqual({ role: 'assistant', content: '```bad' })
+    expect(repair.at(-1)?.content).toContain('JSON')
+    expect(f.deps.save).toHaveBeenCalledWith(f.id, expect.objectContaining({ checks: [{ grounded: true, numbersVerified: false }] }), expect.arrayContaining([expect.objectContaining({ id: 'E1' })]))
     expect(f.states.at(-1)).toMatchObject({ status: 'ready', stale: false })
     expect(JSON.stringify(f.stored.get(f.id))).not.toContain('never-persist-this-key')
     await f.service.dispose()
@@ -133,13 +141,40 @@ async function diskFixture() {
   const id = randomUUID()
   let revision = 1
   const ref = (kind: string) => ({ id: kind, documentId: id, kind, revision, relativePath: kind === 'parsed_markdown' ? 'original.md' : 'translated.md', contentHash: 'a'.repeat(64), metadata: {} })
-  await writeFile(join(root, 'original.md'), '# English title\nOriginal content')
-  await writeFile(join(root, 'translated.md'), '# 中文标题\n# 摘要\n翻译内容\n# 结论\n结论内容')
+  await writeFile(join(root, 'original.md'), '# English title\n\n## Abstract\n\nOriginal paper content sufficient for a structured summary.')
+  await writeFile(join(root, 'translated.md'), '# 中文标题\n# 摘要\n翻译内容是这篇论文的完整摘要，用于校验读取。\n# 结论\n结论内容说明研究发现。')
   const repository = { getTask: () => ({ outputDir: root }), getLatestArtifactReference: (_id: string, kind: string) => ref(kind) } as unknown as ConstructorParameters<typeof PaperInsightStore>[0]
   const store = new PaperInsightStore(repository)
   return { root, id, store, repository, revise: () => { revision++ } }
 }
 describe('paper insight atomic storage', () => {
+  it('prefers v2, preserves v1, separates prompt updates from source staleness and reopens anchors', async () => {
+    const f = await diskFixture()
+    const context = await f.store.briefContext(f.id, new AbortController().signal)
+    expect(context.context.language).toBe('original')
+    const brief = assembleBrief(briefContent, context.context, { provider: 'deepseek', model: 'deepseek-flash', sourceRevision: context.sourceRevision })
+    await f.store.save(f.id, insight(context.sourceRevision))
+    const anchors = context.context.excerpts.map(({ id, section, text }) => ({ id, section, text }))
+    await f.store.saveBrief(f.id, { ...brief, provenance: { ...brief.provenance, promptVersion: 'older-prompt' } }, anchors)
+    expect(await new PaperInsightStore(f.repository).get(f.id)).toMatchObject({ status: 'ready', brief: { checks: [{ grounded: true, numbersVerified: false }] }, anchors, stale: false, promptOutdated: true })
+    expect(await readdir(join(f.root, 'insight'))).toEqual(['brief.v2.json', 'insight.v1.json'])
+    f.revise()
+    expect(await f.store.get(f.id)).toMatchObject({ stale: true, promptOutdated: true })
+    const path = join(f.root, 'insight', 'brief.v2.json'), prior = await readFile(path, 'utf8')
+    vi.mocked(rename).mockRejectedValueOnce(Object.assign(new Error('disk failure'), { code: 'EIO' }))
+    await expect(f.store.saveBrief(f.id, brief, anchors)).rejects.toThrow('disk failure')
+    expect(await readFile(path, 'utf8')).toBe(prior)
+    expect((await readdir(join(f.root, 'insight'))).some((name) => name.startsWith('.pending'))).toBe(false)
+    await writeFile(path, '{broken')
+    await expect(f.store.get(f.id)).rejects.toThrow()
+  })
+  it('uses translated text only when the original is absent or empty', async () => {
+    const f = await diskFixture()
+    await writeFile(join(f.root, 'original.md'), '')
+    const context = await f.store.briefContext(f.id, new AbortController().signal)
+    expect(context.context.language).toBe('translated')
+    expect(JSON.stringify(context)).toContain('翻译内容')
+  })
   it('supports old missing files, translated sources, durable reopen and revision staleness', async () => {
     const f = await diskFixture()
     expect(await f.store.get(f.id)).toEqual({ status: 'missing' })

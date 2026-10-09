@@ -1,5 +1,6 @@
+import { paperBriefSaveSchema } from '@shared/paperBrief/contracts'
 import { PaperInsightStore } from './persistence/paperInsightStore'
-import { paperInsightRequestSchema, paperInsightSaveSchema, paperInsightContextRequestSchema } from '@shared/paperInsight'
+import { paperInsightRequestSchema } from '@shared/paperInsight'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
 import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
 import { PaperChatStore } from './persistence/paperChatStore'
@@ -140,8 +141,8 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
   const insightStore = () => new PaperInsightStore(requireRepository())
   const handlers: UtilityHandlerMap = {
     'insight:get': (request) => insightStore().get(paperInsightRequestSchema.parse(request.payload).documentId),
-    'insight:save': (request) => { const { documentId, insight } = paperInsightSaveSchema.parse(request.payload); return insightStore().save(documentId, insight) },
-    'insight:context': (request, signal) => { const { documentId, budgetBytes } = paperInsightContextRequestSchema.parse(request.payload); return insightStore().context(documentId, budgetBytes, signal) },
+    'insight:save-brief': (request) => { const { documentId, brief, anchors } = paperBriefSaveSchema.parse(request.payload); return insightStore().saveBrief(documentId, brief, anchors) },
+    'insight:brief-context': (request, signal) => insightStore().briefContext(paperInsightRequestSchema.parse(request.payload).documentId, signal),
     'chat:load': (request) => { const { documentId, before } = paperChatLoadRequestSchema.parse(request.payload); return chatStore.load(documentId, before) },
     'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
     'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),

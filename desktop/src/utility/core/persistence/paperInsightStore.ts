@@ -6,6 +6,10 @@ import { paperInsightRecordSchema, paperInsightSchema, PAPER_INSIGHT_MAX_BYTES, 
 import type { V2TaskRepositoryCompat } from './v2TaskRepositoryCompat'
 import { PathPolicy } from './pathPolicy'
 import { selectInsightExcerpts } from '../paperInsightContext'
+import { buildBriefContext, BRIEF_BUDGETS } from '@shared/paperBrief/context'
+import { PAPER_BRIEF_PROMPT_VERSION } from '@shared/paperBrief/prompt'
+import { paperBriefRecordSchema, paperBriefSaveSchema, briefContextResultSchema, PAPER_BRIEF_MAX_BYTES, type BriefContextResult, type BriefAnchor } from '@shared/paperBrief/contracts'
+import type { PaperBrief } from '@shared/paperBrief/schema'
 
 type Repository = Pick<V2TaskRepositoryCompat, 'getTask' | 'getLatestArtifactReference'>
 const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException)?.code === 'ENOENT'
@@ -52,6 +56,14 @@ export class PaperInsightStore {
     const snapshot = await this.snapshot(documentId)
     try {
       const root = await this.insightRoot(snapshot.root)
+      try {
+        const record = paperBriefRecordSchema.parse(JSON.parse(await this.read(join(root, 'brief.v2.json'), PAPER_BRIEF_MAX_BYTES)))
+        this.policy.resolveChild(root, 'brief.v2.json')
+        if (record.documentId !== documentId) throw new Error('档案卡不属于当前论文')
+        return { status: 'ready', brief: record.brief, anchors: record.anchors,
+          stale: record.brief.provenance.sourceRevision !== snapshot.sourceRevision,
+          promptOutdated: record.brief.provenance.promptVersion !== PAPER_BRIEF_PROMPT_VERSION }
+      } catch (error) { if (!missing(error)) throw error }
       const path = join(root, 'insight.v1.json')
       const record = paperInsightRecordSchema.parse(JSON.parse(await this.read(path, PAPER_INSIGHT_MAX_BYTES)))
       this.policy.resolveChild(root, 'insight.v1.json')
@@ -74,16 +86,43 @@ export class PaperInsightStore {
     return { documentId, sourceRevision: snapshot.sourceRevision, language: snapshot.translated ? 'translated' : 'original', ...selectInsightExcerpts(markdown, budgetBytes) }
   }
 
+  async briefContext(documentId: string, signal: AbortSignal): Promise<BriefContextResult> {
+    signal.throwIfAborted()
+    const snapshot = await this.snapshot(documentId)
+    const readArtifact = async (artifact: typeof snapshot.original): Promise<string> => {
+      if (!artifact) return ''
+      this.policy.resolveChild(snapshot.root, artifact.relativePath)
+      return this.read(join(snapshot.root, artifact.relativePath), 32 * 1024 * 1024)
+    }
+    const original = await readArtifact(snapshot.original)
+    signal.throwIfAborted()
+    const translated = original.trim() ? '' : await readArtifact(snapshot.translated)
+    signal.throwIfAborted()
+    const context = buildBriefContext(original, translated, BRIEF_BUDGETS.standard)
+    const after = await this.snapshot(documentId)
+    if (after.sourceRevision !== snapshot.sourceRevision) throw new Error('论文内容正在更新，请重试')
+    return briefContextResultSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, context })
+  }
+
+  async saveBrief(documentId: string, brief: PaperBrief, anchors: BriefAnchor[]): Promise<{ saved: true }> {
+    const value = paperBriefSaveSchema.parse({ documentId, brief, anchors })
+    const body = JSON.stringify(paperBriefRecordSchema.parse({ version: 2, ...value }))
+    return this.commit(documentId, 'brief.v2.json', body, PAPER_BRIEF_MAX_BYTES)
+  }
+
   async save(documentId: string, raw: PaperInsight): Promise<{ saved: true }> {
     const insight = paperInsightSchema.parse(raw)
+    const body = JSON.stringify(paperInsightRecordSchema.parse({ version: 1, documentId, insight }))
+    return this.commit(documentId, 'insight.v1.json', body, PAPER_INSIGHT_MAX_BYTES)
+  }
+
+  private async commit(documentId: string, name: string, body: string, maxBytes: number): Promise<{ saved: true }> {
+    if (Buffer.byteLength(body) > maxBytes) throw new Error('解读文件超过大小限制')
     const snapshot = await this.snapshot(documentId)
     const root = await this.insightRoot(snapshot.root, true)
-    const name = 'insight.v1.json'
     const target = join(root, name)
     try { if ((await lstat(target)).isSymbolicLink()) throw new Error('解读文件不能是符号链接') } catch (error) { if (!missing(error)) throw error }
     this.policy.resolveChild(root, name)
-    const body = JSON.stringify(paperInsightRecordSchema.parse({ version: 1, documentId, insight }))
-    if (Buffer.byteLength(body) > PAPER_INSIGHT_MAX_BYTES) throw new Error('解读文件超过大小限制')
     const temporary = this.policy.resolveChild(root, `.pending-${randomUUID()}`)
     try {
       const handle = await open(temporary, 'wx')

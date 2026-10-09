@@ -3,6 +3,8 @@
  * Validated contract between the renderer and Main/Utility (see AGENTS.md §13). Only paper content goes in; no import metadata.
  */
 import { z } from 'zod'
+import { paperBriefSchema } from './paperBrief/schema'
+import { briefAnchorsSchema } from './paperBrief/contracts'
 import { paperChatProviderSchema, PAPER_CHAT_MODELS, supportedChatModelSchema } from './paperChatSchemas'
 
 const text = (max: number) => z.string().trim().min(1).max(max).refine((value) => ![...value].some((char) => char.charCodeAt(0) < 32 && !'\t\n\r'.includes(char)))
@@ -18,10 +20,11 @@ export const paperInsightSchema = paperInsightContentSchema.extend({
   generatedAt: z.iso.datetime(), sourceRevision: text(512)
 }).strict()
 export type PaperInsight = z.infer<typeof paperInsightSchema>
-export const paperInsightStateSchema = z.discriminatedUnion('status', [
+export const paperInsightStateSchema = z.union([
   z.object({ status: z.literal('missing') }).strict(),
   z.object({ status: z.literal('generating') }).strict(),
   z.object({ status: z.literal('ready'), insight: paperInsightSchema, stale: z.boolean() }).strict(),
+  z.object({ status: z.literal('ready'), brief: paperBriefSchema, anchors: briefAnchorsSchema, stale: z.boolean(), promptOutdated: z.boolean() }).strict(),
   z.object({ status: z.literal('failed'), error: text(1024) }).strict(),
   z.object({ status: z.literal('unavailable'), reason: text(1024) }).strict()
 ])

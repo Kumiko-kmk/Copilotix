@@ -1,3 +1,4 @@
+import { briefContent } from '../tests/fixtures/paperBrief'
 import { expect, test } from '@playwright/test'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
@@ -27,14 +28,15 @@ test('archive insight uses validated settings, provider HTTP and durable local s
       await archive.getByRole('button', { name: '查看档案' }).click()
       await expect(archive.locator('.paper-archive-detail')).toHaveAttribute('aria-busy', 'false')
       await expect(archive.locator('.paper-archive-detail h2')).toHaveText('Original title')
-      await archive.getByRole('tab', { name: /AI 解读/u }).click()
+      const legacyTab = archive.getByRole('tab', { name: /AI 解读/u })
+      if (await legacyTab.count()) await legacyTab.click()
       await expect.poll(() => archive.locator('.paper-archive-tabpanel').evaluate((element) => getComputedStyle(element, '::after').transform)).toBe('matrix(0, 0, 0, 1, 0, 0)')
       return archive
     }
     let archive = await openDetail()
     await expect(archive.getByText('请先在服务连接中保存模型 API Key。')).toBeVisible()
-    await expect(archive.getByRole('button', { name: '生成 AI 解读' })).toHaveCount(0)
-    await app.evaluate(({ net }) => {
+    await expect(archive.getByRole('button', { name: '生成 AI 档案卡' })).toHaveCount(0)
+    await app.evaluate(({ net }, brief) => {
       Reflect.set(globalThis, '__insightRequests', [])
       net.fetch = async (input, init) => {
         const body = JSON.parse(String(init?.body)) as { model: string; stream?: boolean; messages?: unknown[] }
@@ -42,29 +44,37 @@ test('archive insight uses validated settings, provider HTTP and durable local s
         if (body.stream) {
           if (body.model !== 'qwen-plus') throw new Error('Wrong insight model')
           const requests = Reflect.get(globalThis, '__insightRequests') as unknown[]; requests.push(body)
-          const content = JSON.stringify({ summary: '仅根据摘录生成的测试概述', researchQuestion: '如何提高论文阅读效率？', method: '通过结构化提取组织内容', contributions: ['统一研究问题与方法'], findings: ['方便快速浏览'], limitations: ['只依据摘录'], keywords: ['论文阅读'] })
+          const content = JSON.stringify(brief)
           return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
         }
         return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { headers: { 'Content-Type': 'application/json' } })
       }
-    })
+    }, briefContent)
     const saved = await window.evaluate(async () => {
       const { credentials: _credentials, ...settings } = await window.copilotix.getSettings()
       return window.copilotix.saveSettings({ ...settings, credentialMutations: { qwen: { action: 'set', value: 'copilotix-e2e-insight-fake-key' } } })
     })
     expect(saved.fieldErrors).toEqual({}); expect(saved.settings.credentials.qwen.state).toBe('valid')
     await window.reload(); archive = await openDetail()
-    await archive.getByRole('button', { name: '生成 AI 解读' }).click()
+    await archive.getByRole('button', { name: '生成 AI 档案卡' }).click()
     await expect(archive.getByText('如何提高论文阅读效率？')).toBeVisible({ timeout: 15_000 })
     await expect(archive.getByText('通过结构化提取组织内容')).toBeVisible()
     await expect(archive.getByText('统一研究问题与方法')).toBeVisible()
     const requests = await app.evaluate(() => Reflect.get(globalThis, '__insightRequests')) as unknown[]
     expect(requests).toHaveLength(1)
-    expect(JSON.stringify(requests)).toContain('研究论文阅读效率')
+    expect(JSON.stringify(requests)).toContain('Original paper content')
+    expect(requests[0]).toMatchObject({ temperature: 0.2, max_tokens: 3000, response_format: { type: 'json_object' } })
     expect(JSON.stringify(requests)).not.toContain(workspace.root)
     expect(JSON.stringify(requests)).not.toContain('copilotix-e2e-insight-fake-key')
-    const durable = await readFile(join(workspace.root, 'documents-v2', documentId, 'insight', 'insight.v1.json'), 'utf8')
+    const durable = await readFile(join(workspace.root, 'documents-v2', documentId, 'insight', 'brief.v2.json'), 'utf8')
     expect(durable).toContain('统一研究问题与方法'); expect(durable).not.toContain('fake-key')
+    await expect(archive.getByText('证据基础', { exact: true })).toBeVisible()
+    await expect(archive.getByText('页数', { exact: true })).toHaveCount(0)
+    await archive.getByRole('tab', { name: /发现/u }).click()
+    await expect(archive.getByText('需核对', { exact: true })).toBeVisible()
+    await expect(archive.locator('.paper-archive-anchor summary')).toContainText('E1')
+    await archive.locator('.paper-archive-anchor summary').click()
+    await expect(archive.locator('.paper-archive-anchor p')).toContainText('Original paper content')
     await window.screenshot({ path: testInfo.outputPath('archive-insight.png') })
     await window.reload(); archive = await openDetail()
     await expect(archive.getByText('统一研究问题与方法')).toBeVisible()

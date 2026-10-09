@@ -1,4 +1,6 @@
-import { paperInsightContentSchema, paperInsightSchema, paperInsightStateSchema, paperInsightRequestSchema, type PaperInsight, type PaperInsightContext, type PaperInsightState } from '@shared/paperInsight'
+import { assembleBrief, buildBriefMessages, buildBriefRepairMessage, clipPreviousAnswer, parseBriefResponse, PAPER_BRIEF_REQUEST, PAPER_BRIEF_MAX_REQUEST_BYTES, type PaperBrief } from '@shared/paperBrief'
+import type { BriefContextResult, BriefAnchor } from '@shared/paperBrief/contracts'
+import { paperInsightStateSchema, paperInsightRequestSchema, type PaperInsightContext, type PaperInsightState } from '@shared/paperInsight'
 import { hasPaperChatConsent, resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { AppSettings } from '@shared/types'
 import type { Job } from '@core/types'
@@ -10,8 +12,8 @@ export interface PaperInsightDependencies {
   settings(): Promise<AppSettings>
   key(provider: PaperChatProvider): Promise<string | null>
   get(documentId: string): Promise<PaperInsightState>
-  context(documentId: string, budgetBytes: number, signal: AbortSignal): Promise<PaperInsightContext>
-  save(documentId: string, insight: PaperInsight): Promise<unknown>
+  context(documentId: string, signal: AbortSignal): Promise<BriefContextResult>
+  save(documentId: string, brief: PaperBrief, anchors: BriefAnchor[]): Promise<unknown>
   stream: ChatProvider['stream']
   recordUsage(provider: PaperChatProvider, usage: ProviderTokenUsage): Promise<void>
   changed(documentId: string, state: PaperInsightState): void
@@ -115,9 +117,9 @@ export class PaperInsightService {
       signal.throwIfAborted()
       if (auth.reason !== undefined) { this.emit(documentId, { status: 'unavailable', reason: auth.reason }); return }
       if (run.automatic && !auth.settings.autoGeneratePaperInsight) { this.emit(documentId, stored); return }
-      const context = await this.deps.context(documentId, insightBudget(auth.provider), signal)
+      const context = await this.deps.context(documentId, signal)
       if (context.documentId !== documentId) throw new Error('scope mismatch')
-      const messages = buildInsightMessages(context)
+      const messages = buildBriefMessages(context.context)
       for (let attempt = 0; attempt < 2; attempt++) {
         // Recheck credentials, consent and configuration after queue/context work and before retries.
         auth = await this.authorization()
@@ -128,7 +130,7 @@ export class PaperInsightService {
         const usage = await this.deps.stream({
           provider: auth.provider, model: auth.model, key: auth.key,
           baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
-          signal, messages,
+          signal, messages, ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
           onDelta: (delta) => {
             signal.throwIfAborted()
             if (answer.length + delta.length > 32_768) throw new Error('output budget exceeded')
@@ -137,20 +139,22 @@ export class PaperInsightService {
         })
         if (usage) await this.deps.recordUsage(auth.provider, usage).catch(() => undefined)
         signal.throwIfAborted()
-        let parsed: unknown
-        try { parsed = JSON.parse(answer) as unknown } catch { parsed = null }
-        const content = paperInsightContentSchema.safeParse(parsed)
-        if (!content.success) {
+        const parsed = parseBriefResponse(answer)
+        if (!parsed.ok) {
           if (attempt === 0) {
-            messages[0]!.content += ' 上次输出未通过 JSON 字段与长度校验。请重新生成符合全部限制的 JSON，不要附加任何文字。'
+            messages.push({ role: 'assistant', content: clipPreviousAnswer(answer) }, buildBriefRepairMessage(parsed.problems))
             continue
           }
           throw new Error('invalid structured response')
         }
-        const insight = paperInsightSchema.parse({ ...content.data, model: { provider: auth.provider, name: auth.model }, generatedAt: new Date().toISOString(), sourceRevision: context.sourceRevision })
+        const brief = assembleBrief(parsed.content, context.context, {
+          provider: auth.provider, model: auth.model, sourceRevision: context.sourceRevision
+        })
+        const cited = new Set(brief.findings.flatMap((finding) => finding.anchors))
+        const anchors = context.context.excerpts.filter((excerpt) => cited.has(excerpt.id)).map(({ id, section, text }) => ({ id, section, text }))
         signal.throwIfAborted()
         // Await atomic write even when cancellation arrives during commit, then report actual disk state.
-        await this.deps.save(documentId, insight)
+        await this.deps.save(documentId, brief, anchors)
         this.emit(documentId, await this.deps.get(documentId))
         return
       }

@@ -102,7 +102,7 @@ interface Paragraph {
 
 /** Prefer the original text (no translation loss); fall back to the translation. */
 export function buildBriefContext(original: string, translated: string, budgetBytes: number = BRIEF_BUDGETS.standard): BriefContext {
-  const useOriginal = original.trim().length >= Math.min(2000, translated.trim().length * 0.5) && original.trim().length > 0
+  const useOriginal = original.trim().length > 0
   const markdown = useOriginal ? original : translated
   const { title, sections } = segment(normalizeMarkdown(markdown))
   const outline = takeOutline(sections.map((section) => section.heading).filter((heading): heading is string => Boolean(heading)))
@@ -219,7 +219,7 @@ function segment(markdown: string): { title: string | null; sections: Section[] 
   let current: Section = { heading: null, role: 'front', paragraphs: [] }
   const parents = new Map<string, SectionRole>()
   let dropping = false
-  for (const block of markdown.split(/\n{2,}/u).map((part) => part.trim()).filter(Boolean)) {
+  for (const block of markdown.replace(/^(#{1,6}[^\S\n]+[^\n]+)$/gmu, '\n\n$1\n\n').split(/\n{2,}/u).map((part) => part.trim()).filter(Boolean)) {
     const heading = /^#{1,6}\s+(.+)$/su.exec(block)
     if (!heading) {
       if (dropping) continue
@@ -284,7 +284,8 @@ function scoreParagraphs(sections: Section[]): Paragraph[] {
   const paragraphs: Paragraph[] = []
   let order = 0
   for (const section of sections) {
-    const label = section.heading ?? (section.role === 'front' ? '前言信息' : '正文')
+    if (section.role === 'front') continue
+    const label = section.heading ?? '正文'
     section.paragraphs = mergeShort(section.paragraphs)
     section.paragraphs.forEach((raw, index) => {
       const text = raw.replace(/\s+/gu, ' ').trim()

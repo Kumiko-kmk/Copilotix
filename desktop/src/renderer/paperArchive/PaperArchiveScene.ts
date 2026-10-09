@@ -107,6 +107,7 @@ const DETAIL_SPAN = 5.9
 const DETAIL_SCREEN = { x: 550 / 1920, y: 560 / 1080 }
 // The original holds the decryption for several seconds; the archive keeps it short.
 const DECRYPT_SECONDS = 0.9
+const CLOSE_SECONDS = 0.32
 const PAGE_HEIGHT = 3.15
 const PAGE_MAX_WIDTH = 4.5
 const UP = new Vector3(0, 1, 0)
@@ -141,7 +142,7 @@ export interface PaperArchiveSceneOptions {
 }
 
 /** closed → opening (lifting, camera turning) → decrypting (cover clearing) → open. */
-export type DetailPhase = 'closed' | 'opening' | 'decrypting' | 'open'
+export type DetailPhase = 'closed' | 'opening' | 'decrypting' | 'open' | 'closing'
 
 type Pulse = { row: number; lane: number; time: number }
 
@@ -207,6 +208,7 @@ export class PaperArchiveScene {
     start: PlanePosition
     inverse: { lane: Vector2; row: Vector2 } | null
     active: boolean
+    moved: boolean
     samples: Array<{ value: PlanePosition; time: number }>
   } | null = null
 
@@ -232,6 +234,8 @@ export class PaperArchiveScene {
   private detail = 0
   private reveal = 0
   private phase: DetailPhase = 'closed'
+  private closing: { elapsed: number; lift: number; detail: number; reveal: number } | null = null
+  private pendingSelection: { paperId: string; cell: ArchiveCell; instant: boolean } | null = null
   private pulseGain = 1
   private hero: Group | null = null
   private heroIndex: MeshStandardMaterial | null = null
@@ -497,7 +501,11 @@ export class PaperArchiveScene {
   }
 
   get detailOpen(): boolean {
-    return this.targetDetail
+    return this.phase !== 'closed'
+  }
+
+  get detailReady(): boolean {
+    return this.phase === 'open'
   }
 
   /** Extract the selected paper: lift it clear, turn the camera to it and decrypt its cover. */
@@ -505,9 +513,11 @@ export class PaperArchiveScene {
     if (!this.loaded || this.targetDetail || !paperAt(this.shelves, this.selected)) return false
     this.stopMomentum()
     this.hoverCell = null
+    this.pendingSelection = null
+    this.closing = null
     this.targetDetail = true
     this.lastInteraction = performance.now()
-    this.setPhase('opening')
+    this.setPhase(this.reveal >= 1 ? 'open' : 'opening')
     this.wake()
     return true
   }
@@ -516,8 +526,44 @@ export class PaperArchiveScene {
     if (!this.targetDetail) return
     this.targetDetail = false
     this.lastInteraction = performance.now()
-    this.setPhase('closed')
+    this.closing = {
+      elapsed: 0, lift: this.lifts.get(cellKey(this.selected))?.value ?? 0,
+      detail: this.detail, reveal: this.reveal
+    }
+    this.setPhase('closing')
+    if (this.reduced) this.finishClose()
     this.wake()
+  }
+
+  private finishClose(): void {
+    this.closing = null
+    this.detail = this.reveal = 0
+    this.heroUniforms.uReveal.value = 0
+    this.lifts.set(cellKey(this.selected), { value: PREVIEW_LIFT, velocity: 0 })
+    this.setDetailPage(null)
+    this.setPhase('closed')
+    const pending = this.pendingSelection
+    this.pendingSelection = null
+    if (!pending) return
+    const cell = cellForPaper(this.shelves, pending.paperId, pending.cell)
+    if (!cell) return
+    if (pending.instant) {
+      this.jumpTo(cell)
+      this.emitSelection()
+    } else this.select(cell)
+  }
+
+  private requestSelection(cell: ArchiveCell, instant = false): void {
+    this.stopMomentum()
+    if (this.detailOpen) {
+      const paper = paperAt(this.shelves, cell)
+      this.pendingSelection = paper ? { paperId: paper.id, cell, instant } : null
+      this.closeDetail()
+    } else if (instant) {
+      this.jumpTo(cell)
+      this.emitSelection()
+      this.wake()
+    } else this.select(cell)
   }
 
   private setPhase(phase: DetailPhase): void {
@@ -581,6 +627,7 @@ export class PaperArchiveScene {
 
   setReducedMotion(reduced: boolean): void {
     this.reduced = reduced
+    if (reduced && this.closing) this.finishClose()
     this.wake()
   }
 
@@ -591,7 +638,21 @@ export class PaperArchiveScene {
     const keys = new Set(shelves.map((shelf) => shelf.key))
     for (const key of this.memory.keys()) if (!keys.has(key)) this.memory.delete(key)
     const next = current ? cellForPaper(shelves, current.id, this.selected) : null
-    if (next && !sameCell(next, this.selected)) this.jumpTo(next)
+    if (this.pendingSelection) {
+      const cell = cellForPaper(shelves, this.pendingSelection.paperId, this.pendingSelection.cell)
+      if (cell) this.pendingSelection.cell = cell
+      else this.pendingSelection = null
+    }
+    if (!next && this.detailOpen) {
+      this.pendingSelection = null
+      this.targetDetail = false
+      this.finishClose()
+    }
+    if (next && !sameCell(next, this.selected)) {
+      const lift = this.lifts.get(cellKey(this.selected))
+      this.jumpTo(next)
+      if (this.detailOpen && lift) this.lifts.set(cellKey(next), lift)
+    }
     this.emitSelection()
     this.wake()
   }
@@ -600,24 +661,17 @@ export class PaperArchiveScene {
   focusPaper(paperId: string, options: { instant?: boolean } = {}): boolean {
     const cell = cellForPaper(this.shelves, paperId, this.selected)
     if (!cell) return false
-    this.closeDetail()
-    this.stopMomentum()
-    if (options.instant) {
-      this.jumpTo(cell)
-      this.emitSelection()
-      this.wake()
-    } else this.select(cell)
+    this.requestSelection(cell, options.instant)
     return true
   }
 
   navigate(axis: 'lane' | 'row', direction: number): void {
     if (this.drag?.active) return
-    this.closeDetail()
-    this.stopMomentum()
+    const from = this.pendingSelection?.cell ?? this.selected
     const target = axis === 'row'
-      ? { lane: this.selected.lane, row: this.selected.row + direction }
-      : laneStep(this.shelves, this.selected, direction, this.memory)
-    this.select(target)
+      ? { lane: from.lane, row: from.row + direction }
+      : laneStep(this.shelves, from, direction, this.memory)
+    this.requestSelection(target)
   }
 
   activate(): void {
@@ -843,7 +897,7 @@ export class PaperArchiveScene {
   }
 
   private idleEligible(): boolean {
-    return this.idleFeatureEnabled() && !this.targetDetail && this.detail < 0.01 && !this.drag?.active && !this.momentum &&
+    return this.idleFeatureEnabled() && !this.detailOpen && this.detail < 0.01 && !this.drag?.active && !this.momentum &&
       this.pulses.length === 0 && (performance.now() - this.lastInteraction) / 1000 > IDLE_DELAY
   }
 
@@ -876,6 +930,7 @@ export class PaperArchiveScene {
     const selectedKey = cellKey(this.selected)
     if (this.shelves.length && !this.lifts.has(selectedKey)) this.lifts.set(selectedKey, { value: 0, velocity: 0 })
     for (const [key, spring] of this.lifts) {
+      if (key === selectedKey && this.closing) continue
       const target = key === selectedKey && this.shelves.length ? (this.targetDetail ? INSPECTION_LIFT : PREVIEW_LIFT) : 0
       const extracting = key === selectedKey && (this.targetDetail || spring.value > PREVIEW_LIFT + 0.01)
       const rate = reduced ? 35 : extracting ? 5 : target ? 4.2 : 4.5
@@ -919,6 +974,18 @@ export class PaperArchiveScene {
   /** Camera progress, decryption and ripple gain for the extracted card; returns whether it is still moving. */
   private updateDetail(dt: number, selectedKey: string): boolean {
     const reduced = this.reduced
+    if (this.closing) {
+      const closing = this.closing
+      closing.elapsed += dt
+      const progress = reduced ? 1 : Math.min(1, closing.elapsed / CLOSE_SECONDS)
+      const remaining = 1 - smooth(progress)
+      this.lifts.set(selectedKey, { value: PREVIEW_LIFT + (closing.lift - PREVIEW_LIFT) * remaining, velocity: 0 })
+      this.detail = closing.detail * remaining
+      this.reveal = closing.reveal * remaining
+      this.heroUniforms.uReveal.value = smooth(this.reveal)
+      if (progress === 1) this.finishClose()
+      return true
+    }
     const lift = this.lifts.get(selectedKey)?.value ?? 0
     // As in the original, the camera follows the lift: it turns once the card is clear of the array.
     const cameraTarget = this.targetDetail
@@ -1132,7 +1199,7 @@ export class PaperArchiveScene {
   private flushHover(): void {
     const sample = this.pendingHover
     this.pendingHover = null
-    if (sample && !this.drag && !this.momentum && !this.targetDetail) this.setHover(this.pickCell(sample.x, sample.y))
+    if (sample && !this.drag && !this.momentum && !this.detailOpen) this.setHover(this.pickCell(sample.x, sample.y))
   }
 
   /** Screen-space pixels per lane and per row around the selection, inverted for dragging. */
@@ -1171,8 +1238,9 @@ export class PaperArchiveScene {
         startY: event.clientY,
         start,
         // The plane does not move while a paper is extracted; the pointer only clicks.
-        inverse: this.targetDetail ? null : this.dragInverse(),
+        inverse: this.detailOpen ? null : this.dragInverse(),
         active: false,
+        moved: false,
         samples: [{ value: start, time: event.timeStamp }]
       }
       canvas.setPointerCapture(event.pointerId)
@@ -1190,6 +1258,7 @@ export class PaperArchiveScene {
       const dx = event.clientX - drag.startX
       const dy = event.clientY - drag.startY
       if (!drag.active && Math.hypot(dx, dy) < 8) return
+      drag.moved = true
       if (!drag.inverse || this.shelves.length === 0) return
       if (!drag.active) {
         drag.active = true
@@ -1225,11 +1294,14 @@ export class PaperArchiveScene {
         this.wake()
         return
       }
-      if (cancelled) return
+      if (cancelled || drag.moved || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 8) return
       const cell = this.pickCell(event.clientX, event.clientY)
-      if (this.targetDetail) {
+      if (this.detailOpen) {
         // Clicking the extracted paper opens it; clicking anywhere else puts it back.
-        if (cell && sameCell(cell, this.selected)) this.activate()
+        if (cell && sameCell(cell, this.selected)) {
+          if (this.phase === 'closing') this.openDetail()
+          else if (this.detailReady) this.activate()
+        }
         else this.closeDetail()
         return
       }
@@ -1239,6 +1311,7 @@ export class PaperArchiveScene {
     }
     canvas.addEventListener('pointerup', (event) => release(event, false), { signal })
     canvas.addEventListener('pointercancel', (event) => release(event, true), { signal })
+    canvas.addEventListener('lostpointercapture', (event) => release(event, true), { signal })
     canvas.addEventListener('pointerleave', () => {
       this.pendingHover = null
       if (!this.drag) this.setHover(null)
@@ -1249,7 +1322,7 @@ export class PaperArchiveScene {
     canvas.addEventListener('wheel', (event) => {
       if (event.ctrlKey || this.drag || !this.loaded) return
       event.preventDefault()
-      if (this.targetDetail) return
+      if (this.detailOpen) return
       this.stopMomentum()
       const unit = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? canvas.clientHeight : 1
       const horizontal = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)

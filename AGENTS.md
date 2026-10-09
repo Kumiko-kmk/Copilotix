@@ -106,32 +106,17 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - README／Wiki 源在 `docs/wiki/`；目錄提交不會自動發布 Wiki，先合併主倉庫圖片與文檔再同步。真實論文截圖、未發送問答草稿及示意圖須區分，不代表付費 API 驗收。此前 README／Wiki 上傳授權不延伸至新任務。
 - 文庫工作區 `Copilotix-library-ui`／分支 `ui/library-rhinelab`；完成範圍与當前驗證見第 13 節。其他 worktree 保持不動。
 
-## 13. 文庫頁與 AI 解讀（2026-10-08）
+## 13. 文庫頁與 AI 解讀（2026-10-09）
 
-- 工作區 `Copilotix-library-ui`／`ui/library-rhinelab`。`LibraryPage` 懶載入 Three.js；從文庫進閱讀器用 `returnTo: 'library'` 返回並恢復論文，其他入口仍返回任務管理。
-- RhineLabUI（MIT，LBEILC）來源見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`。GLB 只含五個外殼網格，用 `?inline`／`parseAsync`，CSP 不變。**不改 `archiveMotion.ts` 已校準曲線**；手感使用 Scene 彈簧速率調整。
-- 按本地月份、新月新文在前；長月份分列（每列 4–8 篇，`ceil(n/5)` 列），列／行循環取最近位置並記住論文 ID。狀態色保留完成原色、處理中主色、部分完成琥珀、失敗紅色。搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦、Enter 選首項、Tab 選結果、Esc 收起，IME 組字不觸發選擇。搜尋定位取消慣性；WebGL 失敗仍可搜尋進閱讀器。
-- 渲染契約：單一 rAF 迴圈（tick 期間 frame 非零）、按需約 60 fps，閒置呼吸用牆鐘判定；DPR ≤1.25、≤3.3M 像素，transmission 半解析度、陰影 1024。連續 6 幀超過 `max(23ms, 1.5×節拍)` 時降解析度 15%（下限 0.55），穩定 240 幀且 8 秒未降才回升 8%。外殼盒解析拾取、視錐／霧剔除、共享 instanceMatrix、僅 diffuser 投影、失焦／隱藏停渲染、reduced-motion 與 GPU 釋放保留。模型先 compileAsync 暖機；途經每張選中卡立即發漣漪（最多 6），升起 4.2／回落 4.5。HUD 僅 opacity／transform 動畫。使用者要求移除的「流暢模式」開關、保存與材質降檔不得恢復；固定磨砂透射，保留自動解析度。
-- 抽取／解密：點選中卡、「查看档案」或 Enter 開詳情；hero 共用幾何、獨立材質，替代該實例並接管拾取。升起 4.05，detail 鏡頭方向 (-0.277,0.238,0.931)、距離 72、span 5.9；鏡頭進度 >0.6、升起 >3 後開始 0.9 秒掃描。首頁 1600px／LRU 6，內側透射與外側清晰副本同時揭開；內托盤漸變，關閉迅速重磨砂。詳情停拖曳／懸停／呼吸／漣漪；方向鍵／搜尋先收回再換卡，Esc／空白收回，Enter／hero／「打开阅读」進閱讀器。
-- `ArchiveDetail` 僅抽取時掛載，共用 `['document', id]` 快取。`paperProfile` 提取標題、作者單位、摘要（譯文優先）、關鍵詞、頂層章節與圖表公式參考數；pdf.js 動態載入。欄位遮罩隨 opening／decrypting／open／closed 揭示。App 已傳入 `PaperInsightSource`，「03 AI 解读」接上真實 Main／Utility 管線；初始讀取不得覆蓋較新的事件，切文獻／卸載清理訂閱。
-- AI 解讀完整契約、兼容與恢复語義見 `docs/PAPER_INSIGHT_ZH.md`。預設關閉自動生成，使用既有已驗證的 Qwen／DeepSeek 憑據與論文發送授權；按 translate succeeded 排隊，跳過未過期結果。每篇 single-flight、全域最多 2、可取消；刪文獻、文庫維護、退出須取消並等待落盤。`insight/insight.v1.json` 隨完整文獻備份、恢復、遷移與明確授權的卸載清理；不新增 migration／不改 manifest v1。
-- 本地驗證（使用者授權）：95 個單元測試檔、639 項通過／3 項既有跳過；其後補充原子 rename 失敗測試，17 項解讀／IPC 測試再次通過。typecheck 通過；lint 0 errors／63 項既有 any 警告；四 bundle／Utility smoke 通過。Electron E2E：文庫正常／WebGL 降級 2 項，AI 解讀 1 項（真實設定／憑據 IPC，僅 mock provider HTTP，驗證缺 Key、遮罩完全退開後顯示內容、重開持久化與自動生成設定保存）。付費 API、遠端 CI、安裝生命週期未驗證；未 push。
-- 性能診斷 Ctrl+Shift+F 顯示 fps、DPR×縮放、卡片／三角形與 GPU。此前 RTX 3060／2560×1600@165Hz 實測方向鍵 55 fps、拖曳 52–55 fps；Claude 的抽取實測約 1.35 秒。這些是本機歷史證據，不代表所有硬體。
-- 本地測試包已重建：`release-artifacts/muzkeczu-41844-6fb59349/program/Copilotix.exe`（須保留整個 program 目錄）；同層 `Copilotix-1.1.0-win-x64.zip` 為 compact Setup，入口亦在 `release/setup.exe`。ASAR 23.65 MiB、runtime 353.33 MiB、ZIP 94.11 MiB；packaged smoke、fuses、內容／雜湊／體積門禁通過。官方 Electron 44.1.1 SHA-256 核對後用本地 ZIP 打包，以避免鏡像 TLS 中斷；临时 electronDist 已還原，未更改發布安全政策。ZIP SHA-256：`5976B2ACC148F4002FE997C4F22ECA35E13F23785D9608FC6F29D6B38E39D14E`。
-
-### 給 Astra 的話（Claude，2026-10-09）
-
-使用者希望解析完成後讓模型生成**跨學科通用的結構化資訊**，取代解密頁的頁數、章節數、圖表數等閱讀價值低的欄位。我已完成演算法與契約（未接入管線／界面），設計說明見 `docs/PAPER_BRIEF_ZH.md`，代碼在 `desktop/src/shared/paperBrief/`（schema／context／prompt／grounding，全部純函式），測試 `desktop/tests/paperBrief.test.ts`（依第 8 節未在本地執行，跑全量時若失敗請直接修正）。
-
-設計要點：欄位對應 Keshav 五 C、Swales CARS、結構化摘要與 Toulmin 論證；每條結論帶 anchors（E1…）指回送出的摘錄，程式核對 anchors 與數字，未通過標「需核對」；局限區分作者自述與 AI 推斷。選段按 IMRaD 角色在 24 KB 預算內必選摘要／結論／貢獻陳述、保底方法／結果／討論／局限、按角色配額填充，並附完整目錄與覆蓋報告。14 篇真實論文實測見文檔第 4 節。順帶修正：`paperProfile` 與新選段器的 HTML 標籤清理不再被數學中的 `<` 吞掉正文；中文「參考文獻」等標題不能用 `\b` 判斷（JS 的 `\b` 不適用 CJK）。
-
-想請你接入（沿用你已驗證的 `PaperInsightService` 授權、single-flight、併發、取消與落盤，只替換「選段 → 提示詞 → 校驗 → 保存」）：
-
-1. **選段**：Utility 新增 v2 context operation，呼叫 `buildBriefContext(原文, 譯文, BRIEF_BUDGETS.standard)`；送出的整體請求以 `PAPER_BRIEF_MAX_REQUEST_BYTES`（48 KB）為上限，取代 v1 的 16 KB。
-2. **生成**：`buildBriefMessages` ＋ `PAPER_BRIEF_REQUEST`（temperature 0.2、max_tokens 3000、`response_format: json_object`；ChatProvider 需能傳這些參數，不支持時省略）。`parseBriefResponse` 失敗只重試一次：對話追加 assistant（`clipPreviousAnswer`）＋ `buildBriefRepairMessage(problems)`。成功後 `assembleBrief` 再保存。
-3. **存儲與兼容**：寫 `insight/brief.v2.json`（原子寫入、PathPolicy、≤256 KiB）；v1 保留可讀，按文檔第 8 節：sourceRevision 變更才算過期，promptVersion 不同只提示可重新生成。IPC 狀態需能攜帶 v2（例如在 ready 狀態加 `brief`，或新增版本化欄位），zod strict 校驗沿用 `paperBriefSchema`。備份／卸載清單測試加入 `brief.v2.json` 與臨時檔。
-4. **解密頁展示**：按文檔第 3 節的「解密頁建議」替換低價值欄位：tldr 作副標題，類型＋領域標籤，「證據基礎」「檢驗方式」取代「頁數」「圖·表·公式」；分頁建議「概覽（背景→缺口→問題、關鍵思路）／發現（強度徽章、需核對、anchors）／局限與前提／閱讀路線與術語」。沒有 v2 時退回現有規則欄位並提供生成入口。遵守你寫的詳情互動與遮罩契約。
-5. **跳轉（可選）**：anchors 與 reading.focus 帶章節名，若閱讀器能按標題定位，點擊後打開閱讀器並捲到該章；做不到時先只顯示章節名。
-6. **測試**：服務層覆蓋修復重試、checks 透傳、v1／v2 共存與過期規則；E2E 用 mock provider 回傳一份含一個捏造數字的 v2 JSON，驗證「需核對」與 anchors 顯示。
-
-品質評估（文檔第 9 節，跨學科 10–20 篇人工評分）需要真實 API，由使用者安排驗收，不要用 mock 結果宣稱品質。修改 `paperBrief` 的詞表、配額或提示詞時，請同步更新 `PAPER_BRIEF_PROMPT_VERSION` 與文檔。
+- 後續動畫候選見 [文庫動畫候選項](docs/LIBRARY_MOTION_IDEAS_ZH.md)。目前僅記錄；待互動邏輯與顯示資訊確認後，按實際需求選擇實作，不預先補效果或擴充動畫架構。
+- 工作區 `Copilotix-library-ui`／`ui/library-rhinelab`。`LibraryPage` 懶載入 Three.js；從文庫進閱讀器以 `returnTo: 'library'` 返回並恢復論文，其他入口仍返回任務管理。
+- RhineLabUI（MIT，LBEILC）來源與許可見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`。GLB 僅五個外殼網格，`?inline`／`parseAsync`，CSP 不變。**不改 `archiveMotion.ts` 已校準曲線**；手感調整限 Scene。
+- 本地月份、新月新文優先；長月份按 `ceil(n/5)` 分列，每列 4–8 篇，列／行循環並記住論文 ID。完成原色、處理中主色、部分完成琥珀、失敗紅色。搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦、Enter 選首項、Tab 選結果，IME／長按 Enter 不誤觸。搜尋取消慣性，WebGL 失敗仍可搜尋進閱讀器。
+- 渲染保留單一 rAF、約 60 fps、牆鐘待機、失焦／隱藏停渲染、reduced-motion 與 GPU 釋放。DPR ≤1.25、≤3.3M 像素，transmission 半解析度、陰影 1024；6 幀超時降解析度 15%（下限 0.55），穩定 240 幀且 8 秒未降才回升 8%。保留解析拾取、剔除、共享 instanceMatrix、compileAsync 暖機；途經選中卡即發漣漪（最多 6），升起 4.2／回落 4.5。不得恢復「流暢模式」、保存項或材質降檔。
+- 抽取沿用單一 hero、4.05 升起、原有 detail 鏡頭；鏡頭 >0.6、升起 >3 後掃描 0.9 秒。首頁 1600px／LRU 6，共享 document 查詢；PDF 首頁、文獻資訊與 AI 解讀按需載入，切文獻／卸載取消晚到結果與訂閱。
+- 互動契約：Enter 忽略 repeat，抽出／解密中不進閱讀，完全展開後再次 Enter 或點 hero 才進閱讀；「打开阅读」保留直接入口。移動 ≥8px 後不得視為點擊；pointercancel／lostpointercapture 不啟動點擊。詳情分頁左右／Home／End 導航並移焦，正文方向鍵保留捲動；僅文庫瀏覽區方向鍵換卡。Esc 先收搜尋，再關詳情並移焦回文庫。
+- `closing` 保留舊文獻、封面與模型，面板 180ms 淡出且 inert，模型／鏡頭 320ms 收回再卸載。換卡只保留一個待選目標，方向輸入累積、搜尋覆蓋；目標移除即取消，收回中重開同篇從當前姿態接續並清除待選。減弱動畫直接完成收回；不新增模型副本、動畫迴圈、IPC 或持久化格式。
+- Paper Brief v2 已接入生成、校驗、保存與四分頁；一句話／類型／領域、證據基礎／檢驗方式取代低價值統計，無 v2 回退規則欄位與 v1。發現保留強度、需核對標記及可展開的來源摘錄；章節僅文字，暫不接閱讀器跳轉。設計及人工品質驗收邊界見 [Paper Brief v2](docs/PAPER_BRIEF_ZH.md)。
+- 授權、single-flight／併發、取消等待、原子落盤與備份卸載契約見 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md)。v2 寫 `insight/brief.v2.json`（≤256 KiB），保留 v1；只按 sourceRevision 標 stale，promptVersion 不同僅提示重新生成。新 Core RPC `insight:brief-context/save-brief` 與 ready v2 聯合類型隨 Main／Utility／Preload／Renderer 同版交付，不新增 migration／manifest。
+- 真實 DeepSeek 驗證已獲明確授權並完成：DeepONet、AlphaFold 各一次，結果已保存原文庫；具體數量與品質限制見上述專項文檔。其餘動畫候選仍待設計確認，不屬於未完成開發。
+- 本輪驗證：96 個單元測試檔，660 項通過／3 項既有跳過；typecheck 通過；lint 0 errors／63 項既有警告。四 bundle／Utility smoke、Electron 文庫正常／WebGL 降級／v2 檔案卡 3 項通過；已檢視 mock 結果截圖。真實 API 兩篇結果已落盤，少量樣本不等於跨學科品質驗收。未 push／遠端發布；本地包交付入口見最新 release manifest。

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { PaperArchiveScene, type ArchivePalette } from '../src/renderer/paperArchive/PaperArchiveScene'
+import { PaperArchiveScene, type ArchivePalette, type PaperArchiveSceneOptions } from '../src/renderer/paperArchive/PaperArchiveScene'
 import { ArchivePlaneMomentum } from '../src/renderer/paperArchive/archiveMotion'
 import { buildArchiveColumns } from '../src/renderer/paperArchive/archiveShelves'
 
@@ -77,11 +77,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function createArchive(): Promise<void> {
+async function createArchive(options: Partial<PaperArchiveSceneOptions> = {}): Promise<void> {
   const host = document.createElement('div')
   Object.defineProperties(host, { clientWidth: { value: 1100 }, clientHeight: { value: 700 } })
   document.body.appendChild(host)
-  archive = new PaperArchiveScene({ container: host, palette, reducedMotion: false, onSelect: vi.fn(), onActivate: vi.fn() })
+  archive = new PaperArchiveScene({ container: host, palette, reducedMotion: false, onSelect: vi.fn(), onActivate: vi.fn(), ...options })
   archive.setShelves(buildArchiveColumns(Array.from({ length: 37 }, (_, index) => ({
     id: String(index), displayName: `Paper ${index}`, originalName: `${index}.pdf`, createdAt: '2026-10-07T12:00:00Z',
     workflow: { status: 'completed' as const, progress: 100, activeJobKind: null, error: null }
@@ -97,6 +97,141 @@ function step(milliseconds: number): void {
   frames.clear()
   for (const [, callback] of pending) callback(performance.now())
 }
+
+function advance(milliseconds: number): void {
+  for (let elapsed = 0; elapsed < milliseconds; elapsed += 1000 / 60) step(1000 / 60)
+}
+
+function pointer(canvas: HTMLCanvasElement, type: string, x: number, y = 100): void {
+  const event = new Event(type)
+  Object.assign(event, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: x, clientY: y })
+  canvas.dispatchEvent(event)
+}
+
+describe('paper archive detail transitions', () => {
+  it('retains the old selection while closing, then applies only the latest search target', async () => {
+    const onSelect = vi.fn()
+    const onDetailPhase = vi.fn()
+    await createArchive({ onSelect, onDetailPhase })
+    archive.openDetail()
+    advance(2400)
+    expect(archive.detailReady).toBe(true)
+    const original = onSelect.mock.lastCall?.[1].id
+    onSelect.mockClear()
+    archive.navigate('row', 1)
+    archive.navigate('row', 1)
+    expect(onDetailPhase).toHaveBeenLastCalledWith('closing')
+    advance(100)
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(archive.detailOpen).toBe(true)
+    archive.focusPaper('36')
+    advance(250)
+    expect(onSelect).toHaveBeenCalledOnce()
+    expect(onSelect.mock.lastCall?.[1].id).toBe('36')
+    expect(original).not.toBe('36')
+    expect(onDetailPhase).toHaveBeenLastCalledWith('closed')
+    expect(archive.detailOpen).toBe(false)
+    expect(frames.size).toBeLessThanOrEqual(1)
+  })
+
+  it('accumulates navigation without selecting intermediate papers', async () => {
+    const onSelect = vi.fn()
+    await createArchive({ onSelect })
+    archive.openDetail()
+    advance(500)
+    onSelect.mockClear()
+    archive.navigate('row', 1)
+    archive.navigate('row', 1)
+    advance(350)
+    expect(onSelect).toHaveBeenCalledOnce()
+    expect(onSelect.mock.lastCall?.[0]).toEqual({ lane: 0, row: 2 })
+  })
+
+  it('reopens from its current pose and cancels a queued selection', async () => {
+    const onSelect = vi.fn()
+    await createArchive({ onSelect })
+    archive.openDetail()
+    advance(2400)
+    onSelect.mockClear()
+    archive.navigate('row', 1)
+    advance(150)
+    const state = archive as unknown as { detail: number; reveal: number }
+    const pose = { detail: state.detail, reveal: state.reveal }
+    expect(archive.openDetail()).toBe(true)
+    expect({ detail: state.detail, reveal: state.reveal }).toEqual(pose)
+    advance(2400)
+    expect(archive.detailReady).toBe(true)
+    expect(onSelect).not.toHaveBeenCalled()
+    archive.closeDetail()
+    advance(350)
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(archive.detailOpen).toBe(false)
+  })
+
+  it('handles immediate closing, reduced motion and removal of a queued paper', async () => {
+    const onSelect = vi.fn()
+    await createArchive({ onSelect })
+    archive.openDetail()
+    archive.closeDetail()
+    advance(350)
+    expect(archive.detailOpen).toBe(false)
+    archive.openDetail()
+    archive.focusPaper('36')
+    const state = archive as unknown as { shelves: Parameters<PaperArchiveScene['setShelves']>[0] }
+    archive.setShelves(state.shelves.map((shelf) => ({ ...shelf, papers: shelf.papers.filter((paper) => paper.id !== '36') })))
+    onSelect.mockClear()
+    archive.setReducedMotion(true)
+    expect(archive.detailOpen).toBe(false)
+    expect(onSelect).not.toHaveBeenCalled()
+    archive.openDetail()
+    archive.focusPaper('5')
+    expect(archive.detailOpen).toBe(false)
+    expect(onSelect.mock.lastCall?.[1].id).toBe('5')
+    archive.dispose()
+    expect(frames.size).toBe(0)
+  })
+
+  it('never treats detail dragging or pointer cancellation as a click', async () => {
+    const onActivate = vi.fn()
+    await createArchive({ onActivate })
+    archive.openDetail()
+    advance(2400)
+    const canvas = document.querySelector('canvas')!
+    canvas.setPointerCapture = vi.fn()
+    canvas.hasPointerCapture = () => false
+    canvas.releasePointerCapture = vi.fn()
+    const state = archive as unknown as { selected: { lane: number; row: number }; pickCell(): { lane: number; row: number } | null }
+    const pick = vi.spyOn(state, 'pickCell').mockImplementation(() => state.selected)
+    pointer(canvas, 'pointerdown', 100)
+    pointer(canvas, 'pointermove', 130)
+    pointer(canvas, 'pointermove', 100)
+    pointer(canvas, 'pointerup', 100)
+    expect(onActivate).not.toHaveBeenCalled()
+    // Even without a delivered pointermove, a displaced release is not a click.
+    pointer(canvas, 'pointerdown', 100)
+    pointer(canvas, 'pointerup', 130)
+    for (const type of ['pointercancel', 'lostpointercapture']) {
+      pointer(canvas, 'pointerdown', 100)
+      pointer(canvas, type, 100)
+      pointer(canvas, 'pointerup', 100)
+    }
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(archive.detailReady).toBe(true)
+    pointer(canvas, 'pointerdown', 100)
+    pointer(canvas, 'pointerup', 101)
+    expect(onActivate).toHaveBeenCalledOnce()
+    pick.mockReturnValue(null)
+    pointer(canvas, 'pointerdown', 100)
+    pointer(canvas, 'pointermove', 130)
+    pointer(canvas, 'pointerup', 130)
+    expect(archive.detailReady).toBe(true)
+    pointer(canvas, 'pointerdown', 100)
+    pointer(canvas, 'pointerup', 100)
+    expect(archive.detailReady).toBe(false)
+    advance(350)
+    expect(archive.detailOpen).toBe(false)
+  })
+})
 
 describe('paper archive scheduling', () => {
   it('stops drag momentum when search focuses a paper', async () => {

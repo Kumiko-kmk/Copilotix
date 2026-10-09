@@ -74,7 +74,13 @@ export default function LibraryPage(props: {
         },
         onActivate: (paper) => onOpenRef.current(paper.id),
         onError: () => setUnsupported(true),
-        onDetailPhase: setPhase
+        onDetailPhase: (next) => {
+          setPhase(next)
+          const active = document.activeElement
+          if ((next === 'opening' || next === 'closing') && active instanceof HTMLElement && pageRef.current?.contains(active) && !active.closest('.paper-archive-tools')) {
+            pageRef.current.focus({ preventScroll: true })
+          }
+        }
       })
     } catch {
       setUnsupported(true)
@@ -112,6 +118,7 @@ export default function LibraryPage(props: {
       }
       if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented || event.isComposing) return
       const target = event.target instanceof HTMLElement ? event.target : null
+      if (!target || !pageRef.current?.contains(target)) return
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
       if (document.querySelector('.ant-modal-wrap')) return
       if (event.key === '/') {
@@ -119,12 +126,20 @@ export default function LibraryPage(props: {
         searchRef.current?.focus()
         return
       }
-      if (!scene || target?.closest('.paper-archive-tools')) return
+      if (event.key === 'Escape' && searchOpen) {
+        event.preventDefault()
+        setSearchOpen(false)
+        pageRef.current?.focus({ preventScroll: true })
+        return
+      }
+      if (!scene || target.closest('.paper-archive-tools')) return
       if (event.key === 'Escape' && scene.detailOpen) {
         event.preventDefault()
         scene.closeDetail()
+        pageRef.current?.focus({ preventScroll: true })
         return
       }
+      if (target.closest('.paper-archive-detail-layer')) return
       const moves: Record<string, ['lane' | 'row', number]> = {
         ArrowLeft: ['lane', -1], ArrowRight: ['lane', 1], ArrowUp: ['row', -1], ArrowDown: ['row', 1]
       }
@@ -135,13 +150,14 @@ export default function LibraryPage(props: {
       } else if (event.key === 'Enter' && !(target instanceof HTMLButtonElement)) {
         // First Enter extracts the paper (as ACCESS FILE does in the original); the next one opens it.
         event.preventDefault()
-        if (scene.detailOpen) scene.activate()
+        if (event.repeat) return
+        if (scene.detailReady) scene.activate()
         else scene.openDetail()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [searchOpen])
 
   const navigate = React.useCallback((axis: 'lane' | 'row', direction: number) => sceneRef.current?.navigate(axis, direction), [])
   const shelf = shelfAt(shelves, selection.cell.lane)
@@ -161,8 +177,8 @@ export default function LibraryPage(props: {
   }
 
   return (
-    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}`} aria-label="文库">
-      <div ref={hostRef} className="paper-archive-stage" />
+    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}`} aria-label="文库" data-detail-phase={phase}>
+      <div ref={hostRef} className="paper-archive-stage" onPointerDown={() => pageRef.current?.focus({ preventScroll: true })} />
       <div className="paper-archive-veil" aria-hidden="true" />
       {stats ? (
         <output className="paper-archive-stats" aria-label="文库渲染诊断">
@@ -194,7 +210,7 @@ export default function LibraryPage(props: {
               onFocus={() => setSearchOpen(true)}
               onChange={(event) => { setQuery(event.target.value); setSearchOpen(true) }}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.nativeEvent.isComposing && searchOpen && matches[0]) {
+                if (event.key === 'Enter' && !event.repeat && !event.nativeEvent.isComposing && searchOpen && matches[0]) {
                   event.preventDefault()
                   chooseResult(matches[0].paper)
                 }
@@ -232,9 +248,11 @@ export default function LibraryPage(props: {
           </button>
         </div>
       ) : paper && phase !== 'closed' ? (
-        <ArchiveDetail paper={paper} month={shelf?.month ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
-          phase={phase} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
-          onClose={() => sceneRef.current?.closeDetail()} insights={props.insights} />
+        <div className={`paper-archive-detail-layer${phase === 'closing' ? ' closing' : ''}`} inert={phase === 'closing'} aria-hidden={phase === 'closing' ? true : undefined}>
+          <ArchiveDetail key={paper.id} paper={paper} month={shelf?.month ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
+            phase={phase} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
+            onClose={() => sceneRef.current?.closeDetail()} insights={props.insights} />
+        </div>
       ) : paper ? (
         <article className="paper-archive-panel" aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.month}</span>

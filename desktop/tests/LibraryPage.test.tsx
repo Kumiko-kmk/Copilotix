@@ -1,21 +1,26 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentSummary } from '@shared/ipcSchemas'
-import type { PaperArchiveSceneOptions } from '../src/renderer/paperArchive/PaperArchiveScene'
+import type { DetailPhase, PaperArchiveSceneOptions } from '../src/renderer/paperArchive/PaperArchiveScene'
 import { laneStep, paperAt, type ArchiveCell, type ArchiveShelf } from '../src/renderer/paperArchive/archiveShelves'
 import LibraryPage from '../src/renderer/pages/LibraryPage'
 
 const scene = vi.hoisted(() => ({
   focusPaper: vi.fn(), navigate: vi.fn(), activate: vi.fn(), dispose: vi.fn(),
+  openDetail: vi.fn(), closeDetail: vi.fn(),
+  phase: 'closed' as DetailPhase, onPhase: undefined as PaperArchiveSceneOptions['onDetailPhase'],
   fail: false
 }))
+// Exercise the real detail markup and keyboard handlers without document/PDF I/O.
+vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: true }) }))
 vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
   PaperArchiveScene: class {
     private shelves: ArchiveShelf[] = []
     private cell: ArchiveCell = { lane: 0, row: 0 }
     constructor(private options: PaperArchiveSceneOptions) {
       if (scene.fail) throw new Error('WebGL unavailable')
+      scene.onPhase = options.onDetailPhase
     }
     setShelves(shelves: ArchiveShelf[]): void {
       this.shelves = shelves
@@ -29,6 +34,14 @@ vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
       this.options.onSelect(this.cell, paperAt(this.shelves, this.cell))
     }
     activate = scene.activate
+    get detailOpen(): boolean { return scene.phase !== 'closed' }
+    get detailReady(): boolean { return scene.phase === 'open' }
+    openDetail(): void {
+      scene.openDetail()
+      if (scene.phase === 'closed' || scene.phase === 'closing') changePhase('opening')
+    }
+    closeDetail(): void { scene.closeDetail(); changePhase('closing') }
+    setDetailPage = vi.fn()
     dispose = scene.dispose
     setReducedMotion = vi.fn()
   }
@@ -37,6 +50,7 @@ vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   scene.fail = false
+  scene.phase = 'closed'
   localStorage.clear()
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
@@ -44,6 +58,13 @@ beforeEach(() => {
   })
 })
 afterEach(cleanup)
+
+function changePhase(phase: DetailPhase): void {
+  scene.phase = phase
+  scene.onPhase?.(phase)
+}
+
+function region(): HTMLElement { return screen.getByRole('region', { name: '文库' }) }
 
 function paper(name: string, originalName = `${name}.pdf`): DocumentSummary {
   return {
@@ -60,7 +81,7 @@ describe('LibraryPage', () => {
     const onOpen = vi.fn()
     render(<LibraryPage documents={[alpha, paper('Beta')]} onOpen={onOpen} onCreate={vi.fn()} />)
     const search = screen.getByRole('searchbox', { name: '搜索文库' })
-    fireEvent.keyDown(window, { key: '/' })
+    fireEvent.keyDown(region(), { key: '/' })
     expect(document.activeElement).toBe(search)
     fireEvent.change(search, { target: { value: ' RESEARCH alpha ' } })
     fireEvent.keyDown(search, { key: 'ArrowDown' })
@@ -109,7 +130,7 @@ describe('LibraryPage', () => {
     const onOpen = vi.fn()
     render(<LibraryPage documents={[alpha]} onOpen={onOpen} onCreate={vi.fn()} />)
     expect(screen.getByRole('heading', { name: '当前环境无法显示三维文库' })).toBeTruthy()
-    fireEvent.keyDown(window, { key: '/' })
+    fireEvent.keyDown(region(), { key: '/' })
     const search = screen.getByRole('searchbox', { name: '搜索文库' })
     fireEvent.change(search, { target: { value: 'Alpha' } })
     fireEvent.keyDown(search, { key: 'Enter' })
@@ -119,10 +140,75 @@ describe('LibraryPage', () => {
   it('shows five columns for 37 papers in one month and advances the HUD with ArrowRight', () => {
     render(<LibraryPage documents={Array.from({ length: 37 }, (_, index) => paper(`Paper ${index}`))} onOpen={vi.fn()} onCreate={vi.fn()} />)
     expect(screen.getByText('COLUMN 01 / 05')).toBeTruthy()
-    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    fireEvent.keyDown(region(), { key: 'ArrowRight' })
     expect(scene.navigate).toHaveBeenCalledWith('lane', 1)
     expect(screen.getByText('COLUMN 02 / 05')).toBeTruthy()
     expect(screen.getByRole('button', { name: '下一列' })).toBeTruthy()
     expect(screen.queryByRole('checkbox', { name: '流畅模式' })).toBeNull()
+  })
+
+  it('ignores held Enter and only opens the reader after detail is ready', () => {
+    const onOpen = vi.fn()
+    render(<LibraryPage documents={[paper('Alpha')]} onOpen={onOpen} onCreate={vi.fn()} />)
+    fireEvent.keyDown(region(), { key: 'Enter', repeat: true })
+    expect(scene.openDetail).not.toHaveBeenCalled()
+    fireEvent.keyDown(region(), { key: 'Enter' })
+    expect(scene.phase).toBe('opening')
+    fireEvent.keyDown(region(), { key: 'Enter' })
+    act(() => changePhase('decrypting'))
+    fireEvent.keyDown(region(), { key: 'Enter' })
+    expect(scene.activate).not.toHaveBeenCalled()
+    // The explicit shortcut remains available during extraction.
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
+    expect(onOpen).toHaveBeenCalledOnce()
+    act(() => changePhase('open'))
+    fireEvent.keyDown(region(), { key: 'Enter', repeat: true })
+    expect(scene.activate).not.toHaveBeenCalled()
+    fireEvent.keyDown(region(), { key: 'Enter' })
+    expect(scene.activate).toHaveBeenCalledOnce()
+  })
+
+  it('scopes arrows to tabs, document scrolling or archive navigation', () => {
+    render(<LibraryPage documents={[paper('Alpha')]} onOpen={vi.fn()} onCreate={vi.fn()} />)
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    expect(scene.navigate).not.toHaveBeenCalled()
+    fireEvent.keyDown(region(), { key: 'Enter' })
+    const abstract = screen.getByRole('tab', { name: /摘要/u })
+    const structure = screen.getByRole('tab', { name: /结构/u })
+    abstract.focus()
+    fireEvent.keyDown(abstract, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(structure)
+    expect(structure.getAttribute('aria-selected')).toBe('true')
+    act(() => changePhase('open'))
+    expect(document.activeElement).toBe(structure)
+    fireEvent.keyDown(structure, { key: 'Home' })
+    expect(document.activeElement).toBe(abstract)
+    fireEvent.keyDown(abstract, { key: 'End' })
+    expect(document.activeElement).toBe(structure)
+    fireEvent.keyDown(structure, { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(abstract)
+    expect(fireEvent.keyDown(screen.getByRole('tabpanel'), { key: 'ArrowDown' })).toBe(true)
+    expect(scene.navigate).not.toHaveBeenCalled()
+    fireEvent.keyDown(region(), { key: 'ArrowDown' })
+    expect(scene.navigate).toHaveBeenCalledWith('row', 1)
+  })
+
+  it('closes search before detail and keeps the closing panel mounted but inert', () => {
+    render(<LibraryPage documents={[paper('Alpha')]} onOpen={vi.fn()} onCreate={vi.fn()} />)
+    fireEvent.keyDown(region(), { key: 'Enter' })
+    const search = screen.getByRole('searchbox', { name: '搜索文库' })
+    fireEvent.focus(search)
+    fireEvent.keyDown(search, { key: 'Escape' })
+    expect(scene.closeDetail).not.toHaveBeenCalled()
+    fireEvent.keyDown(region(), { key: 'Escape' })
+    expect(scene.closeDetail).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(region())
+    expect(region().querySelector('.paper-archive-detail-layer')?.hasAttribute('inert')).toBe(true)
+    expect(region().querySelector('.paper-archive-detail')).not.toBeNull()
+    fireEvent.keyDown(region(), { key: 'Enter' })
+    expect(scene.phase).toBe('opening')
+    expect(region().querySelector('.paper-archive-detail-layer')?.hasAttribute('inert')).toBe(false)
+    act(() => changePhase('closed'))
+    expect(region().querySelector('.paper-archive-detail')).toBeNull()
   })
 })

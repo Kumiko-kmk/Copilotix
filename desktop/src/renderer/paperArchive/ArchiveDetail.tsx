@@ -6,8 +6,10 @@ import type { PaperInsight, PaperInsightSource, PaperInsightState } from '@share
 import type { ArchivePaper } from './archiveShelves'
 import type { DetailPhase } from './PaperArchiveScene'
 import { extractPaperProfile } from './paperProfile'
+import { PAPER_TYPE_LABELS } from '@shared/paperBrief/schema'
+import BriefContent, { type BriefTab } from './BriefContent'
 
-type Tab = 'abstract' | 'structure' | 'insight'
+type Tab = 'abstract' | 'structure' | 'insight' | BriefTab
 
 /**
  * The extracted paper's file, after RhineLabUI's detail view: masked fields that clear as the
@@ -37,6 +39,10 @@ export default function ArchiveDetail(props: {
   const [tab, setTab] = React.useState<Tab>('abstract')
   const [original, setOriginal] = React.useState(false)
   const revealed = props.phase !== 'opening'
+  const insight = usePaperInsight(paper.id, props.insights)
+  const ready = insight.ready
+  const briefState = ready && 'brief' in ready ? ready : null
+  const brief = briefState?.brief
 
   React.useEffect(() => {
     setPages(null)
@@ -69,7 +75,9 @@ export default function ArchiveDetail(props: {
   const subtitle = profile?.translatedTitle && profile.translatedTitle !== title ? profile.translatedTitle : null
   const abstract = original ? profile?.abstract : profile?.translatedAbstract ?? profile?.abstract
   const counts = profile?.counts
-  const tabs: Array<[Tab, string]> = [['abstract', '摘要'], ['structure', '结构'], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
+  const tabs: Array<[Tab, string]> = brief ? [['overview', '概览'], ['findings', '发现'], ['limits', '局限与前提'], ['reading', '阅读路线与术语']]
+    : [['abstract', '摘要'], ['structure', '结构'], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
+  const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
 
   return (
     <>
@@ -80,28 +88,47 @@ export default function ArchiveDetail(props: {
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.month}</span>
           <h2 className="paper-archive-reveal" style={{ '--i': 0 } as React.CSSProperties} title={title}>{title}</h2>
-          {subtitle ? <p className="paper-archive-detail-subtitle paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}>{subtitle}</p> : null}
+          {brief ? <><p className="paper-archive-detail-subtitle paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}>{brief.tldr}</p><p className="paper-archive-brief-tags"><span>{PAPER_TYPE_LABELS[brief.paperType]}</span><span>{brief.field.discipline} · {brief.field.area}</span></p></> : subtitle ? <p className="paper-archive-detail-subtitle paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}>{subtitle}</p> : null}
         </header>
         <div className="paper-archive-rule"><i /></div>
         {details.isError ? <p className="paper-archive-detail-error" role="alert">论文内容读取失败，可以直接打开阅读。</p> : null}
         <dl className="paper-archive-fields">
           <Field index={2} wide label="作者 / 单位" value={profile?.authors ?? (profile ? '未识别' : null)} />
-          <Field index={3} label="页数" value={pages ? `${pages} 页` : !profile ? null : /\.(?:md|markdown)$/iu.test(paper.originalName.trim()) ? 'Markdown 原文' : '—'} />
-          <Field index={4} label="章节" value={profile ? `${profile.sections.length} 节` : null} />
-          <Field index={5} label="图 · 表 · 公式" value={counts ? `${counts.figures} · ${counts.tables} · ${counts.equations}` : null} />
-          <Field index={6} label="参考文献" value={counts ? `${counts.references} 条` : null} />
-          {profile?.keywords.length ? <Field index={7} wide label="关键词" value={profile.keywords.join(' · ')} /> : null}
+          {brief ? <>
+            <Field index={3} label="证据基础" value={brief.approach.basis} />
+            <Field index={4} label="检验方式" value={brief.approach.evaluation} />
+            <Field index={5} wide label="关键词" value={brief.keywords.join(' · ')} />
+          </> : <>
+            <Field index={3} label="页数" value={pages ? `${pages} 页` : !profile ? null : /\.(?:md|markdown)$/iu.test(paper.originalName.trim()) ? 'Markdown 原文' : '—'} />
+            <Field index={4} label="章节" value={profile ? `${profile.sections.length} 节` : null} />
+            <Field index={5} label="图 · 表 · 公式" value={counts ? `${counts.figures} · ${counts.tables} · ${counts.equations}` : null} />
+            <Field index={6} label="参考文献" value={counts ? `${counts.references} 条` : null} />
+            {profile?.keywords.length ? <Field index={7} wide label="关键词" value={profile.keywords.join(' · ')} /> : null}
+          </>}
+
         </dl>
         <div className="paper-archive-tabs" role="tablist" aria-label="档案内容">
           {tabs.map(([id, label], index) => (
-            <button key={id} type="button" role="tab" id={`paper-archive-tab-${id}`} aria-selected={tab === id}
-              aria-controls="paper-archive-tabpanel" onClick={() => setTab(id)}>
+            <button key={id} type="button" role="tab" id={`paper-archive-tab-${id}`} aria-selected={activeTab === id}
+              tabIndex={activeTab === id ? 0 : -1} aria-controls="paper-archive-tabpanel" onClick={() => setTab(id)}
+              onKeyDown={(event) => {
+                if (event.altKey || event.ctrlKey || event.metaKey) return
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                  : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+                    : event.key === 'ArrowRight' ? (index + 1) % tabs.length : null
+                if (next === null) return
+                const nextTab = tabs[next]
+                if (!nextTab) return
+                event.preventDefault()
+                setTab(nextTab[0])
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+              }}>
               <small>{String(index + 1).padStart(2, '0')}</small>{label}
             </button>
           ))}
         </div>
-        <section id="paper-archive-tabpanel" role="tabpanel" aria-labelledby={`paper-archive-tab-${tab}`} className="paper-archive-tabpanel paper-archive-reveal" style={{ '--i': 8 } as React.CSSProperties}>
-          {tab === 'abstract' ? (
+        <section id="paper-archive-tabpanel" role="tabpanel" tabIndex={0} aria-labelledby={`paper-archive-tab-${activeTab}`} className="paper-archive-tabpanel paper-archive-reveal" style={{ '--i': 8 } as React.CSSProperties}>
+          {briefState ? <BriefContent brief={briefState.brief} anchors={briefState.anchors} tab={activeTab as BriefTab} /> : activeTab === 'abstract' ? (
             <>
               <div className="paper-archive-tabpanel-head">
                 <span className="paper-archive-eyebrow">ABSTRACT / {original ? '原文' : '译文'}</span>
@@ -111,12 +138,21 @@ export default function ArchiveDetail(props: {
               </div>
               <p className="paper-archive-abstract">{abstract ?? (profile ? '未找到摘要段落。' : '正在读取…')}</p>
             </>
-          ) : tab === 'structure' ? (
+          ) : activeTab === 'structure' ? (
             profile?.sections.length
               ? <ol className="paper-archive-outline">{profile.sections.map((section) => <li key={section}>{section}</li>)}</ol>
               : <p className="paper-archive-abstract">{profile ? '未识别到章节标题。' : '正在读取…'}</p>
-          ) : props.insights ? <InsightPanel key={paper.id} documentId={paper.id} source={props.insights} /> : null}
+          ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} onRegenerate={insight.generate} /> : <p className="paper-archive-abstract">生成档案卡后可查看研究问题、证据、发现与阅读路线。</p>}
         </section>
+        {props.insights ? <div className="paper-archive-brief-status" role="status">
+          {insight.state?.status === 'generating' ? <>AI 正在阅读这篇论文… <button type="button" onClick={() => { void props.insights?.cancel?.(paper.id).catch(() => undefined) }}>取消生成</button></>
+            : <>
+              {insight.state?.status === 'unavailable' ? insight.state.reason : insight.state?.status === 'failed' ? insight.state.error
+                : briefState ? `${briefState.brief.provenance.model.name} · ${briefState.stale ? '论文内容已更新' : briefState.promptOutdated ? '可用新版提示词重新生成' : 'AI 档案卡'}`
+                  : ready ? '旧版解读可继续阅读，可升级为新版档案卡。' : '尚未生成 AI 档案卡。'}
+              {insight.state && insight.state.status !== 'unavailable' ? <button type="button" onClick={insight.generate}>{ready ? '重新生成档案卡' : '生成 AI 档案卡'}</button> : null}
+            </>}
+        </div> : null}
         <footer className="paper-archive-detail-actions">
           <button type="button" className="paper-archive-primary" onClick={props.onOpen}>
             <span>打开阅读</span><ArrowRightOutlined aria-hidden="true" />
@@ -136,38 +172,36 @@ function Field(props: { index: number; label: string; value: string | null; wide
   )
 }
 
-function InsightPanel(props: { documentId: string; source: PaperInsightSource }): React.JSX.Element {
+function usePaperInsight(documentId: string, source?: PaperInsightSource) {
   const [state, setState] = React.useState<PaperInsightState | null>(null)
+  const [ready, setReady] = React.useState<Extract<PaperInsightState, { status: 'ready' }> | null>(null)
+  const generation = React.useRef(0)
   React.useEffect(() => {
-    let cancelled = false
+    const version = ++generation.current
     let updated = false
     setState(null)
-    const stop = props.source.subscribe((documentId, next) => {
-      if (!cancelled && documentId === props.documentId) { updated = true; setState(next) }
+    setReady(null)
+    if (!source) return
+    const accept = (next: PaperInsightState): void => {
+      if (generation.current !== version) return
+      setState(next)
+      if (next.status === 'ready') setReady(next)
+    }
+    const stop = source.subscribe((id, next) => { if (id === documentId) { updated = true; accept(next) } })
+    source.get(documentId).then((next) => { if (!updated) accept(next) }, () => {
+      if (!updated) accept({ status: 'failed', error: '无法读取本地档案卡，请重试。' })
     })
-    props.source.get(props.documentId).then((next) => { if (!cancelled && !updated) setState(next) }, () => {
-      if (!cancelled && !updated) setState({ status: 'failed', error: '无法读取本地解读，请重试。' })
-    })
-    return () => { cancelled = true; stop() }
-  }, [props.documentId, props.source])
-  const mounted = React.useRef(true)
-  React.useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+    return () => { generation.current++; stop() }
+  }, [documentId, source])
   const generate = (): void => {
+    if (!source) return
+    const version = generation.current
     setState({ status: 'generating' })
-    props.source.generate(props.documentId).catch(() => {
-      if (mounted.current) setState({ status: 'failed', error: '无法开始生成，请稍后重试。' })
+    source.generate(documentId).catch(() => {
+      if (generation.current === version) setState({ status: 'failed', error: '无法开始生成，请稍后重试。' })
     })
   }
-  if (!state) return <p className="paper-archive-abstract">正在读取…</p>
-  if (state.status === 'ready') return <InsightView insight={state.insight} stale={state.stale} onRegenerate={generate} />
-  if (state.status === 'generating') return <div><p className="paper-archive-abstract" role="status">AI 正在阅读这篇论文…</p>{props.source.cancel ? <button type="button" onClick={() => { void props.source.cancel?.(props.documentId).catch(() => undefined) }}>取消生成</button> : null}</div>
-  if (state.status === 'unavailable') return <p className="paper-archive-abstract">{state.reason}</p>
-  return (
-    <div className="paper-archive-insight-empty">
-      <p className="paper-archive-abstract">{state.status === 'failed' ? `生成失败：${state.error}` : '还没有为这篇论文生成结构化解读。'}</p>
-      <button type="button" onClick={generate}>{state.status === 'failed' ? '重试' : '生成 AI 解读'}</button>
-    </div>
-  )
+  return { state, ready, generate }
 }
 
 function InsightView(props: { insight: PaperInsight; stale: boolean; onRegenerate(): void }): React.JSX.Element {

@@ -7,7 +7,7 @@
 import type { BriefContext } from './context'
 import { byteLength } from './context'
 
-export const PAPER_BRIEF_PROMPT_VERSION = 'brief-v2.2026-10-09'
+export const PAPER_BRIEF_PROMPT_VERSION = 'brief-v2.2026-10-09.1'
 
 /** Request options for OpenAI-compatible endpoints (Qwen DashScope and DeepSeek both accept them). */
 export const PAPER_BRIEF_REQUEST = {
