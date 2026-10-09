@@ -166,6 +166,14 @@
     linear-gradient(90deg, transparent 38%, color-mix(in srgb, var(--archive-bg) 80%, transparent) 54%, color-mix(in srgb, var(--archive-bg) 94%, transparent) 70%),
     linear-gradient(0deg, color-mix(in srgb, var(--archive-bg) 70%, transparent) 0, transparent 18%);
 }
+/* Extracted paper: the array below the card is covered completely, fading in while the camera turns. */
+.paper-archive-floor-veil {
+  position: absolute; z-index: 1; top: calc(var(--archive-detail-top) + var(--archive-detail-height) - 10px); right: 0; bottom: 0; left: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--archive-bg) 0%, transparent) 0, var(--archive-bg) 30px);
+  opacity: 0; pointer-events: none; transition: opacity .2s ease;
+}
+.paper-archive-page.detail-open .paper-archive-floor-veil { opacity: 1; transition: opacity .55s var(--ease-out) .3s; }
+.paper-archive-page[data-detail-phase="closing"] .paper-archive-floor-veil { opacity: 0; transition: opacity .2s ease; }
 .paper-archive-detail-layer {
   position: absolute; inset: 0; z-index: 2; pointer-events: none;
   opacity: 1; transition: opacity .18s var(--ease-out);
@@ -183,10 +191,12 @@
 }
 .paper-archive-detail-back kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 3px; color: var(--muted); font: 10px/1.4 inherit; }
 .paper-archive-detail-back:hover { color: var(--archive-accent); }
-/* Fixed to the extracted card's height on every tab; only the tab panel scrolls. */
+/* The file header lines up with the brand (eyebrow with eyebrow, title with 文库); the panel ends
+   at the extracted card's foot and keeps that height on every tab. Only the tab panel scrolls. */
 .paper-archive-detail, .paper-archive-detail-frame {
-  position: absolute; z-index: 2; top: var(--archive-detail-top); left: var(--archive-panel-left);
-  width: var(--archive-detail-width); height: var(--archive-detail-height); box-sizing: border-box;
+  position: absolute; z-index: 2; top: var(--page-top); left: var(--archive-panel-left);
+  width: var(--archive-detail-width); box-sizing: border-box;
+  height: max(360px, calc(var(--archive-detail-top) + var(--archive-detail-height) - var(--page-top)));
 }
 .paper-archive-detail { display: flex; min-height: 0; padding: 18px 0 16px; flex-direction: column; animation: paper-archive-fade .18s var(--ease-out) both; }
 .paper-archive-detail > * { flex: none; }
@@ -195,7 +205,7 @@
 .paper-archive-detail-frame i:first-child { top: 0; }
 .paper-archive-detail-frame i:last-child { bottom: 0; }
 .paper-archive-detail header h2 {
-  display: -webkit-box; margin: 10px 0 0; overflow: hidden; color: var(--ink);
+  display: -webkit-box; margin: 4px 0 0; overflow: hidden; color: var(--ink);
   font-size: clamp(20px, 2vw, 30px); font-weight: 760; letter-spacing: .005em; line-height: 1.22; overflow-wrap: anywhere;
   -webkit-box-orient: vertical; -webkit-line-clamp: 2; user-select: text;
 }
@@ -265,7 +275,7 @@
   .paper-archive-page { --archive-detail-width: min(480px, 46vw); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .paper-archive-detail-layer { transition: none; }
+  .paper-archive-detail-layer, .paper-archive-floor-veil { transition: none !important; }
   .paper-archive-detail, .paper-archive-detail-back, .paper-archive-tabpanel { animation: none; }
   .paper-archive-reveal::after { transition: none; }
 }

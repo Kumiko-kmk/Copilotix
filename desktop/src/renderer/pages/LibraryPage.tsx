@@ -196,6 +196,7 @@ export default function LibraryPage(props: {
     <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}`} aria-label="文库" data-detail-phase={phase}>
       <div ref={hostRef} className="paper-archive-stage" onPointerDown={() => pageRef.current?.focus({ preventScroll: true })} />
       <div className="paper-archive-veil" aria-hidden="true" />
+      <div className="paper-archive-floor-veil" aria-hidden="true" />
       {stats ? (
         <output className="paper-archive-stats" aria-label="文库渲染诊断">
           {stats.fps} fps · DPR {stats.pixelRatio} × {stats.resolutionScale} · {stats.drawn} 卡 · {(stats.triangles / 1e6).toFixed(2)}M 三角形<br />{stats.gpu}

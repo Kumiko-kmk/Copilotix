@@ -93,6 +93,10 @@ const LATE_FRAME_MS = 23
 const MAX_PIXEL_RATIO = 1.25
 const MAX_DRAWING_PIXELS = 3.3e6
 const MIN_RESOLUTION_SCALE = 0.55
+// Once a paper is open nothing moves, so the scene is drawn at the display's own density (it
+// only redraws on change); the browse limits return as soon as it closes.
+const DETAIL_PIXEL_RATIO = 2
+const MAX_DETAIL_PIXELS = 8.3e6
 const ENTRY_DURATION = 4.35
 // The original holds the plane almost flat for ~1.3 s between the outgoing scan crest and its
 // return (its entry was timed to music). The archive runs that stretch about five times faster,
@@ -100,9 +104,9 @@ const ENTRY_DURATION = 4.35
 const ENTRY_GAP = { start: 0.95, length: 0.5, skipped: 1.25 }
 // The resting shoulder rises over real time as the slide ends, full when the returning crest crosses it.
 const SHOULDER_RISE = { start: 0.95, length: 0.9 }
-// Browse framing: the selected card sits a little right of and below the original's aim, which
+// Browse framing: the selected card sits a little left of and below the original's aim, which
 // balances it against the panel (fractions of the view).
-const ARRAY_SCREEN_SHIFT = { x: 0.035, y: 0.1 }
+const ARRAY_SCREEN_SHIFT = { x: -0.04, y: 0.1 }
 // Extraction and detail framing from RhineLabUI (INSPECTION_LIFT, archiveFraming detail values).
 const INSPECTION_LIFT = 4.05
 const BASE_DIRECTION = new Vector3(
@@ -531,6 +535,7 @@ export class PaperArchiveScene {
   setDetailPage(page: HTMLCanvasElement | null): void {
     const mesh = this.page
     if (!mesh) return
+    this.pageCanvas = page
     const material = mesh.material as MeshBasicMaterial
     const front = this.pageFront!
     const frontMaterial = front.material as MeshBasicMaterial
@@ -541,7 +546,7 @@ export class PaperArchiveScene {
     mesh.visible = false
     front.visible = false
     if (page && page.width > 0 && page.height > 0) {
-      const texture = new CanvasTexture(page)
+      const texture = new CanvasTexture(this.pageImage(page))
       texture.colorSpace = SRGBColorSpace
       texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy())
       const aspect = page.width / page.height
@@ -558,6 +563,35 @@ export class PaperArchiveScene {
     material.needsUpdate = true
     frontMaterial.needsUpdate = true
     this.wake()
+  }
+
+  private pageCanvas: HTMLCanvasElement | null = null
+
+  /**
+   * The page scaled to the height it is drawn at when the paper is open. A 1600 px page shown at
+   * a few hundred device pixels was sampled between mip levels and looked soft; at about 1:1
+   * the GPU samples the full-resolution level and the text stays sharp.
+   */
+  private pageImage(page: HTMLCanvasElement): HTMLCanvasElement {
+    const { clientWidth: width, clientHeight: height } = this.options.container
+    if (!width || !height) return page
+    const span = Math.max(DETAIL_SPAN, DETAIL_SPAN * (16 / 9) / (width / height))
+    const aspect = page.width / page.height
+    const pageHeight = Math.min(PAGE_HEIGHT, PAGE_MAX_WIDTH / aspect)
+    const target = Math.ceil((pageHeight / span) * height * this.detailPixelRatio(width, height))
+    if (target >= page.height * 0.9) return page
+    const image = document.createElement('canvas')
+    image.height = target
+    image.width = Math.max(1, Math.round(target * aspect))
+    const context = image.getContext('2d', { alpha: false })
+    if (!context) return page
+    context.imageSmoothingQuality = 'high'
+    context.drawImage(page, 0, 0, image.width, image.height)
+    return image
+  }
+
+  private detailPixelRatio(width: number, height: number): number {
+    return Math.min(window.devicePixelRatio || 1, DETAIL_PIXEL_RATIO, Math.sqrt(MAX_DETAIL_PIXELS / (width * height)))
   }
 
   get detailOpen(): boolean {
@@ -628,7 +662,9 @@ export class PaperArchiveScene {
 
   private setPhase(phase: DetailPhase): void {
     if (this.phase === phase) return
+    const sharp = phase === 'open' || this.phase === 'open'
     this.phase = phase
+    if (sharp) this.applyResolution()
     this.options.onDetailPhase?.(phase)
   }
 
@@ -802,6 +838,7 @@ export class PaperArchiveScene {
     this.cameraKey = ''
     this.updateCamera()
     this.emitDetailFrame()
+    if (this.pageCanvas) this.setDetailPage(this.pageCanvas)
     this.wake()
   }
 
@@ -884,7 +921,7 @@ export class PaperArchiveScene {
     const { clientWidth: width, clientHeight: height } = this.options.container
     if (!width || !height) return
     const base = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO, Math.sqrt(MAX_DRAWING_PIXELS / (width * height)))
-    this.renderer.setPixelRatio(Math.max(0.5, base * this.resolutionScale))
+    this.renderer.setPixelRatio(this.phase === 'open' ? this.detailPixelRatio(width, height) : Math.max(0.5, base * this.resolutionScale))
     this.renderer.setSize(width, height, false)
   }
 
