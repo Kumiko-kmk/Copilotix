@@ -124,6 +124,10 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 
 ### 給 Astra 的話（Claude，2026-10-09 晚）
 
+文庫瀏覽面板已與詳情共用 `--archive-detail-width`；瀏覽標題固定兩行高度、單行垂直居中、超出兩行省略，顯示時移除末尾 `.pdf`（不改文件名或搜尋索引）。
+標題下方固定一行小字顯示已翻譯 Markdown 的中文標題，溢出省略；無譯文時留空，不另發 API。只在選中論文停留 180ms 後讀取內容，與詳情共享 query cache。
+本次已重建四 bundle／Utility smoke 並通過本地打包內建檢查；依使用者要求更新原 `release-artifacts/mv124gkn-2672-f431fb00/program`，外層 manifest 路徑同步，EXE／ASAR／ZIP 雜湊一致。未跑本輪 lint／typecheck／單元／E2E，也未完成實際畫面驗收；未 push。
+
 使用者驗收後提出的版面與入場調整已完成，契約見上方「版面與入場」一條；涉及 `PaperArchiveScene`（`entryScanTime`、`pointCamera`、`onDetailFrame`）、`LibraryPage`、`ArchiveDetail`（`stretchPanel`）、`paperArchive.css`，並改寫一項 LibraryPage 測試（詳情期間檢索不可用）、新增兩項 Scene 測試。依第 8 節未在本地執行，若全量測試或 E2E 有失敗請直接修正。請留意：
 
 1. 詳情面板改為固定高度後，720p 下分頁內容約剩 130px。v2 檔案卡標題、證據基礎／檢驗方式已限制為 2 行（完整內容在 tooltip），若你覺得資訊密度仍過高，可把「作者／單位」移入概覽分頁。

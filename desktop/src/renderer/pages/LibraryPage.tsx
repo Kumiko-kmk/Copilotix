@@ -1,9 +1,11 @@
 import React from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, ExpandOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import type { PaperInsightSource } from '@shared/paperInsight'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../paperArchive/PaperArchiveScene'
 import ArchiveDetail from '../paperArchive/ArchiveDetail'
+import { extractPaperProfile } from '../paperArchive/paperProfile'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
 import { documentTypeLabel, formatTaskCreatedAt, statusLabels } from './TasksPage'
 import '../paperArchive/paperArchive.css'
@@ -178,6 +180,7 @@ export default function LibraryPage(props: {
   const navigate = React.useCallback((axis: 'lane' | 'row', direction: number) => sceneRef.current?.navigate(axis, direction), [])
   const shelf = shelfAt(shelves, selection.cell.lane)
   const paper = selection.paper
+  const displayTitle = paper?.displayName.replace(/\.pdf\s*$/iu, '').trim() ?? ''
   const paperIndex = paperIndexAt(shelves, selection.cell)
   const shelfIndex = shelves.length ? wrap(selection.cell.lane, shelves.length) : 0
   const empty = shelves.length === 0
@@ -274,7 +277,8 @@ export default function LibraryPage(props: {
       ) : paper ? (
         <article ref={panelRef} className="paper-archive-panel" aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.month}</span>
-          <h2 key={paper.id} className="paper-archive-title" title={paper.displayName}>{paper.displayName}</h2>
+          <h2 key={paper.id} className="paper-archive-title" title={displayTitle}><span>{displayTitle}</span></h2>
+          <BrowseTranslatedTitle paper={paper} />
           <div className="paper-archive-rule"><i /></div>
           <dl className="paper-archive-meta">
             <div><dt>状态</dt><dd className={`status-${paper.workflow.status}`}>{statusLabels[paper.workflow.status]}{paper.workflow.status === 'translating' ? ` ${paper.workflow.progress}%` : ''}</dd></div>
@@ -319,6 +323,26 @@ export default function LibraryPage(props: {
 }
 
 const RULER_TICKS = 9
+
+/** Read only the selected paper after navigation settles; share the detail query cache. */
+function BrowseTranslatedTitle({ paper }: { paper: ArchivePaper }): React.JSX.Element {
+  const [settledId, setSettledId] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setSettledId(paper.id), 180)
+    return () => window.clearTimeout(timer)
+  }, [paper.id])
+  const details = useQuery({
+    queryKey: ['document', paper.id],
+    queryFn: () => window.copilotix.getDocument(paper.id),
+    enabled: settledId === paper.id,
+    staleTime: 30_000
+  })
+  const translatedTitle = React.useMemo(() => {
+    const markdown = details.data?.translatedMarkdown
+    return markdown ? extractPaperProfile('', markdown).translatedTitle?.replace(/\.pdf\s*$/iu, '').trim() ?? '' : ''
+  }, [details.data?.translatedMarkdown])
+  return <p className="paper-archive-translated-title" title={translatedTitle || undefined}>{translatedTitle || '\u00a0'}</p>
+}
 
 /** A fixed-width ruler; long shelves map onto it proportionally. */
 function Ruler(props: { count: number; index: number }): React.JSX.Element {

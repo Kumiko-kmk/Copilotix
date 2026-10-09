@@ -75,16 +75,24 @@
 
 .paper-archive-panel {
   top: 50%; left: var(--archive-panel-left);
-  width: min(460px, var(--archive-detail-width));
+  width: var(--archive-detail-width);
   transform: translateY(-58%);
 }
 .paper-archive-path i { margin: 0 10px; font-style: normal; opacity: .6; }
 .paper-archive-title {
-  display: -webkit-box; margin: 14px 0 0; overflow: hidden;
+  display: flex; align-items: center; height: 2.56em; margin: 14px 0 0; overflow: hidden;
   color: var(--ink); font-size: clamp(20px, 1.9vw, 27px); font-weight: 720; letter-spacing: .01em; line-height: 1.28;
   overflow-wrap: anywhere; user-select: text;
-  -webkit-box-orient: vertical; -webkit-line-clamp: 3;
   animation: paper-archive-roll .36s var(--ease-out) both;
+}
+.paper-archive-title > span {
+  display: -webkit-box; width: 100%; overflow: hidden;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
+.paper-archive-translated-title {
+  height: 1.5em; margin: 6px 0 0; overflow: hidden;
+  color: var(--muted); font-size: 13px; line-height: 1.5;
+  white-space: nowrap; text-overflow: ellipsis;
 }
 .paper-archive-rule { position: relative; height: 1px; margin: 22px 0 18px; background: color-mix(in srgb, var(--ink) 55%, transparent); }
 .paper-archive-rule i { position: absolute; top: -3px; left: -10px; width: 5px; height: 5px; background: var(--ink); }
@@ -145,7 +153,6 @@
 @keyframes paper-archive-fade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 980px) {
-  .paper-archive-panel { width: min(400px, var(--archive-detail-width)); }
   .paper-archive-footer { grid-template-columns: 1fr auto; }
   .paper-archive-rows { display: none; }
 }
