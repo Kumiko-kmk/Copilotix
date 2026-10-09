@@ -114,9 +114,18 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - 本地月份、新月新文優先；長月份按 `ceil(n/5)` 分列，每列 4–8 篇，列／行循環並記住論文 ID。完成原色、處理中主色、部分完成琥珀、失敗紅色。搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦、Enter 選首項、Tab 選結果，IME／長按 Enter 不誤觸。搜尋取消慣性，WebGL 失敗仍可搜尋進閱讀器。
 - 渲染保留單一 rAF、約 60 fps、牆鐘待機、失焦／隱藏停渲染、reduced-motion 與 GPU 釋放。DPR ≤1.25、≤3.3M 像素，transmission 半解析度、陰影 1024；6 幀超時降解析度 15%（下限 0.55），穩定 240 幀且 8 秒未降才回升 8%。保留解析拾取、剔除、共享 instanceMatrix、compileAsync 暖機；途經選中卡即發漣漪（最多 6），升起 4.2／回落 4.5。不得恢復「流暢模式」、保存項或材質降檔。
 - 抽取沿用單一 hero、4.05 升起、原有 detail 鏡頭；鏡頭 >0.6、升起 >3 後掃描 0.9 秒。首頁 1600px／LRU 6，共享 document 查詢；PDF 首頁、文獻資訊與 AI 解讀按需載入，切文獻／卸載取消晚到結果與訂閱。
-- 互動契約：Enter 忽略 repeat，抽出／解密中不進閱讀，完全展開後再次 Enter 或點 hero 才進閱讀；「打开阅读」保留直接入口。移動 ≥8px 後不得視為點擊；pointercancel／lostpointercapture 不啟動點擊。詳情分頁左右／Home／End 導航並移焦，正文方向鍵保留捲動；僅文庫瀏覽區方向鍵換卡。Esc 先收搜尋，再關詳情並移焦回文庫。
+- 互動契約：Enter 忽略 repeat，抽出／解密中不進閱讀，完全展開後再次 Enter 或點 hero 才進閱讀；「打开阅读」保留直接入口。移動 ≥8px 後不得視為點擊；pointercancel／lostpointercapture 不啟動點擊。詳情分頁左右／Home／End 導航並移焦，正文方向鍵保留捲動；僅文庫瀏覽區方向鍵換卡。瀏覽時 Esc 先收搜尋；抽出期間檢索沿橫線收起並 inert（結果清單同時關閉），Esc 直接關詳情並移焦回文庫。
 - `closing` 保留舊文獻、封面與模型，面板 180ms 淡出且 inert，模型／鏡頭 320ms 收回再卸載。換卡只保留一個待選目標，方向輸入累積、搜尋覆蓋；目標移除即取消，收回中重開同篇從當前姿態接續並清除待選。減弱動畫直接完成收回；不新增模型副本、動畫迴圈、IPC 或持久化格式。
+- 版面與入場（2026-10-09 晚，Claude）：入場以 `entryScanTime` 把原版掃描波去程與回程之間約 1.3 秒的平板段壓縮為約 0.25 秒，肩部按真實時間在滑入結束時升起，`archiveMotion.ts` 曲線不變。瀏覽鏡頭以 `ARRAY_SCREEN_SHIFT` 把選中卡移向右下（3.5%／10% 視口）；瀏覽面板與詳情面板共用 `--archive-panel-left` 左緣。Scene 以 `onDetailFrame` 回報抽出卡最終的投影範圍，頁面寫入 `--archive-detail-top/height`，詳情面板每個分頁固定為卡片高度，只有分頁內容捲動；抽出時面板上下框線由瀏覽面板範圍拉伸到卡片上下緣（WAAPI，僅 transform／clip-path），收回時反向。返回按鈕移到卡片下方。
 - Paper Brief v2 已接入生成、校驗、保存與四分頁；一句話／類型／領域、證據基礎／檢驗方式取代低價值統計，無 v2 回退規則欄位與 v1。發現保留強度、需核對標記及可展開的來源摘錄；章節僅文字，暫不接閱讀器跳轉。設計及人工品質驗收邊界見 [Paper Brief v2](docs/PAPER_BRIEF_ZH.md)。
 - 授權、single-flight／併發、取消等待、原子落盤與備份卸載契約見 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md)。v2 寫 `insight/brief.v2.json`（≤256 KiB），保留 v1；只按 sourceRevision 標 stale，promptVersion 不同僅提示重新生成。新 Core RPC `insight:brief-context/save-brief` 與 ready v2 聯合類型隨 Main／Utility／Preload／Renderer 同版交付，不新增 migration／manifest。
 - 真實 DeepSeek 驗證已獲明確授權並完成：DeepONet、AlphaFold 各一次，結果已保存原文庫；具體數量與品質限制見上述專項文檔。其餘動畫候選仍待設計確認，不屬於未完成開發。
 - 本輪驗證：96 個單元測試檔，660 項通過／3 項既有跳過；typecheck 通過；lint 0 errors／63 項既有警告。四 bundle／Utility smoke、Electron 文庫正常／WebGL 降級／v2 檔案卡 3 項通過；已檢視 mock 結果截圖。真實 API 兩篇結果已落盤，少量樣本不等於跨學科品質驗收。本地打包與 packaged smoke／完整性／體積門禁通過（runtime 353.28 MiB、ZIP 94.05 MiB）；入口見 `release/advanced/release-manifest.json`。未跑本輪完整安裝生命週期／遠端 CI，未 push／遠端發布。
+
+### 給 Astra 的話（Claude，2026-10-09 晚）
+
+使用者驗收後提出的版面與入場調整已完成，契約見上方「版面與入場」一條；涉及 `PaperArchiveScene`（`entryScanTime`、`pointCamera`、`onDetailFrame`）、`LibraryPage`、`ArchiveDetail`（`stretchPanel`）、`paperArchive.css`，並改寫一項 LibraryPage 測試（詳情期間檢索不可用）、新增兩項 Scene 測試。依第 8 節未在本地執行，若全量測試或 E2E 有失敗請直接修正。請留意：
+
+1. 詳情面板改為固定高度後，720p 下分頁內容約剩 130px。v2 檔案卡標題、證據基礎／檢驗方式已限制為 2 行（完整內容在 tooltip），若你覺得資訊密度仍過高，可把「作者／單位」移入概覽分頁。
+2. `stretchPanel` 依賴瀏覽面板在 `onDetailPhase('opening')` 時仍掛載；如果之後調整詳情掛載時機，請保留這一捕捉點。
+3. 減弱動畫時拉伸、檢索收合全部跳過。

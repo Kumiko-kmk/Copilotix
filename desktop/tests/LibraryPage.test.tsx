@@ -193,13 +193,15 @@ describe('LibraryPage', () => {
     expect(scene.navigate).toHaveBeenCalledWith('row', 1)
   })
 
-  it('closes search before detail and keeps the closing panel mounted but inert', () => {
+  it('folds the search away while a paper is extracted and keeps the closing panel mounted but inert', () => {
     render(<LibraryPage documents={[paper('Alpha')]} onOpen={vi.fn()} onCreate={vi.fn()} />)
+    fireEvent.focus(screen.getByRole('searchbox', { name: '搜索文库' }))
+    expect(screen.getByRole('list', { name: '搜索结果' })).toBeTruthy()
     fireEvent.keyDown(region(), { key: 'Enter' })
-    const search = screen.getByRole('searchbox', { name: '搜索文库' })
-    fireEvent.focus(search)
-    fireEvent.keyDown(search, { key: 'Escape' })
-    expect(scene.closeDetail).not.toHaveBeenCalled()
+    expect(scene.phase).toBe('opening')
+    expect(region().querySelector('.paper-archive-tools')?.hasAttribute('inert')).toBe(true)
+    expect(screen.queryByRole('searchbox', { name: '搜索文库' })).toBeNull()
+    expect(screen.queryByRole('list', { name: '搜索结果' })).toBeNull()
     fireEvent.keyDown(region(), { key: 'Escape' })
     expect(scene.closeDetail).toHaveBeenCalledOnce()
     expect(document.activeElement).toBe(region())
@@ -210,5 +212,7 @@ describe('LibraryPage', () => {
     expect(region().querySelector('.paper-archive-detail-layer')?.hasAttribute('inert')).toBe(false)
     act(() => changePhase('closed'))
     expect(region().querySelector('.paper-archive-detail')).toBeNull()
+    expect(region().querySelector('.paper-archive-tools')?.hasAttribute('inert')).toBe(false)
+    expect(screen.getByRole('searchbox', { name: '搜索文库' })).toBeTruthy()
   })
 })

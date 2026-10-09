@@ -12,6 +12,12 @@
   --archive-index-failed: #cf5049;
   --archive-index-empty: #e4d6c5;
   --archive-gutter: clamp(28px, 4.4vw, 64px);
+  /* The browse panel and the detail panel share one left edge. */
+  --archive-detail-width: min(560px, 42vw);
+  --archive-panel-left: calc(100% - var(--archive-gutter) - var(--archive-detail-width));
+  /* Set from the scene to the extracted card's projected top and height. */
+  --archive-detail-top: 20%;
+  --archive-detail-height: 66%;
   position: relative;
   width: 100%;
   height: 100%;
@@ -26,7 +32,7 @@
 .paper-archive-veil {
   position: absolute; inset: 0; z-index: 1; pointer-events: none;
   background:
-    linear-gradient(90deg, transparent 46%, color-mix(in srgb, var(--archive-bg) 72%, transparent) 64%, color-mix(in srgb, var(--archive-bg) 86%, transparent) 100%),
+    linear-gradient(90deg, transparent 44%, color-mix(in srgb, var(--archive-bg) 76%, transparent) 57%, color-mix(in srgb, var(--archive-bg) 88%, transparent) 100%),
     linear-gradient(0deg, color-mix(in srgb, var(--archive-bg) 82%, transparent) 0, transparent 22%);
 }
 
@@ -41,7 +47,21 @@
 
 .paper-archive-tools { position: absolute; z-index: 3; top: calc(var(--page-top) + 18px); right: var(--archive-gutter); width: min(360px, 42%); }
 .paper-archive-search { position: relative; }
-.paper-archive-search-field { display: flex; align-items: center; gap: 8px; margin-top: 6px; border-bottom: 1px solid var(--muted); }
+.paper-archive-search-field { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.paper-archive-search-field::after {
+  position: absolute; right: 0; bottom: 0; left: 0; height: 1px; background: var(--muted); content: "";
+  transform-origin: right; transition: transform .26s var(--ease-out);
+}
+/* Opening the index: the rule draws out first, then the label and field unfold up from it. */
+.paper-archive-search > label, .paper-archive-search-field > * {
+  transform-origin: 50% 100%; transition: transform .26s var(--ease-out) .18s, opacity .2s ease .18s;
+}
+.paper-archive-tools { visibility: visible; transition: visibility 0s; }
+/* Extracted paper: label and field fold down onto the rule, then the rule retracts to the right. */
+.paper-archive-tools.collapsed { visibility: hidden; transition: visibility 0s linear .48s; }
+.paper-archive-tools.collapsed .paper-archive-search > label { opacity: 0; transform: translateY(40px) scaleY(0); transition-delay: 0s; }
+.paper-archive-tools.collapsed .paper-archive-search-field > * { opacity: 0; transform: scaleY(0); transition-delay: 0s; }
+.paper-archive-tools.collapsed .paper-archive-search-field::after { transform: scaleX(0); transition: transform .26s cubic-bezier(.4, 0, 1, 1) .2s; }
 .paper-archive-search input { width: 100%; min-width: 0; padding: 9px 2px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14px; }
 .paper-archive-search kbd { color: var(--muted); font-size: 12px; }
 .paper-archive-search input:focus-visible, .paper-archive-results button:focus-visible { outline: 2px solid var(--archive-accent); outline-offset: 2px; }
@@ -54,8 +74,8 @@
 .paper-archive-results small { color: var(--muted); font-size: 11px; }
 
 .paper-archive-panel {
-  top: 50%; right: var(--archive-gutter);
-  width: min(460px, 38vw);
+  top: 50%; left: var(--archive-panel-left);
+  width: min(460px, var(--archive-detail-width));
   transform: translateY(-58%);
 }
 .paper-archive-path i { margin: 0 10px; font-style: normal; opacity: .6; }
@@ -125,7 +145,7 @@
 @keyframes paper-archive-fade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 980px) {
-  .paper-archive-panel { width: min(400px, 46vw); }
+  .paper-archive-panel { width: min(400px, var(--archive-detail-width)); }
   .paper-archive-footer { grid-template-columns: 1fr auto; }
   .paper-archive-rows { display: none; }
 }
@@ -135,6 +155,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .paper-archive-canvas, .paper-archive-title, .paper-archive-index strong, .paper-archive-shelves span { animation: none; }
+  .paper-archive-tools, .paper-archive-search > label, .paper-archive-search-field > *, .paper-archive-search-field::after { transition: none !important; }
 }
 
 /* ───────── Extracted paper (RhineLabUI detail view: masks clear as the cover decrypts) ───────── */
@@ -153,34 +174,43 @@
 .paper-archive-detail-layer > * { pointer-events: auto; }
 .paper-archive-detail-layer.closing > * { pointer-events: none; }
 @starting-style { .paper-archive-detail-layer { opacity: 0; } }
+/* Below the card, where the browse footer was. */
 .paper-archive-detail-back {
-  position: absolute; z-index: 3; top: calc(var(--page-top) + 128px); left: var(--archive-gutter);
+  position: absolute; z-index: 3; bottom: 26px; left: var(--archive-gutter);
   display: inline-flex; align-items: center; gap: 12px; height: 36px; padding: 0 4px;
   border: 0; background: transparent; color: var(--ink); font-size: 12px; font-weight: 650; letter-spacing: .12em; cursor: pointer;
   animation: paper-archive-fade .18s var(--ease-out) both;
 }
 .paper-archive-detail-back kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 3px; color: var(--muted); font: 10px/1.4 inherit; }
 .paper-archive-detail-back:hover { color: var(--archive-accent); }
-.paper-archive-detail {
-  position: absolute; z-index: 2; top: 50%; right: var(--archive-gutter);
-  display: flex; width: min(560px, 42vw); max-height: calc(100% - 150px); flex-direction: column;
-  transform: translateY(-46%); animation: paper-archive-fade .18s var(--ease-out) both;
+/* Fixed to the extracted card's height on every tab; only the tab panel scrolls. */
+.paper-archive-detail, .paper-archive-detail-frame {
+  position: absolute; z-index: 2; top: var(--archive-detail-top); left: var(--archive-panel-left);
+  width: var(--archive-detail-width); height: var(--archive-detail-height); box-sizing: border-box;
 }
+.paper-archive-detail { display: flex; min-height: 0; padding: 18px 0 16px; flex-direction: column; animation: paper-archive-fade .18s var(--ease-out) both; }
+.paper-archive-detail > * { flex: none; }
+.paper-archive-detail-frame { pointer-events: none; }
+.paper-archive-detail-frame i { position: absolute; right: 0; left: 0; height: 1px; background: color-mix(in srgb, var(--ink) 34%, transparent); transform-origin: left; }
+.paper-archive-detail-frame i:first-child { top: 0; }
+.paper-archive-detail-frame i:last-child { bottom: 0; }
 .paper-archive-detail header h2 {
-  display: -webkit-box; margin: 12px 0 0; overflow: hidden; color: var(--ink);
-  font-size: clamp(22px, 2.2vw, 32px); font-weight: 760; letter-spacing: .005em; line-height: 1.22; overflow-wrap: anywhere;
-  -webkit-box-orient: vertical; -webkit-line-clamp: 3; user-select: text;
+  display: -webkit-box; margin: 10px 0 0; overflow: hidden; color: var(--ink);
+  font-size: clamp(20px, 2vw, 30px); font-weight: 760; letter-spacing: .005em; line-height: 1.22; overflow-wrap: anywhere;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 2; user-select: text;
 }
-.paper-archive-detail-subtitle { margin: 10px 0 0; color: color-mix(in srgb, var(--ink) 78%, var(--muted)); font-size: 15px; font-weight: 600; line-height: 1.5; user-select: text; }
-.paper-archive-detail .paper-archive-rule { margin: 20px 0 16px; background: var(--ink); }
+.paper-archive-detail-subtitle { display: -webkit-box; margin: 8px 0 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: color-mix(in srgb, var(--ink) 78%, var(--muted)); font-size: 15px; font-weight: 600; line-height: 1.5; user-select: text; }
+.paper-archive-detail .paper-archive-rule { margin: 14px 0 12px; background: var(--ink); }
 .paper-archive-detail-error { margin: 0 0 12px; color: var(--archive-index-failed); font-size: 13px; }
-.paper-archive-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 28px; margin: 0 0 18px; }
+.paper-archive-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 22px; margin: 0 0 12px; }
 .paper-archive-fields > div.wide { grid-column: 1 / -1; }
-.paper-archive-fields dt { margin-bottom: 5px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
+.paper-archive-fields > div.half { grid-column: span 2; }
+.paper-archive-fields dt { margin-bottom: 3px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
 .paper-archive-fields dd {
   display: -webkit-box; margin: 0; overflow: hidden; color: var(--text); font-size: 13.5px; line-height: 1.55;
-  font-variant-numeric: tabular-nums; -webkit-box-orient: vertical; -webkit-line-clamp: 2; user-select: text;
+  font-variant-numeric: tabular-nums; -webkit-box-orient: vertical; -webkit-line-clamp: 1; user-select: text;
 }
+.paper-archive-fields > div.half dd { -webkit-line-clamp: 2; }
 .paper-archive-tabs { position: relative; display: flex; gap: 28px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 22%, transparent); }
 .paper-archive-tabs button {
   position: relative; display: inline-flex; align-items: baseline; gap: 6px; height: 36px; padding: 0;
@@ -194,7 +224,7 @@
 .paper-archive-tabs button[aria-selected="true"] { color: var(--ink); }
 .paper-archive-tabs button[aria-selected="true"]::after { transform: scaleX(1); }
 .paper-archive-tabs button:hover { color: var(--ink); }
-.paper-archive-tabpanel { min-height: 0; max-height: 34vh; margin-top: 14px; padding-right: 8px; overflow: auto; overscroll-behavior: contain; animation: paper-archive-fade .15s ease both; }
+.paper-archive-tabpanel { min-height: 64px; margin-top: 14px; padding-right: 8px; overflow: auto; overscroll-behavior: contain; animation: paper-archive-fade .15s ease both; }
 .paper-archive-tabpanel::-webkit-scrollbar { width: 8px; }
 .paper-archive-tabpanel::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 99px; background: rgba(120, 104, 82, .3) padding-box; }
 .paper-archive-tabpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -211,9 +241,10 @@
 .paper-archive-insight ul { margin: 0; padding-left: 18px; }
 .paper-archive-insight small { color: var(--muted); font-size: 11px; }
 .paper-archive-insight-empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.paper-archive-detail-actions { display: flex; align-items: center; gap: 22px; margin-top: 20px; }
+.paper-archive-detail-actions { display: flex; align-items: center; gap: 22px; margin-top: 14px; }
+.paper-archive-detail > .paper-archive-tabpanel { flex: 1 1 0; }
 .paper-archive-primary {
-  display: inline-flex; min-width: 230px; height: 46px; padding: 0 18px; align-items: center; justify-content: space-between;
+  display: inline-flex; min-width: 230px; height: 42px; padding: 0 18px; align-items: center; justify-content: space-between;
   border: 0; border-radius: 2px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 650; letter-spacing: .1em; cursor: pointer;
   transition: background .18s ease;
 }
@@ -231,7 +262,7 @@
 .paper-archive-detail.revealed .paper-archive-reveal::after { transform: scaleX(0); }
 
 @media (max-width: 1180px) {
-  .paper-archive-detail { width: min(480px, 46vw); }
+  .paper-archive-page { --archive-detail-width: min(480px, 46vw); }
 }
 @media (prefers-reduced-motion: reduce) {
   .paper-archive-detail-layer { transition: none; }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { PaperArchiveScene, type ArchivePalette, type PaperArchiveSceneOptions } from '../src/renderer/paperArchive/PaperArchiveScene'
+import { PaperArchiveScene, entryScanTime, type ArchivePalette, type PaperArchiveSceneOptions } from '../src/renderer/paperArchive/PaperArchiveScene'
 import { ArchivePlaneMomentum } from '../src/renderer/paperArchive/archiveMotion'
 import { buildArchiveColumns } from '../src/renderer/paperArchive/archiveShelves'
 
@@ -288,5 +288,27 @@ describe('paper archive scheduling', () => {
     for (let frame = 0; frame < 600; frame++) step(1000 / 60)
     expect(frames.size).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('archive entry and detail framing', () => {
+  it('shortens only the flat stretch of the entry scan', () => {
+    expect(entryScanTime(0.5)).toBe(0.5)
+    expect(entryScanTime(3)).toBeCloseTo(4.25)
+    let previous = -Infinity
+    for (let time = 0; time <= 4; time += 0.01) {
+      const scan = entryScanTime(time)
+      expect(scan).toBeGreaterThan(previous)
+      previous = scan
+    }
+  })
+
+  it('reports where the extracted card will sit so the panel can match its height', async () => {
+    const onDetailFrame = vi.fn()
+    await createArchive({ onDetailFrame })
+    const frame = onDetailFrame.mock.lastCall?.[0]
+    expect(frame.top).toBeGreaterThan(0)
+    expect(frame.bottom - frame.top).toBeGreaterThan(300)
+    expect(frame.right).toBeLessThan(1100 * 0.6)
   })
 })

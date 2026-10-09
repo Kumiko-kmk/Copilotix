@@ -21,6 +21,8 @@ export default function ArchiveDetail(props: {
   month: string
   fileNumber: number
   phase: Exclude<DetailPhase, 'closed'>
+  /** The browse panel's box when extraction started; the panel stretches from it to the card's height. */
+  morphFrom?: DOMRect | null
   onPage(page: HTMLCanvasElement | null): void
   onOpen(): void
   onClose(): void
@@ -43,6 +45,20 @@ export default function ArchiveDetail(props: {
   const ready = insight.ready
   const briefState = ready && 'brief' in ready ? ready : null
   const brief = briefState?.brief
+  const articleRef = React.useRef<HTMLElement>(null)
+  const frameRef = React.useRef<HTMLDivElement>(null)
+  const closing = props.phase === 'closing'
+  const { morphFrom } = props
+
+  // Opening: the frame rules spread from the browse panel to the card's top and bottom and the
+  // content is uncovered between them. Closing: they draw back together while the layer fades.
+  React.useLayoutEffect(() => {
+    const article = articleRef.current
+    const frame = frameRef.current
+    if (!article || !frame || !morphFrom || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const animations = stretchPanel(article, frame, morphFrom, closing)
+    return () => animations.forEach((animation) => animation.cancel())
+  }, [closing, morphFrom])
 
   React.useEffect(() => {
     setPages(null)
@@ -84,7 +100,8 @@ export default function ArchiveDetail(props: {
       <button type="button" className="paper-archive-detail-back" onClick={props.onClose}>
         <ArrowLeftOutlined aria-hidden="true" /><span>返回档案</span><kbd>Esc</kbd>
       </button>
-      <article className={`paper-archive-detail${revealed ? ' revealed' : ''}`} aria-label="论文档案" aria-busy={!revealed || details.isPending}>
+      <div ref={frameRef} className="paper-archive-detail-frame" aria-hidden="true"><i /><i /></div>
+      <article ref={articleRef} className={`paper-archive-detail${revealed ? ' revealed' : ''}`} aria-label="论文档案" aria-busy={!revealed || details.isPending}>
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.month}</span>
           <h2 className="paper-archive-reveal" style={{ '--i': 0 } as React.CSSProperties} title={title}>{title}</h2>
@@ -95,8 +112,8 @@ export default function ArchiveDetail(props: {
         <dl className="paper-archive-fields">
           <Field index={2} wide label="作者 / 单位" value={profile?.authors ?? (profile ? '未识别' : null)} />
           {brief ? <>
-            <Field index={3} label="证据基础" value={brief.approach.basis} />
-            <Field index={4} label="检验方式" value={brief.approach.evaluation} />
+            <Field index={3} half label="证据基础" value={brief.approach.basis} />
+            <Field index={4} half label="检验方式" value={brief.approach.evaluation} />
             <Field index={5} wide label="关键词" value={brief.keywords.join(' · ')} />
           </> : <>
             <Field index={3} label="页数" value={pages ? `${pages} 页` : !profile ? null : /\.(?:md|markdown)$/iu.test(paper.originalName.trim()) ? 'Markdown 原文' : '—'} />
@@ -163,11 +180,39 @@ export default function ArchiveDetail(props: {
   )
 }
 
-function Field(props: { index: number; label: string; value: string | null; wide?: boolean }): React.JSX.Element {
+const OPEN_TIMING: KeyframeAnimationOptions = { duration: 440, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }
+const CLOSE_TIMING: KeyframeAnimationOptions = { duration: 180, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }
+
+/** Stretch the panel between the browse panel's box and its own (compositor-only: transform and clip-path). */
+function stretchPanel(article: HTMLElement, frame: HTMLElement, from: DOMRect, closing: boolean): Animation[] {
+  const to = article.getBoundingClientRect()
+  if (!to.width || !to.height) return []
+  const top = Math.min(to.height, Math.max(0, from.top - to.top))
+  const bottom = Math.min(to.height - top, Math.max(0, to.bottom - from.bottom))
+  const left = Math.min(to.width, Math.max(0, from.left - to.left))
+  const right = Math.min(to.width - left, Math.max(0, to.right - from.right))
+  const width = Math.max(0.05, (to.width - left - right) / to.width)
+  const full = 'inset(0px 0px 0px 0px)'
+  const narrow = `inset(${top}px ${right}px ${bottom}px ${left}px)`
+  const [rule, base] = [...frame.children] as HTMLElement[]
+  const edges: Array<[HTMLElement | undefined, string]> = [
+    [rule, `translate(${left}px, ${top}px) scaleX(${width})`],
+    [base, `translate(${left}px, ${-bottom}px) scaleX(${width})`]
+  ]
+  const timing = closing ? CLOSE_TIMING : OPEN_TIMING
+  const between = (start: string, end: string): Keyframe[] => closing ? [{ transform: end }, { transform: start }] : [{ transform: start }, { transform: end }]
+  return [
+    article.animate(closing ? [{ clipPath: full }, { clipPath: narrow }] : [{ clipPath: narrow }, { clipPath: full }], timing),
+    ...edges.flatMap(([edge, collapsed]) => edge ? [edge.animate(between(collapsed, 'none'), timing)] : [])
+  ]
+}
+
+/** Wide and short fields keep one line (the full text is in the tooltip); half-width fields keep two. */
+function Field(props: { index: number; label: string; value: string | null; wide?: boolean; half?: boolean }): React.JSX.Element {
   return (
-    <div className={props.wide ? 'wide' : undefined}>
+    <div className={props.wide ? 'wide' : props.half ? 'half' : undefined}>
       <dt>{props.label}</dt>
-      <dd className="paper-archive-reveal" style={{ '--i': props.index } as React.CSSProperties}>{props.value ?? ' '}</dd>
+      <dd className="paper-archive-reveal" title={props.value ?? undefined} style={{ '--i': props.index } as React.CSSProperties}>{props.value ?? ' '}</dd>
     </div>
   )
 }

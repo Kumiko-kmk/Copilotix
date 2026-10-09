@@ -24,6 +24,9 @@ export default function LibraryPage(props: {
   const hostRef = React.useRef<HTMLDivElement>(null)
   const pageRef = React.useRef<HTMLElement>(null)
   const searchRef = React.useRef<HTMLInputElement>(null)
+  const panelRef = React.useRef<HTMLElement>(null)
+  /** The browse panel's box when extraction starts; the detail panel stretches out of it. */
+  const morphFromRef = React.useRef<DOMRect | null>(null)
   const sceneRef = React.useRef<PaperArchiveScene | null>(null)
   const onOpenRef = React.useRef(props.onOpen)
   onOpenRef.current = props.onOpen
@@ -74,7 +77,20 @@ export default function LibraryPage(props: {
         },
         onActivate: (paper) => onOpenRef.current(paper.id),
         onError: () => setUnsupported(true),
+        onDetailFrame: (frame) => {
+          const page = pageRef.current
+          if (!page) return
+          // The detail panel spans the extracted card's height (see .paper-archive-detail).
+          page.style.setProperty('--archive-detail-top', `${frame.top}px`)
+          page.style.setProperty('--archive-detail-height', `${frame.bottom - frame.top}px`)
+        },
         onDetailPhase: (next) => {
+          // Still mounted here: React re-renders after this callback.
+          if (next === 'opening' || next === 'open') {
+            const panel = panelRef.current?.getBoundingClientRect()
+            if (panel?.height) morphFromRef.current = panel
+          }
+          if (next !== 'closed') setSearchOpen(false)
           setPhase(next)
           const active = document.activeElement
           if ((next === 'opening' || next === 'closing') && active instanceof HTMLElement && pageRef.current?.contains(active) && !active.closest('.paper-archive-tools')) {
@@ -192,7 +208,8 @@ export default function LibraryPage(props: {
         <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${monthCount} 个月份 · ${shelves.length} 列`}</p>
       </header>
 
-      <div className="paper-archive-tools">
+      {/* While a paper is extracted the index folds down into its rule and the rule retracts. */}
+      <div className={`paper-archive-tools${phase !== 'closed' ? ' collapsed' : ''}`} inert={phase !== 'closed'} aria-hidden={phase !== 'closed' ? true : undefined}>
         <div className="paper-archive-search" role="search" aria-label="文库检索"
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false) }}
           onKeyDown={(event) => {
@@ -250,11 +267,11 @@ export default function LibraryPage(props: {
       ) : paper && phase !== 'closed' ? (
         <div className={`paper-archive-detail-layer${phase === 'closing' ? ' closing' : ''}`} inert={phase === 'closing'} aria-hidden={phase === 'closing' ? true : undefined}>
           <ArchiveDetail key={paper.id} paper={paper} month={shelf?.month ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
-            phase={phase} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
+            phase={phase} morphFrom={morphFromRef.current} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
             onClose={() => sceneRef.current?.closeDetail()} insights={props.insights} />
         </div>
       ) : paper ? (
-        <article className="paper-archive-panel" aria-live="polite">
+        <article ref={panelRef} className="paper-archive-panel" aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.month}</span>
           <h2 key={paper.id} className="paper-archive-title" title={paper.displayName}>{paper.displayName}</h2>
           <div className="paper-archive-rule"><i /></div>

@@ -94,6 +94,15 @@ const MAX_PIXEL_RATIO = 1.25
 const MAX_DRAWING_PIXELS = 3.3e6
 const MIN_RESOLUTION_SCALE = 0.55
 const ENTRY_DURATION = 4.35
+// The original holds the plane almost flat for ~1.3 s between the outgoing scan crest and its
+// return (its entry was timed to music). The archive runs that stretch about five times faster,
+// so the cards rise into the wave as soon as they finish sliding in.
+const ENTRY_GAP = { start: 0.95, length: 0.5, skipped: 1.25 }
+// The resting shoulder rises over real time as the slide ends, full when the returning crest crosses it.
+const SHOULDER_RISE = { start: 0.95, length: 0.9 }
+// Browse framing: the selected card sits a little right of and below the original's aim, which
+// balances it against the panel (fractions of the view).
+const ARRAY_SCREEN_SHIFT = { x: 0.035, y: 0.1 }
 // Extraction and detail framing from RhineLabUI (INSPECTION_LIFT, archiveFraming detail values).
 const INSPECTION_LIFT = 4.05
 const BASE_DIRECTION = new Vector3(
@@ -139,6 +148,15 @@ export interface PaperArchiveSceneOptions {
   onError?(error: unknown): void
   /** Extraction state of the selected paper, for the detail panel. */
   onDetailPhase?(phase: DetailPhase): void
+  /** Where the fully extracted card will sit, in container pixels, so the panel can match its height. */
+  onDetailFrame?(frame: DetailFrame): void
+}
+
+export interface DetailFrame {
+  top: number
+  bottom: number
+  left: number
+  right: number
 }
 
 /** closed → opening (lifting, camera turning) → decrypting (cover clearing) → open. */
@@ -156,6 +174,11 @@ function indexTone(paper: ArchivePaper | null): keyof ArchivePalette['index'] {
   if (status === 'failed') return 'failed'
   if (status === 'partial') return 'partial'
   return 'active'
+}
+
+/** Scan time for an entry time: monotonic, identical outside the shortened gap. */
+export function entryScanTime(entry: number): number {
+  return entry + ENTRY_GAP.skipped * smooth((entry - ENTRY_GAP.start) / ENTRY_GAP.length)
 }
 
 function decodeInlineAsset(url: string): ArrayBuffer {
@@ -424,6 +447,43 @@ export class PaperArchiveScene {
     hero.visible = false
     this.hero = hero
     this.scene.add(hero)
+    for (const mesh of this.surfaces.values()) {
+      mesh.geometry.computeBoundingBox()
+      this.heroBounds.union(mesh.geometry.boundingBox!)
+    }
+    this.emitDetailFrame()
+  }
+
+  private readonly heroBounds = new Box3()
+  private readonly frameCamera = new PerspectiveCamera(3, 1, 1, 200)
+  private readonly frameCorner = new Vector3()
+  private readonly frameOrigin = new Vector3()
+  private frameKey = ''
+
+  /** Project the shell at the final detail framing; the camera aims relative to the card, so its world position does not matter. */
+  private emitDetailFrame(): void {
+    const { clientWidth: width, clientHeight: height } = this.options.container
+    if (!width || !height || this.heroBounds.isEmpty() || !this.options.onDetailFrame) return
+    this.pointCamera(this.frameCamera, 1, width, height, this.frameOrigin)
+    const { min, max } = this.heroBounds
+    let left = Infinity
+    let right = -Infinity
+    let top = Infinity
+    let bottom = -Infinity
+    for (let corner = 0; corner < 8; corner++) {
+      this.frameCorner.set(corner & 1 ? max.x : min.x, corner & 2 ? max.y : min.y, corner & 4 ? max.z : min.z).project(this.frameCamera)
+      const x = (this.frameCorner.x + 1) * width / 2
+      const y = (1 - this.frameCorner.y) * height / 2
+      left = Math.min(left, x)
+      right = Math.max(right, x)
+      top = Math.min(top, y)
+      bottom = Math.max(bottom, y)
+    }
+    const frame = { top: Math.round(top), bottom: Math.round(bottom), left: Math.round(left), right: Math.round(right) }
+    const key = `${frame.top}:${frame.bottom}:${frame.left}:${frame.right}`
+    if (key === this.frameKey) return
+    this.frameKey = key
+    this.options.onDetailFrame(frame)
   }
 
   /** The array cover plus a diagonal wipe that clears the frost from the top down. */
@@ -741,6 +801,7 @@ export class PaperArchiveScene {
     this.applyResolution()
     this.cameraKey = ''
     this.updateCamera()
+    this.emitDetailFrame()
     this.wake()
   }
 
@@ -755,35 +816,44 @@ export class PaperArchiveScene {
     const key = detail < 1e-4 ? `array:${width}x${height}` : ''
     if (key && key === this.cameraKey) return
     this.cameraKey = key
+    const distance = this.pointCamera(this.camera, detail, width, height, this.heroPosition)
+    const fog = this.scene.fog as Fog
+    fog.near = distance + 5 + (-1 - 5) * detail
+    fog.far = distance + 25 + (12 - 25) * detail
+    this.frustum.setFromProjectionMatrix(this.frustumMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse))
+  }
+
+  /** Point `camera` for a blend between the array (0) and detail (1) framing; returns its distance. */
+  private pointCamera(camera: PerspectiveCamera, detail: number, width: number, height: number, hero: Vector3): number {
     const aspect = width / height
     const baseSpan = VIEW_SPAN + (DETAIL_SPAN - VIEW_SPAN) * detail
     // RhineLabUI's archiveFraming: wide windows extend sideways, narrow ones keep the 16:9 width.
     const span = Math.max(baseSpan, baseSpan * (16 / 9) / aspect)
     const direction = this.cameraDirection.copy(BASE_DIRECTION).lerp(DETAIL_DIRECTION, detail).normalize()
     const distance = CAMERA_DISTANCE + (DETAIL_DISTANCE - CAMERA_DISTANCE) * detail
+    const right = this.cameraRight.crossVectors(UP, direction).normalize()
+    const up = this.cameraUp.crossVectors(direction, right).normalize()
+    const unitsPerPixel = span / height
+    // Moving the aim left and up moves the picture right and down.
     const aim = this.cameraAim.copy(ARRAY_AIM)
+      .addScaledVector(right, -ARRAY_SCREEN_SHIFT.x * width * unitsPerPixel)
+      .addScaledVector(up, ARRAY_SCREEN_SHIFT.y * height * unitsPerPixel)
     if (detail > 0) {
-      const right = this.cameraRight.crossVectors(UP, direction).normalize()
-      const up = this.cameraUp.crossVectors(direction, right).normalize()
-      const unitsPerPixel = span / height
-      const detailAim = this.cameraDetailAim.copy(this.heroPosition)
+      const detailAim = this.cameraDetailAim.copy(hero)
       detailAim.y += CARD_HEIGHT / 2
       detailAim.addScaledVector(right, (0.5 - DETAIL_SCREEN.x) * width * unitsPerPixel)
       detailAim.addScaledVector(up, (DETAIL_SCREEN.y - 0.5) * height * unitsPerPixel)
       aim.lerp(detailAim, detail)
     }
-    this.camera.aspect = aspect
-    this.camera.fov = (2 * Math.atan(span / (2 * distance)) * 180) / Math.PI
-    this.camera.near = Math.max(1, distance - 45)
-    this.camera.far = distance + 60
-    this.camera.position.copy(aim).addScaledVector(direction, distance)
-    this.camera.lookAt(aim)
-    this.camera.updateProjectionMatrix()
-    this.camera.updateMatrixWorld()
-    const fog = this.scene.fog as Fog
-    fog.near = distance + 5 + (-1 - 5) * detail
-    fog.far = distance + 25 + (12 - 25) * detail
-    this.frustum.setFromProjectionMatrix(this.frustumMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse))
+    camera.aspect = aspect
+    camera.fov = (2 * Math.atan(span / (2 * distance)) * 180) / Math.PI
+    camera.near = Math.max(1, distance - 45)
+    camera.far = distance + 60
+    camera.position.copy(aim).addScaledVector(direction, distance)
+    camera.lookAt(aim)
+    camera.updateProjectionMatrix()
+    camera.updateMatrixWorld()
+    return distance
   }
 
   private readonly cameraDirection = new Vector3()
@@ -1032,11 +1102,11 @@ export class PaperArchiveScene {
     }
   }
 
-  private field(row: number, lane: number, entry: number): number {
+  /** `scan` is the entry time on the original's timeline (see entryScanTime). */
+  private field(row: number, lane: number, scan: number): number {
     // Opening scan (reference 22–26.35 s), anchored on the selection like the original's row 12, lane 2.
-    const scan = entry < ENTRY_DURATION ? archiveWave(row - this.selected.row + 12, lane - this.selected.lane, entry) : 0
-    const shoulderGain = smooth((entry - 1.9) / 1.2)
-    let height = scan + settlingWave(row - this.shoulder.value) * columnStrength(lane, this.laneFocus.value) * shoulderGain
+    const crest = scan < ENTRY_DURATION ? archiveWave(row - this.selected.row + 12, lane - this.selected.lane, scan) : 0
+    let height = crest + settlingWave(row - this.shoulder.value) * columnStrength(lane, this.laneFocus.value) * this.shoulderGain
     if (this.idleGain > 0) height += idleWave(row, lane, this.clock) * this.idleGain
     if (this.pulses.length) {
       let ripple = 0
@@ -1048,6 +1118,7 @@ export class PaperArchiveScene {
     return height
   }
 
+  private shoulderGain = 0
   private readonly matrix = new Matrix4()
   private readonly position = new Vector3()
   private readonly rotation = new Quaternion()
@@ -1064,13 +1135,13 @@ export class PaperArchiveScene {
   }
 
   /** Pose of one card into `position` / `rotation`; returns its own selection lift. */
-  private pose(lane: number, row: number, x: number, z: number, entry: number): number {
+  private pose(lane: number, row: number, x: number, z: number, scan: number): number {
     const key = `${lane}:${row}`
     const selectedLift = this.lifts.get(key)?.value ?? 0
     const lift = selectedLift + (this.hoverLifts.get(key) ?? 0)
-    const height = this.field(row, lane, entry)
+    const height = this.field(row, lane, scan)
     // Cards lean with the slope of the wave until they are lifted clear of it.
-    const slope = this.field(row + 0.5, lane, entry) - this.field(row - 0.5, lane, entry)
+    const slope = this.field(row + 0.5, lane, scan) - this.field(row - 0.5, lane, scan)
     this.rotation.setFromAxisAngle(this.axisX, slope * 0.024 * (1 - smooth(lift / PREVIEW_LIFT)))
     this.position.set(x, BASE_Y + height + lift, z)
     return selectedLift
@@ -1080,6 +1151,8 @@ export class PaperArchiveScene {
     const cover = this.surfaces.get('Frosted_Polymer')!
     const index = this.surfaces.get('Index_Inlay')
     const slide = this.reduced ? 0 : -28 * (1 - smooth(entry / 1.1))
+    const scan = entryScanTime(entry)
+    this.shoulderGain = smooth((entry - SHOULDER_RISE.start) / SHOULDER_RISE.length)
     const centerLane = Math.round(this.laneTrack.value)
     // Centre the pool on what is in view, including the entry slide.
     const centerRow = Math.round(this.rowTrack.value - slide / ROW_SPACING)
@@ -1090,7 +1163,7 @@ export class PaperArchiveScene {
     const heroActive = this.heroActive()
 
     // Pose the selected card first: the detail camera aims at it before the array is culled.
-    const selectedLift = this.pose(selected.lane, selected.row, selected.lane * COLUMN_SPACING - trackX, selected.row * ROW_SPACING + rail + slide, entry)
+    const selectedLift = this.pose(selected.lane, selected.row, selected.lane * COLUMN_SPACING - trackX, selected.row * ROW_SPACING + rail + slide, scan)
     this.heroPosition.copy(this.position)
     this.heroRotation.copy(this.rotation)
     const selectedAmount = Math.min(1, selectedLift / PREVIEW_LIFT)
@@ -1126,7 +1199,7 @@ export class PaperArchiveScene {
         if (!this.frustum.intersectsSphere(this.bounds)) continue
         if (this.bounds.center.distanceTo(this.camera.position) - CARD_RADIUS > fogFar) continue
 
-        const lift = this.pose(lane, row, x, z, entry)
+        const lift = this.pose(lane, row, x, z, scan)
         this.matrix.compose(this.position, this.rotation, this.scale)
         cover.setMatrixAt(count, this.matrix)
         this.tint.copy(this.palette.card).lerp(this.palette.cardSelected, Math.min(1, lift / PREVIEW_LIFT))
