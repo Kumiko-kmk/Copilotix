@@ -114,7 +114,8 @@ describe('paper archive detail transitions', () => {
     const onDetailPhase = vi.fn()
     await createArchive({ onSelect, onDetailPhase })
     archive.openDetail()
-    advance(2400)
+    // Lift and camera turn, then the ~2.3 s decryption.
+    advance(3600)
     expect(archive.detailReady).toBe(true)
     const original = onSelect.mock.lastCall?.[1].id
     onSelect.mockClear()

@@ -47,6 +47,8 @@ export default function LibraryPage(props: {
   }, [query, searchIndex])
   const restoredRef = React.useRef(false)
   const [phase, setPhase] = React.useState<DetailPhase>('closed')
+  /** The glass has begun to clear: the panel's redaction follows it. */
+  const [decryptReveal, setDecryptReveal] = React.useState(false)
   const fileNumbers = React.useMemo(() => new Map(shelves.flatMap((shelf) => shelf.papers).map((paper, index) => [paper.id, index + 1])), [shelves])
   const showPage = React.useCallback((page: HTMLCanvasElement | null) => sceneRef.current?.setDetailPage(page), [])
   const [stats, setStats] = React.useState<ReturnType<PaperArchiveScene['getStats']> | null>(null)
@@ -86,7 +88,9 @@ export default function LibraryPage(props: {
           page.style.setProperty('--archive-detail-top', `${frame.top}px`)
           page.style.setProperty('--archive-detail-height', `${frame.bottom - frame.top}px`)
         },
+        onDecryptReveal: () => setDecryptReveal(true),
         onDetailPhase: (next) => {
+          if (next === 'opening' || next === 'closed') setDecryptReveal(false)
           // Still mounted here: React re-renders after this callback.
           if (next === 'opening' || next === 'open') {
             const panel = panelRef.current?.getBoundingClientRect()
@@ -271,7 +275,7 @@ export default function LibraryPage(props: {
       ) : paper && phase !== 'closed' ? (
         <div className={`paper-archive-detail-layer${phase === 'closing' ? ' closing' : ''}`} inert={phase === 'closing'} aria-hidden={phase === 'closing' ? true : undefined}>
           <ArchiveDetail key={paper.id} paper={paper} month={shelf?.month ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
-            phase={phase} morphFrom={morphFromRef.current} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
+            phase={phase} morphFrom={morphFromRef.current} textReveal={decryptReveal || phase === 'open'} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
             onClose={() => sceneRef.current?.closeDetail()} insights={props.insights} />
         </div>
       ) : paper ? (

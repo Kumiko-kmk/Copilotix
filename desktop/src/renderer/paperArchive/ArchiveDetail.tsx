@@ -8,12 +8,13 @@ import type { DetailPhase } from './PaperArchiveScene'
 import { extractPaperProfile } from './paperProfile'
 import { PAPER_TYPE_LABELS } from '@shared/paperBrief/schema'
 import BriefContent, { type BriefTab } from './BriefContent'
+import { useLineRedaction } from './lineRedaction'
 
 type Tab = 'abstract' | 'structure' | 'insight' | BriefTab
 
 /**
- * The extracted paper's file, after RhineLabUI's detail view: masked fields that clear as the
- * cover decrypts. Mounted only while a paper is extracted, so the archive itself never loads
+ * The extracted paper's file, after RhineLabUI's detail view: every line is redacted until the
+ * glass clears, then the ink slides away line by line. Mounted only while a paper is extracted, so the archive itself never loads
  * document bodies.
  */
 export default function ArchiveDetail(props: {
@@ -23,6 +24,8 @@ export default function ArchiveDetail(props: {
   phase: Exclude<DetailPhase, 'closed'>
   /** The browse panel's box when extraction started; the panel stretches from it to the card's height. */
   morphFrom?: DOMRect | null
+  /** The glass has started to clear (or the file is already open): lift the redaction. */
+  textReveal?: boolean
   onPage(page: HTMLCanvasElement | null): void
   onOpen(): void
   onClose(): void
@@ -38,12 +41,15 @@ export default function ArchiveDetail(props: {
     [details.data]
   )
   const [tab, setTab] = React.useState<Tab>('abstract')
-  const revealed = props.phase !== 'opening'
+  const revealed = props.textReveal ?? props.phase === 'open'
   const insight = usePaperInsight(paper.id, props.insights)
   const ready = insight.ready
   const briefState = ready && 'brief' in ready ? ready : null
   const brief = briefState?.brief
   const articleRef = React.useRef<HTMLElement>(null)
+  const redactionRef = React.useRef<HTMLDivElement>(null)
+  const redactedContent = React.useMemo(() => ({}), [details.data, ready, tab])
+  useLineRedaction(articleRef, redactionRef, { covered: props.phase !== 'closing', reveal: revealed, content: redactedContent })
   const closing = props.phase === 'closing'
   const { morphFrom } = props
 
@@ -91,7 +97,8 @@ export default function ArchiveDetail(props: {
       <button type="button" className="paper-archive-detail-back" onClick={props.onClose}>
         <ArrowLeftOutlined aria-hidden="true" /><span>返回档案</span><kbd>Esc</kbd>
       </button>
-      <article ref={articleRef} className={`paper-archive-detail${revealed ? ' revealed' : ''}`} aria-label="论文档案" aria-busy={!revealed || details.isPending}>
+      <article ref={articleRef} className="paper-archive-detail" aria-label="论文档案" aria-busy={!revealed || details.isPending}>
+        <div ref={redactionRef} className="paper-archive-redactions" aria-hidden="true" />
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.month}</span>
           <h2 className="paper-archive-reveal" style={{ '--i': 0 } as React.CSSProperties} title={title}>{title}</h2>

@@ -60,6 +60,15 @@ import {
   type ArchivePaper,
   type ArchiveShelf
 } from './archiveShelves'
+import {
+  GLASS_FEATHER,
+  SCAN_CORNERS,
+  SCAN_FACE_Z,
+  SCAN_FROM,
+  SCAN_TO,
+  decryptionFrame,
+  type DecryptionFrame
+} from './archiveDecryption'
 
 // Scene, model, materials and lighting follow RhineLabUI (MIT, Copyright (c)
 // 2026 LBEILC, https://github.com/LBEILC/RhineLabUI): src/scene.ts and
@@ -93,8 +102,9 @@ const LATE_FRAME_MS = 23
 const MAX_PIXEL_RATIO = 1.25
 const MAX_DRAWING_PIXELS = 3.3e6
 const MIN_RESOLUTION_SCALE = 0.55
-// Once a paper is open nothing moves, so the scene is drawn at the display's own density (it
-// only redraws on change); the browse limits return as soon as it closes.
+// Once a paper is open nothing moves and the scene only redraws on change, so it is drawn at
+// twice the display's density when that fits (the browser averages each 2×2 block: smoother
+// edges and text) and at the display's own density otherwise. Browse limits return on close.
 const DETAIL_PIXEL_RATIO = 2
 const MAX_DETAIL_PIXELS = 8.3e6
 const ENTRY_DURATION = 4.35
@@ -118,8 +128,6 @@ const DETAIL_DIRECTION = new Vector3(-0.277, 0.238, 0.931).normalize()
 const DETAIL_DISTANCE = 72
 const DETAIL_SPAN = 5.9
 const DETAIL_SCREEN = { x: 550 / 1920, y: 560 / 1080 }
-// The original holds the decryption for several seconds; the archive keeps it short.
-const DECRYPT_SECONDS = 0.9
 const CLOSE_SECONDS = 0.32
 const PAGE_HEIGHT = 3.15
 const PAGE_MAX_WIDTH = 4.5
@@ -154,6 +162,8 @@ export interface PaperArchiveSceneOptions {
   onDetailPhase?(phase: DetailPhase): void
   /** Where the fully extracted card will sit, in container pixels, so the panel can match its height. */
   onDetailFrame?(frame: DetailFrame): void
+  /** The glass has started to clear: the panel's text redaction follows it. */
+  onDecryptReveal?(): void
 }
 
 export interface DetailFrame {
@@ -295,6 +305,8 @@ export class PaperArchiveScene {
     canvas.className = 'paper-archive-canvas'
     canvas.setAttribute('aria-hidden', 'true')
     options.container.appendChild(canvas)
+    this.inspection = this.createInspection()
+    options.container.appendChild(this.inspection.root)
 
     // Studio illumination from RhineLabUI's archive-lighting.ts (baseline look).
     const pmrem = new PMREMGenerator(this.renderer)
@@ -384,6 +396,7 @@ export class PaperArchiveScene {
       this.hero!.position.set(0, -200, 0)
       await this.renderer.compileAsync(this.scene, this.camera)
       if (this.disposed) return
+      if (this.resolutionDirty) this.flushResolution()
       this.renderer.render(this.scene, this.camera)
       this.hero!.visible = false
       this.loaded = true
@@ -436,8 +449,8 @@ export class PaperArchiveScene {
         '#include <alphamap_fragment>',
         [
           '#include <alphamap_fragment>',
-          'float front = mix(1.3, -0.3, uReveal);',
-          'diffuseColor.a *= smoothstep(front - 0.05, front + 0.05, vCard.y + 0.22 * (vCard.x - 0.5));'
+          `float front = mix(1.12, ${(-0.12 - GLASS_FEATHER).toFixed(3)}, uReveal);`,
+          `diffuseColor.a *= smoothstep(front - ${GLASS_FEATHER.toFixed(3)}, front + ${GLASS_FEATHER.toFixed(3)}, vCard.y + 0.22 * (vCard.x - 0.5));`
         ].join('\n')
       )
     }
@@ -509,21 +522,23 @@ export class PaperArchiveScene {
         'uniform vec3 uScanColor;',
         'varying float vPanelHeight;',
         'varying float vPanelX;',
-        // The wipe front runs diagonally, top first, from above the card to below it.
+        // The feathered front (RhineLabUI glass-reveal.ts) runs slightly diagonally, top first.
         'float paperArchiveEdge() { return vPanelHeight + 0.22 * (vPanelX - 0.5); }',
-        'float paperArchiveFront() { return mix(1.3, -0.3, uReveal); }',
+        `float paperArchiveFront() { return mix(1.12, ${(-0.12 - GLASS_FEATHER).toFixed(3)}, uReveal); }`,
         shader.fragmentShader
       ].join('\n')
         .replace('#include <color_fragment>', [
           '#include <color_fragment>',
-          'float clearAmount = smoothstep(paperArchiveFront() - 0.05, paperArchiveFront() + 0.05, paperArchiveEdge());',
+          `float clearAmount = smoothstep(paperArchiveFront() - ${GLASS_FEATHER.toFixed(3)}, paperArchiveFront() + ${GLASS_FEATHER.toFixed(3)}, paperArchiveEdge());`,
           'vec3 frostShade = mix(vec3(0.40, 0.30, 0.20), vec3(1.0, 0.98, 0.94), smoothstep(0.1, 1.0, vPanelHeight));',
           'diffuseColor.rgb *= mix(frostShade, vec3(0.8, 0.78, 0.74), clearAmount);'
         ].join('\n'))
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.03, clearAmount);')
         .replace('#include <emissivemap_fragment>', [
           '#include <emissivemap_fragment>',
-          'float scanLine = exp(-pow((paperArchiveEdge() - paperArchiveFront()) / 0.012, 2.0)) * step(0.001, uReveal) * step(uReveal, 0.999);',
+          'float scanDistance = paperArchiveEdge() - paperArchiveFront();',
+          // A sharp line with a soft glow trailing into the frost.
+          'float scanLine = (exp(-pow(scanDistance / 0.011, 2.0)) + 0.32 * exp(-pow(scanDistance / 0.07, 2.0))) * step(0.001, uReveal) * step(uReveal, 0.999);',
           'totalEmissiveRadiance += uScanColor * scanLine * 1.6;'
         ].join('\n'))
     }
@@ -591,7 +606,9 @@ export class PaperArchiveScene {
   }
 
   private detailPixelRatio(width: number, height: number): number {
-    return Math.min(window.devicePixelRatio || 1, DETAIL_PIXEL_RATIO, Math.sqrt(MAX_DETAIL_PIXELS / (width * height)))
+    const native = Math.min(window.devicePixelRatio || 1, DETAIL_PIXEL_RATIO)
+    const doubled = native * 2
+    return doubled * doubled * width * height <= MAX_DETAIL_PIXELS ? doubled : Math.min(native, Math.sqrt(MAX_DETAIL_PIXELS / (width * height)))
   }
 
   get detailOpen(): boolean {
@@ -664,6 +681,11 @@ export class PaperArchiveScene {
     if (this.phase === phase) return
     const sharp = phase === 'open' || this.phase === 'open'
     this.phase = phase
+    if (phase === 'decrypting') {
+      this.decryptElapsed = 0
+      this.revealAnnounced = false
+    }
+    if (phase !== 'decrypting') this.decryptFrame = null
     if (sharp) this.applyResolution()
     this.options.onDetailPhase?.(phase)
   }
@@ -785,6 +807,7 @@ export class PaperArchiveScene {
     for (const mesh of this.surfaces.values()) mesh.dispose()
     for (const item of this.disposables) item.dispose()
     this.pageTexture?.dispose()
+    this.inspection.root.remove()
     this.renderer.dispose()
     this.renderer.forceContextLoss()
     this.renderer.domElement.remove()
@@ -834,6 +857,8 @@ export class PaperArchiveScene {
   private resize(): void {
     const { clientWidth: width, clientHeight: height } = this.options.container
     if (!width || !height) return
+    // Applied at the next frame: resizing the drawing buffer clears it, and a cleared canvas
+    // composited before the next render is the archive's occasional flash.
     this.applyResolution()
     this.cameraKey = ''
     this.updateCamera()
@@ -900,6 +925,74 @@ export class PaperArchiveScene {
   private readonly cameraDetailAim = new Vector3()
   private readonly frustumMatrix = new Matrix4()
 
+  private decryptElapsed = 0
+  private decryptFrame: DecryptionFrame | null = null
+  private revealAnnounced = false
+  private readonly inspection: { root: SVGSVGElement; lines: SVGPathElement; corners: SVGRectElement[]; point: SVGCircleElement }
+  private inspectionShown = false
+  private readonly inspectPoint = new Vector3()
+
+  /** RhineLabUI's inspection marks (inspection-overlay.ts): drawn in screen space over the card face. */
+  private createInspection(): { root: SVGSVGElement; lines: SVGPathElement; corners: SVGRectElement[]; point: SVGCircleElement } {
+    const svg = (name: string): SVGElement => document.createElementNS('http://www.w3.org/2000/svg', name)
+    const root = svg('svg') as SVGSVGElement
+    root.setAttribute('class', 'paper-archive-inspection')
+    root.setAttribute('aria-hidden', 'true')
+    const lines = svg('path') as SVGPathElement
+    const corners = SCAN_CORNERS.map(() => {
+      const corner = svg('rect') as SVGRectElement
+      corner.setAttribute('width', '8')
+      corner.setAttribute('height', '8')
+      return corner
+    })
+    const point = svg('circle') as SVGCircleElement
+    point.setAttribute('r', '2.4')
+    root.append(lines, ...corners, point)
+    return { root, lines, corners, point }
+  }
+
+  private projectFace(x: number, y: number): [number, number] {
+    const { clientWidth: width, clientHeight: height } = this.options.container
+    this.inspectPoint.set(x, y, SCAN_FACE_Z).applyMatrix4(this.hero!.matrixWorld).project(this.camera)
+    return [(this.inspectPoint.x + 1) * width / 2, (1 - this.inspectPoint.y) * height / 2]
+  }
+
+  private drawInspection(): void {
+    const frame = this.phase === 'decrypting' ? this.decryptFrame : null
+    const { root, lines, corners, point } = this.inspection
+    if (!frame || !this.hero || !(frame.intervals.length || frame.markers > 0 || frame.point > 0)) {
+      if (this.inspectionShown) {
+        root.style.opacity = '0'
+        this.inspectionShown = false
+      }
+      return
+    }
+    const { clientWidth: width, clientHeight: height } = this.options.container
+    this.hero.updateMatrixWorld()
+    root.setAttribute('viewBox', `0 0 ${width} ${height}`)
+    root.style.opacity = '1'
+    this.inspectionShown = true
+    const along = (t: number): [number, number] => this.projectFace(
+      SCAN_FROM[0] + (SCAN_TO[0] - SCAN_FROM[0]) * t,
+      SCAN_FROM[1] + (SCAN_TO[1] - SCAN_FROM[1]) * t
+    )
+    lines.setAttribute('d', frame.intervals.map(([a, b]) => {
+      const [ax, ay] = along(a)
+      const [bx, by] = along(b)
+      return `M${ax.toFixed(1)} ${ay.toFixed(1)}L${bx.toFixed(1)} ${by.toFixed(1)}`
+    }).join(''))
+    corners.forEach((corner, index) => {
+      const [x, y] = this.projectFace(...SCAN_CORNERS[index]!)
+      corner.setAttribute('x', (x - 4).toFixed(1))
+      corner.setAttribute('y', (y - 4).toFixed(1))
+      corner.style.opacity = String(frame.markers)
+    })
+    const [cx, cy] = along(0.5)
+    point.setAttribute('cx', cx.toFixed(1))
+    point.setAttribute('cy', cy.toFixed(1))
+    point.style.opacity = String(frame.point)
+  }
+
   /** Diagnostics for testers (Ctrl+Shift+F on the archive page). */
   getStats(): { fps: number; pixelRatio: number; resolutionScale: number; drawn: number; triangles: number; gpu: string } {
     const now = performance.now()
@@ -916,14 +1009,35 @@ export class PaperArchiveScene {
     }
   }
 
-  /** Device pixels are capped by ratio and by total count, then scaled down further if frames run late. */
+  /**
+   * Request a drawing-buffer change. Resizing the buffer clears it, so the change is made at the
+   * start of a frame that renders right after; changing it between frames (a resize, closing the
+   * detail from a key press, or the adaptive step after a render) let a blank canvas reach the
+   * screen for a frame, which was the archive's occasional flash.
+   */
   private applyResolution(): void {
+    this.resolutionDirty = true
+    this.wake()
+  }
+
+  private resolutionDirty = true
+
+  /** Device pixels are capped by ratio and by total count, then scaled down further if frames run late. */
+  private flushResolution(): void {
+    this.resolutionDirty = false
     const { clientWidth: width, clientHeight: height } = this.options.container
     if (!width || !height) return
+    const open = this.phase === 'open'
     const base = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO, Math.sqrt(MAX_DRAWING_PIXELS / (width * height)))
-    this.renderer.setPixelRatio(this.phase === 'open' ? this.detailPixelRatio(width, height) : Math.max(0.5, base * this.resolutionScale))
-    this.renderer.setSize(width, height, false)
+    const ratio = open ? this.detailPixelRatio(width, height) : Math.max(0.5, base * this.resolutionScale)
+    // The open card is static: the glass behind it can be sampled at full resolution too.
+    this.renderer.transmissionResolutionScale = open ? 1 : 0.5
+    if (ratio !== this.renderer.getPixelRatio()) this.renderer.setPixelRatio(ratio)
+    const size = this.renderer.getSize(this.rendererSize)
+    if (size.x !== width || size.y !== height) this.renderer.setSize(width, height, false)
   }
+
+  private readonly rendererSize = new Vector2()
 
   private wake(): void {
     if (this.disposed || this.frame || document.hidden) return
@@ -960,12 +1074,16 @@ export class PaperArchiveScene {
     this.lastPresented = now
     const dt = Math.min(Math.max(0, elapsedMs) / 1000, 0.05)
     this.clock += dt
+    if (this.resolutionDirty) this.flushResolution()
     const motion = this.loaded && this.update(dt)
+    // A phase change in update() may ask for a new buffer: apply it before this frame's render.
+    if (this.resolutionDirty) this.flushResolution()
+    this.drawInspection()
     this.renderer.render(this.scene, this.camera)
     this.presentedTimes.push(now)
     if (this.presentedTimes.length > 240) this.presentedTimes.splice(0, this.presentedTimes.length - 240)
     if (continuous && period < LATE_FRAME_MS - 1) this.adaptResolution(elapsedMs, Math.max(LATE_FRAME_MS, stride * period * 1.5), now)
-    if (motion || this.idleGain > 0.001 || this.idleEligible()) {
+    if (motion || this.resolutionDirty || this.idleGain > 0.001 || this.idleEligible()) {
       this.frame = requestAnimationFrame(this.tick)
       return
     }
@@ -1089,7 +1207,7 @@ export class PaperArchiveScene {
       this.lifts.set(selectedKey, { value: PREVIEW_LIFT + (closing.lift - PREVIEW_LIFT) * remaining, velocity: 0 })
       this.detail = closing.detail * remaining
       this.reveal = closing.reveal * remaining
-      this.heroUniforms.uReveal.value = smooth(this.reveal)
+      this.heroUniforms.uReveal.value = this.reveal
       if (progress === 1) this.finishClose()
       return true
     }
@@ -1104,8 +1222,21 @@ export class PaperArchiveScene {
     if (this.targetDetail) {
       if (this.phase === 'opening' && this.detail > 0.6 && lift > 3) this.setPhase('decrypting')
       if (this.phase === 'decrypting') {
-        this.reveal = reduced ? 1 : Math.min(1, this.reveal + dt / DECRYPT_SECONDS)
-        if (this.reveal >= 1) this.setPhase('open')
+        // RhineLabUI's sequence: corner marks and a diagonal that grows in from both ends, holds,
+        // draws back into a point, then the glass clears from the top.
+        this.decryptElapsed += dt
+        const frame = reduced ? null : decryptionFrame(this.decryptElapsed)
+        this.decryptFrame = frame
+        // Re-entry while refrosting continues from the displayed glass.
+        this.reveal = frame ? Math.max(this.reveal, frame.clarity) : 1
+        if (!this.revealAnnounced && (!frame || frame.clarity > 0)) {
+          this.revealAnnounced = true
+          this.options.onDecryptReveal?.()
+        }
+        if (!frame || frame.phase === 'clear') {
+          this.reveal = 1
+          this.setPhase('open')
+        }
         moving = true
       }
     } else if (this.reveal > 0) {
@@ -1114,7 +1245,7 @@ export class PaperArchiveScene {
       if (this.reveal < 0.001) this.reveal = 0
       moving = true
     }
-    this.heroUniforms.uReveal.value = smooth(this.reveal)
+    this.heroUniforms.uReveal.value = this.reveal
     const pulseTarget = this.targetDetail ? 0 : 1
     this.pulseGain += (pulseTarget - this.pulseGain) * (1 - Math.exp(-dt * 8))
     if (Math.abs(pulseTarget - this.pulseGain) < 1e-3) this.pulseGain = pulseTarget
