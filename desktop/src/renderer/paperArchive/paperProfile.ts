@@ -57,7 +57,21 @@ function splitBlocks(markdown: string): Block[] {
 }
 
 /** Strip Markdown and HTML decoration down to readable text. */
-export function cleanInline(text: string): string {
+export function cleanInline(text: string, preserveLinks = false): string {
+  const destinations: string[] = []
+  if (preserveLinks) {
+    // Autolinks look like HTML tags to the generic cleaner. Keep their destinations;
+    // descriptive Markdown and HTML links also need the URL in an abstract.
+    text = text.replace(/<(https?:\/\/[^<>\s]+)>/giu, '$1')
+      .replace(/<a\b[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/giu,
+        (_, url: string, label: string) => label.trim() === url ? url : `${label} (${url})`)
+      .replace(/(?<!!)\[([^\]]*)\]\((https?:\/\/[^\s)]+)(?:\s+["'][^"']*["'])?\)/giu,
+        (_, label: string, url: string) => !label.trim() || label.trim() === url ? url : `${label} (${url})`)
+    text = text.replace(/https?:\/\/[^\s<>]+/giu, (url) => {
+      destinations.push(url)
+      return `\uE000${destinations.length - 1}\uE001`
+    })
+  }
   return text
     .replace(/<sup>.*?<\/sup>/giu, '')
     // Real tags only, so a bare `<` in maths cannot swallow the rest of the paragraph.
@@ -67,6 +81,7 @@ export function cleanInline(text: string): string {
     .replace(/[*_`]{1,3}([^*_`]+)[*_`]{1,3}/gu, '$1')
     .replace(/\s+/gu, ' ')
     .trim()
+    .replace(/\uE000(\d+)\uE001/gu, (_, index: string) => destinations[Number(index)] ?? '')
 }
 
 function firstTitle(blocks: Block[]): string | null {
@@ -92,7 +107,7 @@ function abstractOf(blocks: Block[]): string | null {
       if (parts.join(' ').length > MAX_ABSTRACT) break
     }
   }
-  const text = cleanInline(parts.join('\n\n'))
+  const text = cleanInline(parts.join('\n\n'), true)
   if (!text) return null
   return text.length > MAX_ABSTRACT ? `${text.slice(0, MAX_ABSTRACT).trimEnd()}…` : text
 }

@@ -113,7 +113,7 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - RhineLabUI（MIT，LBEILC）來源與許可見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`。GLB 僅五個外殼網格，`?inline`／`parseAsync`，CSP 不變。**不改 `archiveMotion.ts` 已校準曲線**；手感調整限 Scene。
 - 本地月份、新月新文優先；長月份按 `ceil(n/5)` 分列，每列 4–8 篇，列／行循環並記住論文 ID。完成原色、處理中主色、部分完成琥珀、失敗紅色。搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦、Enter 選首項、Tab 選結果，IME／長按 Enter 不誤觸。搜尋取消慣性，WebGL 失敗仍可搜尋進閱讀器。
 - 渲染保留單一 rAF、約 60 fps、牆鐘待機、失焦／隱藏停渲染、reduced-motion 與 GPU 釋放。DPR ≤1.25、≤3.3M 像素，transmission 半解析度、陰影 1024；6 幀超時降解析度 15%（下限 0.55），穩定 240 幀且 8 秒未降才回升 8%。保留解析拾取、剔除、共享 instanceMatrix、compileAsync 暖機；途經選中卡即發漣漪（最多 6），升起 4.2／回落 4.5。不得恢復「流暢模式」、保存項或材質降檔。
-- 抽取沿用單一 hero、4.05 升起、原有 detail 鏡頭；鏡頭 >0.6、升起 >3 後進入解密（2026-10-10，Claude）：`archiveDecryption.ts` 移植 RhineLabUI decryption／glass-reveal／document-decryption 曲線，以 2.4 倍速播放（約 2.3 秒，原版互動 3.6 秒）：四角標記與對角線兩端長入、相接、回縮成點（Scene 內 SVG `.paper-archive-inspection`，按卡面模型座標投影），玻璃以 0.12 羽化前緣自上而下清除並帶主色掃描光；清除開始時 `onDecryptReveal` 通知頁面，`lineRedaction.ts` 對 `.paper-archive-reveal` 內每一行文字逐行畫墨條並按閱讀順序向右滑出（0.95 秒）。減弱動畫直接完成且不畫墨條。首頁 1600px／LRU 6，共享 document 查詢；PDF 首頁、文獻資訊與 AI 解讀按需載入，切文獻／卸載取消晚到結果與訂閱。
+- 抽取沿用單一 hero、4.05 升起、原有 detail 鏡頭；鏡頭 >0.6、升起 >3 後進入解密（2026-10-10，Claude）：`archiveDecryption.ts` 移植 RhineLabUI decryption／glass-reveal／document-decryption 曲線，以 2.4 倍速播放（約 2.3 秒，原版互動 3.6 秒）：四角標記與對角線兩端長入、相接、回縮成點（Scene 內 SVG `.paper-archive-inspection`，按卡面模型座標投影），玻璃以 0.12 羽化前緣自上而下清除並帶主色掃描光；清除開始時 `onDecryptReveal` 通知頁面，`lineRedaction.ts` 對 `.paper-archive-reveal` 內每一行文字逐行畫墨條並按閱讀順序向右滑出（0.475 秒）。減弱動畫直接完成且不畫墨條。首頁 1600px／LRU 6，共享 document 查詢；PDF 首頁、文獻資訊與 AI 解讀按需載入，切文獻／卸載取消晚到結果與訂閱。
 - 互動契約：Enter 忽略 repeat，抽出／解密中不進閱讀，完全展開後再次 Enter 或點 hero 才進閱讀；「打开阅读」保留直接入口。移動 ≥8px 後不得視為點擊；pointercancel／lostpointercapture 不啟動點擊。詳情分頁左右／Home／End 導航並移焦，正文方向鍵保留捲動；僅文庫瀏覽區方向鍵換卡。瀏覽時 Esc 先收搜尋；抽出期間檢索沿橫線收起並 inert（結果清單同時關閉），Esc 直接關詳情並移焦回文庫。
 - `closing` 保留舊文獻、封面與模型，面板 180ms 淡出且 inert，模型／鏡頭 320ms 收回再卸載。換卡只保留一個待選目標，方向輸入累積、搜尋覆蓋；目標移除即取消，收回中重開同篇從當前姿態接續並清除待選。減弱動畫直接完成收回；不新增模型副本、動畫迴圈、IPC 或持久化格式。
 - 版面與入場（2026-10-09 晚，Claude）：入場以 `entryScanTime` 把原版掃描波去程與回程之間約 1.3 秒的平板段壓縮為約 0.25 秒，肩部按真實時間在滑入結束時升起，`archiveMotion.ts` 曲線不變。瀏覽鏡頭以 `ARRAY_SCREEN_SHIFT` 把選中卡移向左下（-4%／10% 視口）；瀏覽面板與詳情面板共用 `--archive-panel-left` 左緣。Scene 以 `onDetailFrame` 回報抽出卡最終的投影範圍，頁面寫入 `--archive-detail-top/height`；詳情面板頂端與左側品牌對齊（FILE NO. 對 PAPER ARCHIVE、標題對「文库」），底端到卡片下緣，各分頁高度固定，只有分頁內容捲動；卡片下緣以下由 `.paper-archive-floor-veil` 隨鏡頭轉向完全遮蓋陣列；詳情內容由瀏覽面板範圍以 clip-path 揭露／收回；上下裝飾框線已依使用者要求移除。返回按鈕移到卡片下方。詳情完全展開（`open`）後渲染在 ≤8.3M 像素內用 2 倍顯示器 DPR（瀏覽器按 2×2 平均，邊緣與文字更平滑），放不下則用原生 DPR（≤2），透射亦改全解析度；靜止時不重繪，收回即恢復瀏覽上限。繪圖緩衝區變更一律經 `applyResolution` 標記、於下一幀開頭 `flushResolution` 後立即渲染：此前在幀間（ResizeObserver、按鍵收回詳情、渲染後的自適應降級）改尺寸會清空畫布並以空白幀合成，即文庫偶發閃爍的原因；首頁貼圖按展開後的設備像素高度重採樣，避免 1600px 原圖跨 mip 取樣發糊。
@@ -135,3 +135,10 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 1. 詳情面板改為固定高度後，720p 下分頁內容約剩 130px。v2 檔案卡標題、證據基礎／檢驗方式已限制為 2 行（完整內容在 tooltip），若你覺得資訊密度仍過高，可把「作者／單位」移入概覽分頁。
 2. `stretchPanel` 依賴瀏覽面板在 `onDetailPhase('opening')` 時仍掛載；如果之後調整詳情掛載時機，請保留這一捕捉點。
 3. 減弱動畫時 clip-path 揭露、檢索收合全部跳過。
+
+### 摘要連結與逐行遮罩修復
+
+- 摘要保留 HTTP(S) 自動連結、Markdown／HTML 連結目標與 URL 下劃線；以純文字展示，長網址可換行。標題／作者等既有清理不變。
+- 墨條遮蓋所有可見文字，包括不足半行的底部片段；解密前捲動、尺寸與字體改變會重新量測。逐行退場總時長由 0.95 秒減半為 0.475 秒，閱讀順序曲線與卡片解密時間不變。
+- 本輪針對性驗證：paperProfile／archiveDecryption 共 8 項通過；無頭 Chrome 對長摘要部分末行、捲動及改寬三種量測情境均無未遮蓋文字。這是瀏覽器量測驗證，不代替實際 Electron 全流程視覺驗收。
+- 四 bundle／Utility smoke 與本地打包內建門禁通過，更新使用者指定的 `release-artifacts/mv124gkn-2672-f431fb00/program`；EXE／ASAR／ZIP 雜湊符合外層 manifest。預設 Electron 下載／解壓兩次停滯，暫時以本地已安裝同版 44.1.1 distribution 完成原發布管線，未改專案打包設定或門禁；失敗暫存保留。舊 `mv144njz-44120-a6636715/program` 被占用而清理失敗，原管線保留恢復目錄，未強制退出舊程式。

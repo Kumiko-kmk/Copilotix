@@ -36,6 +36,13 @@ const TRANSLATED = [
 ].join('\n\n')
 
 describe('paper profile', () => {
+  it('preserves abstract link destinations in autolink, Markdown and HTML forms', () => {
+    const url = 'https://github.com/hojonathanho/diffusion'
+    for (const link of [`<${url}>`, `[代码](${url})`, `<a href="${url}">代码</a>`, `<${url}/some_code_here>`]) {
+      const translated = `# 扩散模型\n\n## 摘要\n\n我们展示了图像合成结果，实现可见 ${link}。\n\n## 引言`
+      expect(extractPaperProfile('', translated).translatedAbstract).toContain(link.includes('some_code_here') ? `${url}/some_code_here` : url)
+    }
+  })
   it('reads title, authors, abstracts, keywords and top-level sections', () => {
     const profile = extractPaperProfile(ORIGINAL, TRANSLATED)
     expect(profile.title).toBe('Attention Is All You Need')

@@ -33,6 +33,19 @@ export function useLineRedaction(
     // No cleanup: the bars must survive the render in which `reveal` turns true, and they are
     // replaced on the next measurement or removed with the panel.
     drawCovers(article, host)
+    // Keep the bars aligned when the viewport, fonts or scroll position change while covered.
+    let active = true
+    const redraw = (): void => { if (active) drawCovers(article, host) }
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(redraw)
+    observer?.observe(article)
+    article.querySelectorAll<HTMLElement>(TARGETS).forEach((target) => observer?.observe(target))
+    article.addEventListener('scroll', redraw, true)
+    void document.fonts?.ready.then(redraw)
+    return () => {
+      active = false
+      observer?.disconnect()
+      article.removeEventListener('scroll', redraw, true)
+    }
   }, [root, layer, covered, reveal, content])
 
   React.useLayoutEffect(() => {
@@ -74,10 +87,12 @@ function drawCovers(article: HTMLElement, host: HTMLElement): void {
         if (!rect.width || !rect.height) continue
         const top = Math.max(rect.top, bounds.top)
         const bottom = Math.min(rect.bottom, bounds.bottom)
-        if (bottom - top < rect.height * 0.5) continue
-        const x = rect.left - origin.left
+        // Even a fraction of the last line is visible and must receive a cover.
+        if (bottom <= top) continue
+        const x = Math.max(rect.left, bounds.left) - origin.left
         const y = top - origin.top
         const right = Math.min(rect.right, bounds.right) - origin.left
+        if (right <= x) continue
         const lineBottom = bottom - origin.top
         const line = own.find((entry) => Math.abs(entry.y - y) < 6)
         if (line) {

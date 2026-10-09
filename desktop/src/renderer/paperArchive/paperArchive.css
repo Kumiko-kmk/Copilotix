@@ -248,7 +248,7 @@
   padding: 2px 0; border: 0; border-bottom: 1px solid currentColor; background: transparent; color: var(--archive-accent); font-size: 12px; cursor: pointer;
 }
 .paper-archive-abstract { margin: 0; color: var(--text); font-size: 14px; line-height: 1.85; text-align: justify; user-select: text; }
-.paper-archive-translated-abstract { text-indent: 2em; }
+.paper-archive-translated-abstract { text-indent: 2em; overflow-wrap: anywhere; }
 .paper-archive-outline { margin: 0; padding-left: 0; list-style: none; counter-reset: section; }
 .paper-archive-outline li { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px dashed color-mix(in srgb, var(--ink) 14%, transparent); color: var(--text); font-size: 13.5px; counter-increment: section; }
 .paper-archive-outline li::before { min-width: 22px; color: var(--muted); content: counter(section, decimal-leading-zero); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.9; }

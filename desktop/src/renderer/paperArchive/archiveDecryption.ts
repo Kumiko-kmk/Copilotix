@@ -94,7 +94,7 @@ export function decryptionFrame(elapsed: number): DecryptionFrame {
 export const GLASS_FEATHER = 0.12
 
 /** Text redaction: each line's ink slides out to the right, top lines first. */
-export const REDACTION_SECONDS = 0.95
+export const REDACTION_SECONDS = 0.475
 const REDACTION_STAGGER = 0.22
 
 /** Progress of one ink bar (0 covering, 1 gone) for overall progress `progress` of `count` bars. */
