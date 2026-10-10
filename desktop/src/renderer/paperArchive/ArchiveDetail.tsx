@@ -5,7 +5,7 @@ import type { DocumentDetails } from '@shared/ipcSchemas'
 import type { PaperInsight, PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
 import type { ArchivePaper } from './archiveShelves'
 import type { DetailPhase } from './PaperArchiveScene'
-import { extractPaperProfile } from './paperProfile'
+import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from './paperProfile'
 import BriefContent, { type BriefTab } from './BriefContent'
 import { useLineRedaction } from './lineRedaction'
 
@@ -104,8 +104,8 @@ export default function ArchiveDetail(props: {
     return () => { cancelled = true }
   }, [data, profile, paper.id, paper.originalName, paper.displayName, onPage])
 
-  const title = profile?.title ?? paper.displayName
-  const subtitle = profile?.translatedTitle?.replace(/\.pdf\s*$/iu, '').trim() ?? ''
+  const title = archiveTitle(paper.displayName)
+  const subtitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown), [details.data?.translatedMarkdown])
   const abstract = profile?.translatedAbstract
   // The count beside a tab says how much is behind it before switching.
   const tabs: Array<[Tab, string, number?]> = brief

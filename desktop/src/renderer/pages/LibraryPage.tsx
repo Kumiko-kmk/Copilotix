@@ -6,7 +6,7 @@ import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight
 import type { LibraryCategories } from '@shared/libraryCategories'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../paperArchive/PaperArchiveScene'
 import ArchiveDetail, { type ArchiveMorph } from '../paperArchive/ArchiveDetail'
-import { extractPaperProfile } from '../paperArchive/paperProfile'
+import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from '../paperArchive/paperProfile'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
 import { statusLabels } from '../documentStatus'
 import '../paperArchive/paperArchive.css'
@@ -199,7 +199,7 @@ export default function LibraryPage(props: {
   const navigate = React.useCallback((axis: 'lane' | 'row', direction: number) => sceneRef.current?.navigate(axis, direction), [])
   const shelf = shelfAt(shelves, selection.cell.lane)
   const paper = selection.paper
-  const displayTitle = paper?.displayName.replace(/\.pdf\s*$/iu, '').trim() ?? ''
+  const displayTitle = paper ? archiveTitle(paper.displayName) : ''
   const paperIndex = paperIndexAt(shelves, selection.cell)
   const shelfIndex = shelves.length ? wrap(selection.cell.lane, shelves.length) : 0
   const empty = shelves.length === 0
@@ -438,10 +438,7 @@ function BrowseTranslatedTitle({ paper }: { paper: ArchivePaper }): React.JSX.El
     enabled: settledId === paper.id,
     staleTime: 30_000
   })
-  const translatedTitle = React.useMemo(() => {
-    const markdown = details.data?.translatedMarkdown
-    return markdown ? extractPaperProfile('', markdown).translatedTitle?.replace(/\.pdf\s*$/iu, '').trim() ?? '' : ''
-  }, [details.data?.translatedMarkdown])
+  const translatedTitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown), [details.data?.translatedMarkdown])
   return <p className="paper-archive-translated-title">{translatedTitle || '\u00a0'}</p>
 }
 

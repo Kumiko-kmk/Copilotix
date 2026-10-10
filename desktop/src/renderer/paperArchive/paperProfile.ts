@@ -29,6 +29,19 @@ const SECTION_NUMBER = /^(?:\d+|[IVXLC]+)(?:\.\d+)+[.\s]/u
 const MAX_ABSTRACT = 1600
 const MAX_SECTIONS = 12
 
+/**
+ * The titles the archive shows for a paper. The browse panel and the detail header must use these
+ * same two functions: the header's titles glide out of the panel's, and any difference in text
+ * appears as the title being redrawn mid-transition.
+ */
+export function archiveTitle(displayName: string): string {
+  return displayName.replace(/\.pdf\s*$/iu, '').trim()
+}
+
+export function archiveTranslatedTitle(translatedMarkdown: string | null | undefined): string {
+  return translatedMarkdown ? extractPaperProfile('', translatedMarkdown).translatedTitle?.replace(/\.pdf\s*$/iu, '').trim() ?? '' : ''
+}
+
 export function extractPaperProfile(markdown: string, translatedMarkdown = ''): PaperProfile {
   const source = splitBlocks(markdown)
   const translated = splitBlocks(translatedMarkdown)

@@ -112,7 +112,9 @@
    one) would otherwise move the whole panel. */
 .paper-archive-summary dd { display: -webkit-box; height: calc(1.7em * 3); overflow: hidden; overflow-wrap: anywhere; white-space: normal; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 3; user-select: text; }
 /* Back from the detail view: the titles have just glided home, so the panel fades in as one. */
-.paper-archive-panel.returning { animation: paper-archive-fade .22s var(--ease-out) both; }
+/* Back from the detail view: the titles are already here (they glided back and the header held
+   them until this panel mounted), so they appear at once; only the rest fades in. */
+.paper-archive-panel.returning > :not(.paper-archive-title, .paper-archive-translated-title) { animation: paper-archive-fade .22s var(--ease-out) both; }
 .paper-archive-panel.returning :is(.paper-archive-title, .paper-archive-arrive) { animation: none; }
 
 .paper-archive-action {
@@ -188,11 +190,14 @@
 /* ───────── Extracted paper (RhineLabUI detail view: masks clear as the cover decrypts) ───────── */
 .paper-archive-actions { display: flex; flex-wrap: wrap; gap: 8px 22px; }
 .paper-archive-veil { transition: opacity .3s var(--ease-out); }
-.paper-archive-page.detail-open .paper-archive-veil {
+/* Gradients cannot transition, so the detail wash is a layer that crossfades in and out. */
+.paper-archive-veil::after {
+  position: absolute; inset: 0; content: ""; opacity: 0; transition: opacity .3s var(--ease-out);
   background:
     linear-gradient(90deg, transparent 38%, color-mix(in srgb, var(--archive-bg) 80%, transparent) 54%, color-mix(in srgb, var(--archive-bg) 94%, transparent) 70%),
     linear-gradient(0deg, color-mix(in srgb, var(--archive-bg) 70%, transparent) 0, transparent 18%);
 }
+.paper-archive-page.detail-open .paper-archive-veil::after { opacity: 1; }
 /* Extracted paper: the array below the card is covered completely, fading in while the camera turns. */
 .paper-archive-floor-veil {
   position: absolute; z-index: 1; top: calc(var(--archive-detail-top) + var(--archive-detail-height) - 10px); right: 0; bottom: 0; left: 0;
@@ -201,14 +206,13 @@
 }
 .paper-archive-page.detail-open .paper-archive-floor-veil { opacity: 1; transition: opacity .55s var(--ease-out) .3s; }
 .paper-archive-page[data-detail-phase="closing"] .paper-archive-floor-veil { opacity: 0; transition: opacity .2s ease; }
-.paper-archive-detail-layer {
-  position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  opacity: 1; transition: opacity .18s var(--ease-out);
-}
-.paper-archive-detail-layer.closing { opacity: 0; }
+/* The layer itself never fades: the titles in it take over from the browse panel's on the same
+   pixels, and hand them back on close. Everything else fades on its own (body in ArchiveDetail). */
+.paper-archive-detail-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
 .paper-archive-detail-layer > * { pointer-events: auto; }
 .paper-archive-detail-layer.closing > * { pointer-events: none; }
-@starting-style { .paper-archive-detail-layer { opacity: 0; } }
+.paper-archive-detail header .paper-archive-path { animation: paper-archive-fade .18s var(--ease-out) both; }
+.paper-archive-detail-layer.closing :is(.paper-archive-detail-back, .paper-archive-detail header .paper-archive-path) { opacity: 0; transition: opacity .12s ease; }
 /* Below the card, where the browse footer was. */
 .paper-archive-detail-back {
   position: absolute; z-index: 3; bottom: 26px; left: var(--archive-gutter);
@@ -225,7 +229,7 @@
   width: var(--archive-detail-width); box-sizing: border-box;
   height: max(360px, calc(var(--archive-detail-top) + var(--archive-detail-height) - var(--page-top)));
 }
-.paper-archive-detail { display: flex; min-height: 0; padding: 18px 0 0; flex-direction: column; animation: paper-archive-fade .18s var(--ease-out) both; }
+.paper-archive-detail { display: flex; min-height: 0; padding: 18px 0 0; flex-direction: column; }
 .paper-archive-detail > * { flex: none; }
 .paper-archive-detail header h2 {
   display: -webkit-box; margin: 4px 0 0; overflow: hidden; color: var(--ink);
