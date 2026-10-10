@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockMapping } from '@shared/types'
-import { displayPaperTitle, extractPaperTitle, MAX_TITLE_STEM_LENGTH, sanitizeTitleStem, titleFileName } from '@main/titleNaming'
+import { displayPaperTitle, extractPaperTitle, MAX_TITLE_STEM_LENGTH, sanitizeTitleStem, titleFileName } from '@shared/titleNaming'
 
 function mapping(
   sourceText: string,

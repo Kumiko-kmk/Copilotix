@@ -53,12 +53,14 @@ export const BRIEF_COUNTS = {
 /** Fresh output may miss a range by this much before a repair is requested. */
 const TOLERANCE = { below: 0.75, above: 1.15 }
 const MISSING = /^原文未说明/u
+const WHITESPACE = /\s/u
+const FULL_WIDTH = /[\p{Script=Han}\u3000-\u303f\uff00-\uffef]/u
 
 export function displayLength(text: string): number {
   let length = 0
   for (const char of text) {
-    if (/\s/u.test(char)) continue
-    length += /[\p{Script=Han}　-〿＀-￯]/u.test(char) ? 1 : 0.5
+    if (WHITESPACE.test(char)) continue
+    length += FULL_WIDTH.test(char) ? 1 : 0.5
   }
   return Math.round(length)
 }

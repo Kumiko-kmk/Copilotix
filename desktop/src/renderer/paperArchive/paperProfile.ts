@@ -33,13 +33,14 @@ export function extractPaperProfile(markdown: string, translatedMarkdown = ''): 
   const source = splitBlocks(markdown)
   const translated = splitBlocks(translatedMarkdown)
   const primary = source.length ? source : translated
+  const translatedKeywords = keywordsOf(translated)
   return {
     title: firstTitle(source),
     translatedTitle: firstTitle(translated),
     authors: authorLines(primary),
     abstract: abstractOf(source),
     translatedAbstract: abstractOf(translated),
-    keywords: keywordsOf(translated).length ? keywordsOf(translated) : keywordsOf(source),
+    keywords: translatedKeywords.length ? translatedKeywords : keywordsOf(source),
     sections: sectionsOf(translated.length ? translated : source),
     counts: countsOf(markdown || translatedMarkdown, primary)
   }

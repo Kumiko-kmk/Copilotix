@@ -42,7 +42,7 @@ describe('TasksPage', () => {
     expect(screen.getByText('排队中').closest('.ant-tag')).toBeTruthy()
     expect(progress.closest('td')!.classList.contains('task-progress-cell')).toBe(false)
     expect(screen.getAllByRole('progressbar')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: '重试' }).getAttribute('title')).toContain('保留已完成区块')
+    expect(screen.getByRole('button', { name: '重试' }).getAttribute('title')).toBeNull()
   })
 
   it('shows PDF and Markdown labels and minute-precision creation times', () => {

@@ -156,7 +156,7 @@ describe('paper insight atomic storage', () => {
     await f.store.save(f.id, insight(context.sourceRevision))
     const anchors = context.context.excerpts.map(({ id, section, text }) => ({ id, section, text }))
     await f.store.saveBrief(f.id, { ...brief, provenance: { ...brief.provenance, promptVersion: 'older-prompt' } }, anchors)
-    expect(await new PaperInsightStore(f.repository).get(f.id)).toMatchObject({ status: 'ready', brief: { checks: [{ grounded: true, numbersVerified: false }] }, anchors, stale: false, promptOutdated: true })
+    expect(await new PaperInsightStore(f.repository).get(f.id)).toMatchObject({ status: 'ready', brief: { checks: brief.checks }, anchors, stale: false, promptOutdated: true })
     expect(await readdir(join(f.root, 'insight'))).toEqual(['brief.v2.json', 'insight.v1.json'])
     f.revise()
     expect(await f.store.get(f.id)).toMatchObject({ stale: true, promptOutdated: true })

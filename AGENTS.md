@@ -103,6 +103,7 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 
 ## 12. 版本與共享進度（可更新／清理）
 
+- 2026-10-10 保守代碼清理：以 `bbc832a` 為基線，刪除僅測試使用的 Main 標題轉導出／RAG 舊門面及六個無消費者的 CSS 類名規則，減少文檔投影、關鍵詞、字數正則的重複處理。運行契約／兼容資料／動畫不變；按本次使用者覆蓋率與運行一致性要求，本地完整單元 678 通過／3 既有跳過、原覆蓋率門禁、typecheck、lint、四 bundle／Utility smoke、七項 Electron 回歸通過。補齊更早界面改動遺留的測試預期，測試用例數量不減；範圍、統計邊界及證據見 [清理審計](docs/CODE_CLEANUP_20261010_ZH.md)。未打包／push，現有發布產物不變。
 - 1.1.0 已經 PR #8 合併並發布，說明見 `docs/releases/1.1.0.zh-CN.md`。僅該版的一次性未簽章例外已用完，變量已移除；其他版本要求正式簽章，已發布 tag／文件不改動。歷史 CI 不替代後續最新提交驗證。
 - README／Wiki 源在 `docs/wiki/`；目錄提交不會自動發布 Wiki，先合併主倉庫圖片與文檔再同步。真實論文截圖、未發送問答草稿及示意圖須區分，不代表付費 API 驗收。此前 README／Wiki 上傳授權不延伸至新任務。
 - 文庫工作區 `Copilotix-library-ui`／分支 `ui/library-rhinelab`；完成範圍与當前驗證見第 13 節。其他 worktree 保持不動。

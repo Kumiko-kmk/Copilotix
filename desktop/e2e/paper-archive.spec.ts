@@ -80,7 +80,7 @@ for (const disableWebGL of [false, true]) {
       await expect(results.getByRole('button')).toHaveCount(1)
       await results.getByRole('button', { name: /Archive Alpha/u }).click()
       if (supported) {
-        await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha.pdf')
+        await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha')
         await archive.focus()
         await window.keyboard.down('Enter')
         await window.keyboard.down('Enter')
@@ -115,10 +115,14 @@ for (const disableWebGL of [false, true]) {
         await window.mouse.up()
         await expect(archive).toHaveAttribute('data-detail-phase', 'open')
         await expect(window.locator('.reader-header')).toHaveCount(0)
-        // Search dismisses before detail; a new search selection returns the old card first.
+        // Detail keeps search collapsed and inert; Escape returns focus to the archive.
         await window.keyboard.press('/')
-        await window.keyboard.press('Escape')
+        await expect(archive.locator('.paper-archive-tools')).toHaveAttribute('inert', '')
+        await expect(archive.locator('#paper-archive-search')).not.toBeFocused()
+        await expect(results).toHaveCount(0)
         await expect(archive).toHaveAttribute('data-detail-phase', 'open')
+        await window.keyboard.press('Escape')
+        await expect(archive).toHaveAttribute('data-detail-phase', 'closed')
         await expect(archive).toBeFocused()
         await window.keyboard.press('ArrowDown')
         await window.keyboard.press('ArrowDown')
@@ -126,7 +130,7 @@ for (const disableWebGL of [false, true]) {
         await window.keyboard.press('/')
         await search.fill('ARCHIVE alpha')
         await window.keyboard.press('Enter')
-        await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha.pdf')
+        await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha')
         await window.keyboard.press('Enter')
         await expect(archive.getByRole('button', { name: '打开阅读' })).toBeVisible()
         // Explicit Open remains a shortcut, including during extraction.
@@ -140,7 +144,7 @@ for (const disableWebGL of [false, true]) {
       await window.locator('.reader-header button').first().click()
       await expect(archive).toBeVisible()
       if (supported) {
-        await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha.pdf')
+        await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha')
       } else {
         await expect(fallback).toBeVisible()
         await expect(search).toBeVisible()

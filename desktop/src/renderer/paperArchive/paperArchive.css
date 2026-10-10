@@ -249,7 +249,7 @@
 .paper-archive-tabpanel::-webkit-scrollbar { width: 8px; }
 .paper-archive-tabpanel::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 99px; background: rgba(120, 104, 82, .3) padding-box; }
 .paper-archive-tabpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.paper-archive-tabpanel-head button, .paper-archive-insight-empty button, .paper-archive-insight small button {
+.paper-archive-tabpanel-head button, .paper-archive-insight small button {
   padding: 2px 0; border: 0; border-bottom: 1px solid currentColor; background: transparent; color: var(--archive-accent); font-size: 12px; cursor: pointer;
 }
 .paper-archive-abstract { margin: 0; color: var(--text); font-size: 14px; line-height: 1.85; text-align: justify; user-select: text; }
@@ -262,7 +262,6 @@
 .paper-archive-insight dd { margin: 0; color: var(--text); font-size: 13.5px; line-height: 1.7; }
 .paper-archive-insight ul { margin: 0; padding-left: 18px; }
 .paper-archive-insight small { color: var(--muted); font-size: 11px; }
-.paper-archive-insight-empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .paper-archive-detail-actions { display: flex; align-items: center; gap: 22px; margin-top: 24px; }
 .paper-archive-detail > .paper-archive-tabpanel { flex: 1 1 0; }
 .paper-archive-primary {

@@ -13,11 +13,14 @@ vi.mock('three', async (importOriginal) => {
       domElement = document.createElement('canvas')
       shadowMap = { enabled: false, type: 0 }
       info = { render: { triangles: 100 } }
+      capabilities = { getMaxAnisotropy: () => 8 }
+      size = new actual.Vector2()
       ratio = 1
       setPixelRatio(value: number): void { this.ratio = value }
       getPixelRatio(): number { return this.ratio }
       getContext(): object { return { getExtension: () => null } }
-      setSize = vi.fn()
+      getSize(target: import('three').Vector2): import('three').Vector2 { return target.copy(this.size) }
+      setSize = vi.fn((width: number, height: number) => { this.size.set(width, height) })
       render = vi.fn()
       compileAsync = vi.fn(async () => undefined)
       dispose = vi.fn()
@@ -86,9 +89,7 @@ async function createArchive(options: Partial<PaperArchiveSceneOptions> = {}): P
     id: String(index), displayName: `Paper ${index}`, originalName: `${index}.pdf`, createdAt: '2026-10-07T12:00:00Z',
     workflow: { status: 'completed' as const, progress: 100, activeJobKind: null, error: null }
   }))))
-  await Promise.resolve()
-  await Promise.resolve()
-  expect(host.querySelector('canvas')?.getAttribute('data-archive-state')).toBe('ready')
+  await vi.waitFor(() => expect(host.querySelector('canvas')?.getAttribute('data-archive-state')).toBe('ready'))
 }
 
 function step(milliseconds: number): void {

@@ -72,8 +72,7 @@ export function computeDocumentChange(
     next.set(summary.id, summary)
   }
 
-  const upserted = current
-    .map((candidate) => documentSummarySchema.parse(candidate))
+  const upserted = [...next.values()]
     .filter((candidate) => !sameSummary(previous.get(candidate.id), candidate))
   const removedIds = [...previous.keys()].filter((id) => !next.has(id))
   if (upserted.length === 0 && removedIds.length === 0) return { next, event: null }
@@ -89,7 +88,7 @@ export function computeDocumentChange(
 }
 
 function sameSummary(left: DocumentSummary | undefined, right: DocumentSummary): boolean {
-  return left !== undefined && JSON.stringify(documentSummarySchema.parse(left)) === JSON.stringify(documentSummarySchema.parse(right))
+  return left !== undefined && JSON.stringify(documentSummarySchema.parse(left)) === JSON.stringify(right)
 }
 
 function activeJobKindFor(status: DocumentSummary['workflow']['status']): 'parse' | 'translate' | null {
