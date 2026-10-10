@@ -2,7 +2,7 @@ import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'n
 import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { _electron as electron } from '@playwright/test'
+import { _electron as electron, type Page } from '@playwright/test'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/core/blockMapping'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/shared/translationPlanProtocol'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
@@ -426,4 +426,18 @@ function createTwoPagePdf(): Buffer {
   for (const offset of offsets.slice(1)) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`
   return Buffer.from(pdf)
+}
+
+/**
+ * Opens a paper the way users reach it now that the task list is gone: from the home page's
+ * "继续阅读" shelf, which holds the three most recently updated papers. Seed at most three
+ * papers (or update the wanted one last) before calling this.
+ */
+export async function openPaperFromHome(window: Page, documentId: string): Promise<void> {
+  const card = window.locator(`.shelf-card[data-document-id="${documentId}"]`)
+  if (!(await window.locator('.new-parse-page').isVisible())) {
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '新解析' }).click()
+  }
+  await card.click()
 }

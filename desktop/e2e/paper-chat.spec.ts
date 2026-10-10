@@ -1,6 +1,6 @@
 import { _electron as electron, expect, test } from '@playwright/test'
 import { join } from 'node:path'
-import { createE2EWorkspace, seedReaderTask } from './helpers'
+import { createE2EWorkspace, openPaperFromHome, seedReaderTask } from './helpers'
 
 test('reuses the translation API and switches chat models without a second settings page', async () => {
   test.setTimeout(60_000)
@@ -42,9 +42,7 @@ test('reuses the translation API and switches chat models without a second setti
     expect(saved.settings.credentials.qwen.state).toBe('valid')
     expect(await app.evaluate(() => Reflect.get(globalThis, '__chatCredentialProbeCount'))).toBe(1)
     await window.reload()
-    await window.getByRole('button', { name: '展开主导航' }).click()
-    await window.getByRole('button', { name: '任务管理' }).click()
-    await window.locator(`tr[data-row-key="${documentId}"] .task-link`).click()
+    await openPaperFromHome(window, documentId)
     // Chat is the third tab of the reader's text group, sized exactly like the Markdown reader.
     const chatTab = window.locator('.reader-tab', { hasText: 'AI 问答' })
     const model = window.locator('.reader-chat-model .ant-select-selection-item')
@@ -71,9 +69,7 @@ test('reuses the translation API and switches chat models without a second setti
     // Wait for the durable session write, then reload through the real preload/Main/Utility path.
     await expect.poll(() => window.evaluate((documentId) => window.copilotix.paperChat.session({ documentId }), documentId)).toMatchObject({ draft: '未发送草稿' })
     await window.reload()
-    await window.getByRole('button', { name: '展开主导航' }).click()
-    await window.getByRole('button', { name: '任务管理' }).click()
-    await window.locator(`tr[data-row-key="${documentId}"] .task-link`).click()
+    await openPaperFromHome(window, documentId)
     await chatTab.click()
     await expect(window.getByRole('log', { name: '问答记录' })).toContainText('记住这个问题')
     await expect(window.getByRole('log', { name: '问答记录' })).toContainText('持久保存的测试回答')

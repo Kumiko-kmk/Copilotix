@@ -26,7 +26,7 @@ Copilotix 是面向论文阅读的 Windows 桌面应用。导入 PDF，经 Miner
 
 1. 从 [1.1.0 Release](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.1.0) 下载 `Copilotix-1.1.0-win-x64.zip`，完整解压并运行 `setup.exe`；也可直接下载独立 Setup。
 2. 在「设置 → 服务连接」验证 MinerU Token 和所需服务，点击「保存全部更改」；确认翻译来源与文献保存位置。
-3. 选择或拖入 PDF，在任务管理中打开文献；按需拆分对照阅读，进入 AI 问答前确认接收服务与发送内容。
+3. 选择或拖入 PDF，在首页「继续阅读」或文库中打开文献；按需拆分对照阅读，进入 AI 问答前确认接收服务与发送内容。
 
 > **1.1.0 经授权以未签章形式发布。** 请从本仓库 Release 下载，并用同页 `SHA256SUMS.txt` 核对文件；后续正式签章要求仍保留。安装、覆盖升级及资料保留见 [Wiki 安装指南](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade)。
 

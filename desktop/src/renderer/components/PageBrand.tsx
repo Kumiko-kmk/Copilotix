@@ -20,7 +20,3 @@ export default function PageBrand(props: {
   )
 }
 
-/** The archive's ink rule with its square marker. */
-export function ArchiveRule(props: { className?: string }): React.JSX.Element {
-  return <div className={`archive-rule${props.className ? ` ${props.className}` : ''}`} aria-hidden="true"><i /></div>
-}

@@ -1,7 +1,7 @@
 import { chromium, expect, test, type Locator, type Page } from '@playwright/test'
 import { execFileSync, spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromHome, seedReaderTask } from './helpers'
 import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
 import type { CopilotixDesktopApi } from '../src/shared/types'
 
@@ -595,14 +595,13 @@ test('shows a recoverable error when the local PDF is missing', async () => {
   }
 })
 
-test('shows the parsed English title in recent tasks and the Reader header', async () => {
+test('shows the parsed English title on the home shelf and in the Reader header', async () => {
   const workspace = await createE2EWorkspace()
   await seedReaderTask(workspace, { englishTitle: 'Attention Is All You Need' })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await openTaskList(window)
-    const paper = window.locator('.task-link', { hasText: 'Attention Is All You Need.pdf' })
+    const paper = window.locator('.shelf-card', { hasText: 'Attention Is All You Need' })
     await expect(paper).toBeVisible()
     await paper.click()
     await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need.pdf')
@@ -683,16 +682,8 @@ test('renders and safely links an optional real Copilotix task', async () => {
   }
 })
 
-async function openTaskList(window: Page): Promise<void> {
-  await window.locator('[data-edge-dock="top"]').hover()
-  await window.getByRole('button', { name: '任务管理' }).click()
-}
-
 async function openPaper(window: Page, taskId: string): Promise<void> {
-  await openTaskList(window)
-  const item = window.locator(`tr[data-row-key="${taskId}"] .task-link`)
-  await expect(item).toBeVisible()
-  await item.click()
+  await openPaperFromHome(window, taskId)
   await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
   // Image/font readiness has a production 30 s deadline. Wait for the actual
   // ready/error state, failing promptly on errors rather than operating during loading.

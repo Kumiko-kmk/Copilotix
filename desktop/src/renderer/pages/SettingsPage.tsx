@@ -292,7 +292,7 @@ export default function SettingsPage(props: {
   return (
     <section className="page settings-page">
       {contextHolder}
-      <PageBrand eyebrow="COPILOTIX / SETTINGS" title="设置" meta="服务连接、翻译模型与文库存储" />
+      <PageBrand eyebrow="COPILOTIX / SETTINGS" title="设置" />
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="设置分类">
           <button className={section === 'connections' ? 'active' : ''} onClick={() => setSection('connections')}><small aria-hidden="true">01</small>服务连接</button>

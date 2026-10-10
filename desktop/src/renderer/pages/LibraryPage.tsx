@@ -8,7 +8,7 @@ import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../pap
 import ArchiveDetail, { type ArchiveMorph } from '../paperArchive/ArchiveDetail'
 import { extractPaperProfile } from '../paperArchive/paperProfile'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
-import { statusLabels } from './TasksPage'
+import { statusLabels } from '../documentStatus'
 import '../paperArchive/paperArchive.css'
 
 // Survives page switches so returning from the reader lands on the same paper.

@@ -14,6 +14,7 @@ import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView, ReaderChat
 import { IpcClientError } from '@shared/ipc'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutations'
 import ReaderWorkbench from '../components/ReaderWorkbench'
+import DocumentLifecycleActions from '../components/DocumentLifecycleActions'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
   activeSyncedViews,
@@ -144,13 +145,14 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
     <section className="reader-page">
       {contextHolder}
       <header className="reader-header">
-        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><span className="reader-eyebrow" aria-hidden="true">READER<i>/</i></span><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
+        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
         <Space>
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
           <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />
           <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
           </Dropdown>
+          <DocumentLifecycleActions summary={document.summary} messageApi={messageApi} onDeleted={props.onBack} />
         </Space>
       </header>
       <ReaderWorkspace

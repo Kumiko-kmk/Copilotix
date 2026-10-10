@@ -1,14 +1,8 @@
 import React from 'react'
-import { ArrowRightOutlined } from '@ant-design/icons'
+import { CheckOutlined, CloseOutlined, ExclamationOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '@shared/ipcSchemas'
+import { ACTIVE_STATUSES, statusLabels as STATUS_LABELS, type WorkflowStatus } from '../documentStatus'
 
-type WorkflowStatus = DocumentSummary['workflow']['status']
-
-const STATUS_LABELS: Record<WorkflowStatus, string> = {
-  queued: '排队中', uploading: '上传中', parsing: '解析中', translating: '翻译中',
-  partial: '部分完成', completed: '已完成', failed: '失败'
-}
-const ACTIVE_STATUSES = new Set<WorkflowStatus>(['queued', 'uploading', 'parsing', 'translating'])
 const WEEKDAYS = '日一二三四五六'
 
 export function greetingFor(date: Date): string {
@@ -34,10 +28,18 @@ export function relativeTime(value: string, now = Date.now()): string {
   return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
-/** A hairline along the card's foot: filled to the progress while active, full in the status colour otherwise. */
-function StatusLine(props: { status: WorkflowStatus; progress: number }): React.JSX.Element {
-  const progress = ACTIVE_STATUSES.has(props.status) ? Math.max(0, Math.min(100, props.progress)) : 100
-  return <span className="shelf-progress" aria-hidden="true"><i style={{ width: `${progress}%` }} /></span>
+function StatusBadge(props: { status: WorkflowStatus; progress: number }): React.JSX.Element {
+  if (ACTIVE_STATUSES.has(props.status)) {
+    const progress = Math.max(0, Math.min(100, props.progress))
+    return (
+      <svg className="shelf-ring" viewBox="0 0 24 24" aria-hidden="true">
+        <circle className="shelf-ring-track" cx="12" cy="12" r="9.5" />
+        <circle className="shelf-ring-value" cx="12" cy="12" r="9.5" pathLength="100" style={{ strokeDasharray: `${progress} 100` }} />
+      </svg>
+    )
+  }
+  const icon = props.status === 'completed' ? <CheckOutlined /> : props.status === 'failed' ? <CloseOutlined /> : <ExclamationOutlined />
+  return <span className="shelf-badge" aria-hidden="true">{icon}</span>
 }
 
 /** "Continue reading" shelf with the three most recently touched papers. */
@@ -54,8 +56,8 @@ export function RecentShelf(props: {
   return (
     <section className="recent-shelf" aria-label="继续阅读">
       <header className="recent-shelf-header">
-        <span className="eyebrow">CONTINUE / 继续阅读</span>
-        <button type="button" onClick={props.onViewAll}><span>全部 {props.documents.length} 篇</span><ArrowRightOutlined aria-hidden="true" /></button>
+        <span>继续阅读</span>
+        <button type="button" onClick={props.onViewAll}>全部 {props.documents.length} 篇 <span aria-hidden="true">→</span></button>
       </header>
       <div className="recent-shelf-list">
         {recent.map((document, index) => {
@@ -66,16 +68,17 @@ export function RecentShelf(props: {
               key={document.id}
               type="button"
               className={`shelf-card status-${status}`}
+              data-document-id={document.id}
               style={{ '--i': index } as React.CSSProperties}
               aria-label={`打开论文：${document.displayName}，${STATUS_LABELS[status]}${progress}`}
               onClick={() => props.onOpen(document.id)}
             >
-              <span className="shelf-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+              <span className="shelf-thumb" aria-hidden="true"><i /></span>
               <span className="shelf-copy">
                 <strong>{document.displayName.replace(/\.pdf$/iu, '')}</strong>
-                <small><i aria-hidden="true" />{STATUS_LABELS[status]}{progress} · {relativeTime(document.updatedAt)}</small>
+                <small>{STATUS_LABELS[status]}{progress} · {relativeTime(document.updatedAt)}</small>
               </span>
-              <StatusLine status={status} progress={document.workflow.progress} />
+              <StatusBadge status={status} progress={document.workflow.progress} />
             </button>
           )
         })}

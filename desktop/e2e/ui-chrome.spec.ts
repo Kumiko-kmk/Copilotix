@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromHome, seedReaderTask } from './helpers'
 import { MAX_PDF_PAGES } from '../src/shared/constants'
 
 const MINIMAP_TRANSLATED_MARKDOWN = [
@@ -305,10 +305,8 @@ test('provides an interactive minimap for original and translated Markdown', asy
   try {
     const window = await app.firstWindow()
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 700))
-    // The bottom paper switcher was removed; papers open from the task list.
-    await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('button', { name: '任务管理' }).click()
-    await window.locator(`tr[data-row-key="${taskId}"] .task-link`).click()
+    // Papers open from the home shelf (or the library); the task list was removed.
+    await openPaperFromHome(window, taskId)
 
     // Opening a paper loads its details through IPC before the Markdown pane exists.
     await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
