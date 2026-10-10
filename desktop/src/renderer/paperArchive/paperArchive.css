@@ -217,7 +217,6 @@
   font-size: clamp(20px, 2vw, 30px); font-weight: 760; letter-spacing: .005em; line-height: 1.22; overflow-wrap: anywhere;
   -webkit-box-orient: vertical; -webkit-line-clamp: 2; user-select: text;
 }
-.paper-archive-detail-subtitle { display: -webkit-box; margin: 8px 0 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: color-mix(in srgb, var(--ink) 78%, var(--muted)); font-size: 15px; font-weight: 600; line-height: 1.5; user-select: text; }
 .paper-archive-detail .paper-archive-rule { margin: calc(14px / 3) 0 4px; background: var(--ink); }
 .paper-archive-detail-error { margin: 0 0 12px; color: var(--archive-index-failed); font-size: 13px; }
 .paper-archive-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 22px; margin: 0 0 12px; }
@@ -293,7 +292,6 @@
 }
 
 /* Brief content shares the existing scroll panel and reveal; no additional motion. */
-.paper-archive-brief-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; color: var(--muted); font-size: 11px; }
 .paper-archive-brief-content { color: var(--text); font-size: 13px; line-height: 1.7; user-select: text; }
 .paper-archive-brief-content h3 { margin: 16px 0 6px; font-size: 13px; color: var(--ink); }
 .paper-archive-brief-content h3:first-child { margin-top: 0; }

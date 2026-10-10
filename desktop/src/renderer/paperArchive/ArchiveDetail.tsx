@@ -6,7 +6,6 @@ import type { PaperInsight, PaperInsightSource, PaperInsightState } from '@share
 import type { ArchivePaper } from './archiveShelves'
 import type { DetailPhase } from './PaperArchiveScene'
 import { extractPaperProfile } from './paperProfile'
-import { PAPER_TYPE_LABELS } from '@shared/paperBrief/schema'
 import BriefContent, { type BriefTab } from './BriefContent'
 import { useLineRedaction } from './lineRedaction'
 
@@ -90,7 +89,7 @@ export default function ArchiveDetail(props: {
   }, [data, profile, paper.id, paper.originalName, paper.displayName, onPage])
 
   const title = profile?.title ?? paper.displayName
-  const subtitle = profile?.translatedTitle && profile.translatedTitle !== title ? profile.translatedTitle : null
+  const subtitle = profile?.translatedTitle?.replace(/\.pdf\s*$/iu, '').trim() ?? ''
   const abstract = profile?.translatedAbstract
   // The count beside a tab says how much is behind it before switching.
   const tabs: Array<[Tab, string, number?]> = brief
@@ -108,7 +107,7 @@ export default function ArchiveDetail(props: {
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.category}</span>
           <h2 className="paper-archive-reveal" style={{ '--i': 0 } as React.CSSProperties} title={title}>{title}</h2>
-          {brief ? <p className="paper-archive-brief-tags paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}><span>{PAPER_TYPE_LABELS[brief.paperType]}</span><span>{brief.field.discipline} · {brief.field.area}</span></p> : subtitle ? <p className="paper-archive-detail-subtitle paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}>{subtitle}</p> : null}
+          <p className="paper-archive-translated-title paper-archive-reveal" title={subtitle || undefined} style={{ '--i': 1 } as React.CSSProperties}>{subtitle || '\u00a0'}</p>
         </header>
         <div className="paper-archive-rule"><i /></div>
         {details.isError ? <p className="paper-archive-detail-error" role="alert">论文内容读取失败，可以直接打开阅读。</p> : null}
