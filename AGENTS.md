@@ -137,6 +137,12 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 2. `stretchPanel` 依賴瀏覽面板在 `onDetailPhase('opening')` 時仍掛載；如果之後調整詳情掛載時機，請保留這一捕捉點。
 3. 減弱動畫時 clip-path 揭露、檢索收合全部跳過。
 
+### 現有文庫批次生成（2026-10-10）
+
+- 使用者明確選擇並授權發送到 `https://api.deepseek.com/chat/completions`；沿用現行 `deepseek-flash`／`brief-v2.2026-10-10` 生成全部 15 篇。首輪 14 篇成功，1 篇單獨重試成功，15 份已保存原文庫 `insight/brief.v2.json`，schema／論文 ID／来源 revision／promptVersion 均核對通過。
+- 共 29 次服務呼叫（含修復與重試）、469711 tokens。用量獨立保存於批次報告，未寫入運行中應用的用量統計；未修改永久服務選擇、授權或自動生成設定，未調整產品代碼。
+- 全部標示部分摘錄；14 項發現需人工核對，第二答仍有 3 項字數／數量提示，按現行契約保留有效結果。這是實際 API 生成及落盤核對，不等於人工論文品質驗收。報告與舊结果備份見 `../investigation/paper-brief-bulk-20261010/SUMMARY.md`、`report.json`、`audit.json`、`previous-results/`。
+
 ### 摘要連結與逐行遮罩修復
 
 - 摘要保留 HTTP(S) 自動連結、Markdown／HTML 連結目標與 URL 下劃線；以純文字展示，長網址可換行。標題／作者等既有清理不變。
