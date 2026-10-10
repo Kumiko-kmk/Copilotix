@@ -96,7 +96,7 @@
 }
 .paper-archive-rule { position: relative; height: 1px; margin: calc(22px / 3) 0 6px; background: color-mix(in srgb, var(--ink) 55%, transparent); }
 .paper-archive-rule i { position: absolute; top: -3px; left: -10px; width: 5px; height: 5px; background: var(--ink); }
-.paper-archive-meta { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 6px 30px; margin: 0 0 22px; }
+.paper-archive-meta { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 6px 30px; margin: 0 0 22px; }
 .paper-archive-meta dt { margin-bottom: 4px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
 .paper-archive-meta dd { margin: 0; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; }
 .paper-archive-meta dd.status-completed { color: #3f8a6e; }
@@ -233,6 +233,12 @@
   border: 0; background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 600; cursor: pointer; transition: color .18s ease;
 }
 .paper-archive-tabs button small { font-size: 10px; font-variant-numeric: tabular-nums; }
+.paper-archive-tab-count { margin-left: 2px; color: var(--muted); font-size: 10.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.paper-archive-meta dd.brief-ready { color: var(--archive-accent); }
+.paper-archive-meta dd.brief-failed { color: var(--archive-index-failed); }
+.paper-archive-elapsed { font-variant-numeric: tabular-nums; }
+.paper-archive-primary-end { display: inline-flex; align-items: center; gap: 12px; }
+.paper-archive-primary kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, #fff 35%, transparent); border-radius: 3px; color: color-mix(in srgb, #fff 70%, transparent); font: 10px/1.4 inherit; letter-spacing: .04em; }
 .paper-archive-tabs button::after {
   position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--archive-accent);
   content: ""; transform: scaleX(0); transform-origin: left; transition: transform .18s var(--ease-out);

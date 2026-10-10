@@ -88,8 +88,10 @@ export default function ArchiveDetail(props: {
   const title = profile?.title ?? paper.displayName
   const subtitle = profile?.translatedTitle && profile.translatedTitle !== title ? profile.translatedTitle : null
   const abstract = profile?.translatedAbstract
-  const tabs: Array<[Tab, string]> = brief ? [['overview', '概览'], ['findings', '发现'], ['limits', '局限与前提'], ['reading', '阅读路线与术语']]
-    : [['abstract', '摘要'], ['structure', '结构'], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
+  // The count beside a tab says how much is behind it before switching.
+  const tabs: Array<[Tab, string, number?]> = brief
+    ? [['overview', '概览'], ['findings', '发现', brief.findings.length], ['limits', '局限与前提', brief.limitations.length + brief.assumptions.length], ['reading', '阅读路线与术语', brief.terms.length]]
+    : [['abstract', '摘要'], ['structure', '结构', profile?.sections.length || undefined], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
   const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
 
   return (
@@ -133,7 +135,7 @@ export default function ArchiveDetail(props: {
                 setTab(nextTab[0])
                 event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
               }}>
-              <small>{String(index + 1).padStart(2, '0')}</small>{label}
+              <small>{String(index + 1).padStart(2, '0')}</small>{label}{tabs[index]![2] ? <span className="paper-archive-tab-count">{tabs[index]![2]}</span> : null}
             </button>
           ))}
         </div>
@@ -152,7 +154,7 @@ export default function ArchiveDetail(props: {
           ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} onRegenerate={insight.generate} /> : <p className="paper-archive-abstract">生成档案卡后可查看研究问题、证据、发现与阅读路线。</p>}
         </section>
         {props.insights && insight.state?.status !== 'unavailable' ? <div className="paper-archive-brief-status" role="status">
-          {insight.state?.status === 'generating' ? <>AI 正在阅读这篇论文… <button type="button" onClick={() => { void props.insights?.cancel?.(paper.id).catch(() => undefined) }}>取消生成</button></>
+          {insight.state?.status === 'generating' ? <>AI 正在阅读这篇论文…<Elapsed /> <button type="button" onClick={() => { void props.insights?.cancel?.(paper.id).catch(() => undefined) }}>取消生成</button></>
             : <>
               {insight.state?.status === 'failed' ? insight.state.error
                 : briefState ? `${briefState.brief.provenance.model.name} · ${briefState.stale ? '论文内容已更新' : briefState.promptOutdated ? '可用新版提示词重新生成' : 'AI 档案卡'}`
@@ -162,12 +164,24 @@ export default function ArchiveDetail(props: {
         </div> : null}
         <footer className="paper-archive-detail-actions">
           <button type="button" className="paper-archive-primary" onClick={props.onOpen}>
-            <span>打开阅读</span><ArrowRightOutlined aria-hidden="true" />
+            <span>打开阅读</span><span className="paper-archive-primary-end"><kbd aria-hidden="true">Enter</kbd><ArrowRightOutlined aria-hidden="true" /></span>
           </button>
         </footer>
       </article>
     </>
   )
+}
+
+/** Time since the generating state appeared, as m:ss; a detailed brief can take a minute or two. */
+function Elapsed(): React.JSX.Element {
+  const [start] = React.useState(() => Date.now())
+  const [now, setNow] = React.useState(start)
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const seconds = Math.floor((now - start) / 1000)
+  return <span className="paper-archive-elapsed"> {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>
 }
 
 const OPEN_TIMING: KeyframeAnimationOptions = { duration: 440, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }

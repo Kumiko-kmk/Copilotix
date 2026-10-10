@@ -33,14 +33,18 @@ const NO_CONTROL = (value: string): boolean => ![...value].some((char) => char.c
 const text = (max: number) => z.string().trim().min(1).max(max).refine(NO_CONTROL, '不能包含控制字符')
 const anchors = z.array(z.string().regex(/^E\d{1,3}$/u)).max(4)
 
-/** What the model writes. Limits are in characters and sized for one detail screen. */
+/**
+ * What the model writes. These are the storage limits in characters; they only ever grow, so
+ * briefs saved under an older prompt stay valid. The display ranges for new output are in
+ * lengths.ts.
+ */
 export const paperBriefContentSchema = z.object({
   paperType: z.enum(PAPER_TYPES),
   field: z.object({ discipline: text(40), area: text(60) }).strict(),
   tldr: text(120),
   context: z.object({ background: text(300), gap: text(300), question: text(300) }).strict(),
   approach: z.object({
-    summary: text(400),
+    summary: text(420),
     keyIdeas: z.array(text(120)).min(1).max(5),
     basis: text(300),
     evaluation: text(300)

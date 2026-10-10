@@ -81,7 +81,7 @@ describe('structured paper insight', () => {
     const repair = vi.mocked(f.deps.stream).mock.lastCall![0].messages
     expect(repair.at(-2)).toEqual({ role: 'assistant', content: '```bad' })
     expect(repair.at(-1)?.content).toContain('JSON')
-    expect(f.deps.save).toHaveBeenCalledWith(f.id, expect.objectContaining({ checks: [{ grounded: true, numbersVerified: false }] }), expect.arrayContaining([expect.objectContaining({ id: 'E1' })]))
+    expect(f.deps.save).toHaveBeenCalledWith(f.id, expect.objectContaining({ checks: [{ grounded: true, numbersVerified: false }, { grounded: true, numbersVerified: true }, { grounded: true, numbersVerified: true }] }), expect.arrayContaining([expect.objectContaining({ id: 'E1' })]))
     expect(f.states.at(-1)).toMatchObject({ status: 'ready', stale: false })
     expect(JSON.stringify(f.stored.get(f.id))).not.toContain('never-persist-this-key')
     await f.service.dispose()

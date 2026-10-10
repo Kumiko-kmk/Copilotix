@@ -98,7 +98,7 @@ export class PaperInsightStore {
     signal.throwIfAborted()
     const translated = original.trim() ? '' : await readArtifact(snapshot.translated)
     signal.throwIfAborted()
-    const context = buildBriefContext(original, translated, BRIEF_BUDGETS.standard)
+    const context = buildBriefContext(original, translated, BRIEF_BUDGETS.detailed)
     const after = await this.snapshot(documentId)
     if (after.sourceRevision !== snapshot.sourceRevision) throw new Error('论文内容正在更新，请重试')
     return briefContextResultSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, context })

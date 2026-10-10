@@ -42,7 +42,9 @@ export interface BriefContext {
 }
 
 /** Input budgets in UTF-8 bytes (≈ an upper bound on tokens for mixed CJK/Latin text). */
-export const BRIEF_BUDGETS = { compact: 12 * 1024, standard: 24 * 1024, extended: 40 * 1024 } as const
+// `detailed` is what the archive sends (2026-10-10): about 19 000 Chinese characters, roughly a
+// third to a half of a typical translated paper once references and appendices are dropped.
+export const BRIEF_BUDGETS = { compact: 12 * 1024, standard: 24 * 1024, extended: 40 * 1024, detailed: 56 * 1024 } as const
 
 const encoder = new TextEncoder()
 export const byteLength = (text: string): number => encoder.encode(text).length
@@ -77,10 +79,11 @@ const ROLE_WEIGHT: Record<SectionRole, number> = {
   abstract: 10, conclusion: 6, limitations: 6, discussion: 4, results: 4, introduction: 3,
   method: 3, body: 2, caption: 3, background: 1, front: 0
 }
-const EXCERPT_CAP = 720
-const MANDATORY_CAP: Partial<Record<SectionRole, number>> = { abstract: 2200, conclusion: 1800 }
+// Longer excerpts keep a method or result paragraph whole, so the model sees conditions and numbers together.
+const EXCERPT_CAP = 1100
+const MANDATORY_CAP: Partial<Record<SectionRole, number>> = { abstract: 3000, conclusion: 2600 }
 const QUOTA_ROLES: SectionRole[] = ['method', 'results', 'discussion', 'limitations']
-const MAX_EXCERPTS = 48
+const MAX_EXCERPTS = 96
 // After the mandatory excerpts, no single role may take more than this share of the budget,
 // so results-heavy papers still show their method and discussion.
 const FILL_SHARE: Record<SectionRole, number> = {
@@ -88,7 +91,7 @@ const FILL_SHARE: Record<SectionRole, number> = {
   caption: 0.08, conclusion: 0.06, background: 0.04, abstract: 0, front: 0
 }
 const MERGE_BELOW = 160
-const OUTLINE_CAP = 2400
+const OUTLINE_CAP = 3200
 
 interface Paragraph {
   order: number
@@ -143,7 +146,7 @@ export function buildBriefContext(original: string, translated: string, budgetBy
     }
   }
   // 2. The introduction's contribution statement: the best-scoring of its last paragraphs.
-  take(best('introduction', (paragraph) => paragraph.last) ?? best('introduction'), 900)
+  take(best('introduction', (paragraph) => paragraph.last) ?? best('introduction'), 1400)
   take(best('introduction'), EXCERPT_CAP)
   // 3. At least one excerpt for each remaining IMRaD role that the paper has.
   for (const role of QUOTA_ROLES) take(best(role), EXCERPT_CAP)

@@ -10,10 +10,15 @@ import { paperBriefContentSchema, paperBriefSchema, PAPER_BRIEF_SCHEMA_VERSION, 
 import type { BriefContext } from './context'
 import { byteLength } from './context'
 import { PAPER_BRIEF_PROMPT_VERSION } from './prompt'
+import { checkBriefLengths } from './lengths'
 
 export type ParsedBrief = { ok: true; content: PaperBriefContent } | { ok: false; problems: string[] }
 
-export function parseBriefResponse(raw: string): ParsedBrief {
+/**
+ * `lengths: true` also checks the word-count ranges of BRIEF_LENGTHS. The service asks for it on
+ * the first answer only: a repair round fixes lengths, but a brief is never thrown away for them.
+ */
+export function parseBriefResponse(raw: string, options: { lengths?: boolean } = {}): ParsedBrief {
   const start = raw.indexOf('{')
   const end = raw.lastIndexOf('}')
   if (start < 0 || end <= start) return { ok: false, problems: ['输出中没有 JSON 对象'] }
@@ -24,7 +29,10 @@ export function parseBriefResponse(raw: string): ParsedBrief {
     return { ok: false, problems: ['JSON 语法错误（检查引号、逗号与括号）'] }
   }
   const result = paperBriefContentSchema.safeParse(value)
-  if (result.success) return { ok: true, content: result.data }
+  if (result.success) {
+    const problems = options.lengths ? checkBriefLengths(result.data) : []
+    return problems.length ? { ok: false, problems: problems.slice(0, 12) } : { ok: true, content: result.data }
+  }
   return {
     ok: false,
     problems: result.error.issues.slice(0, 12).map((issue) => `${issue.path.join('.') || '根对象'}：${issue.message}`)

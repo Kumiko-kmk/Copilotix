@@ -5,9 +5,16 @@
 
 export const DECRYPTION_START = 34.12
 export const DECRYPTION_END = 39.56
+/** Where the glass starts to clear and the text redaction follows (reference time). */
+const REVEAL_START = 38.84
+// The marks before the glass clears (diagonal growing in, holding, drawing back) play twice as fast
+// as the clearing itself: the wait before the text appears is about 1 s instead of 2 s, while the
+// clearing and the text redaction keep their pace.
+const LEAD_RATE = 4.8
 const RATE = 2.4
-/** Wall-clock length of the archive's decryption (about 2.3 s; the original takes 3.6 s). */
-export const DECRYPTION_SECONDS = (DECRYPTION_END - DECRYPTION_START) / RATE
+const LEAD_SECONDS = (REVEAL_START - DECRYPTION_START) / LEAD_RATE
+/** Wall-clock length of the archive's decryption (about 1.3 s; the original takes 3.6 s). */
+export const DECRYPTION_SECONDS = LEAD_SECONDS + (DECRYPTION_END - REVEAL_START) / RATE
 
 const clamp = (value: number): number => Math.max(0, Math.min(1, value))
 const smooth = (value: number): number => {
@@ -73,7 +80,8 @@ export interface DecryptionFrame {
 
 /** The decryption at `elapsed` wall-clock seconds after it starts. */
 export function decryptionFrame(elapsed: number): DecryptionFrame {
-  const time = DECRYPTION_START + Math.max(0, elapsed) * RATE
+  const wall = Math.max(0, elapsed)
+  const time = wall < LEAD_SECONDS ? DECRYPTION_START + wall * LEAD_RATE : REVEAL_START + (wall - LEAD_SECONDS) * RATE
   const grow = sampleCurve(GROW, time)
   const remaining = sampleCurve(RETRACT, time)
   const intervals: Array<[number, number]> = []
@@ -94,7 +102,7 @@ export function decryptionFrame(elapsed: number): DecryptionFrame {
 export const GLASS_FEATHER = 0.12
 
 /** Text redaction: each line's ink slides out to the right, top lines first. */
-export const REDACTION_SECONDS = 0.475
+export const REDACTION_SECONDS = 0.95
 const REDACTION_STAGGER = 0.22
 
 /** Progress of one ink bar (0 covering, 1 gone) for overall progress `progress` of `count` bars. */

@@ -3,17 +3,19 @@ import { DECRYPTION_SECONDS, decryptionFrame, redactionOffset } from '../src/ren
 
 describe('archive decryption timeline', () => {
   it('draws the diagonal in, holds it, draws it back, then clears the glass', () => {
-    expect(DECRYPTION_SECONDS).toBeGreaterThan(2)
-    expect(DECRYPTION_SECONDS).toBeLessThan(2.5)
-    const joining = decryptionFrame(0.3)
+    expect(DECRYPTION_SECONDS).toBeGreaterThan(1.2)
+    expect(DECRYPTION_SECONDS).toBeLessThan(1.4)
+    const joining = decryptionFrame(0.2)
     expect(joining.phase).toBe('joining')
     expect(joining.intervals).toHaveLength(2)
     expect(joining.clarity).toBe(0)
-    const connected = decryptionFrame(1.0)
+    const connected = decryptionFrame(0.6)
     expect(connected.phase).toBe('connected')
     expect(connected.intervals).toEqual([[0, 1]])
-    expect(decryptionFrame(1.75).phase).toBe('retracting')
-    const revealing = decryptionFrame(2.1)
+    expect(decryptionFrame(0.85).phase).toBe('retracting')
+    // The glass, and with it the text, starts to clear about 1 s in.
+    expect(decryptionFrame(0.97).clarity).toBe(0)
+    const revealing = decryptionFrame(1.1)
     expect(revealing.phase).toBe('revealing')
     expect(revealing.clarity).toBeGreaterThan(0)
     expect(revealing.intervals).toEqual([])

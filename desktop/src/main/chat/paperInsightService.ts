@@ -107,7 +107,8 @@ export class PaperInsightService {
   private async execute(run: Run): Promise<void> {
     const { documentId, controller } = run
     const signal = controller.signal
-    const timer = setTimeout(() => controller.abort(new Error('timeout')), 180_000)
+    // The detailed brief streams up to ~6000 output tokens; allow for slow provider periods.
+    const timer = setTimeout(() => controller.abort(new Error('timeout')), 300_000)
     try {
       signal.throwIfAborted()
       const stored = await this.deps.get(documentId)
@@ -139,7 +140,7 @@ export class PaperInsightService {
         })
         if (usage) await this.deps.recordUsage(auth.provider, usage).catch(() => undefined)
         signal.throwIfAborted()
-        const parsed = parseBriefResponse(answer)
+        const parsed = parseBriefResponse(answer, { lengths: attempt === 0 })
         if (!parsed.ok) {
           if (attempt === 0) {
             messages.push({ role: 'assistant', content: clipPreviousAnswer(answer) }, buildBriefRepairMessage(parsed.problems))

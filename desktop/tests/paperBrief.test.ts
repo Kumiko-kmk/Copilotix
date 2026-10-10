@@ -6,7 +6,9 @@ import {
   buildBriefMessages,
   buildBriefRepairMessage,
   byteLength,
+  checkBriefLengths,
   clip,
+  displayLength,
   extractNumbers,
   normalizeMarkdown,
   parseBriefResponse,
@@ -125,6 +127,39 @@ describe('paper brief prompt', () => {
     expect(messages[1]!.content).toMatch(/^请为下面这篇论文生成论文档案卡。\n<paper>\n\{.*\}\n<\/paper>$/su)
     expect(byteLength(JSON.stringify(messages))).toBeLessThanOrEqual(PAPER_BRIEF_MAX_REQUEST_BYTES)
     expect(buildBriefRepairMessage(['findings：数量不足']).content).toContain('- findings：数量不足')
+  })
+})
+
+describe('paper brief lengths', () => {
+  it('counts Han characters as one and other characters as half', () => {
+    expect(displayLength('注意力 Transformer')).toBe(9)
+    expect(displayLength('  ')).toBe(0)
+  })
+
+  it('asks to lengthen or shorten fresh output but accepts an honest “原文未说明”', () => {
+    const content = sampleContent('E1')
+    const problems = checkBriefLengths({ ...content, context: { ...content.context, background: '原文未说明' }, tldr: '短'.repeat(200) })
+    expect(problems.some((problem) => problem.startsWith('tldr：200 字'))).toBe(true)
+    expect(problems.some((problem) => problem.startsWith('context.background'))).toBe(false)
+    expect(problems.some((problem) => problem.startsWith('context.gap') && problem.includes('少于'))).toBe(true)
+    // Lists that depend on the paper only have a maximum.
+    expect(problems.some((problem) => problem.startsWith('openQuestions：'))).toBe(false)
+    expect(problems.some((problem) => problem.startsWith('findings：2 项'))).toBe(true)
+  })
+
+  it('checks lengths only when asked, so the second attempt is never discarded for them', () => {
+    const raw = JSON.stringify(sampleContent('E1'))
+    expect(parseBriefResponse(raw).ok).toBe(true)
+    const strict = parseBriefResponse(raw, { lengths: true })
+    expect(strict.ok).toBe(false)
+    if (!strict.ok) expect(strict.problems.every((problem) => /字|项/u.test(problem))).toBe(true)
+  })
+
+  it('states every range in the prompt', () => {
+    const system = buildBriefMessages(buildBriefContext(PAPER, ''))[0]!.content
+    expect(system).toContain('"tldr": "一句话：研究对象、做法与最主要的结果，40–70字"')
+    expect(system).toContain('findings 3–6')
+    expect(system).not.toContain('${')
   })
 })
 

@@ -2,7 +2,7 @@ import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, ExpandOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '@shared/ipcSchemas'
-import type { PaperInsightSource } from '@shared/paperInsight'
+import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../paperArchive/PaperArchiveScene'
 import ArchiveDetail from '../paperArchive/ArchiveDetail'
 import { extractPaperProfile } from '../paperArchive/paperProfile'
@@ -288,6 +288,7 @@ export default function LibraryPage(props: {
             <div><dt>状态</dt><dd className={`status-${paper.workflow.status}`}>{statusLabels[paper.workflow.status]}{paper.workflow.status === 'translating' ? ` ${paper.workflow.progress}%` : ''}</dd></div>
             <div><dt>类型</dt><dd>{documentTypeLabel(paper.originalName)}</dd></div>
             <div><dt>创建</dt><dd>{formatTaskCreatedAt(paper.createdAt)}</dd></div>
+            {props.insights ? <BrowseBriefState paper={paper} source={props.insights} /> : null}
           </dl>
           <div className="paper-archive-actions">
             <button type="button" className="paper-archive-action" onClick={() => sceneRef.current?.openDetail()}>
@@ -327,6 +328,24 @@ export default function LibraryPage(props: {
 }
 
 const RULER_TICKS = 9
+
+/** Whether the selected paper already has an AI file card, read once navigation settles. */
+function BrowseBriefState({ paper, source }: { paper: ArchivePaper; source: PaperInsightSource }): React.JSX.Element | null {
+  const [state, setState] = React.useState<PaperInsightState | null>(null)
+  React.useEffect(() => {
+    let current = true
+    setState(null)
+    const timer = window.setTimeout(() => {
+      source.get(paper.id).then((next) => { if (current) setState(next) }, () => undefined)
+    }, 180)
+    const stop = source.subscribe((id, next) => { if (current && id === paper.id) setState(next) })
+    return () => { current = false; window.clearTimeout(timer); stop() }
+  }, [paper.id, source])
+  if (!state || state.status === 'unavailable') return null
+  const label = state.status === 'ready' ? ('brief' in state ? (state.stale ? '需更新' : '已生成') : '旧版')
+    : state.status === 'generating' ? '生成中' : state.status === 'failed' ? '生成失败' : '未生成'
+  return <div><dt>档案卡</dt><dd className={`brief-${state.status}`}>{label}</dd></div>
+}
 
 /** Read only the selected paper after navigation settles; share the detail query cache. */
 function BrowseTranslatedTitle({ paper }: { paper: ArchivePaper }): React.JSX.Element {

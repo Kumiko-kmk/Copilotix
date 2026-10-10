@@ -63,7 +63,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     const requests = await app.evaluate(() => Reflect.get(globalThis, '__insightRequests')) as unknown[]
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests)).toContain('Original paper content')
-    expect(requests[0]).toMatchObject({ temperature: 0.2, max_tokens: 3000, response_format: { type: 'json_object' } })
+    expect(requests[0]).toMatchObject({ temperature: 0.2, max_tokens: 6000, response_format: { type: 'json_object' } })
     expect(JSON.stringify(requests)).not.toContain(workspace.root)
     expect(JSON.stringify(requests)).not.toContain('copilotix-e2e-insight-fake-key')
     const durable = await readFile(join(workspace.root, 'documents-v2', documentId, 'insight', 'brief.v2.json'), 'utf8')
