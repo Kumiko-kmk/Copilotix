@@ -67,9 +67,10 @@ test('archive keeps titles separate, category controls fixed, and translated abs
     }
     if (baseline) return
     await expect(archive.getByText('COLUMN 01 / 02', { exact: true })).toBeVisible()
-    await expect(archive.locator('.paper-archive-keywords')).toContainText(briefContent.keywords.join(' · '))
+    await expect(archive.locator('.paper-archive-keywords')).toContainText(briefContent.keywords.join(' '))
     await expect(archive.locator('.paper-archive-meta')).not.toContainText('已完成')
-    await expect(archive.locator('.paper-archive-meta')).toContainText('2026/10/07')
+    await expect(archive.locator('.paper-archive-meta').locator('dt')).toHaveText(['关键词', '总结'])
+    await expect(archive.locator('.paper-archive-summary')).toContainText(briefContent.tldr)
     const positions = () => archive.locator('.paper-archive-shelves').evaluate((element) => {
       const buttons = [...element.querySelectorAll('button')].map((button) => button.getBoundingClientRect().left)
       const label = element.querySelector('div')!.getBoundingClientRect()

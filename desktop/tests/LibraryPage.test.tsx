@@ -48,6 +48,7 @@ vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
 }))
 
 beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe = vi.fn(); disconnect = vi.fn() })
   vi.clearAllMocks()
   scene.fail = false
   scene.phase = 'closed'
@@ -57,7 +58,7 @@ beforeEach(() => {
     value: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })
   })
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 function changePhase(phase: DetailPhase): void {
   scene.phase = phase
@@ -141,6 +142,10 @@ describe('LibraryPage', () => {
     render(<LibraryPage documents={Array.from({ length: 37 }, (_, index) => paper(`Paper ${index}`))} onOpen={vi.fn()} onCreate={vi.fn()} />)
     expect(screen.getByText('COLUMN 01 / 01')).toBeTruthy()
     expect(screen.getByText('关键词')).toBeTruthy()
+    expect(screen.getByText('总结')).toBeTruthy()
+    expect(screen.queryByText('类型')).toBeNull()
+    expect(screen.queryByText('创建')).toBeNull()
+    expect(screen.queryByText('档案卡')).toBeNull()
     expect(screen.queryByText('状态')).toBeNull()
     fireEvent.keyDown(region(), { key: 'ArrowRight' })
     expect(scene.navigate).toHaveBeenCalledWith('lane', 1)

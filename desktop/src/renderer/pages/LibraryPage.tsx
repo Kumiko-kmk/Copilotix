@@ -8,7 +8,7 @@ import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../pap
 import ArchiveDetail from '../paperArchive/ArchiveDetail'
 import { extractPaperProfile } from '../paperArchive/paperProfile'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
-import { documentTypeLabel, formatTaskCreatedAt, statusLabels } from './TasksPage'
+import { statusLabels } from './TasksPage'
 import '../paperArchive/paperArchive.css'
 
 // Survives page switches so returning from the reader lands on the same paper.
@@ -289,10 +289,7 @@ export default function LibraryPage(props: {
           <BrowseTranslatedTitle paper={paper} />
           <div className="paper-archive-rule"><i /></div>
           <dl className="paper-archive-meta">
-            <BrowseKeywords key={paper.id} paper={paper} source={props.insights} />
-            <div><dt>类型</dt><dd>{documentTypeLabel(paper.originalName)}</dd></div>
-            <div><dt>创建</dt><dd>{formatTaskCreatedAt(paper.createdAt)}</dd></div>
-            {props.insights ? <BrowseBriefState paper={paper} source={props.insights} /> : null}
+            <BrowsePaperNotes key={paper.id} paper={paper} source={props.insights} />
           </dl>
           <div className="paper-archive-actions">
             <button type="button" className="paper-archive-action" onClick={() => sceneRef.current?.openDetail()}>
@@ -333,8 +330,8 @@ export default function LibraryPage(props: {
 
 const RULER_TICKS = 9
 
-/** Keywords occupy the former status cell; title and date rendering keep their original structure. */
-function BrowseKeywords({ paper, source }: { paper: ArchivePaper; source?: PaperInsightSource }): React.JSX.Element {
+/** Read keywords and the file card's summary together after selection settles. */
+function BrowsePaperNotes({ paper, source }: { paper: ArchivePaper; source?: PaperInsightSource }): React.JSX.Element {
   const [settled, setSettled] = React.useState(false)
   const [state, setState] = React.useState<PaperInsightState | null>(null)
   React.useEffect(() => {
@@ -356,8 +353,35 @@ function BrowseKeywords({ paper, source }: { paper: ArchivePaper; source?: Paper
   const extracted = React.useMemo(() => details.data
     ? extractPaperProfile(details.data.markdown, details.data.translatedMarkdown).keywords : [], [details.data])
   const fromCard = state?.status === 'ready' ? ('brief' in state ? state.brief.keywords : state.insight.keywords) : []
-  const keywords = (fromCard.length ? fromCard : extracted).join(' · ')
-  return <div className="paper-archive-keywords"><dt>关键词</dt><dd title={keywords || undefined}>{keywords || '—'}</dd></div>
+  const keywords = (fromCard.length ? fromCard : extracted).map((word) => word.trim().replace(/\s+/gu, ' ')).filter(Boolean).join(' ')
+  const summary = state?.status === 'ready' ? ('brief' in state ? state.brief.tldr : state.insight.summary) : ''
+  return <>
+    <div className="paper-archive-keywords"><dt>关键词</dt><SingleLineKeywords text={keywords} /></div>
+    <div className="paper-archive-summary"><dt>总结</dt><dd title={summary || undefined}>{summary || '暂无总结'}</dd></div>
+  </>
+}
+
+/** Keep a readable single line, with full keywords available in the tooltip. */
+function SingleLineKeywords({ text }: { text: string }): React.JSX.Element {
+  const ref = React.useRef<HTMLElement>(null)
+  React.useLayoutEffect(() => {
+    const element = ref.current
+    if (!element) return
+    let measuredWidth = -1
+    const fit = (): void => {
+      if (element.clientWidth === measuredWidth) return
+      measuredWidth = element.clientWidth
+      element.style.fontSize = '13px'
+      if (element.scrollWidth > element.clientWidth && element.clientWidth > 0) {
+        element.style.fontSize = `${Math.max(11, 13 * element.clientWidth / element.scrollWidth)}px`
+      }
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [text])
+  return <dd ref={ref} title={text || undefined}>{text || '—'}</dd>
 }
 
 /**
@@ -379,24 +403,6 @@ function useLibraryCategories(documents: readonly DocumentSummary[], load: (() =
     return () => { current = false; window.clearTimeout(timer) }
   }, [key, cardsChanged, load])
   return load ? categories : null
-}
-
-/** Whether the selected paper already has an AI file card, read once navigation settles. */
-function BrowseBriefState({ paper, source }: { paper: ArchivePaper; source: PaperInsightSource }): React.JSX.Element | null {
-  const [state, setState] = React.useState<PaperInsightState | null>(null)
-  React.useEffect(() => {
-    let current = true
-    setState(null)
-    const timer = window.setTimeout(() => {
-      source.get(paper.id).then((next) => { if (current) setState(next) }, () => undefined)
-    }, 180)
-    const stop = source.subscribe((id, next) => { if (current && id === paper.id) setState(next) })
-    return () => { current = false; window.clearTimeout(timer); stop() }
-  }, [paper.id, source])
-  if (!state || state.status === 'unavailable') return null
-  const label = state.status === 'ready' ? ('brief' in state ? (state.stale ? '需更新' : '已生成') : '旧版')
-    : state.status === 'generating' ? '生成中' : state.status === 'failed' ? '生成失败' : '未生成'
-  return <div><dt>档案卡</dt><dd className={`brief-${state.status}`}>{label}</dd></div>
 }
 
 /** Read only the selected paper after navigation settles; share the detail query cache. */

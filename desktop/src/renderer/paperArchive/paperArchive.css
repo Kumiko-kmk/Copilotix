@@ -96,16 +96,13 @@
 }
 .paper-archive-rule { position: relative; height: 1px; margin: calc(22px / 3) 0 6px; background: color-mix(in srgb, var(--ink) 55%, transparent); }
 .paper-archive-rule i { position: absolute; top: -3px; left: -10px; width: 5px; height: 5px; background: var(--ink); }
-.paper-archive-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 6px 20px; margin: 0 0 22px; }
+.paper-archive-meta { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 0 0 22px; }
 .paper-archive-meta dt { margin-bottom: 4px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
 .paper-archive-meta dd { margin: 0; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; }
 .paper-archive-meta > div { min-width: 0; }
 .paper-archive-meta dd { white-space: nowrap; }
-.paper-archive-keywords dd { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; white-space: normal; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; user-select: text; }
-.paper-archive-meta dd.status-completed { color: #3f8a6e; }
-.paper-archive-meta dd.status-failed { color: var(--archive-index-failed); }
-.paper-archive-meta dd.status-partial { color: #b07a1c; }
-.paper-archive-meta dd:is(.status-queued, .status-uploading, .status-parsing, .status-translating) { color: var(--archive-accent); }
+.paper-archive-keywords dd { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.5; user-select: text; }
+.paper-archive-summary dd { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; white-space: normal; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 3; user-select: text; }
 
 .paper-archive-action {
   display: inline-flex; min-width: 172px; height: 44px; padding: 0 14px 0 2px;
@@ -239,8 +236,6 @@
 }
 .paper-archive-tabs button small { font-size: 10px; font-variant-numeric: tabular-nums; }
 .paper-archive-tab-count { margin-left: 2px; color: var(--muted); font-size: 10.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.paper-archive-meta dd.brief-ready { color: var(--archive-accent); }
-.paper-archive-meta dd.brief-failed { color: var(--archive-index-failed); }
 .paper-archive-elapsed { font-variant-numeric: tabular-nums; }
 .paper-archive-primary-end { display: inline-flex; align-items: center; gap: 12px; }
 .paper-archive-primary kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, #fff 35%, transparent); border-radius: 3px; color: color-mix(in srgb, #fff 70%, transparent); font: 10px/1.4 inherit; letter-spacing: .04em; }
