@@ -90,14 +90,16 @@ describe('paper archive shelves', () => {
 })
 
 describe('paper archive columns', () => {
-  it('splits a large category into balanced columns so sideways browsing always has a neighbour', () => {
+  it('keeps all papers in a large category in one looping column', () => {
     const papers = Array.from({ length: 37 }, () => paper(october))
     const columns = buildArchiveColumns(papers, [{ id: 'c-big', name: '神经算子', paperIds: papers.map((item) => item.id) }])
-    expect(columns).toHaveLength(5)
+    expect(columns).toHaveLength(1)
     expect(columns.every((column) => column.category === '神经算子')).toBe(true)
-    expect(columns.map((column) => column.papers.length)).toEqual([8, 8, 8, 8, 5])
-    expect(columns[0]!.label).toBe('神经算子 · 1/5')
-    expect(new Set(columns.map((column) => column.key)).size).toBe(5)
+    expect(columns[0]!.papers).toEqual(papers)
+    expect(columns[0]!.label).toBe('神经算子')
+    expect(columns[0]!.key).toBe('c-big')
+    expect(paperAt(columns, { lane: 0, row: 37 })).toBe(papers[0])
+    expect(paperAt(columns, { lane: 0, row: -1 })).toBe(papers[36])
     expect(columns.flatMap((column) => column.papers)).toHaveLength(37)
   })
 

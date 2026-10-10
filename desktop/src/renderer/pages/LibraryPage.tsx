@@ -289,7 +289,7 @@ export default function LibraryPage(props: {
           <BrowseTranslatedTitle paper={paper} />
           <div className="paper-archive-rule"><i /></div>
           <dl className="paper-archive-meta">
-            <div><dt>状态</dt><dd className={`status-${paper.workflow.status}`}>{statusLabels[paper.workflow.status]}{paper.workflow.status === 'translating' ? ` ${paper.workflow.progress}%` : ''}</dd></div>
+            <BrowseKeywords key={paper.id} paper={paper} source={props.insights} />
             <div><dt>类型</dt><dd>{documentTypeLabel(paper.originalName)}</dd></div>
             <div><dt>创建</dt><dd>{formatTaskCreatedAt(paper.createdAt)}</dd></div>
             {props.insights ? <BrowseBriefState paper={paper} source={props.insights} /> : null}
@@ -320,7 +320,7 @@ export default function LibraryPage(props: {
             <button type="button" aria-label="上一列" onClick={() => navigate('lane', -1)}><ArrowLeftOutlined /></button>
             <div>
               <small>COLUMN {pad(shelfIndex + 1)} / {pad(shelves.length)}</small>
-              <span key={shelf?.key}>{shelf?.label}</span>
+              <span key={shelf?.key} title={shelf?.label}>{shelf?.label}</span>
             </div>
             <button type="button" aria-label="下一列" onClick={() => navigate('lane', 1)}><ArrowRightOutlined /></button>
           </div>
@@ -332,6 +332,33 @@ export default function LibraryPage(props: {
 }
 
 const RULER_TICKS = 9
+
+/** Keywords occupy the former status cell; title and date rendering keep their original structure. */
+function BrowseKeywords({ paper, source }: { paper: ArchivePaper; source?: PaperInsightSource }): React.JSX.Element {
+  const [settled, setSettled] = React.useState(false)
+  const [state, setState] = React.useState<PaperInsightState | null>(null)
+  React.useEffect(() => {
+    let current = true
+    let updated = false
+    const stop = source?.subscribe((id, next) => {
+      if (current && id === paper.id) { updated = true; setState(next) }
+    })
+    const timer = window.setTimeout(() => {
+      setSettled(true)
+      source?.get(paper.id).then((next) => { if (current && !updated) setState(next) }, () => undefined)
+    }, 180)
+    return () => { current = false; window.clearTimeout(timer); stop?.() }
+  }, [paper.id, source])
+  const details = useQuery({
+    queryKey: ['document', paper.id], queryFn: () => window.copilotix.getDocument(paper.id),
+    enabled: settled, staleTime: 30_000
+  })
+  const extracted = React.useMemo(() => details.data
+    ? extractPaperProfile(details.data.markdown, details.data.translatedMarkdown).keywords : [], [details.data])
+  const fromCard = state?.status === 'ready' ? ('brief' in state ? state.brief.keywords : state.insight.keywords) : []
+  const keywords = (fromCard.length ? fromCard : extracted).join(' · ')
+  return <div className="paper-archive-keywords"><dt>关键词</dt><dd title={keywords || undefined}>{keywords || '—'}</dd></div>
+}
 
 /**
  * The library's content categories. Reloaded (debounced) when papers are added, removed or change

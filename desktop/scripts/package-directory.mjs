@@ -14,6 +14,7 @@ import { applyReleaseFusesAfterPack } from './after-pack.mjs'
 import { buildStandaloneUninstaller } from './build-uninstall-launcher.mjs'
 import { verifyDesktopFuses } from './electron-fuses.mjs'
 import { collectThirdPartyLicenses } from './collect-third-party-licenses.mjs'
+import { stampRuntimeFileTimes } from './runtime-file-times.mjs'
 import {
   auditRelease,
   assertReleaseSigningConfiguration,
@@ -104,6 +105,11 @@ export async function publishRelease({ fromBuilt = false } = {}) {
     const asarEntries = listAsarEntries(appAsarPath)
     const runtimeFiles = await collectRelativeFiles(layout.runtimeDirectory)
     assertRequiredPackagedContent({ asarEntries, runtimeFiles })
+
+    // Stamp only this staged distribution, before Setup embeds its files. Source dependencies
+    // and the user's library keep their original dates; file contents/signatures are unchanged.
+    const stampedFiles = await stampRuntimeFileTimes(layout.runtimeDirectory)
+    process.stdout.write(`Runtime file dates: ${stampedFiles} files stamped with this build time\n`)
 
     const runtimeHashes = { executable: await sha256(executablePath), appAsar: await sha256(appAsarPath) }
     await runSetupBuilder(layout, { forceCodeSigning: productionRelease, signerSubject })

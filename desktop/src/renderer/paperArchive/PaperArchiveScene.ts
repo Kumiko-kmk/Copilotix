@@ -982,7 +982,8 @@ export class PaperArchiveScene {
       return `M${ax.toFixed(1)} ${ay.toFixed(1)}L${bx.toFixed(1)} ${by.toFixed(1)}`
     }).join(''))
     corners.forEach((corner, index) => {
-      const [x, y] = this.projectFace(...SCAN_CORNERS[index]!)
+      const cornerPosition = SCAN_CORNERS[index]!
+      const [x, y] = this.projectFace(cornerPosition[0]!, cornerPosition[1]!)
       corner.setAttribute('x', (x - 4).toFixed(1))
       corner.setAttribute('y', (y - 4).toFixed(1))
       corner.style.opacity = String(frame.markers)

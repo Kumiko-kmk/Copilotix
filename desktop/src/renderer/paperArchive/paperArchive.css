@@ -96,9 +96,12 @@
 }
 .paper-archive-rule { position: relative; height: 1px; margin: calc(22px / 3) 0 6px; background: color-mix(in srgb, var(--ink) 55%, transparent); }
 .paper-archive-rule i { position: absolute; top: -3px; left: -10px; width: 5px; height: 5px; background: var(--ink); }
-.paper-archive-meta { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 6px 30px; margin: 0 0 22px; }
+.paper-archive-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 6px 20px; margin: 0 0 22px; }
 .paper-archive-meta dt { margin-bottom: 4px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
 .paper-archive-meta dd { margin: 0; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; }
+.paper-archive-meta > div { min-width: 0; }
+.paper-archive-meta dd { white-space: nowrap; }
+.paper-archive-keywords dd { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; white-space: normal; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; user-select: text; }
 .paper-archive-meta dd.status-completed { color: #3f8a6e; }
 .paper-archive-meta dd.status-failed { color: var(--archive-index-failed); }
 .paper-archive-meta dd.status-partial { color: #b07a1c; }
@@ -141,8 +144,10 @@
 .paper-archive-ruler i.active { width: 2px; height: 24px; background: var(--archive-accent); }
 
 .paper-archive-shelves { display: flex; align-items: center; justify-self: end; gap: 18px; padding-bottom: 6px; }
-.paper-archive-shelves > div { display: flex; min-width: 118px; flex-direction: column; gap: 3px; text-align: center; }
-.paper-archive-shelves span { color: var(--ink); font-size: 14px; font-weight: 600; animation: paper-archive-roll .32s var(--ease-out) both; }
+.paper-archive-shelves > div { display: flex; flex: 0 0 12em; width: 12em; min-width: 0; flex-direction: column; gap: 3px; font-size: 14px; text-align: center; }
+.paper-archive-shelves button { flex-shrink: 0; }
+.paper-archive-shelves small { white-space: nowrap; }
+.paper-archive-shelves span { overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; animation: paper-archive-roll .32s var(--ease-out) both; }
 
 .paper-archive-hints { grid-column: 1 / -1; justify-self: center; margin: 2px 0 0; font-size: 10.5px; letter-spacing: .12em; text-transform: none; }
 .paper-archive-hints i { margin: 0 12px; font-style: normal; opacity: .55; }
