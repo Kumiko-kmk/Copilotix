@@ -22,8 +22,8 @@ export default function ArchiveDetail(props: {
   category: string
   fileNumber: number
   phase: Exclude<DetailPhase, 'closed'>
-  /** The browse panel's box when extraction started; the panel stretches from it to the card's height. */
-  morphFrom?: DOMRect | null
+  /** Boxes in the browse panel when extraction started: the panel stretches from it, the titles glide from theirs. */
+  morphFrom?: ArchiveMorph | null
   /** The glass has started to clear (or the file is already open): lift the redaction. */
   textReveal?: boolean
   onPage(page: HTMLCanvasElement | null): void
@@ -60,7 +60,11 @@ export default function ArchiveDetail(props: {
   React.useLayoutEffect(() => {
     const article = articleRef.current
     if (!article || !morphFrom || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const animations = stretchPanel(article, morphFrom, closing)
+    const animations = [
+      ...stretchPanel(article, morphFrom.panel, closing),
+      ...glide(article.querySelector('header h2'), morphFrom.title, morphFrom.titleSize, closing),
+      ...glide(article.querySelector('header .paper-archive-translated-title'), morphFrom.subtitle, 0, closing)
+    ]
     return () => animations.forEach((animation) => animation.cancel())
   }, [closing, morphFrom])
 
@@ -96,6 +100,20 @@ export default function ArchiveDetail(props: {
     ? [['abstract', '摘要'], ['overview', '概览'], ['findings', '发现', brief.findings.length], ['limits', '局限与前提', brief.limitations.length + brief.assumptions.length]]
     : [['abstract', '摘要'], ['structure', '结构', profile?.sections.length || undefined], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
   const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
+  const tabsRef = React.useRef<HTMLDivElement>(null)
+  // One underline slides to the selected tab. It is placed without motion first, then moves.
+  React.useLayoutEffect(() => {
+    const list = tabsRef.current
+    const active = list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+    if (!list || !active) return
+    list.style.setProperty('--tab-x', `${active.offsetLeft}px`)
+    list.style.setProperty('--tab-w', `${active.offsetWidth}px`)
+    if (list.dataset.indicator !== 'moving') {
+      list.dataset.indicator = 'placed'
+      const frame = requestAnimationFrame(() => { list.dataset.indicator = 'moving' })
+      return () => cancelAnimationFrame(frame)
+    }
+  }, [activeTab, tabs.length, brief])
 
   return (
     <>
@@ -106,8 +124,9 @@ export default function ArchiveDetail(props: {
         <div ref={redactionRef} className="paper-archive-redactions" aria-hidden="true" />
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.category}</span>
-          <h2 className="paper-archive-reveal" style={{ '--i': 0 } as React.CSSProperties}>{title}</h2>
-          <p className="paper-archive-translated-title paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}>{subtitle || '\u00a0'}</p>
+          {/* Not redacted: the titles were already readable in the browse panel and glide up from it. */}
+          <h2>{title}</h2>
+          <p className="paper-archive-translated-title">{subtitle || '\u00a0'}</p>
         </header>
         <div className="paper-archive-rule"><i /></div>
         {details.isError ? <p className="paper-archive-detail-error" role="alert">论文内容读取失败，可以直接打开阅读。</p> : null}
@@ -119,7 +138,7 @@ export default function ArchiveDetail(props: {
           </> : null}
 
         </dl>
-        <div className="paper-archive-tabs" role="tablist" aria-label="档案内容">
+        <div ref={tabsRef} className="paper-archive-tabs" role="tablist" aria-label="档案内容">
           {tabs.map(([id, label], index) => (
             <button key={id} type="button" role="tab" id={`paper-archive-tab-${id}`} aria-selected={activeTab === id}
               tabIndex={activeTab === id ? 0 : -1} aria-controls="paper-archive-tabpanel" onClick={() => setTab(id)}
@@ -184,7 +203,20 @@ function Elapsed(): React.JSX.Element {
   return <span className="paper-archive-elapsed"> {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>
 }
 
+export interface ArchiveMorph {
+  panel: DOMRect
+  title: DOMRect | null
+  subtitle: DOMRect | null
+  /** Font size of the browse title, so the detail title starts at that size. */
+  titleSize: number
+}
+
+// The panel starts stretching once the search has mostly folded away, so the two never cross at
+// the top of the page. The titles ride with the same timing: the panel's clip opens upward exactly
+// as fast as they rise, so they stay inside it the whole way.
+const STRETCH_DELAY = 120
 const OPEN_TIMING: KeyframeAnimationOptions = { duration: 440, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }
+const GLIDE_TIMING: KeyframeAnimationOptions = { ...OPEN_TIMING, delay: STRETCH_DELAY }
 const CLOSE_TIMING: KeyframeAnimationOptions = { duration: 180, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }
 
 /** Reveal between the browse panel's box and the detail bounds using clip-path. */
@@ -197,10 +229,23 @@ function stretchPanel(article: HTMLElement, from: DOMRect, closing: boolean): An
   const right = Math.min(to.width - left, Math.max(0, to.right - from.right))
   const full = 'inset(0px 0px 0px 0px)'
   const narrow = `inset(${top}px ${right}px ${bottom}px ${left}px)`
-  const timing = closing ? CLOSE_TIMING : OPEN_TIMING
+  const timing = closing ? CLOSE_TIMING : { ...OPEN_TIMING, delay: STRETCH_DELAY }
   return [
     article.animate(closing ? [{ clipPath: full }, { clipPath: narrow }] : [{ clipPath: narrow }, { clipPath: full }], timing)
   ]
+}
+
+/** Move a header title from its place in the browse panel (scaled to that size) and back on close. */
+function glide(element: Element | null, from: DOMRect | null, fromSize: number, closing: boolean): Animation[] {
+  if (!(element instanceof HTMLElement) || !from?.height) return []
+  const to = element.getBoundingClientRect()
+  if (!to.height) return []
+  const size = Number.parseFloat(getComputedStyle(element).fontSize)
+  const scale = fromSize > 0 && size > 0 ? fromSize / size : 1
+  const away = `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${scale})`
+  element.style.transformOrigin = '0 0'
+  const frames: Keyframe[] = closing ? [{ transform: 'none' }, { transform: away }] : [{ transform: away }, { transform: 'none' }]
+  return [element.animate(frames, closing ? CLOSE_TIMING : GLIDE_TIMING)]
 }
 
 /** Wide and short fields keep one line; half-width fields keep two. */

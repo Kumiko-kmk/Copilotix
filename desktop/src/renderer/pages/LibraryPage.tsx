@@ -5,7 +5,7 @@ import type { DocumentSummary } from '@shared/ipcSchemas'
 import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
 import type { LibraryCategories } from '@shared/libraryCategories'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../paperArchive/PaperArchiveScene'
-import ArchiveDetail from '../paperArchive/ArchiveDetail'
+import ArchiveDetail, { type ArchiveMorph } from '../paperArchive/ArchiveDetail'
 import { extractPaperProfile } from '../paperArchive/paperProfile'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
 import { statusLabels } from './TasksPage'
@@ -31,7 +31,7 @@ export default function LibraryPage(props: {
   const searchRef = React.useRef<HTMLInputElement>(null)
   const panelRef = React.useRef<HTMLElement>(null)
   /** The browse panel's box when extraction starts; the detail panel stretches out of it. */
-  const morphFromRef = React.useRef<DOMRect | null>(null)
+  const morphFromRef = React.useRef<ArchiveMorph | null>(null)
   const sceneRef = React.useRef<PaperArchiveScene | null>(null)
   const onOpenRef = React.useRef(props.onOpen)
   onOpenRef.current = props.onOpen
@@ -98,7 +98,10 @@ export default function LibraryPage(props: {
           // Still mounted here: React re-renders after this callback.
           if (next === 'opening' || next === 'open') {
             const panel = panelRef.current?.getBoundingClientRect()
-            if (panel?.height) morphFromRef.current = panel
+            // The titles glide from here into the detail header.
+            const box = (selector: string): DOMRect | null => panelRef.current?.querySelector(selector)?.getBoundingClientRect() ?? null
+            const heading = panelRef.current?.querySelector('.paper-archive-title')
+            if (panel?.height) morphFromRef.current = { panel, title: box('.paper-archive-title > span'), subtitle: box('.paper-archive-translated-title'), titleSize: heading ? Number.parseFloat(getComputedStyle(heading).fontSize) : 0 }
           }
           if (next !== 'closed') setSearchOpen(false)
           setPhase(next)
@@ -357,7 +360,7 @@ function BrowsePaperNotes({ paper, source }: { paper: ArchivePaper; source?: Pap
   const summary = state?.status === 'ready' ? ('brief' in state ? state.brief.tldr : state.insight.summary) : ''
   return <>
     <div className="paper-archive-keywords"><dt>关键词</dt><SingleLineKeywords text={keywords} /></div>
-    <div className="paper-archive-summary"><dt>总结</dt><dd>{summary || '暂无总结'}</dd></div>
+    <div className="paper-archive-summary"><dt>总结</dt><dd key={summary} className="paper-archive-arrive">{summary || '暂无总结'}</dd></div>
   </>
 }
 
@@ -381,7 +384,7 @@ function SingleLineKeywords({ text }: { text: string }): React.JSX.Element {
     observer.observe(element)
     return () => observer.disconnect()
   }, [text])
-  return <dd ref={ref}>{text || '—'}</dd>
+  return <dd ref={ref} key={text} className="paper-archive-arrive">{text || '—'}</dd>
 }
 
 /**

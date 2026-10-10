@@ -125,9 +125,9 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - 不改 `archiveMotion.ts` 已校準曲線。單一 rAF、約 60fps，牆鐘待機，失焦／隱藏停渲染；reduced-motion 直接完成動畫，卸載時釋放 GPU。不得恢復「流暢模式」或材質降檔；未採用效果只在 [動畫候選](docs/LIBRARY_MOTION_IDEAS_ZH.md) 記錄。
 - 瀏覽 DPR ≤1.25／≤3.3M 像素，透射半解析度、陰影 1024；6 幀超時降解析度 15%（下限 0.55），穩定 240 幀且 8 秒未降再升 8%。保留解析拾取、剔除、共享 instanceMatrix、compileAsync 暖機；途經選中卡漣漪最多 6，升起 4.2／回落 4.5。
 - 抽出沿用單一 hero、4.05 升起與 detail 鏡頭；鏡頭 >0.6、升起 >3 才解密。標記以 4.8 倍速、玻璃清除以 2.4 倍速，清除前緣羽化 0.12；`onDecryptReveal` 啟動文字揭開。首頁 1600px／LRU 6，按需載入 PDF／資料／解讀；換篇或卸載取消晚到結果與訂閱。
-- `lineRedaction.ts` 等文字與檔案卡載入後揭開；ResizeObserver／MutationObserver 忽略遮擋層，重新量測所有可見文字（含部分末行），滑出途中版面改變就移除遮擋。逐行退場 0.475 秒，閱讀順序曲線與卡片解密時間不變；reduced-motion 不畫墨條。
+- `lineRedaction.ts` 等文字與檔案卡載入後揭開；ResizeObserver／MutationObserver 忽略遮擋層，重新量測所有可見文字（含部分末行），滑出途中版面改變就移除遮擋。逐行退場 0.95 秒，閱讀順序曲線與卡片解密時間不變；reduced-motion 不畫墨條。詳情標題與譯名不遮擋：opening 時捕捉瀏覽面板標題位置與字級，與面板拉伸同時序（延遲 120ms、440ms）平移縮放進詳情標題區，closing 反向；標題層級高於遮擋層。文庫全區文字兩端對齊（居中標籤除外），遮擋條隨之齊整。
 - Enter 忽略 repeat，抽出／解密中不進 Reader，完全展開後再次 Enter 或點 hero 才進入；「打开阅读」可直接進入。移動 ≥8px、pointercancel／lostpointercapture 不觸發點擊。詳情分頁左右／Home／End 移焦，正文方向鍵保留捲動，僅瀏覽區方向鍵換卡。
-- 搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦，Enter 選首項，Tab 選結果，IME 不誤觸並取消慣性。瀏覽 Esc 先收搜尋；抽出期間檢索收合且 inert、結果關閉，Esc 關詳情並移焦回文庫。WebGL 失敗仍可搜尋進 Reader。
+- 搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦，Enter 選首項，Tab 選結果，IME 不誤觸並取消慣性。瀏覽 Esc 先收搜尋；抽出期間檢索收合且 inert、結果關閉，Esc 關詳情並移焦回文庫。收合 0.24 秒內完成，詳情拉伸延遲 120ms 才到達頂部，兩者不交疊；返回時詳情先淡出，橫線 0.2 秒後展開、文字 0.38 秒後展開。搜尋結果與選中頁關鍵詞／總結載入時淡入；詳情分頁以單一滑動指示線切換。WebGL 失敗仍可搜尋進 Reader。
 - `closing` 保留舊文獻／封面／模型：面板 180ms 淡出且 inert，模型／鏡頭 320ms 收回後卸載。僅一個待選目標，方向輸入累積、搜尋覆蓋；目標移除即取消，收回中重開同篇接續姿態並清掉待選；reduced-motion 直接收回。
 - `entryScanTime` 把入場掃描平段壓至約 0.25 秒；肩部在滑入結束時升起。`ARRAY_SCREEN_SHIFT` 將選中卡移向左下（-4%／10% 視口）；瀏覽／詳情共用 `--archive-panel-left` 與 `--archive-detail-width`。
 - `onDetailFrame` 寫入 `--archive-detail-top/height`，詳情頂端與品牌對齊、底端至卡片下緣；分頁高度固定，僅正文捲動，floor veil 遮蓋陣列。clip-path 揭露／收回，不加裝飾框線；返回按鈕在卡片下方。`stretchPanel` 必須在 opening 時捕捉仍掛載的瀏覽面板；reduced-motion 跳過。
