@@ -94,7 +94,7 @@ export default function ArchiveDetail(props: {
   const abstract = profile?.translatedAbstract
   // The count beside a tab says how much is behind it before switching.
   const tabs: Array<[Tab, string, number?]> = brief
-    ? [['abstract', '摘要'], ['overview', '概览'], ['findings', '发现', brief.findings.length], ['limits', '局限与前提', brief.limitations.length + brief.assumptions.length]]
+    ? [['overview', '概览'], ['findings', '发现', brief.findings.length], ['limits', '局限与前提', brief.limitations.length + brief.assumptions.length], ['reading', '阅读路线与术语', brief.terms.length]]
     : [['abstract', '摘要'], ['structure', '结构', profile?.sections.length || undefined], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
   const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
 
@@ -117,7 +117,10 @@ export default function ArchiveDetail(props: {
           {brief ? <>
             <Field index={3} half label="证据基础" value={brief.approach.basis} />
             <Field index={4} half label="检验方式" value={brief.approach.evaluation} />
-          </> : null}
+            <Field index={5} wide label="关键词" value={brief.keywords.join(' · ')} />
+          </> : <>
+            {profile?.keywords.length ? <Field index={7} wide label="关键词" value={profile.keywords.join(' · ')} /> : null}
+          </>}
 
         </dl>
         <div className="paper-archive-tabs" role="tablist" aria-label="档案内容">
@@ -141,18 +144,18 @@ export default function ArchiveDetail(props: {
           ))}
         </div>
         <section id="paper-archive-tabpanel" role="tabpanel" tabIndex={0} aria-labelledby={`paper-archive-tab-${activeTab}`} className="paper-archive-tabpanel paper-archive-reveal" style={{ '--i': 8 } as React.CSSProperties}>
-          {activeTab === 'abstract' ? (
+          {briefState ? <BriefContent brief={briefState.brief} anchors={briefState.anchors} tab={activeTab as BriefTab} /> : activeTab === 'abstract' ? (
             <>
               <div className="paper-archive-tabpanel-head">
                 <span className="paper-archive-eyebrow">ABSTRACT</span>
               </div>
               <p className="paper-archive-abstract paper-archive-translated-abstract">{abstract ?? (profile ? '暂无译文摘要。' : '正在读取…')}</p>
             </>
-          ) : briefState ? <BriefContent brief={briefState.brief} anchors={briefState.anchors} tab={activeTab as BriefTab} /> : activeTab === 'structure' ? (
+          ) : activeTab === 'structure' ? (
             profile?.sections.length
               ? <ol className="paper-archive-outline">{profile.sections.map((section) => <li key={section}>{section}</li>)}</ol>
               : <p className="paper-archive-abstract">{profile ? '未识别到章节标题。' : '正在读取…'}</p>
-          ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} onRegenerate={insight.generate} /> : <p className="paper-archive-abstract">生成档案卡后可查看研究问题、证据、发现与局限。</p>}
+          ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} onRegenerate={insight.generate} /> : <p className="paper-archive-abstract">生成档案卡后可查看研究问题、证据、发现与阅读路线。</p>}
         </section>
         {props.insights && insight.state?.status !== 'unavailable' ? <div className="paper-archive-brief-status" role="status">
           {insight.state?.status === 'generating' ? <>AI 正在阅读这篇论文…<Elapsed /> <button type="button" onClick={() => { void props.insights?.cancel?.(paper.id).catch(() => undefined) }}>取消生成</button></>
