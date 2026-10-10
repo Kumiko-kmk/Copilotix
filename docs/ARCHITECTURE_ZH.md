@@ -6,17 +6,17 @@
 
 | 项目 | 当前基线 |
 |---|---|
-| 适用分支 | `refactor/p0-p1-architecture` 的 P0/P1 架构线 |
-| Desktop 版本 | `1.0.0` |
+| 适用分支 | 当前工作分支见根 `AGENTS.md` |
+| Desktop 版本 | 以 `desktop/package.json` 为准 |
 | Electron | `44.1.1` |
 | Node.js | `24.19.0`（`.node-version` 与 CI 一致） |
 | pnpm | `11.19.0` |
-| 支持目标 | Windows x64 Setup 安装版与 ZIP 免安装版；其他平台未接入发布验收 |
+| 支持目标 | Windows x64 Setup 与包含 Setup 的精简 ZIP；其他平台未接入发布验收 |
 | 本地应用数据目录 | `%APPDATA%\Copilotix-Translation-v2`（Electron `userData`） |
 | 数据库文件 | `copilotix-desktop-v2.sqlite3`，位于上述 `userData` 目录 |
 | 结果目录 | `<outputRoot>\documents-v2\{documentId}`；`documentId` 为 UUID |
 | 当前产品能力 | Parser API 解析、Markdown/表格翻译、PDF 与 Markdown 阅读、映射和阅读标注、可恢复作业与验证发布 |
-| RAG | 尚未实现；见第 10 节和 `RAG_DEVELOPMENT_PLAN_ZH.md` |
+| RAG / 问答 | 单篇问答已接入；RAG 已落地范围见第 10 节 |
 
 本文只讨论 `desktop/` 运行时。Desktop 连接 MinerU 在线 v4 API，不依赖 Python CLI 或本地解析模型。旧 Python 引擎和 Docker 配置已从当前 master 工作树移除。
 
@@ -259,11 +259,9 @@ PDF -> Utility 流式导入/hash -> v2 document/job
     -> sandbox Reader（PDF、Markdown、标注）
 ```
 
-## 10. RAG 状态与 Reader 选区边界
+## 10. RAG 與 Reader 問答邊界
 
-P0/P1 **没有实现 RAG**。当前代码中没有 chunk 生成、chunk 持久化、索引、embedding、vector store、SQLite FTS/FTS5、reranker、retrieval service、query backend 或 chat backend。现有 `ReaderChatSelection`/`ReaderChatSelectionFragment` 只是 Renderer 侧的类型化选区 payload，用于未来集成的输入形状；它没有 IPC channel、会话/消息表、模型调用、流式回答、引用校验或聊天历史。不要把“添加到对话”按钮或选区 payload 写成已支持聊天。
-
-未来 RAG 必须依赖稳定 artifact/revision/mapping，而不是直接把 `BlockMapping.id` 当跨文档身份。具体端口、表、阶段、DoD 和隐私条件见 `RAG_DEVELOPMENT_PLAN_ZH.md`；在对应代码、migration、测试和评测合入前，所有 RAG 章节只能标记为 planned/proposed。
+RAG 已落地／待實作範圍見 [分步索引](rag-implementation/README.md)，單篇文獻問答見 [維護契約](READER_AI_CHAT_PLAN_ZH.md)。切塊與持久化不代表 FTS／向量／多篇檢索已接入；來源身份始終綁定 artifact／revision／hash，不把 BlockMapping.id 當成跨文檔身份。
 
 ## 11. 公开 API 打包与 verified atomic release
 
@@ -272,7 +270,7 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 1. 只在仓库根目录精确的 `.release-next-{buildId}` staging 中构建；不得把 `desktop/out/` 当正式发布目录。
 2. 校验 `main/preload/renderer/utility` bundle、独立 `uninstall-cleanup.js`、`app.asar` 必需 entry、`@napi-rs/keyring` unpack 路径、Electron locale、fuses、运行时文件以及体积上限（当前 `app.asar < 40 MiB`、运行目录 `< 360 MiB`、精简 ZIP `< 155 MiB`、Setup `< 180 MiB`）。
 3. 以同一已验证运行目录生成 NSIS Setup 与 ZIP、`release-manifest.json` 和 `SHA256SUMS.txt`，并重新解压 ZIP 校验入口/ASAR/资源/哈希。正式构建验证主程序、Setup 与内嵌卸载器签章。
-4. 启动已打包的 `Copilotix.exe --copilotix-packaged-smoke`，只接受精确 `COPILOTIX_PACKAGED_SMOKE_OK app=1.0.0 electron=44.1.1` marker 和空 stderr；该 smoke 是 CLI 启动检查，不创建 Renderer 窗口。
+4. 启动已打包的 `Copilotix.exe --copilotix-packaged-smoke`，只接受与 package 版本及 Electron 版本匹配的精确 marker 和空 stderr；该 smoke 是 CLI 启动检查，不创建 Renderer 窗口。
 5. 所有审计、哈希和 smoke 成功后，才把现有 `release/` 原子换到 `.release-previous-{buildId}`，再把 next rename 为 `release/`；失败时恢复旧 release，并保留 staging 供诊断。
 
 精简 Release ZIP 包含 Setup、注册安装卸载入口、安装说明及小型 payload 校验元数据。完整程序已嵌入 Setup；开发运行目录仅存在 `release-artifacts/<build-id>/program/`，不进入下载 ZIP。schema 5 的 distribution 为 compact-setup，runtime.embeddedIn 指明安装器；外层 runtimeArtifactDirectory 定位开发副本，runtime 内的目录与入口相对开发产物目录。外层 release-manifest 含 ZIP 哈希且不进 ZIP，内层 bundle-manifest 不含外部产物路径或自引用 ZIP 哈希。卸载入口仅交给已注册安装的卸载器。更新前退出托盘程序；userData 和 Credential Manager 不属于发布目录。
@@ -294,11 +292,9 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 
 单元/集成测试至少覆盖：Core RPC schema/1 MiB/超时/取消、sender/frame/URL、Utility ready/restart/drain、STRICT migration/checksum、Repository/lease/checkpoint/retry、PathPolicy/符号链接、流式导入与 atomic artifact、翻译 cache/表格协议、映射/标注以及 release transaction/manifest/fuse/packaged smoke。真实 API、真实翻译和真实 PDF 属于 opt-in fixture，不是所有 PR 的默认证据。
 
-### 12.2 当前 Windows 环境记录
+### 12.2 本地驗證邊界
 
-在当前 Windows build `26200` + GameViewer 环境，sandboxed Renderer/GPU 的原生启动失败；因此不能声称本机 GUI E2E 已通过，也不能把 GUI E2E 失败伪装成产品功能通过。专用 packaged CLI smoke 已通过，并且该 smoke 不启动 Renderer。
-
-此环境事实不改变产品安全基线：不得为了本地通过而修改产品默认、发布配置或 CI 去降低 Renderer/GPU sandbox；不得把 `--disable-gpu-sandbox` 当作产品建议。GUI E2E 的通过证据必须来自具备原生条件的受控环境，并单独记录运行环境、构建和测试结果。
+本地驗證是否執行按根 AGENTS 與當次使用者指示；只聲明實際運行的環境與範圍。packaged CLI smoke 不啟動 Renderer，不能代替 GUI／GPU 驗收。不得為本地驗證降低產品默认或 CI 的 sandbox。
 
 ## 13. P0/P1 Definition of Done
 
@@ -306,38 +302,10 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 |---|---|
 | P0：边界与持久化 | Electron 44.1.1/Node 24.19.0 锁定；sandbox Renderer；最小 preload API；IPC/Core RPC schema、sender 校验、1 MiB、timeout/cancel/restart；Utility 独占 SQLite/compute；v2 userData/DB/`documents-v2/{documentId}`；STRICT migrations；PathPolicy；coverage gates 通过 |
 | P1：可恢复工作流 | durable parse/translate jobs；lease/heartbeat/checkpoint/retry/recovery；Utility 流式导入、解析归一化和 translation plan；artifact hash/revision、fsync/atomic publish、结果 ZIP 排除内部文件；provider/credential 边界；verified atomic release 与 packaged CLI smoke |
-| 文档基线 | 三份文档不把 RAG 目标写成实现；记录本机 GUI E2E 限制；公共 API/路径/错误/数据表变更有 owner、schema、测试和迁移说明 |
+| 文档基线 | 区分现有功能与目标设计；公共 API/路径/错误/数据表变更有 schema、测试、兼容与恢复说明 |
 
 任何 DoD 未满足都只能标记为 partial/proposed，不能使用“已完成”作为发布结论。
 
-## 14. 多 Agent 共改规范
+## 14. 維護與後續事項
 
-这些文档和公共契约会被多个 Agent 共同参考，但共享参考不等于共享写入：
-
-1. 开始工作前记录 `git status --short --branch`，确认当前分支和工作树；结束时再次记录。现有用户/Agent 改动属于他人，不能覆盖、回滚或顺手清理。
-2. 一个工作项一个 owner；同一工作树同一时刻只允许一个 Agent 修改同一文件。需要并行实现时使用独立分支/worktree，集成时保留最小 diff。
-3. `shared/*` schema、`preload/index.ts`、`main/ipc.ts`、`main/index.ts`、`v2Database.ts`、JobRepository、release scripts 是高风险公共边界；任何契约改动先更新 schema/测试，再更新本文件与 RAG 计划。
-4. 实现 Agent 不得在不相干工作项中升级依赖、格式化全仓、修改许可证、清理 release、stash 或触碰其他 worktree。
-5. 每项声明都要标注 `implemented`、`verified`、`planned` 或 `blocked`，并附源码/测试路径；本机未运行的 package/E2E 不得写成通过。
-6. 迁移、公开 API、错误码、artifact 格式、job 状态、路径布局和安全设置属于权威边界；改动必须说明兼容策略、失败回滚和测试。
-7. 文档只由负责该章节的 owner 更新；基线、公共契约、决策记录和总进度由集成 Agent 串行维护。
-
-## 15. 已知后续事项
-
-- Copilotix 自有代码已采用根目录 MIT 许可证，桌面 package 元数据同步为 MIT；第三方组件仍按各自许可分发。
-- macOS/Linux 的 Credential Vault、原生 Renderer/GPU、路径、打包、签名/公证和 CI 尚未形成发布验收，不能从纯函数测试推断桌面发布可用。
-- RAG 的 chunk/index/embedding/vector/FTS/reranker/retrieval/chat 仍需按独立计划实现，不得直接添加未经 migration 和隐私评审的表或 Provider。
-
-## 16. 修改前后清单
-
-### 修改前
-
-- 找到对应 port、schema、handler、repository 和测试；确认是否跨 Main/Preload/Utility/Renderer 边界。
-- 确认是否会改变 document path、artifact 格式、job 状态、公开 API、错误码或凭证流向；若会，先登记兼容和迁移方案。
-- 对大文件、网络、SQLite、Utility 和 release 变更定义可重复的 fake/fixture 验证。
-
-### 修改后
-
-- 运行与工作项匹配的 lint/typecheck/unit/coverage；修改发布逻辑时运行脚本测试和受控 packaged smoke。
-- 对 IPC、Core RPC、migration、PathPolicy、lease/checkpoint、atomic artifact 和隐私边界补测试。
-- 检查 `git diff --check`、只提交所属文件、记录验证环境和未运行的测试；不把 GUI E2E 或 release 结果凭空补写。
+協作、文檔精簡、本地驗證與發布授權統一見根 [AGENTS.md](../AGENTS.md)。變更前定位 port／schema／handler／repository，跨邊界修改須保留兼容、回滾與相關回歸。macOS／Linux 的 Vault、原生窗口、路徑、打包與簽名尚未完成发布驗收。

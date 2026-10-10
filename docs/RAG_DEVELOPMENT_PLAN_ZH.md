@@ -2,128 +2,20 @@
 document_id: copilotix-desktop-rag-development-plan
 document_version: 6
 status: proposed
-baseline_ref: refactor/p0-p1-architecture
-baseline_verified_at: 2026-09-16
-scope: RAG future design on the P0/P1 Desktop boundary
+scope: RAG target design on the Desktop boundary
 implementation_plans: docs/rag-implementation/README.md
 ---
 
 # Copilotix Desktop 论文知识库与 RAG 开发计划
 
-> 本文是未来切块、索引、向量检索和论文问答的规划入口。它不宣布任何 RAG 功能已经存在。当前架构事实见 `ARCHITECTURE_ZH.md`；若规划与源码、schema 或测试冲突，以当前实现为准，并把差异记为后续事项。
+> 本文保留 RAG 目标算法与协议设计。已落地范围见分步索引；若设计与源码、schema 或测试冲突，以当前实现为准，更新对应维护入口。
 
-## 0. 当前状态：明确未实现
+## 0. 已落地範圍與待實作邊界
 
-P0/P1 当前**尚未实现 RAG**。仓库中没有：
-
-- chunk 生成器或 chunk 持久化；
-- 文档索引服务、全文索引/FTS/FTS5 表；
-- embedding provider、embedding 任务或 embedding cache；
-- vector store、ANN 或精确向量检索；
-- reranker、retrieval service、query backend；
-- chat provider、聊天会话/消息、流式回答或引用后端。
-
-`ReaderChatSelection` 和 `ReaderChatSelectionFragment` 只是 Renderer 侧的类型化选区 payload；它不是聊天 API，不代表存在 IPC、会话、模型调用、检索、引用或历史。阅读器已有的 PDF/Markdown mapping 可以成为未来 provenance 的输入，但不能被称为 RAG。
-
-因此本文件的所有 `planned`、`proposed`、端口、数据表、指标和阶段都是未来设计；在对应实现、migration、测试、评测和隐私审查合入前，不得在 README、UI、发布说明或 issue 中写成“支持知识库问答”。
-
-### 0.1 结论先行
-
-结合当前代码边界、Windows 桌面发布约束和论文阅读场景，建议采用以下主线，而不是一开始堆叠复杂框架：
-
-1. **切块：Markdown AST + layout/block mapping 的结构感知层次切块**。叶子块负责精确召回，父块负责补全上下文；只有超长正文按句子边界继续切分，并限制重叠。首版不使用纯固定字符切块、纯语义切块或 LLM 自动切块。
-2. **词法检索：SQLite FTS5 BM25 双通道**。英文/拉丁文本用 `unicode61`（可选 Porter），中文与混合术语用 FTS5 `trigram`；短于 3 个字符的中文词、公式、缩写和标识符另走精确匹配降级。这样既保留论文术语的精确命中，也不引入 `jieba` 一类原生分词依赖。
-3. **向量检索：可替换的 OpenAI-compatible Embedding Provider + 1024 维、L2 归一化、余弦/点积**。中国区首个经过评测的推荐配置为 `qwen3.7-text-embedding` 1024 维；成本优先可换 `qwen3.7-text-embedding-flash`，兼容基线可接 `text-embedding-v4` 或 `text-embedding-3-large`。模型名不是数据库常量，必须由 profile 指纹隔离。
-4. **向量存储：先用 Utility worker 中的 Float32 精确扫描建立正确性基线**；达到实测规模门槛后，再通过 `VectorStorePort` 切换 `sqlite-vec`。`sqlite-vec` 当前仍是 `0.1.x alpha`，不能直接作为唯一持久化真相。
-5. **检索：BM25 top 40 + dense top 40 → RRF(`k=60`) → 邻接/父块扩展 → 可选 cross-encoder rerank top 30 → 最终 8–12 个证据块**。RRF 对不同分数尺度更稳，且每个结果来源可解释。
-6. **问答：检索增强生成，而不是把整篇论文无条件塞进长上下文**。回答必须引用应用签发并校验过的 citation；证据不足时明确拒答。选区问答优先使用选区与相邻块，整篇/多论文问题才进入完整混合检索。
-7. **先进技术的采用顺序**：先实现确定性的结构上下文前缀；评测证明有收益后再启用 LLM Contextual Retrieval；Late Chunking、RAPTOR、多向量 ColBERT 和图 RAG 均保留为后续实验，不作为 P0 默认路径。
-
-这条路线的核心取舍是：优先获得可追溯、可恢复、可评测的强基线，再让每项更复杂算法通过离线评测证明增益。对个人论文库，可靠引用、精确术语、跨语言查询和低维护成本，比追求单一排行榜上的最高分更重要。
-
-### 0.2 当前功能实现流程（源码核对）
-
-当前 Desktop 的真实链路如下：
-
-```text
-用户选择/拖入 PDF
-  -> Renderer 调用 window.copilotix.importDocuments
-  -> Preload 固定 channel + Zod 双向校验
-  -> Main DocumentCommandService 校验 PDF/凭证/200 MB 上限
-  -> Utility 流式导入、SHA-256、原子发布 original.pdf
-  -> SQLite documents + parse job
-  -> Main JobScheduler claim/lease/heartbeat
-  -> ParseJobRunner 调 Copilotix v4 API 上传、轮询、下载 ZIP
-  -> Utility normalizeParserOutput
-       发布 full.md / layout.json / block_list.json / 可选 images、content_list
-       记录 artifact revision/hash
-  -> 创建依赖 parse job 的 translate job
-  -> TranslationJobRunner + TranslationPlanOrchestrator
-       Utility 按 Markdown AST/表格生成 plan
-       Main 选择 Qwen/DeepSeek/Bing/TranSmart provider
-       Utility 校验并原子生成 full.zh-CN.md + manifest/checkpoint
-  -> ReaderPage 加载 DocumentDetails
-       左侧 PDF.js，右侧原文/译文/JSON
-       block mapping 联动定位，annotation revision 做高亮/下划线并发保护
-```
-
-对应代码证据：
-
-| 环节 | 当前实现位置 | 可复用点 / RAG 含义 |
-|---|---|---|
-| 页面与阅读器 | `desktop/src/renderer/pages/ReaderPage.tsx`、`ReaderTextPane.tsx`、`PdfPane.tsx` | 可增加搜索/聊天侧栏与引用跳转；Renderer 不能直接访问文件、数据库或密钥 |
-| 公开 API | `desktop/src/shared/ipcSchemas.ts`、`types.ts`、`preload/index.ts` | 新增 `rag:*` 显式领域方法与流事件，不能暴露通用 IPC/SQL/URL |
-| 文档命令 | `desktop/src/main/documentCommandService.ts` | 导入、删除、重试已有清晰命令边界；删除需扩展到索引和会话 |
-| 作业调度 | `desktop/src/main/jobScheduler.ts`、`desktop/src/core/jobs.ts` | 可复用 lease/checkpoint/retry/cancel；现有 `jobs.kind` 只允许 `parse/translate`，迁移时必须重建 CHECK 约束 |
-| 解析 | `desktop/src/main/parseJobRunner.ts`、`parserClient.ts` | parsed artifact 成功发布后即可建立离线 content revision；不等待翻译或 AI 配置 |
-| 翻译 | `desktop/src/main/translationJobRunner.ts`、`translation/translationPlanOrchestrator.ts` | “Utility 生成小型 work descriptor → Main 调网络 → Utility 校验落库”的模式可直接复用于 embedding |
-| Markdown 逻辑块 | `desktop/src/shared/markdownBlocks.ts` | 已使用 remark/GFM/math AST，并可对齐 mapping；应提取为 Chunker 的结构基础而非再写正则切块 |
-| PDF 映射 | `desktop/src/core/blockMapping.ts` | 已合并跨页/续块并保留 bbox、pageIndex、discarded；是 citation provenance 的权威输入之一 |
-| Artifact | `desktop/src/main/artifactService.ts`、Utility normalize operations | 可复用 revision/hash/PathPolicy/原子发布；RAG 必须绑定具体 artifact revision |
-| SQLite | `desktop/src/utility/core/persistence/v2Database.ts` | `node:sqlite`、WAL、foreign keys、STRICT 与 checksum migration 可继续使用 |
-| 凭证与网络 | `desktop/src/main/credentialVault.ts`、`translation/providers.ts`、Settings 中的 provider priority | Embedding/Rerank/Chat 建立独立能力配置，但优先引用已有 Vault 凭证，避免要求用户重复保存同一把 Key；密钥仍只在 Main/Vault |
-
-### 0.3 当前缺口不是“装一个 RAG 库”
-
-| 缺口 | 如果忽略会发生什么 | 本计划的处理 |
-|---|---|---|
-| chunk 与 artifact 没有版本谱系 | 重新解析后旧向量仍被召回，页码与引用错位 | 不可变 `rag_content_revision` + content hash + 原子 active content revision 切换；vector index 另行发布 |
-| 中英文跨语言与精确术语同时存在 | 只用向量会漏公式/缩写，只用 BM25 会漏中文问英文 | 原文/译文双词法通道 + 多语言 dense + RRF |
-| 表格、公式、caption 不是普通段落 | 行列语义被切断，回答数字却无法定位 | 类型感知 chunk + 重复表头 + caption/footnote/公式关系边 |
-| Reader 选区只是前端 payload | “解释这一段”若仍全库检索会被相似段落干扰 | 独立 selection 路由，选区作为 pinned evidence |
-| Core RPC 限制 1 MiB 且不能搬全文/大量向量 | JSON 浮点数组轻易突破上限并阻塞进程 | work descriptor + 受控 request/response artifact，RPC 只传 ID、hash 和小结果 |
-| 当前 job kind 只有 parse/translate | 顺手塞入索引状态会破坏 CHECK 和恢复语义 | 显式 migration；拆分离线 `rag-content-index` 与需授权的 `rag-embed`，分别 checkpoint |
-| 模型/API 会变化 | 换模型后维度混用、缓存污染或召回漂移 | Provider adapter + immutable profile fingerprint + 灰度重建 |
-| LLM 会生成看似真实的页码/引用 | 用户无法核验，形成科研误导 | citation 由应用端生成，模型只能引用允许的 citationId |
-
-### 0.4 从用户实际运行流程重新审查后的修正
-
-2026-09-16 按“首次导入 → 等待处理 → 阅读 → 本地检索 → 可选开启 AI → 提问 → 删除/清理”的真实用户旅程重新核对后，原第 5 版有几处会造成运行时体验错误，必须按本版修正：
-
-1. **解析/翻译状态与知识库状态必须分离。** `DocumentWorkflowStatus` 继续只表示导入、解析和翻译；不能加入 `indexing` 导致已可阅读的文档看起来仍未完成。知识库另有本地索引、语义索引和问答可用性状态。
-2. **本地检索不能依赖 AI Key。** parsed artifact 发布后自动建立 chunk 与 FTS；即使用户从未配置 Qwen/DeepSeek，仍能立即搜索原文并跳转来源。
-3. **不能等待翻译才开始索引。** 原文索引是主数据；译文完成后只增加或刷新译文词法字段，不应重建原文 chunk、改变 citation 身份或使已有向量失效。
-4. **保存 API Key 不等于同意上传论文内容。** 语义索引默认关闭；首次开启时明确说明会发送哪些文本、给哪个服务、用途和删除边界。Chat 与 rerank 也分别显示外发范围。
-5. **能力配置不能机械复制翻译设置。** Bing/TranSmart 只能用于翻译；DeepSeek Chat 兼容端点不代表支持 embedding；同一供应商已有 Vault 凭证时可被 capability profile 引用，但每项能力必须独立探测模型与端点。
-6. **Reader 不增加永久第三列。** 当前最小窗口宽度与 PDF/文本双栏布局下，搜索/问答使用 400–480 px 可折叠右侧抽屉；多论文检索进入顶层“知识库”页面。
-7. **选区必须绑定 artifact 快照。** 现有 `ReaderChatSelection` 只含前端文本/映射信息，不足以防止重新解析后的错引；请求必须携带 artifact/revision 身份，后端重新校验选区与来源。
-8. **后台运行要可见、可控。** 主窗口关闭后作业可能继续在托盘运行；本地切块和 embedding 必须低优先级、可暂停/取消/重试，并且不能阻塞阅读、解析或翻译。
-9. **删除语义必须完整。** 删除任务时，应用数据库中的 chunk、FTS、向量和 tombstone 必须删除；`deleteFiles` 只决定是否删除原始/解析文件，不能让已删除论文继续被召回。
-10. **存储治理必须覆盖两个位置。** 现有输出目录页面还需同时统计 `userData` 内的数据库、FTS、向量缓存和聊天历史，并提供分类清理，而不是只显示 `outputRoot`。
-
-由此，运行时能力不再是单一“RAG 已完成/未完成”，而是三个独立维度：
-
-```text
-阅读可用性：由现有 parse/translate workflow 决定
-本地检索：   parsed artifact -> chunk/FTS，默认自动、离线可用
-AI 增强：    显式同意 + 有效 capability profile -> embedding/rerank/chat
-```
-
-### 0.5 当前基线门禁（2026-09-16 实测）
-
-- `pnpm desktop:typecheck`：通过。
-- `pnpm desktop:test`：未全绿；当前结果为 1 个失败、59 个通过的 test files，267 个通过、3 个跳过的 tests。失败用例为 `desktop/tests/taskService.test.ts` 中的 `resumes a remote checkpoint without resubmitting and runs one dependent translation`，预期 `succeeded`、实际 `partial`。
-- 该失败发生在任何 RAG 代码修改前，必须由子计划 `00_BASELINE_STABILIZATION.md` 先定位并恢复全绿；不得把它忽略、改名为“已知失败”或降低测试/coverage 门禁后继续。
+- 00–03 已完成：共享 RAG 契約／獨立狀態、Utility 持久化與作業骨架、結構切塊／來源譜系／revision 原子發布。維護入口見 [分步索引](rag-implementation/README.md)。
+- 單篇文獻問答已接入模型、選區／全文上下文、流式回答、引用與本地歷史，見 [問答契約](READER_AI_CHAT_PLAN_ZH.md)；它不使用完整混合 RAG。
+- FTS 搜索、embedding runner、向量檢索、hybrid／rerank 與多篇 RAG 問答仍為後續設計。能力是否接入以當前源碼與測試為準，不能將已有 schema／資料表當成完整檢索功能。
+- 下文保留目標算法、协议與評測設計；分步完成狀態只在索引維護，最新整體驗證只在根 AGENTS 記錄。
 
 ## 1. 设计前提与非目标
 
@@ -770,38 +662,9 @@ PDF/Markdown、作者附带的隐藏文字、OCR 结果、引用文本都属于�
 | 论文问答 | 10–11 | 整篇/多篇/选区问答有可点击且可验证的引用 | 流取消、拒答、引用校验、快照一致性和注入防护通过 |
 | 治理与发布 | 12–13 | 历史、存储、删除、托盘后台和大库性能可控 | 清理/删除语义、基准、packaged smoke 和发布证据齐全 |
 
-### 9.1 推荐实施顺序与依赖
+### 9.1 實施入口
 
-```text
-00 恢复现有基线
-  -> 01 契约/独立状态
-  -> 02 持久化与 durable jobs
-  -> 03 chunk + provenance
-  -> 04 自动本地 FTS 后端
-  -> 05 知识库搜索 UI / Reader 抽屉     （第一个完整用户价值）
-  -> 06 AI capability + 明示同意
-  -> 07 embedding + exact vector
-  -> 08 hybrid + 评测
-  -> 09 可选 rerank
-  -> 10 chat + citation
-  -> 11 selection QA + Reader 集成
-  -> 12 历史/存储/删除治理
-  -> 13 性能/托盘/发布；达到门槛后才评估 ANN
-```
-
-不要把聊天 UI 作为第一阶段。先让用户能看到 chunk、全文搜索结果和真实页码，能最快暴露解析/mapping/中文检索问题；如果这些基础证据不可靠，增加 LLM 只会把问题隐藏在流畅答案后面。
-
-### 9.2 各阶段建议改动位置
-
-| 阶段 | 主要新增/修改位置 | 关键测试 |
-|---|---|---|
-| 01–02 | `shared/rag*.ts`、`core/types.ts`、`core/jobs.ts`、`v2Database.ts`、Repository ports | migration 1→新版本、checksum、job CHECK、独立状态机、删除/恢复 |
-| 03 | `utility/core/compute/structureAwareChunker.ts`、`markdownBlocks.ts` 抽取共享 AST visitor | 金标 Markdown：标题、长段、跨页、表、公式、图片、列表、Unicode offset |
-| 04–05 | `utility/core/persistence/ragFtsIndex.ts`、Main/IPC search handler、Renderer Knowledge/Search drawer | FTS5 capability、word/trigram/短词、无 Key、转义注入、scope、删除/重建、跳页 |
-| 06–07 | `main/ragEmbeddingJobRunner.ts`、`main/rag/providers/*`、Utility plan/store、Vault/Settings | 明示同意、能力探测、batch/429/401/维度/NaN/迟到响应/cancel/restart/cache/profile |
-| 08–09 | `utility/core/retrieval/*`、`main/retrievalOrchestrator.ts` | exact similarity、RRF、canonical 去重、文档配额、rerank 降级、token budget |
-| 10–11 | `main/chatOrchestrator.ts`、流 IPC、Renderer ChatPanel/CitationCard、selection validator | event 顺序、取消、结构化输出、citation validator、选区/整篇/多论文/无答案 |
-| 12–13 | conversation/storage repo、Settings/Storage、job resource lanes、release scripts | 删除/保留/清理、10k/50k/100k benchmark、ABI/ASAR、离线、升级/回滚、packaged smoke |
+依賴、狀態、改動位置與回歸入口統一維護於 [分步計劃](rag-implementation/README.md)，不在此重複。
 
 ### 9.3 最小可用版本（建议）
 
@@ -882,25 +745,13 @@ RAG 只有同时满足以下条件才可从 proposed 改为 implemented：
 
 记录：request/job/profile ID、scope 文档数、候选数、每阶段耗时、cache hit、降级原因、最终引用数、用户取消和错误码。默认不记录 query、chunk、embedding、prompt 或回答正文。若用户自愿开启本地质量反馈，只保存点赞/点踩、匿名问题类别和 citationId/hash；导出诊断包前再次预览并脱敏。
 
-## 11. 多 Agent 协作与变更纪律
+## 11. 協作紀律
 
-1. 一个工作项一个 owner；同一工作树同一时刻不允许多个 Agent 修改同一文件。并行实现使用独立 branch/worktree，集成时保留最小 diff。
-2. `shared/*` schema、Preload API、Main IPC、Core RPC、v2 migration、JobRepository、Artifact/PathPolicy、release scripts 是高风险边界；修改前先登记 owner、输入/输出、兼容策略、失败恢复和测试。
-3. 文档、schema、migration、实现和测试必须同步；新增 RAG 表或 Provider 前先完成子计划 00–02，不能在普通任务中顺手改公共数据结构。
-4. Agent 开始/结束都记录 `git status --short --branch`；不得覆盖他人改动、`reset`、stash、清理 release 或修改其他 worktree。
-5. 每个工作项标注 `planned`、`implemented`、`verified` 或 `blocked`，并附源码/测试/评测证据。未运行的 package/E2E 不得写成通过。
-6. 文档维护 owner 负责 baseline、公共契约、决策记录和总进度；实现 Agent 只修改领取的代码和测试。任何契约变更都要通知集成 Agent。
-7. 不以“模型返回了页码/路径/引用”为可信证据；必须由应用端 schema、scope、hash 和 PathPolicy 验证。
+沿用根 [AGENTS.md](../AGENTS.md) 的 worktree、公共契約、文檔、驗證與發布規則。RAG scope／citation 仍须由 schema、hash 與 PathPolicy 校驗，不採信模型自造身份。
 
-## 12. 当前平台与发布限制
+## 12. 發布與評審邊界
 
-在当前 Windows build `26200` + GameViewer 环境，sandboxed Renderer/GPU 原生启动失败；本机没有 GUI E2E 通过证据。不得声称 Desktop GUI E2E 本机通过，也不得建议产品默认或 CI 降低 sandbox。专用 packaged CLI smoke 已通过，且不启动 Renderer；它只能证明打包入口的 CLI 启动 marker，不证明 UI、GPU、Renderer 或 RAG。
-
-RAG 实现若增加 worker、模型或原生 vector backend，必须复用 Desktop 的 verified atomic release：所有内容先在精确 release staging 中构建、审计、解压校验、哈希和 packaged smoke 成功，再原子发布到 `release/`；失败保留 staging/恢复旧 release。不得把 RAG 目录、模型缓存、查询历史或密钥放进 release ZIP。
-
-## 13. 已知后续事项
-
-根仓库许可证文件和 `desktop/package.json` 的许可证元数据目前不一致；这只登记为后续法务/发布事项，本计划不修改许可证文本、package 声明或署名信息。RAG 的模型、FTS tokenizer、向量后端、云端 Provider 和数据保留策略都需在对应阶段单独完成许可与隐私评审。
+新增 worker、原生向量後端或模型須沿用 [發布門禁](DESKTOP_RELEASE_ZH.md)，不得將索引、模型緩存、查詢歷史或密鑰放入发布包。FTS tokenizer、向量後端與 Provider 的許可／隱私評審在对应階段完成；本地啟動兼容策略不改產品安全基線。
 
 ## 14. 技术决策汇总（建议转 ADR）
 
@@ -967,16 +818,3 @@ RAG 实现若增加 worker、模型或原生 vector backend，必须复用 Deskt
 10. BEIR [论文](https://arxiv.org/abs/2104.08663)：BM25 是稳健基线，rerank/late interaction 通常质量高但成本也高，支持“先混合基线再逐项评测”的路线。
 11. QASPER [论文与数据](https://aclanthology.org/2021.naacl-main.365/)：整篇科研论文问答与证据选择的公开参考任务。
 12. OWASP [RAG Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/RAG_Security_Cheat_Sheet.html) 与 [Prompt Injection Prevention](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)：不可信文档、RAG poisoning、结构化隔离、最小权限和输出验证依据。
-
-## 19. 最终建议
-
-如果现在开始编码，最负责任的第一批工作不是接聊天 API，而是：
-
-1. 完成 RAG migration/profile/revision/job 契约；
-2. 基于现有 remark + block mapping 实现可预览、可测试的层次 chunk；
-3. parsed artifact 到达后先交付完全本地、无需 Key 的 FTS5 搜索与 Reader 引用跳转；
-4. 以单独 capability profile 引用 Vault 凭证，取得明确同意后，按 translation plan 的跨进程模式接入 embedding provider，建立 exact vector 基线；
-5. 用本项目金标确定 hybrid/RRF/rerank 参数，rerank 无增益时保持关闭；
-6. 最后接 ChatProvider，并把“无证据不回答、引用必须绑定 artifact 快照且可验证”设为上线门槛。
-
-这条顺序能让每个阶段都有独立用户价值，也能避免在底层证据不可靠时用 LLM 的语言流畅性掩盖错误。严格执行入口见 [`docs/rag-implementation/README.md`](rag-implementation/README.md)。

@@ -51,11 +51,7 @@ pnpm desktop:test:coverage
 
 CI 还执行 bundle build、verified directory release、脚本/发布校验和 Playwright E2E。真实 API、真实翻译、真实 PDF 和 GUI E2E 是有条件的验证，不得用未运行的本机命令补写通过结论。
 
-### 当前 Windows 环境说明
-
-在当前 Windows build `26200` + GameViewer 环境，sandboxed Renderer/GPU 原生启动失败；因此没有本机 GUI E2E 通过证据。专用 packaged CLI smoke 已通过，且不启动 Renderer，它不能证明 GUI、GPU、Renderer 或 RAG 可用。
-
-该限制不授权修改产品安全基线：不得降低产品默认、发布配置或 CI 的 Renderer/GPU sandbox，也不得把 `--disable-gpu-sandbox` 作为产品建议。GUI E2E 的通过证据必须来自具备原生启动条件的受控环境。
+本地驗證是否執行、實際通過範圍與環境限制以根 [AGENTS.md](../AGENTS.md) 為入口。CLI smoke 不代表 GUI 驗收；測試啟動策略不改產品或 CI 的 sandbox。
 
 ## 构建与发布
 
@@ -70,16 +66,14 @@ pnpm desktop:release:from-built
 Copilotix.exe --copilotix-packaged-smoke
 ```
 
-只有精确的 `COPILOTIX_PACKAGED_SMOKE_OK app=1.0.0 electron=44.1.1` marker、空 stderr、哈希/manifest 审计全部成功后，才会把新目录原子发布到根目录 `release/`；失败时恢复旧目录并保留 staging。发布包是完整目录，不要只复制 `Copilotix.exe`；`userData` 和 Credential Manager 不在发布包内。
+只有版本匹配的精确 smoke marker、空 stderr、哈希／manifest 校验全部成功后才原子发布；失败恢复旧目录并保留 staging。发布布局以 [Windows 发布](DESKTOP_RELEASE_ZH.md) 为准，勿单独复制 EXE；用户数据与凭据不在发布包内。
 
 ## 功能与隐私
 
-当前提供 PDF 导入、官方解析、Markdown/表格翻译、原文/译文/布局阅读、PDF 与 block mapping 联动、荧光笔/下划线标注和另存结果。`ReaderChatSelection` 目前只是 Renderer 选区 payload；当前没有 chunk、index、embedding、vector、FTS、reranker、retrieval 或 chat backend，不要把“添加到对话”当作已实现聊天。
+当前提供 PDF 导入、官方解析、Markdown／表格翻译、阅读工作台、映射联动、标注、导出、文库与档案卡、单篇论文问答。问答边界见 [维护契约](READER_AI_CHAT_PLAN_ZH.md)；RAG 检索进度见 [分步索引](rag-implementation/README.md)。
 
 PDF 会上传到 Parser 服务返回的预签名地址；待翻译文本会发送到所选翻译 Provider。Token 只发送到代码中固定的 Parser API 来源；API Key 进入 Credential Manager，不写 SQLite、Renderer、日志或结果 ZIP。日志会遮蔽 Token、API Key、Authorization 和预签名 URL 查询参数，不记录论文正文。
 
-## 协作与已知事项
+## 協作
 
-共享工作区中的公共契约必须有唯一 owner：`shared` schema、Preload API、Main IPC、Core RPC、v2 migration、JobRepository、Artifact/PathPolicy 和发布脚本均需先登记变更、兼容策略、测试和恢复语义。开始/结束记录 `git status --short --branch`；不得覆盖他人改动、stash、清理 release、升级无关依赖或修改其他 worktree。文档中的 `implemented`、`verified`、`planned`、`blocked` 必须有源码/测试证据。
-
-Copilotix 自有代码已采用根目录 MIT 许可证，桌面 package 元数据同步为 MIT；第三方组件仍按各自许可分发。
+遵循根 [AGENTS.md](../AGENTS.md)，不在此複製 owner、worktree、交付紀錄或授權規則。
