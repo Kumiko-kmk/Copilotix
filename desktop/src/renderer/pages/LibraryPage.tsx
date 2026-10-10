@@ -41,7 +41,7 @@ export default function LibraryPage(props: {
   const [searchOpen, setSearchOpen] = React.useState(false)
   const categories = useLibraryCategories(props.documents, props.loadCategories, props.insights)
   const shelves = React.useMemo(() => buildArchiveColumns(props.documents, categories?.categories), [props.documents, categories])
-  const categoryCount = React.useMemo(() => new Set(shelves.map((shelf) => shelf.category)).size, [shelves])
+  const categoryCount = shelves.length
   const searchIndex = React.useMemo(() => shelves.flatMap((shelf) => shelf.papers.map((paper) => ({
     paper, category: shelf.category, text: `${paper.displayName}\n${paper.originalName}`.toLowerCase()
   }))), [shelves])
@@ -286,14 +286,7 @@ export default function LibraryPage(props: {
         <article ref={panelRef} className="paper-archive-panel" aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
           <h2 key={paper.id} className="paper-archive-title" title={displayTitle}><span>{displayTitle}</span></h2>
-          <BrowseTranslatedTitle paper={paper} />
-          <div className="paper-archive-rule"><i /></div>
-          <dl className="paper-archive-meta">
-            <div><dt>状态</dt><dd className={`status-${paper.workflow.status}`}>{statusLabels[paper.workflow.status]}{paper.workflow.status === 'translating' ? ` ${paper.workflow.progress}%` : ''}</dd></div>
-            <div><dt>类型</dt><dd>{documentTypeLabel(paper.originalName)}</dd></div>
-            <div><dt>创建</dt><dd>{formatTaskCreatedAt(paper.createdAt)}</dd></div>
-            {props.insights ? <BrowseBriefState paper={paper} source={props.insights} /> : null}
-          </dl>
+          <BrowseMetadata key={paper.id} paper={paper} source={props.insights} />
           <div className="paper-archive-actions">
             <button type="button" className="paper-archive-action" onClick={() => sceneRef.current?.openDetail()}>
               <span>查看档案</span><ExpandOutlined aria-hidden="true" />
@@ -320,7 +313,7 @@ export default function LibraryPage(props: {
             <button type="button" aria-label="上一列" onClick={() => navigate('lane', -1)}><ArrowLeftOutlined /></button>
             <div>
               <small>COLUMN {pad(shelfIndex + 1)} / {pad(shelves.length)}</small>
-              <span key={shelf?.key}>{shelf?.label}</span>
+              <span key={shelf?.key} title={shelf?.label}>{shelf?.label}</span>
             </div>
             <button type="button" aria-label="下一列" onClick={() => navigate('lane', 1)}><ArrowRightOutlined /></button>
           </div>
@@ -354,26 +347,20 @@ function useLibraryCategories(documents: readonly DocumentSummary[], load: (() =
   return load ? categories : null
 }
 
-/** Whether the selected paper already has an AI file card, read once navigation settles. */
-function BrowseBriefState({ paper, source }: { paper: ArchivePaper; source: PaperInsightSource }): React.JSX.Element | null {
+/** Read the selected paper and its card after navigation settles; share the detail query cache. */
+function BrowseMetadata({ paper, source }: { paper: ArchivePaper; source?: PaperInsightSource }): React.JSX.Element {
   const [state, setState] = React.useState<PaperInsightState | null>(null)
   React.useEffect(() => {
-    let current = true
     setState(null)
+    if (!source) return
+    let current = true
+    let updated = false
     const timer = window.setTimeout(() => {
-      source.get(paper.id).then((next) => { if (current) setState(next) }, () => undefined)
+      source.get(paper.id).then((next) => { if (current && !updated) setState(next) }, () => undefined)
     }, 180)
-    const stop = source.subscribe((id, next) => { if (current && id === paper.id) setState(next) })
+    const stop = source.subscribe((id, next) => { if (current && id === paper.id) { updated = true; setState(next) } })
     return () => { current = false; window.clearTimeout(timer); stop() }
   }, [paper.id, source])
-  if (!state || state.status === 'unavailable') return null
-  const label = state.status === 'ready' ? ('brief' in state ? (state.stale ? '需更新' : '已生成') : '旧版')
-    : state.status === 'generating' ? '生成中' : state.status === 'failed' ? '生成失败' : '未生成'
-  return <div><dt>档案卡</dt><dd className={`brief-${state.status}`}>{label}</dd></div>
-}
-
-/** Read only the selected paper after navigation settles; share the detail query cache. */
-function BrowseTranslatedTitle({ paper }: { paper: ArchivePaper }): React.JSX.Element {
   const [settledId, setSettledId] = React.useState<string | null>(null)
   React.useEffect(() => {
     const timer = window.setTimeout(() => setSettledId(paper.id), 180)
@@ -385,11 +372,24 @@ function BrowseTranslatedTitle({ paper }: { paper: ArchivePaper }): React.JSX.El
     enabled: settledId === paper.id,
     staleTime: 30_000
   })
-  const translatedTitle = React.useMemo(() => {
-    const markdown = details.data?.translatedMarkdown
-    return markdown ? extractPaperProfile('', markdown).translatedTitle?.replace(/\.pdf\s*$/iu, '').trim() ?? '' : ''
-  }, [details.data?.translatedMarkdown])
-  return <p className="paper-archive-translated-title" title={translatedTitle || undefined}>{translatedTitle || '\u00a0'}</p>
+  const profile = React.useMemo(() => details.data
+    ? extractPaperProfile(details.data.markdown, details.data.translatedMarkdown) : null, [details.data])
+  const translatedTitle = profile?.translatedTitle?.replace(/\.pdf\s*$/iu, '').trim() ?? ''
+  const cardKeywords = state?.status === 'ready' ? ('brief' in state ? state.brief.keywords : state.insight.keywords) : []
+  const keywords = cardKeywords.length ? cardKeywords : profile?.keywords ?? []
+  const keywordText = keywords.join(' · ')
+  const label = state?.status === 'ready' ? ('brief' in state ? (state.stale ? '需更新' : '已生成') : '旧版')
+    : state?.status === 'generating' ? '生成中' : state?.status === 'failed' ? '生成失败' : '未生成'
+  return <>
+    <p className="paper-archive-translated-title" title={translatedTitle || undefined}>{translatedTitle || '\u00a0'}</p>
+    <div className="paper-archive-rule"><i /></div>
+    <dl className="paper-archive-meta">
+      <div className="paper-archive-keywords"><dt>关键词</dt><dd title={keywordText || undefined}>{keywordText || (details.isPending && !state ? '正在读取…' : '暂无关键词')}</dd></div>
+      <div><dt>类型</dt><dd>{documentTypeLabel(paper.originalName)}</dd></div>
+      <div><dt>创建</dt><dd>{formatTaskCreatedAt(paper.createdAt)}</dd></div>
+      {state && state.status !== 'unavailable' ? <div><dt>档案卡</dt><dd className={`brief-${state.status}`}>{label}</dd></div> : null}
+    </dl>
+  </>
 }
 
 /** A fixed-width ruler; long shelves map onto it proportionally. */

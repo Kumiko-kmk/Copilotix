@@ -1,7 +1,7 @@
 import { CONTRIBUTION_KIND_LABELS, FINDING_STRENGTH_LABELS, type PaperBrief } from '@shared/paperBrief/schema'
 import type { BriefAnchor } from '@shared/paperBrief/contracts'
 
-export type BriefTab = 'overview' | 'findings' | 'limits' | 'reading'
+export type BriefTab = 'overview' | 'findings' | 'limits'
 
 export default function BriefContent(props: { brief: PaperBrief; anchors: BriefAnchor[]; tab: BriefTab }): React.JSX.Element {
   const { brief, anchors, tab } = props
@@ -27,15 +27,10 @@ export default function BriefContent(props: { brief: PaperBrief; anchors: BriefA
           })}
         </section>
       })}
-    </> : tab === 'limits' ? <>
+    </> : <>
       <h3>局限</h3>{brief.limitations.length ? <ul>{brief.limitations.map((item) => <li key={item.text}><span className="paper-archive-badge">{item.source === 'author' ? '作者自述' : 'AI 推断'}</span> {item.text}</li>)}</ul> : <p>摘录未提供。</p>}
       <h3>成立前提</h3><Items items={brief.assumptions} />
       <h3>开放问题</h3><Items items={brief.openQuestions} />
-    </> : <>
-      <h3>适合读者</h3><p>{brief.reading.audience}</p>
-      <h3>背景知识</h3><Items items={brief.reading.prerequisites} />
-      <h3>建议先读</h3>{brief.reading.focus.length ? <ol>{brief.reading.focus.map((item) => <li key={item.section}><strong>{item.section}</strong>：{item.reason}</li>)}</ol> : <p>未提供阅读顺序。</p>}
-      <h3>术语</h3><dl>{brief.terms.map((item) => <div key={item.term}><dt>{item.term}</dt><dd>{item.definition}</dd></div>)}</dl>
     </>}
     <p className="paper-archive-brief-note">{brief.coverage.basis === 'partial' ? '依据部分摘录生成' : '依据提供的正文生成'}{brief.coverage.missing.length ? ` · 缺少：${brief.coverage.missing.join('、')}` : ''}</p>
   </div>

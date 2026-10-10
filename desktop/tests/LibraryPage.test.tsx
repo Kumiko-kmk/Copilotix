@@ -137,12 +137,14 @@ describe('LibraryPage', () => {
     expect(onOpen).toHaveBeenCalledWith(alpha.id)
   })
 
-  it('shows five columns for 37 uncategorised papers and advances the HUD with ArrowRight', () => {
+  it('keeps 37 uncategorised papers in one column and wraps the HUD with ArrowRight', () => {
     render(<LibraryPage documents={Array.from({ length: 37 }, (_, index) => paper(`Paper ${index}`))} onOpen={vi.fn()} onCreate={vi.fn()} />)
-    expect(screen.getByText('COLUMN 01 / 05')).toBeTruthy()
+    expect(screen.getByText('COLUMN 01 / 01')).toBeTruthy()
+    expect(screen.getByText('关键词')).toBeTruthy()
+    expect(screen.queryByText('状态')).toBeNull()
     fireEvent.keyDown(region(), { key: 'ArrowRight' })
     expect(scene.navigate).toHaveBeenCalledWith('lane', 1)
-    expect(screen.getByText('COLUMN 02 / 05')).toBeTruthy()
+    expect(screen.getByText('COLUMN 01 / 01')).toBeTruthy()
     expect(screen.getByRole('button', { name: '下一列' })).toBeTruthy()
     expect(screen.queryByRole('checkbox', { name: '流畅模式' })).toBeNull()
   })

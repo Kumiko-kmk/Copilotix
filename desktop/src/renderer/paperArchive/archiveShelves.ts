@@ -4,10 +4,10 @@ import { ALL_PAPERS_NAME } from '@shared/libraryCategories'
 export type ArchivePaper = Pick<DocumentSummary, 'id' | 'displayName' | 'originalName' | 'createdAt' | 'workflow'>
 
 export interface ArchiveShelf {
-  /** Stable key: the category id, with `#n` when a category spans several columns. */
+  /** Stable category id; each category occupies exactly one column. */
   key: string
   label: string
-  /** Category name shared by every column of the same category. */
+  /** Category name, without column-part suffixes. */
   category: string
   papers: ArchivePaper[]
 }
@@ -22,9 +22,6 @@ export interface ArchiveCategory {
 /** Shown until the library's categories arrive, or when they are unavailable. */
 export const ALL_PAPERS = ALL_PAPERS_NAME
 const UNSORTED = { id: 'pending', name: '待分类' }
-
-/** RhineLabUI's array holds eight files per column. */
-export const COLUMN_CAPACITY = 8
 
 /** Physical position in the unbounded, looping archive plane. */
 export type ArchiveCell = { lane: number; row: number }
@@ -68,23 +65,11 @@ export function groupPapersByCategory(papers: readonly ArchivePaper[], categorie
 }
 
 /**
- * Archive columns: categories in order, long categories split into balanced columns so the plane
- * always has neighbouring columns to slide to. Small libraries keep at least four papers per
- * column; large ones at most eight.
+ * One column per category, regardless of size. The scene renders only the visible rows and
+ * loops through all papers in that category.
  */
 export function buildArchiveColumns(papers: readonly ArchivePaper[], categories?: readonly ArchiveCategory[] | null): ArchiveShelf[] {
-  const capacity = Math.min(COLUMN_CAPACITY, Math.max(4, Math.ceil(papers.length / 5)))
-  return groupPapersByCategory(papers, categories).flatMap((group) => {
-    const parts = Math.ceil(group.papers.length / capacity)
-    if (parts <= 1) return [group]
-    const size = Math.ceil(group.papers.length / parts)
-    return Array.from({ length: parts }, (_, part) => ({
-      key: `${group.key}#${part + 1}`,
-      label: `${group.label} · ${part + 1}/${parts}`,
-      category: group.category,
-      papers: group.papers.slice(part * size, (part + 1) * size)
-    }))
-  })
+  return groupPapersByCategory(papers, categories)
 }
 
 export function shelfAt(shelves: readonly ArchiveShelf[], lane: number): ArchiveShelf | null {
