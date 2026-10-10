@@ -106,8 +106,8 @@ export default function ArchiveDetail(props: {
         <div ref={redactionRef} className="paper-archive-redactions" aria-hidden="true" />
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.category}</span>
-          <h2 className="paper-archive-reveal" style={{ '--i': 0 } as React.CSSProperties} title={title}>{title}</h2>
-          <p className="paper-archive-translated-title paper-archive-reveal" title={subtitle || undefined} style={{ '--i': 1 } as React.CSSProperties}>{subtitle || '\u00a0'}</p>
+          <h2 className="paper-archive-reveal" style={{ '--i': 0 } as React.CSSProperties}>{title}</h2>
+          <p className="paper-archive-translated-title paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}>{subtitle || '\u00a0'}</p>
         </header>
         <div className="paper-archive-rule"><i /></div>
         {details.isError ? <p className="paper-archive-detail-error" role="alert">论文内容读取失败，可以直接打开阅读。</p> : null}
@@ -203,12 +203,12 @@ function stretchPanel(article: HTMLElement, from: DOMRect, closing: boolean): An
   ]
 }
 
-/** Wide and short fields keep one line (the full text is in the tooltip); half-width fields keep two. */
+/** Wide and short fields keep one line; half-width fields keep two. */
 function Field(props: { index: number; label: string; value: string | null; wide?: boolean; half?: boolean }): React.JSX.Element {
   return (
     <div className={props.wide ? 'wide' : props.half ? 'half' : undefined}>
       <dt>{props.label}</dt>
-      <dd className="paper-archive-reveal" title={props.value ?? undefined} style={{ '--i': props.index } as React.CSSProperties}>{props.value ?? ' '}</dd>
+      <dd className="paper-archive-reveal" style={{ '--i': props.index } as React.CSSProperties}>{props.value ?? ' '}</dd>
     </div>
   )
 }

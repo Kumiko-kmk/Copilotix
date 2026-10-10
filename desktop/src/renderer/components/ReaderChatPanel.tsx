@@ -80,12 +80,14 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
   return (
     <div className="reader-chat-model-picker">
       <Select
+        title=""
         size="small" variant="borderless" aria-label="问答服务商" className="reader-chat-provider"
         value={provider} disabled={props.locked} popupMatchSelectWidth={false} placement="topLeft" placeholder="服务商"
-        options={(Object.keys(PROVIDER_LABELS) as PaperChatProvider[]).map((value) => ({ value, label: PROVIDER_LABELS[value], disabled: !routing.settings?.enabledTranslationProviders.includes(value) }))}
+        options={(Object.keys(PROVIDER_LABELS) as PaperChatProvider[]).map((value) => ({ value, label: PROVIDER_LABELS[value], title: '', disabled: !routing.settings?.enabledTranslationProviders.includes(value) }))}
         onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: resolvePaperChatModel(value, value === 'qwen' ? routing.settings?.qwenChatModel : routing.settings?.deepseekChatModel) })}
       />
       <Select
+        title=""
         size="small"
         variant="borderless"
         aria-label="问答模型"
@@ -94,7 +96,7 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
         placement="topLeft"
         value={routing.model}
         disabled={props.locked || !provider}
-        options={routing.models.map((name) => ({ value: name, label: name }))}
+        options={routing.models.map((name) => ({ value: name, label: name, title: '' }))}
         onChange={(model: string) => { if (provider) chat.setSelectedModel({ provider, model }) }}
       />
     </div>
@@ -246,7 +248,7 @@ export default function ReaderChatPanel(props: {
             {chat.pinned.map((pin, index) => {
               const page = pin.fragments[0]?.pageIndex
               return (
-                <span className="paper-chat-pin" key={index} title={pin.text}>
+                <span className="paper-chat-pin" key={index}>
                   <span className="paper-chat-pin-source">{pin.view === 'original' ? '原文' : '译文'}{page !== undefined && page !== null ? ` · 第 ${page + 1} 页` : ''}</span>
                   <span className="paper-chat-pin-text">{pin.text.slice(0, 40)}{pin.text.length > 40 ? '…' : ''}</span>
                   <button type="button" aria-label={`移除选区 ${index + 1}`} disabled={chat.busy} onClick={() => chat.removePin(index)}><CloseOutlined /></button>

@@ -147,7 +147,7 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
         <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
         <Space>
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
-          <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} title={focusedView === 'pdf' ? 'PDF 视图没有可复制的文本' : undefined} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />
+          <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />
           <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
           </Dropdown>

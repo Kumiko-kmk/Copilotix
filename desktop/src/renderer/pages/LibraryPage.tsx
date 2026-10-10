@@ -285,7 +285,7 @@ export default function LibraryPage(props: {
       ) : paper ? (
         <article ref={panelRef} className="paper-archive-panel" aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
-          <h2 key={paper.id} className="paper-archive-title" title={displayTitle}><span>{displayTitle}</span></h2>
+          <h2 key={paper.id} className="paper-archive-title"><span>{displayTitle}</span></h2>
           <BrowseTranslatedTitle paper={paper} />
           <div className="paper-archive-rule"><i /></div>
           <dl className="paper-archive-meta">
@@ -317,7 +317,7 @@ export default function LibraryPage(props: {
             <button type="button" aria-label="上一列" onClick={() => navigate('lane', -1)}><ArrowLeftOutlined /></button>
             <div>
               <small>COLUMN {pad(shelfIndex + 1)} / {pad(shelves.length)}</small>
-              <span key={shelf?.key} title={shelf?.label}>{shelf?.label}</span>
+              <span key={shelf?.key}>{shelf?.label}</span>
             </div>
             <button type="button" aria-label="下一列" onClick={() => navigate('lane', 1)}><ArrowRightOutlined /></button>
           </div>
@@ -357,11 +357,11 @@ function BrowsePaperNotes({ paper, source }: { paper: ArchivePaper; source?: Pap
   const summary = state?.status === 'ready' ? ('brief' in state ? state.brief.tldr : state.insight.summary) : ''
   return <>
     <div className="paper-archive-keywords"><dt>关键词</dt><SingleLineKeywords text={keywords} /></div>
-    <div className="paper-archive-summary"><dt>总结</dt><dd title={summary || undefined}>{summary || '暂无总结'}</dd></div>
+    <div className="paper-archive-summary"><dt>总结</dt><dd>{summary || '暂无总结'}</dd></div>
   </>
 }
 
-/** Keep a readable single line, with full keywords available in the tooltip. */
+/** Fit keywords on one readable line without a hover popup. */
 function SingleLineKeywords({ text }: { text: string }): React.JSX.Element {
   const ref = React.useRef<HTMLElement>(null)
   React.useLayoutEffect(() => {
@@ -381,7 +381,7 @@ function SingleLineKeywords({ text }: { text: string }): React.JSX.Element {
     observer.observe(element)
     return () => observer.disconnect()
   }, [text])
-  return <dd ref={ref} title={text || undefined}>{text || '—'}</dd>
+  return <dd ref={ref}>{text || '—'}</dd>
 }
 
 /**
@@ -422,7 +422,7 @@ function BrowseTranslatedTitle({ paper }: { paper: ArchivePaper }): React.JSX.El
     const markdown = details.data?.translatedMarkdown
     return markdown ? extractPaperProfile('', markdown).translatedTitle?.replace(/\.pdf\s*$/iu, '').trim() ?? '' : ''
   }, [details.data?.translatedMarkdown])
-  return <p className="paper-archive-translated-title" title={translatedTitle || undefined}>{translatedTitle || '\u00a0'}</p>
+  return <p className="paper-archive-translated-title">{translatedTitle || '\u00a0'}</p>
 }
 
 /** A fixed-width ruler; long shelves map onto it proportionally. */

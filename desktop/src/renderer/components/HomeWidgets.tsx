@@ -75,7 +75,6 @@ export function RecentShelf(props: {
               type="button"
               className={`shelf-card status-${status}`}
               style={{ '--i': index } as React.CSSProperties}
-              title={document.displayName}
               aria-label={`打开论文：${document.displayName}，${STATUS_LABELS[status]}${progress}`}
               onClick={() => props.onOpen(document.id)}
             >

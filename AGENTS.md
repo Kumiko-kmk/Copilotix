@@ -6,6 +6,7 @@
 
 - 動手前與交付前執行 `git status --short --branch`，確認 worktree、分支及未提交內容；不得修改、清理、stash 或重置其他 Agent 的 worktree。
 - Worktree 不共享未提交文件；跨分支傳遞須先 commit，再 merge、rebase 或 cherry-pick。
+- 使用者不喜歡滑鼠懸停時出現文字提示／浮層，包括原生 `title`、Tooltip、Popover 預覽與以全文補充截斷文字的彈窗。全應用不再添加這類說明；圖示仍保留 `aria-label`，必要資訊在頁面內或明確點擊後顯示。清單與實作邊界見 [介面偏好](docs/UI_PREFERENCES_ZH.md)。
 - 共享 schema、migration、IPC、Core RPC、JobRepository、Artifact/PathPolicy 或發布腳本的修改，須記錄兼容策略、測試證據與恢復語義。
 - 預設不跑本地 lint、typecheck、單元／覆蓋率及 E2E；仍須維護相關測試。只有使用者要求本地驗證時才執行。未明確授權不得 push、上傳產物或觸發遠端發布；允許本地 commit、build 與打包，驗證邊界見第 8 節。
 
@@ -108,8 +109,9 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 
 ## 13. 文庫頁與 AI 解讀（2026-10-09）
 
-- 檔案頁標題下沿用選中頁的單行譯文標題（含省略與完整 tooltip），移除論文類型／學科分類標籤；證據基礎與檢驗方式暫時保留，待使用者確定替代資訊。
-- 2026-10-10 選中頁精簡：移除類型／創建時間／檔案卡生成狀態及其獨立讀取組件，元信息只保留空格分隔的單行關鍵詞與下方「總結」；關鍵詞隨寬度縮小至 11px，仍超出則省略，完整內容在 tooltip。總結沿用 v2 `tldr`／v1 `summary`，展示檔案標題下不再重複 v2 總結，儲存／生成契約不變。本輪按使用者要求未跑測試、未打包；僅構建開發界面，使用現有 15 篇論文及已保存檔案卡的隔離副本取得 Electron 截圖，未調用模型、未改原文庫。圖片見 `../investigation/library-notes-20261010/selected.png`、`archive.png`。
+- 2026-10-10 全應用懸停提示移除：首頁／文庫／任務／閱讀器／問答／設定的說明 `title` 已刪除；表格省略、Select 選中項／選項與 Badge 關閉自動提示。引用仍可點擊定位，移除懸停預覽及 PDF 區塊浮動類型標籤；Markdown／HTML 與公式生成後的 `title` 僅在顯示層移除，原文與導出不變。維護相關測試預期，本輪未跑測試／未構建／未打包。完整清單及使用者偏好見 [介面偏好](docs/UI_PREFERENCES_ZH.md)。
+- 檔案頁標題下沿用選中頁的單行譯文標題（超出省略，不顯示懸停提示），移除論文類型／學科分類標籤；證據基礎與檢驗方式暫時保留，待使用者確定替代資訊。
+- 2026-10-10 選中頁精簡：移除類型／創建時間／檔案卡生成狀態及其獨立讀取組件，元信息只保留空格分隔的單行關鍵詞與下方「總結」；關鍵詞隨寬度縮小至 11px，仍超出則省略。總結沿用 v2 `tldr`／v1 `summary`，展示檔案標題下不再重複 v2 總結，儲存／生成契約不變。本輪按使用者要求未跑測試、未打包；僅構建開發界面，使用現有 15 篇論文及已保存檔案卡的隔離副本取得 Electron 截圖，未調用模型、未改原文庫。圖片見 `../investigation/library-notes-20261010/selected.png`、`archive.png`。
 - 2026-10-10 重做：先撤銷 `29debc4` 並核對源碼回到 `02e924a`，再實作每分類一列、右下角分類名十二字固定寬度居中、選中頁以關鍵詞取代狀態、詳情「摘要（譯文）→概覽→發現→局限與前提」。原英文／譯文標題與日期渲染保持原結構；閱讀路線與術語不在界面展示，儲存格式、生成提示詞兼容。分類内仍按原序循环浏览。
 - 文件日期：原 Electron 資源帶 1980 年修改時間；`runtime-file-times.mjs` 只更新發布暫存 runtime 的時間戳，在 Setup 嵌入前完成，源依賴與用戶文庫不變。文件內容、签章、原子发布及失败恢复语义不变，日期回歸驗證源文件及副本內容保持不變。
 - 本輪驗證與交付：20 項針對性回歸、typecheck、修改文件 lint、四 bundle／Utility smoke、发布内建 packaged smoke／完整性／體積檢查通過。基線／重做後及實際打包 EXE 均檢查長標題布局，覆盖三个窗口尺寸、快速換篇、固定分類邊界、關鍵詞與譯文摘要；實際包使用隔離文庫與真正保存的 v2 夾具，無模型呼叫。讀回 241 個 runtime 文件時間均為當前構建日期，EXE／ASAR／Setup／ZIP 哈希一致，包內 74 個 out 文件與本地輸出一致。新入口 `release-artifacts/mv1v19un-28996-e231fd96/program/Copilotix.exe`，證據見 `../investigation/archive-redo-20261010/SUMMARY.md`；未執行全量測試／完整安裝生命週期／遠端 CI，未 push。
@@ -140,7 +142,7 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 
 使用者驗收後提出的版面與入場調整已完成，契約見上方「版面與入場」一條；涉及 `PaperArchiveScene`（`entryScanTime`、`pointCamera`、`onDetailFrame`）、`LibraryPage`、`ArchiveDetail`（`stretchPanel`）、`paperArchive.css`，並改寫一項 LibraryPage 測試（詳情期間檢索不可用）、新增兩項 Scene 測試。依第 8 節未在本地執行，若全量測試或 E2E 有失敗請直接修正。請留意：
 
-1. 詳情面板改為固定高度後，720p 下分頁內容約剩 130px。v2 檔案卡標題、證據基礎／檢驗方式已限制為 2 行（完整內容在 tooltip），若你覺得資訊密度仍過高，可把「作者／單位」移入概覽分頁。
+1. 詳情面板改為固定高度後，720p 下分頁內容約剩 130px。v2 檔案卡標題、證據基礎／檢驗方式已限制為 2 行，若你覺得資訊密度仍過高，可把「作者／單位」移入概覽分頁。依使用者偏好不使用懸停提示補充全文。
 2. `stretchPanel` 依賴瀏覽面板在 `onDetailPhase('opening')` 時仍掛載；如果之後調整詳情掛載時機，請保留這一捕捉點。
 3. 減弱動畫時 clip-path 揭露、檢索收合全部跳過。
 

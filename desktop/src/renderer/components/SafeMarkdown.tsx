@@ -1,5 +1,4 @@
 import React from 'react'
-import { Popover } from 'antd'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
@@ -55,16 +54,14 @@ const SafeMarkdown = React.memo(function SafeMarkdown(props: {
         if (!citation || !id) return <span>{children}</span>
         const label = props.citationLabels?.[id]
         return (
-          <Popover content={<CitationPreview citation={citation} />} mouseEnterDelay={0.25} placement="top">
-            <button
-              type="button"
-              className="paper-chat-citation"
-              aria-label={label === undefined ? id : `引用 ${label}`}
-              onClick={() => props.onCitation?.(citation)}
-            >
-              {label ?? children}
-            </button>
-          </Popover>
+          <button
+            type="button"
+            className="paper-chat-citation"
+            aria-label={label === undefined ? id : `引用 ${label}`}
+            onClick={() => props.onCitation?.(citation)}
+          >
+            {label ?? children}
+          </button>
         )
       }
       return <a href={href} target="_blank" rel="noreferrer">{children}</a>
@@ -78,7 +75,8 @@ const SafeMarkdown = React.memo(function SafeMarkdown(props: {
         rehypeRaw,
         [rehypeSanitize, markdownSanitizeSchema],
         rehypeTableMath,
-        [rehypeKatex, { trust: false, throwOnError: false, strict: 'ignore' }]
+        [rehypeKatex, { trust: false, throwOnError: false, strict: 'ignore' }],
+        removeHoverTitles
       ]}
       components={components}
     >
@@ -89,14 +87,18 @@ const SafeMarkdown = React.memo(function SafeMarkdown(props: {
 
 export default SafeMarkdown
 
-function CitationPreview(props: { citation: Citation }): React.JSX.Element {
-  const { excerpt, locator } = props.citation
-  return (
-    <div className="paper-chat-citation-preview">
-      {locator.pageStart !== null ? <strong>第 {locator.pageStart + 1} 页</strong> : null}
-      <p>{excerpt.length > 200 ? `${excerpt.slice(0, 200)}…` : excerpt}</p>
-    </div>
-  )
+type MarkdownNode = { type: string; properties?: Record<string, unknown>; children?: MarkdownNode[] }
+
+/** Remove native hover hints from imported HTML and generated formula markup at display time. */
+function removeHoverTitles() {
+  return (tree: MarkdownNode): void => {
+    const pending = [tree]
+    while (pending.length) {
+      const node = pending.pop()!
+      if (node.properties) delete node.properties.title
+      if (node.children) pending.push(...node.children)
+    }
+  }
 }
 
 export function resolveAsset(src: string | undefined, base: string): string | undefined {

@@ -108,11 +108,11 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
         onRow={(document) => ({ onDoubleClick: () => props.onOpen(document.id) })}
         columns={[
           {
-            title: '任务名称', dataIndex: 'displayName', width: '43%', align: 'center', ellipsis: true,
+            title: '任务名称', dataIndex: 'displayName', width: '43%', align: 'center', ellipsis: { showTitle: false },
             render: (name: string, document: DocumentSummary) => (
               <div className="task-name">
                 <span className="task-file-icon" aria-hidden="true">{documentTypeLabel(document.originalName) === 'PDF' ? <FilePdfOutlined /> : <FileMarkdownOutlined />}</span>
-                <button className="task-link" title={name} onClick={() => props.onOpen(document.id)}>{name}</button>
+                <button className="task-link" onClick={() => props.onOpen(document.id)}>{name}</button>
               </div>
             )
           },
@@ -128,7 +128,6 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={document.workflow.progress}
-                  title={`翻译进度 ${document.workflow.progress}%`}
                 >
                   <span>{statusLabels[document.workflow.status]}</span>
                 </div>
@@ -147,11 +146,11 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
             title: '操作', width: '15%', align: 'center',
             render: (_: unknown, document: DocumentSummary) => (
               <div className="task-actions">
-                <Button type="text" aria-label="打开输出目录" title="打开输出目录" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.id)} />
+                <Button type="text" aria-label="打开输出目录" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.id)} />
                 {document.workflow.status === 'failed' || document.workflow.status === 'partial' || document.workflow.status === 'translating'
-                  ? <Button type="text" aria-label="重试" title={document.workflow.status === 'translating' ? '中断当前翻译并保留已完成区块后重试' : '重试失败区块'} icon={<RedoOutlined />} onClick={() => void retry(document.id)} />
+                  ? <Button type="text" aria-label="重试" icon={<RedoOutlined />} onClick={() => void retry(document.id)} />
                   : <span className="task-action-placeholder" aria-hidden="true" />}
-                <Button danger type="text" aria-label="删除" title="删除任务" icon={<DeleteOutlined />} onClick={() => { setDeleteFiles(true); setDeleting(document) }} />
+                <Button danger type="text" aria-label="删除" icon={<DeleteOutlined />} onClick={() => { setDeleteFiles(true); setDeleting(document) }} />
               </div>
             )
           }

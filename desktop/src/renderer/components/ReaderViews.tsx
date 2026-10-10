@@ -238,7 +238,7 @@ function ChatTabLabel(props: { controller: PaperChatController }): React.JSX.Ele
     <span className="reader-chat-tab">
       AI 问答
       {props.controller.busy ? <span className="reader-chat-tab-busy" aria-label="正在生成" /> : null}
-      {pinned > 0 ? <Badge count={pinned} size="small" color="var(--primary)" title={`${pinned} 个选区`} /> : null}
+      {pinned > 0 ? <Badge count={pinned} size="small" color="var(--primary)" title="" /> : null}
     </span>
   )
 }

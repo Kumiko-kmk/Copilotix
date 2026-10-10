@@ -63,11 +63,11 @@ function setup(consented = true, configured = true) {
 
 async function chooseModel(label: string): Promise<void> {
   fireEvent.mouseDown(await screen.findByRole('combobox', { name: '问答模型' }))
-  fireEvent.click(await screen.findByTitle(label))
+  fireEvent.click(await screen.findByText(label, { selector: '.ant-select-item-option-content' }))
 }
 
 function shownModel(): string | null {
-  return document.querySelector('.reader-chat-model .ant-select-selection-item')?.getAttribute('title') ?? null
+  return document.querySelector('.reader-chat-model .ant-select-selection-item')?.textContent ?? null
 }
 
 async function openMenu(): Promise<void> {
@@ -204,12 +204,13 @@ describe('ReaderChatPanel and local paper sessions', () => {
     await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ question: '总结这篇论文的主要贡献' })))
     expect(question.value).toBe('')
   })
-  it('previews citation excerpts on hover and clears the conversation from the menu', async () => {
+  it('keeps citation navigation without a hover preview and clears the conversation from the menu', async () => {
     const f = setup(); await f.input(); await waitFor(() => expect(f.ask).toHaveBeenCalled())
     f.complete()
     fireEvent.mouseEnter(screen.getByRole('button', { name: '引用 1' }))
-    expect(await screen.findByText('第 1 页')).toBeTruthy()
-    expect(screen.getAllByText('source text').length).toBeGreaterThan(0)
+    expect(document.querySelector('.ant-popover')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '引用 1' }))
+    await waitFor(() => expect(f.onSelect).toHaveBeenCalledWith({ mappingId: 'm1', origin: 'citation' }))
     await openMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: '清空对话' }))
     await waitFor(() => expect(screen.queryByRole('log', { name: '问答记录' })).toBeNull())
@@ -219,7 +220,7 @@ describe('ReaderChatPanel and local paper sessions', () => {
     const f = setup()
     f.settings.credentials.deepseek = { state: 'valid' }
     fireEvent.mouseDown(await screen.findByRole('combobox', { name: '问答服务商' }))
-    fireEvent.click(await screen.findByTitle('DeepSeek'))
+    fireEvent.click(await screen.findByText('DeepSeek', { selector: '.ant-select-item-option-content' }))
     await waitFor(() => expect(shownModel()).toBe('deepseek-flash'))
     await chooseModel('deepseek-v4-pro')
     await f.input()

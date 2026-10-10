@@ -88,7 +88,6 @@ export default function CopilotixWordmark(): React.JSX.Element {
       className="copilotix-wordmark"
       role="img"
       aria-label="COPILOTIX"
-      title="点击重播"
       onPointerLeave={() => setHot(null)}
       onClick={decode}
     >

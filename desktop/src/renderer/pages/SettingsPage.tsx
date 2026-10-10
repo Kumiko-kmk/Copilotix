@@ -574,7 +574,7 @@ function ActivityHeatmap(props: { days: UsageAnalyticsDay[] }): React.JSX.Elemen
         {props.days.map((day, index) => {
           const score = scores[index] ?? 0
           const level = score === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil((score / maximum) * 4)))
-          return <span key={day.date} className={`activity-cell level-${level}`} title={`${day.date}：${day.documents} 份文檔，${day.pages} 頁`} />
+          return <span key={day.date} className={`activity-cell level-${level}`} />
         })}
       </div>
       <footer className="activity-legend"><span>少</span>{[0, 1, 2, 3, 4].map((level) => <i key={level} className={`activity-cell level-${level}`} />)}<span>多</span></footer>

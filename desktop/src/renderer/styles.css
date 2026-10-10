@@ -580,9 +580,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .pdf-block:hover { border-color: #2f5eea; background: rgba(66, 99, 255, .08); }
 .pdf-block.active { border: 2px solid #4465ff; background: rgba(68, 101, 255, .13); }
 .pdf-block.discarded { border-color: rgba(125, 132, 145, .7); background: rgba(125, 132, 145, .025); }
-.pdf-block-label, .pdf-merge-badge { position: absolute; top: -22px; left: -1px; min-width: 36px; padding: 2px 6px; border-radius: 3px 3px 0 0; color: white; background: #2f5eea; font-size: 11px; line-height: 17px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
-.pdf-block:hover .pdf-block-label, .pdf-block.active .pdf-block-label { opacity: 1; }
-.pdf-block.discarded .pdf-block-label { background: #747b88; }
+.pdf-merge-badge { position: absolute; min-width: 36px; padding: 2px 6px; color: white; background: #2f5eea; font-size: 11px; line-height: 17px; white-space: nowrap; pointer-events: none; }
 .pdf-merge-badge { top: auto; bottom: -21px; left: 50%; border-radius: 0 0 3px 3px; opacity: 1; transform: translateX(-50%); }
 .pdf-loading { display: grid; min-height: 500px; place-items: center; gap: 14px; padding: 48px; color: var(--muted); }
 .pdf-loading .ant-progress { width: min(320px, 80%); }
