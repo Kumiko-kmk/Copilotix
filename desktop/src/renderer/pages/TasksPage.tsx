@@ -1,8 +1,9 @@
 import React from 'react'
 import { DeleteOutlined, FileMarkdownOutlined, FilePdfOutlined, FolderOpenOutlined, RedoOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Checkbox, Empty, Input, Modal, Table, Tag, Typography, message } from 'antd'
+import { Button, Checkbox, Empty, Input, Modal, Table, Tag, message } from 'antd'
 import type { InputRef } from 'antd'
 import type { DocumentSummary } from '@shared/ipcSchemas'
+import PageBrand from '../components/PageBrand'
 
 type WorkflowStatus = DocumentSummary['workflow']['status']
 type StatusFilter = 'all' | 'active' | 'completed' | 'attention'
@@ -82,9 +83,7 @@ export default function TasksPage(props: { documents: DocumentSummary[]; onOpen(
   return (
     <section className="page tasks-page">
       {contextHolder}
-      <header className="page-header task-header">
-        <Typography.Title level={2}>全部任务</Typography.Title>
-      </header>
+      <PageBrand className="task-header" eyebrow="COPILOTIX / TASKS" title="全部任务" meta={`${counts.all} 个任务 · 双击任务行打开阅读器`} />
       <div className="task-toolbar">
         <div className="task-overview" role="group" aria-label="按状态筛选">
           <OverviewChip tone="all" label="全部" count={counts.all} active={status === 'all'} onClick={() => setStatus('all')} />

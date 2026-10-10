@@ -144,7 +144,7 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
     <section className="reader-page">
       {contextHolder}
       <header className="reader-header">
-        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
+        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><span className="reader-eyebrow" aria-hidden="true">READER<i>/</i></span><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
         <Space>
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
           <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />

@@ -145,8 +145,8 @@ export default function TutorialPage(props: {
   return (
     <section className="page tutorial-page" aria-label="新手教程">
       {contextHolder}
-      <header className="page-header tutorial-page-header">
-        <div><span className="tutorial-eyebrow">COPILOTIX · 入门体验</span><h1>用一篇经典论文，走完第一次解析</h1></div>
+      <header className="page-header page-brand tutorial-page-header">
+        <div className="page-brand-copy"><span className="eyebrow tutorial-eyebrow">COPILOTIX / TUTORIAL · 入门体验</span><h1>用一篇经典论文，走完第一次解析</h1></div>
         <div className="tutorial-header-actions">
           <Button onClick={restartTutorial}>重新体验教程</Button>
           <Button onClick={props.onClose}>返回新解析</Button>

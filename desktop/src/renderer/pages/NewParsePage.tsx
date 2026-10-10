@@ -1,5 +1,5 @@
 import React from 'react'
-import { FilePdfOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, FilePdfOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Modal, Tag, message } from 'antd'
 import { MAX_PDF_BYTES, MAX_PDF_PAGES } from '@shared/constants'
 import type { AppSettings } from '@shared/types'
@@ -31,8 +31,6 @@ export default function NewParsePage(props: {
   const [skipDuplicates, setSkipDuplicates] = React.useState(true)
   const [submitting, setSubmitting] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
-  const pageRef = React.useRef<HTMLElement>(null)
-  const uploadRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const dragDepthRef = React.useRef(0)
   const [messageApi, contextHolder] = message.useMessage()
@@ -82,25 +80,6 @@ export default function NewParsePage(props: {
     }
   }, [setPdfFiles])
 
-  React.useEffect(() => {
-    const page = pageRef.current
-    if (!page || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-    let frame = 0
-    const onPointerMove = (event: PointerEvent): void => {
-      if (frame) return
-      frame = window.requestAnimationFrame(() => {
-        frame = 0
-        page.style.setProperty('--px', (event.clientX / window.innerWidth * 2 - 1).toFixed(3))
-        page.style.setProperty('--py', (event.clientY / window.innerHeight * 2 - 1).toFixed(3))
-      })
-    }
-    window.addEventListener('pointermove', onPointerMove)
-    return () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      if (frame) window.cancelAnimationFrame(frame)
-    }
-  }, [])
-
   const start = React.useCallback(async () => {
     setSubmitting(true)
     try {
@@ -129,7 +108,7 @@ export default function NewParsePage(props: {
   const oversizedFiles = files.filter((file) => file.size > MAX_PDF_BYTES)
 
   return (
-    <section ref={pageRef} className={`page new-parse-page${dragging ? ' is-dragging' : ''}`}>
+    <section className={`page new-parse-page${dragging ? ' is-dragging' : ''}`}>
       {contextHolder}
       <HomeBackdrop />
       <div className="new-parse-hero">
@@ -140,30 +119,22 @@ export default function NewParsePage(props: {
         </div>
         <div className="new-parse-content">
         <div
-          ref={uploadRef}
           className={dragging ? 'upload-entry dragging' : 'upload-entry'}
-          onPointerMove={(event) => {
-            const entry = uploadRef.current
-            if (!entry) return
-            const bounds = entry.getBoundingClientRect()
-            entry.style.setProperty('--mx', `${event.clientX - bounds.left}px`)
-            entry.style.setProperty('--my', `${event.clientY - bounds.top}px`)
-          }}
           data-testid="pdf-upload-entry"
           role="region"
           aria-label="文档导入区，当前支持 PDF"
         >
-          <span className="upload-halo" aria-hidden="true" />
           <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此窗口</span>
           <div className="upload-entry-copy">
             <UploadGlyph />
             <div className="upload-entry-text">
+              <span className="eyebrow" aria-hidden="true">IMPORT / PDF</span>
               <span className="upload-prompt">拖入文档</span>
               <small>当前支持 PDF，单篇最多 {MAX_PDF_PAGES} 页</small>
             </div>
           </div>
           <Button type="primary" size="large" loading={submitting} onClick={chooseFiles}>
-            选择文档
+            <span>选择文档</span><ArrowRightOutlined aria-hidden="true" />
           </Button>
           <input
             ref={inputRef}
@@ -182,15 +153,25 @@ export default function NewParsePage(props: {
           window.localStorage.setItem(TUTORIAL_ENTRY_USED_KEY, '1')
           setTutorialEntryUsed(true)
           props.onOpenTutorial()
-        }}>第一次使用？从内置论文开始新手教程 <span aria-hidden="true">→</span></button> : null}
+        }}><span>第一次使用？从内置论文开始新手教程</span><ArrowRightOutlined aria-hidden="true" /></button> : null}
         {props.documents && props.onOpenDocument ? (
           <RecentShelf documents={props.documents} onOpen={props.onOpenDocument} onViewAll={() => props.onOpenTasks?.()} />
         ) : null}
       </div>
 
+      {props.documents && props.documents.length > 0 ? (
+        <footer className="home-footer" aria-hidden="true">
+          <div className="home-index">
+            <span className="eyebrow">LIBRARY / PAPERS</span>
+            <div><strong>{String(props.documents.length).padStart(2, '0')}</strong><small>篇论文</small></div>
+          </div>
+          <p className="home-hints">拖入 PDF 导入<i>/</i>顶部悬停打开导航<i>/</i>文库中浏览全部论文</p>
+        </footer>
+      ) : null}
+
       <div className="drop-veil" aria-hidden="true">
         <svg className="drop-veil-frame" preserveAspectRatio="none">
-          <rect x="1.5" y="1.5" rx="22" ry="22" />
+          <rect x="1.5" y="1.5" />
         </svg>
         <div className="drop-veil-message">
           <UploadGlyph />

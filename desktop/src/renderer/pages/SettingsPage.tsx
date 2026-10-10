@@ -1,5 +1,5 @@
 import React from 'react'
-import { CheckCircleOutlined, CloseCircleOutlined, DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, LinkOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, CloseCircleOutlined, DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Button, Checkbox, Input, Typography, message } from 'antd'
 import type {
   AppSettings,
@@ -11,6 +11,7 @@ import type {
   TranslationProviderId
 } from '@shared/types'
 import type { StorageInfo, UsageAnalytics, UsageAnalyticsDay } from '@shared/ipcSchemas'
+import PageBrand from '../components/PageBrand'
 
 type Section = 'connections' | 'models' | 'storage'
 
@@ -291,12 +292,12 @@ export default function SettingsPage(props: {
   return (
     <section className="page settings-page">
       {contextHolder}
-      <header className="page-header"><Typography.Title level={2}>设置</Typography.Title></header>
+      <PageBrand eyebrow="COPILOTIX / SETTINGS" title="设置" meta="服务连接、翻译模型与文库存储" />
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="设置分类">
-          <button className={section === 'connections' ? 'active' : ''} onClick={() => setSection('connections')}><LinkOutlined />服务连接</button>
-          <button className={section === 'models' ? 'active' : ''} onClick={() => setSection('models')}><SettingOutlined />模型设置</button>
-          <button className={section === 'storage' ? 'active' : ''} onClick={() => setSection('storage')}><FolderOutlined />文件存储</button>
+          <button className={section === 'connections' ? 'active' : ''} onClick={() => setSection('connections')}><small aria-hidden="true">01</small>服务连接</button>
+          <button className={section === 'models' ? 'active' : ''} onClick={() => setSection('models')}><small aria-hidden="true">02</small>模型设置</button>
+          <button className={section === 'storage' ? 'active' : ''} onClick={() => setSection('storage')}><small aria-hidden="true">03</small>文件存储</button>
         </nav>
         <div className="settings-content">
           <div className="settings-content-body">
@@ -630,10 +631,10 @@ function compactNumber(value: number): string {
 }
 
 const STORAGE_CATEGORY_DETAILS: Record<StorageInfo['categories'][number]['kind'], { label: string; color: string }> = {
-  source: { label: '源文档', color: '#626bd9' },
-  image: { label: '图片资源', color: '#65a879' },
-  translation: { label: '翻译结果', color: '#d69b53' },
-  other: { label: '其他文件', color: '#a7abb2' }
+  source: { label: '源文档', color: '#5b58d6' },
+  image: { label: '图片资源', color: '#4a9d84' },
+  translation: { label: '翻译结果', color: '#d39b35' },
+  other: { label: '其他文件', color: '#b7ab98' }
 }
 
 function StorageMetric(props: { icon: React.ReactNode; label: string; value: string }): React.JSX.Element {
