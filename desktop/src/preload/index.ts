@@ -1,4 +1,5 @@
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightCancelSchema, paperInsightChangedSchema } from '@shared/paperInsight'
+import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
 import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
@@ -58,6 +59,7 @@ async function invokeValidated<Request, Response>(
 }
 
 const api: CopilotixDesktopApi = {
+  libraryCategories: (request) => invokeValidated('library:categories', libraryCategoriesRequestSchema, libraryCategoriesPageSchema, request),
   paperInsight: {
     get: (request) => invokeValidated('paperInsight:get', paperInsightRequestSchema, paperInsightStateSchema, request),
     generate: (request) => invokeValidated('paperInsight:generate', paperInsightRequestSchema, voidResponseSchema, request),

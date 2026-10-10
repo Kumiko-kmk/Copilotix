@@ -19,7 +19,8 @@ type Tab = 'abstract' | 'structure' | 'insight' | BriefTab
  */
 export default function ArchiveDetail(props: {
   paper: ArchivePaper
-  month: string
+  /** Content category of the paper (shared/libraryCategories.ts). */
+  category: string
   fileNumber: number
   phase: Exclude<DetailPhase, 'closed'>
   /** The browse panel's box when extraction started; the panel stretches from it to the card's height. */
@@ -49,7 +50,10 @@ export default function ArchiveDetail(props: {
   const articleRef = React.useRef<HTMLElement>(null)
   const redactionRef = React.useRef<HTMLDivElement>(null)
   const redactedContent = React.useMemo(() => ({}), [details.data, ready, tab])
-  useLineRedaction(articleRef, redactionRef, { covered: props.phase !== 'closing', reveal: revealed, content: redactedContent })
+  // The text is lifted only once it has loaded: lifting earlier left bars over the old layout
+  // (covering the tab labels) while late text appeared below them uncovered.
+  const contentLoaded = !details.isPending && (!props.insights || insight.state !== null)
+  useLineRedaction(articleRef, redactionRef, { covered: props.phase !== 'closing', reveal: revealed && contentLoaded, content: redactedContent })
   const closing = props.phase === 'closing'
   const { morphFrom } = props
 
@@ -102,7 +106,7 @@ export default function ArchiveDetail(props: {
       <article ref={articleRef} className="paper-archive-detail" aria-label="论文档案" aria-busy={!revealed || details.isPending}>
         <div ref={redactionRef} className="paper-archive-redactions" aria-hidden="true" />
         <header>
-          <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.month}</span>
+          <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.category}</span>
           <h2 className="paper-archive-reveal" style={{ '--i': 0 } as React.CSSProperties} title={title}>{title}</h2>
           {brief ? <><p className="paper-archive-detail-subtitle paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}>{brief.tldr}</p><p className="paper-archive-brief-tags paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}><span>{PAPER_TYPE_LABELS[brief.paperType]}</span><span>{brief.field.discipline} · {brief.field.area}</span></p></> : subtitle ? <p className="paper-archive-detail-subtitle paper-archive-reveal" style={{ '--i': 1 } as React.CSSProperties}>{subtitle}</p> : null}
         </header>

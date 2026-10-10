@@ -1,6 +1,8 @@
 import { paperBriefSaveSchema } from '@shared/paperBrief/contracts'
 import { PaperInsightStore } from './persistence/paperInsightStore'
 import { paperInsightRequestSchema } from '@shared/paperInsight'
+import { libraryCategoriesRequestSchema } from '@shared/libraryCategories'
+import { LibraryCategoryService } from './libraryCategoryService'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
 import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
 import { PaperChatStore } from './persistence/paperChatStore'
@@ -139,7 +141,10 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
   }
   const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const insightStore = () => new PaperInsightStore(requireRepository())
+  const categories = new LibraryCategoryService(insightStore, requireRepository)
   const handlers: UtilityHandlerMap = {
+    // Reads every paper's text on first use: compute lane, so quick data requests are not held up.
+    'compute:library-categories': (request, signal) => categories.page(libraryCategoriesRequestSchema.parse(request.payload).after ?? 0, signal),
     'insight:get': (request) => insightStore().get(paperInsightRequestSchema.parse(request.payload).documentId),
     'insight:save-brief': (request) => { const { documentId, brief, anchors } = paperBriefSaveSchema.parse(request.payload); return insightStore().saveBrief(documentId, brief, anchors) },
     'insight:brief-context': (request, signal) => insightStore().briefContext(paperInsightRequestSchema.parse(request.payload).documentId, signal),

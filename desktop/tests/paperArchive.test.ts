@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import { ArchiveMomentum, damp, settlingWave, SHOULDER_PEAK } from '../src/renderer/paperArchive/archiveMotion'
 import {
+  ALL_PAPERS,
   buildArchiveColumns,
   cellForPaper,
-  groupPapersByMonth,
+  groupPapersByCategory,
   laneStep,
   nearestOccurrence,
   paperAt,
@@ -25,26 +26,39 @@ function paper(createdAt: string, status: DocumentSummary['workflow']['status'] 
   }
 }
 
+const october = '2026-10-15T10:00:00.000Z'
+
 describe('paper archive shelves', () => {
-  it('groups papers into month shelves, newest month and newest paper first', () => {
-    const october = paper('2026-10-15T10:00:00.000Z')
-    const octoberLater = paper('2026-10-20T10:00:00.000Z')
-    const august = paper('2026-08-12T10:00:00.000Z')
-    const shelves = groupPapersByMonth([august, october, octoberLater])
-    expect(shelves.map((shelf) => shelf.key)).toEqual(['2026-10', '2026-08'])
-    expect(shelves[0]!.label).toBe('2026 年 10 月')
-    expect(shelves[0]!.papers.map((item) => item.id)).toEqual([octoberLater.id, october.id])
+  it('shows the whole library as one shelf, newest first, until categories arrive', () => {
+    const older = paper('2026-08-12T10:00:00.000Z')
+    const newer = paper('2026-10-20T10:00:00.000Z')
+    const shelves = groupPapersByCategory([older, newer])
+    expect(shelves.map((shelf) => [shelf.key, shelf.label, shelf.category])).toEqual([['all', ALL_PAPERS, ALL_PAPERS]])
+    expect(shelves[0]!.papers.map((item) => item.id)).toEqual([newer.id, older.id])
+    expect(groupPapersByCategory([])).toEqual([])
   })
 
-  it('puts papers with unreadable dates on a final shelf', () => {
-    const shelves = groupPapersByMonth([paper('not-a-date'), paper('2026-01-15T10:00:00.000Z')])
-    expect(shelves.map((shelf) => shelf.key)).toEqual(['2026-01', 'undated'])
+  it('follows the category order and the order of papers within each category', () => {
+    const [a, b, c, d] = [paper(october), paper(october), paper(october), paper(october)]
+    const shelves = groupPapersByCategory([a!, b!, c!, d!], [
+      { id: 'c-operators', name: '神经算子', paperIds: [c!.id, a!.id] },
+      { id: 'c-attention', name: '注意力机制', paperIds: [b!.id, 'deleted-paper'] }
+    ])
+    expect(shelves.map((shelf) => shelf.label)).toEqual(['神经算子', '注意力机制', '待分类'])
+    expect(shelves[0]!.papers).toEqual([c, a])
+    // A paper imported after the categories were computed waits in 待分类.
+    expect(shelves[2]!.papers).toEqual([d])
+  })
+
+  it('adds papers the categories do not know to an existing 待分类 shelf', () => {
+    const [a, b] = [paper(october), paper(october)]
+    const shelves = groupPapersByCategory([a!, b!], [{ id: 'pending', name: '待分类', paperIds: [a!.id] }])
+    expect(shelves.map((shelf) => [shelf.key, shelf.papers.length])).toEqual([['pending', 2]])
   })
 
   it('loops rows and lanes in both directions', () => {
-    const shelves = groupPapersByMonth([
-      paper('2026-10-10T10:00:00.000Z'), paper('2026-10-11T10:00:00.000Z'), paper('2026-09-10T10:00:00.000Z')
-    ])
+    const [a, b, c] = [paper(october), paper(october), paper(october)]
+    const shelves = groupPapersByCategory([a!, b!, c!], [{ id: 'c-x', name: 'X', paperIds: [a!.id, b!.id] }, { id: 'c-y', name: 'Y', paperIds: [c!.id] }])
     expect(wrap(-1, 3)).toBe(2)
     expect(paperAt(shelves, { lane: 0, row: 2 })).toBe(shelves[0]!.papers[0]!)
     expect(paperAt(shelves, { lane: -1, row: -5 })).toBe(shelves[1]!.papers[0]!)
@@ -55,15 +69,16 @@ describe('paper archive shelves', () => {
   it('finds the nearest occurrence so the plane never travels across a whole loop', () => {
     expect(nearestOccurrence(0, 7, 8)).toBe(8)
     expect(nearestOccurrence(3, -6, 8)).toBe(-5)
-    const shelves = groupPapersByMonth([paper('2026-10-10T10:00:00.000Z'), paper('2026-10-11T10:00:00.000Z')])
+    const shelves = groupPapersByCategory([paper('2026-10-10T10:00:00.000Z'), paper('2026-10-11T10:00:00.000Z')])
     expect(cellForPaper(shelves, shelves[0]!.papers[1]!.id, { lane: 4, row: 9 })).toEqual({ lane: 4, row: 9 })
     expect(cellForPaper(shelves, 'missing', { lane: 0, row: 0 })).toBeNull()
   })
 
   it('returns to the paper last viewed on a shelf when stepping sideways', () => {
-    const shelves = groupPapersByMonth([
-      paper('2026-10-10T10:00:00.000Z'),
-      paper('2026-09-10T10:00:00.000Z'), paper('2026-09-11T10:00:00.000Z'), paper('2026-09-12T10:00:00.000Z')
+    const papers = [paper(october), paper(october), paper(october), paper(october)]
+    const shelves = groupPapersByCategory(papers, [
+      { id: 'c-x', name: 'X', paperIds: [papers[0]!.id] },
+      { id: 'c-y', name: 'Y', paperIds: papers.slice(1).map((item) => item.id) }
     ])
     const remembered = shelves[1]!.papers[2]!
     const next = laneStep(shelves, { lane: 0, row: 10 }, 1, new Map([[shelves[1]!.key, remembered.id]]))
@@ -75,22 +90,21 @@ describe('paper archive shelves', () => {
 })
 
 describe('paper archive columns', () => {
-  it('splits a long month into balanced columns so sideways browsing always has a neighbour', () => {
-    const papers = Array.from({ length: 37 }, (_, index) => paper(`2026-10-${String(1 + (index % 28)).padStart(2, '0')}T10:00:00.000Z`))
-    const columns = buildArchiveColumns(papers)
+  it('splits a large category into balanced columns so sideways browsing always has a neighbour', () => {
+    const papers = Array.from({ length: 37 }, () => paper(october))
+    const columns = buildArchiveColumns(papers, [{ id: 'c-big', name: '神经算子', paperIds: papers.map((item) => item.id) }])
     expect(columns).toHaveLength(5)
-    expect(columns.every((column) => column.month === '2026 年 10 月')).toBe(true)
+    expect(columns.every((column) => column.category === '神经算子')).toBe(true)
     expect(columns.map((column) => column.papers.length)).toEqual([8, 8, 8, 8, 5])
-    expect(columns[0]!.label).toBe('2026 年 10 月 · 1/5')
+    expect(columns[0]!.label).toBe('神经算子 · 1/5')
     expect(new Set(columns.map((column) => column.key)).size).toBe(5)
     expect(columns.flatMap((column) => column.papers)).toHaveLength(37)
   })
 
-  it('keeps small months as a single column', () => {
-    const columns = buildArchiveColumns([paper('2026-10-10T10:00:00.000Z'), paper('2026-09-10T10:00:00.000Z')])
-    expect(columns.map((column) => [column.key, column.label])).toEqual([
-      ['2026-10', '2026 年 10 月'], ['2026-09', '2026 年 9 月']
-    ])
+  it('keeps small categories as single columns', () => {
+    const [a, b] = [paper(october), paper(october)]
+    const columns = buildArchiveColumns([a!, b!], [{ id: 'c-x', name: '扩散模型', paperIds: [a!.id] }, { id: 'c-y', name: '图网络', paperIds: [b!.id] }])
+    expect(columns.map((column) => [column.key, column.label])).toEqual([['c-x', '扩散模型'], ['c-y', '图网络']])
   })
 })
 

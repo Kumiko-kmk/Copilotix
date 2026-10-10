@@ -1,15 +1,27 @@
 import type { DocumentSummary } from '@shared/ipcSchemas'
+import { ALL_PAPERS_NAME } from '@shared/libraryCategories'
 
 export type ArchivePaper = Pick<DocumentSummary, 'id' | 'displayName' | 'originalName' | 'createdAt' | 'workflow'>
 
 export interface ArchiveShelf {
-  /** Stable key: `YYYY-MM` or `undated`, with `#n` when a month spans several columns. */
+  /** Stable key: the category id, with `#n` when a category spans several columns. */
   key: string
   label: string
-  /** Month label shared by every column of the same month. */
-  month: string
+  /** Category name shared by every column of the same category. */
+  category: string
   papers: ArchivePaper[]
 }
+
+/** A content category from the Utility (shared/libraryCategories.ts), papers most typical first. */
+export interface ArchiveCategory {
+  id: string
+  name: string
+  paperIds: readonly string[]
+}
+
+/** Shown until the library's categories arrive, or when they are unavailable. */
+export const ALL_PAPERS = ALL_PAPERS_NAME
+const UNSORTED = { id: 'pending', name: '待分类' }
 
 /** RhineLabUI's array holds eight files per column. */
 export const COLUMN_CAPACITY = 8
@@ -26,55 +38,53 @@ export function nearestOccurrence(value: number, center: number, period: number)
   return value + Math.floor((center - value + period / 2) / period) * period
 }
 
-/** One shelf per calendar month, newest month first and newest paper first. */
-export function groupPapersByMonth(papers: readonly ArchivePaper[]): ArchiveShelf[] {
-  const shelves = new Map<string, ArchivePaper[]>()
-  for (const paper of papers) {
-    const key = monthKey(paper.createdAt)
-    const shelf = shelves.get(key)
-    if (shelf) shelf.push(paper)
-    else shelves.set(key, [paper])
+/**
+ * One shelf per content category, in the order given (largest first) and with each category's
+ * papers in its own order. Papers the categories do not know yet (just imported) join 待分类.
+ * Without categories the whole library is one shelf, newest first.
+ */
+export function groupPapersByCategory(papers: readonly ArchivePaper[], categories?: readonly ArchiveCategory[] | null): ArchiveShelf[] {
+  const newestFirst = (a: ArchivePaper, b: ArchivePaper): number => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)
+  if (!categories?.length) return papers.length ? [{ key: 'all', label: ALL_PAPERS, category: ALL_PAPERS, papers: papers.slice().sort(newestFirst) }] : []
+  const byId = new Map(papers.map((paper) => [paper.id, paper]))
+  const placed = new Set<string>()
+  const shelves: ArchiveShelf[] = []
+  for (const category of categories) {
+    const members = category.paperIds.flatMap((id) => {
+      const paper = byId.get(id)
+      if (!paper || placed.has(id)) return []
+      placed.add(id)
+      return [paper]
+    })
+    if (members.length) shelves.push({ key: category.id, label: category.name, category: category.name, papers: members })
   }
-  return [...shelves.entries()]
-    .sort(([a], [b]) => (a === 'undated' ? 1 : b === 'undated' ? -1 : b.localeCompare(a)))
-    .map(([key, items]) => ({
-      key,
-      label: monthLabel(key),
-      month: monthLabel(key),
-      papers: items.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
-    }))
+  const unsorted = papers.filter((paper) => !placed.has(paper.id)).sort(newestFirst)
+  if (unsorted.length) {
+    const pending = shelves.find((shelf) => shelf.key === UNSORTED.id)
+    if (pending) pending.papers.push(...unsorted)
+    else shelves.push({ key: UNSORTED.id, label: UNSORTED.name, category: UNSORTED.name, papers: unsorted })
+  }
+  return shelves
 }
 
 /**
- * Archive columns: months in order, long months split into balanced columns so the
- * plane always has neighbouring columns to slide to. Small libraries keep at least
- * four papers per column; large ones at most eight.
+ * Archive columns: categories in order, long categories split into balanced columns so the plane
+ * always has neighbouring columns to slide to. Small libraries keep at least four papers per
+ * column; large ones at most eight.
  */
-export function buildArchiveColumns(papers: readonly ArchivePaper[]): ArchiveShelf[] {
+export function buildArchiveColumns(papers: readonly ArchivePaper[], categories?: readonly ArchiveCategory[] | null): ArchiveShelf[] {
   const capacity = Math.min(COLUMN_CAPACITY, Math.max(4, Math.ceil(papers.length / 5)))
-  return groupPapersByMonth(papers).flatMap((month) => {
-    const parts = Math.ceil(month.papers.length / capacity)
-    if (parts <= 1) return [month]
-    const size = Math.ceil(month.papers.length / parts)
+  return groupPapersByCategory(papers, categories).flatMap((group) => {
+    const parts = Math.ceil(group.papers.length / capacity)
+    if (parts <= 1) return [group]
+    const size = Math.ceil(group.papers.length / parts)
     return Array.from({ length: parts }, (_, part) => ({
-      key: `${month.key}#${part + 1}`,
-      label: `${month.label} · ${part + 1}/${parts}`,
-      month: month.label,
-      papers: month.papers.slice(part * size, (part + 1) * size)
+      key: `${group.key}#${part + 1}`,
+      label: `${group.label} · ${part + 1}/${parts}`,
+      category: group.category,
+      papers: group.papers.slice(part * size, (part + 1) * size)
     }))
   })
-}
-
-function monthKey(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'undated'
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-}
-
-function monthLabel(key: string): string {
-  if (key === 'undated') return '未标注日期'
-  const [year, month] = key.split('-')
-  return `${year} 年 ${Number(month)} 月`
 }
 
 export function shelfAt(shelves: readonly ArchiveShelf[], lane: number): ArchiveShelf | null {

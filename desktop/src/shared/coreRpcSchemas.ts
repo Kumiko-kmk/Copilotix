@@ -1,5 +1,6 @@
 import { briefContextResultSchema, paperBriefSaveSchema } from '@shared/paperBrief/contracts'
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightSavedSchema } from './paperInsight'
+import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from './libraryCategories'
 import { paperChatStatusRequestSchema, paperChatStatusSchema, paperContextRequestSchema, paperContextResultSchema } from './paperChatSchemas'
 import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from './paperChatStorageSchemas'
 import { z } from 'zod'
@@ -201,7 +202,7 @@ const coreOperationNames = [
   'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear',
   'annotations:list-snapshot', 'annotations:mutate',
   'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
-  'compute:rag-content-index',
+  'compute:rag-content-index', 'compute:library-categories',
   'compute:translation-plan-open', 'compute:translation-plan-list', 'compute:translation-plan-cache',
   'compute:translation-plan-apply', 'compute:translation-plan-fail', 'compute:translation-plan-finalize'
 ] as const
@@ -458,6 +459,7 @@ export const coreOperationRegistry = {
   'insight:get': { payload: paperInsightRequestSchema, result: paperInsightStateSchema },
   'insight:save-brief': { payload: paperBriefSaveSchema, result: paperInsightSavedSchema },
   'insight:brief-context': { payload: paperInsightRequestSchema, result: briefContextResultSchema },
+  'compute:library-categories': { payload: libraryCategoriesRequestSchema, result: libraryCategoriesPageSchema },
   'chat:load': { payload: paperChatLoadRequestSchema, result: paperChatPageSchema },
   'chat:save-turn': { payload: paperChatSaveTurnSchema, result: paperChatSavedSchema },
   'chat:session': { payload: paperChatDocumentRequestSchema, result: paperChatSessionSchema },

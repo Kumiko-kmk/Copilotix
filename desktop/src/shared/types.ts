@@ -222,6 +222,8 @@ export interface WindowState {
 }
 
 export interface CopilotixDesktopApi {
+  /** One page of the library's content categories (see shared/libraryCategories.ts). */
+  libraryCategories(request: import('./libraryCategories').LibraryCategoriesRequest): Promise<import('./libraryCategories').LibraryCategoriesPage>
   paperInsight: {
     get(request: { documentId: string }): Promise<import('./paperInsight').PaperInsightState>
     generate(request: { documentId: string }): Promise<void>

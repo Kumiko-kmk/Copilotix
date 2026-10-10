@@ -15,6 +15,7 @@ import {
   patchDocumentDetails,
   type DocumentListCache
 } from './documentCache'
+import { loadLibraryCategories } from './paperArchive/libraryCategoriesClient'
 
 const ReaderPage = React.lazy(() => import('./pages/ReaderPage'))
 // Three.js is only loaded once the archive is opened.
@@ -123,7 +124,7 @@ export default function App(): React.JSX.Element {
         {view.name === 'tasks' ? <TasksPage documents={documents} onOpen={openDocument} onCreate={() => setView({ name: 'new' })} /> : null}
         {view.name === 'library' ? (
           <React.Suspense fallback={<div className="page-loading">正在加载文库…</div>}>
-            <LibraryPage insights={insights} documents={documents} onOpen={openFromLibrary} onCreate={() => setView({ name: 'new' })} />
+            <LibraryPage insights={insights} loadCategories={loadLibraryCategories} documents={documents} onOpen={openFromLibrary} onCreate={() => setView({ name: 'new' })} />
           </React.Suspense>
         ) : null}
         {view.name === 'tutorial' && settings ? <TutorialPage

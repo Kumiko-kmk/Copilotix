@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, ExpandOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
+import type { LibraryCategories } from '@shared/libraryCategories'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../paperArchive/PaperArchiveScene'
 import ArchiveDetail from '../paperArchive/ArchiveDetail'
 import { extractPaperProfile } from '../paperArchive/paperProfile'
@@ -22,6 +23,8 @@ export default function LibraryPage(props: {
   onCreate(): void
   /** AI structured readings; the AI tab is hidden until App provides a source. */
   insights?: PaperInsightSource
+  /** Content categories for the columns; without it the library is one "全部论文" category. */
+  loadCategories?: () => Promise<LibraryCategories>
 }): React.JSX.Element {
   const hostRef = React.useRef<HTMLDivElement>(null)
   const pageRef = React.useRef<HTMLElement>(null)
@@ -36,10 +39,11 @@ export default function LibraryPage(props: {
   const [unsupported, setUnsupported] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [searchOpen, setSearchOpen] = React.useState(false)
-  const shelves = React.useMemo(() => buildArchiveColumns(props.documents), [props.documents])
-  const monthCount = React.useMemo(() => new Set(shelves.map((shelf) => shelf.month)).size, [shelves])
+  const categories = useLibraryCategories(props.documents, props.loadCategories, props.insights)
+  const shelves = React.useMemo(() => buildArchiveColumns(props.documents, categories?.categories), [props.documents, categories])
+  const categoryCount = React.useMemo(() => new Set(shelves.map((shelf) => shelf.category)).size, [shelves])
   const searchIndex = React.useMemo(() => shelves.flatMap((shelf) => shelf.papers.map((paper) => ({
-    paper, month: shelf.month, text: `${paper.displayName}\n${paper.originalName}`.toLowerCase()
+    paper, category: shelf.category, text: `${paper.displayName}\n${paper.originalName}`.toLowerCase()
   }))), [shelves])
   const matches = React.useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/u).filter(Boolean)
@@ -213,7 +217,7 @@ export default function LibraryPage(props: {
       <header className="paper-archive-brand">
         <span className="paper-archive-eyebrow">PAPER ARCHIVE</span>
         <h1>文库</h1>
-        <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${monthCount} 个月份 · ${shelves.length} 列`}</p>
+        <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${categoryCount} 个分类 · ${shelves.length} 列`}</p>
       </header>
 
       {/* While a paper is extracted the index folds down into its rule and the rule retracts. */}
@@ -246,10 +250,10 @@ export default function LibraryPage(props: {
             <div id="paper-archive-results" className="paper-archive-results">
               <p role="status">{matches.length ? `${matches.length} 篇论文${matches.length > SEARCH_LIMIT ? ` · 显示前 ${SEARCH_LIMIT} 篇，请细化关键词` : ''}` : '没有匹配的论文'}</p>
               <ul aria-label="搜索结果">
-                {matches.slice(0, SEARCH_LIMIT).map(({ paper: result, month }) => (
+                {matches.slice(0, SEARCH_LIMIT).map(({ paper: result, category }) => (
                   <li key={result.id}><button type="button" onClick={() => chooseResult(result)}>
                     <span>{result.displayName}</span>
-                    <small>{month} · {statusLabels[result.workflow.status]}{unsupported ? ' · 打开阅读' : ''}</small>
+                    <small>{category} · {statusLabels[result.workflow.status]}{unsupported ? ' · 打开阅读' : ''}</small>
                   </button></li>
                 ))}
               </ul>
@@ -274,13 +278,13 @@ export default function LibraryPage(props: {
         </div>
       ) : paper && phase !== 'closed' ? (
         <div className={`paper-archive-detail-layer${phase === 'closing' ? ' closing' : ''}`} inert={phase === 'closing'} aria-hidden={phase === 'closing' ? true : undefined}>
-          <ArchiveDetail key={paper.id} paper={paper} month={shelf?.month ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
+          <ArchiveDetail key={paper.id} paper={paper} category={shelf?.category ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
             phase={phase} morphFrom={morphFromRef.current} textReveal={decryptReveal || phase === 'open'} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
             onClose={() => sceneRef.current?.closeDetail()} insights={props.insights} />
         </div>
       ) : paper ? (
         <article ref={panelRef} className="paper-archive-panel" aria-live="polite">
-          <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.month}</span>
+          <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
           <h2 key={paper.id} className="paper-archive-title" title={displayTitle}><span>{displayTitle}</span></h2>
           <BrowseTranslatedTitle paper={paper} />
           <div className="paper-archive-rule"><i /></div>
@@ -328,6 +332,27 @@ export default function LibraryPage(props: {
 }
 
 const RULER_TICKS = 9
+
+/**
+ * The library's content categories. Reloaded (debounced) when papers are added, removed or change
+ * state, and when a file card finishes, since its field can rename a category. Keeps showing the
+ * previous categories while the next ones load.
+ */
+function useLibraryCategories(documents: readonly DocumentSummary[], load: (() => Promise<LibraryCategories>) | undefined, insights: PaperInsightSource | undefined): LibraryCategories | null {
+  const [categories, setCategories] = React.useState<LibraryCategories | null>(null)
+  const [cardsChanged, setCardsChanged] = React.useState(0)
+  const key = React.useMemo(() => documents.map((document) => `${document.id}:${document.workflow.status}`).sort().join('|'), [documents])
+  React.useEffect(() => insights?.subscribe((_id, state) => { if (state.status === 'ready') setCardsChanged((value) => value + 1) }), [insights])
+  React.useEffect(() => {
+    if (!load) return
+    let current = true
+    const timer = window.setTimeout(() => {
+      load().then((next) => { if (current) setCategories((previous) => previous?.revision === next.revision ? previous : next) }, () => undefined)
+    }, 400)
+    return () => { current = false; window.clearTimeout(timer) }
+  }, [key, cardsChanged, load])
+  return load ? categories : null
+}
 
 /** Whether the selected paper already has an AI file card, read once navigation settles. */
 function BrowseBriefState({ paper, source }: { paper: ArchivePaper; source: PaperInsightSource }): React.JSX.Element | null {

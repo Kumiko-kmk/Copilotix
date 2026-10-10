@@ -137,7 +137,7 @@ describe('LibraryPage', () => {
     expect(onOpen).toHaveBeenCalledWith(alpha.id)
   })
 
-  it('shows five columns for 37 papers in one month and advances the HUD with ArrowRight', () => {
+  it('shows five columns for 37 uncategorised papers and advances the HUD with ArrowRight', () => {
     render(<LibraryPage documents={Array.from({ length: 37 }, (_, index) => paper(`Paper ${index}`))} onOpen={vi.fn()} onCreate={vi.fn()} />)
     expect(screen.getByText('COLUMN 01 / 05')).toBeTruthy()
     fireEvent.keyDown(region(), { key: 'ArrowRight' })

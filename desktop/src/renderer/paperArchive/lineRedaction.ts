@@ -33,18 +33,15 @@ export function useLineRedaction(
     // No cleanup: the bars must survive the render in which `reveal` turns true, and they are
     // replaced on the next measurement or removed with the panel.
     drawCovers(article, host)
-    // Keep the bars aligned when the viewport, fonts or scroll position change while covered.
+    // Keep the bars aligned when the viewport, fonts, scroll position or the text itself change
+    // while covered: a field that loads late moves everything below it.
     let active = true
     const redraw = (): void => { if (active) drawCovers(article, host) }
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(redraw)
-    observer?.observe(article)
-    article.querySelectorAll<HTMLElement>(TARGETS).forEach((target) => observer?.observe(target))
-    article.addEventListener('scroll', redraw, true)
+    const stop = watchLayout(article, host, redraw)
     void document.fonts?.ready.then(redraw)
     return () => {
       active = false
-      observer?.disconnect()
-      article.removeEventListener('scroll', redraw, true)
+      stop()
     }
   }, [root, layer, covered, reveal, content])
 
@@ -57,15 +54,47 @@ export function useLineRedaction(
       host.replaceChildren()
       return
     }
+    const article = root.current
     const animations = inks.map((ink, order) => ink.animate(
       Array.from({ length: SAMPLES + 1 }, (_, step) => ({
         transform: `translateX(${(redactionOffset(step / SAMPLES, order, inks.length) * 101).toFixed(2)}%)`
       })),
       { duration: REDACTION_SECONDS * 1000, easing: 'linear', fill: 'forwards' }
     ))
-    void Promise.all(animations.map((animation) => animation.finished)).then(() => host.replaceChildren(), () => undefined)
-    return () => animations.forEach((animation) => animation.cancel())
-  }, [layer, reveal])
+    // Bars measured for the old layout must not cover the wrong text while they slide away.
+    const stop = article ? watchLayout(article, host, () => {
+      animations.forEach((animation) => animation.cancel())
+      host.replaceChildren()
+    }) : () => undefined
+    void Promise.all(animations.map((animation) => animation.finished)).then(() => host.replaceChildren(), () => undefined).finally(stop)
+    return () => {
+      stop()
+      animations.forEach((animation) => animation.cancel())
+    }
+  }, [root, layer, reveal])
+}
+
+/** Calls `changed` when the panel resizes, scrolls or its text changes (ignoring the bar layer). */
+function watchLayout(article: HTMLElement, host: HTMLElement, changed: () => void): () => void {
+  let frame = 0
+  const schedule = (): void => {
+    if (frame) return
+    frame = requestAnimationFrame(() => { frame = 0; changed() })
+  }
+  const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule)
+  resize?.observe(article)
+  article.querySelectorAll<HTMLElement>(TARGETS).forEach((target) => resize?.observe(target))
+  const mutation = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => {
+    if (records.some((record) => !host.contains(record.target))) schedule()
+  })
+  mutation?.observe(article, { childList: true, subtree: true, characterData: true })
+  article.addEventListener('scroll', schedule, true)
+  return () => {
+    cancelAnimationFrame(frame)
+    resize?.disconnect()
+    mutation?.disconnect()
+    article.removeEventListener('scroll', schedule, true)
+  }
 }
 
 function drawCovers(article: HTMLElement, host: HTMLElement): void {

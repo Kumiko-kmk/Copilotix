@@ -1,6 +1,7 @@
 import { PaperInsightService } from './chat/paperInsightService'
 import { registerPaperInsightHandlers } from './chat/paperInsightIpc'
 import { paperInsightChangedSchema } from '@shared/paperInsight'
+import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { ChatProvider } from './chat/chatProvider'
 import { PaperChatService } from './chat/paperChatService'
 import { registerPaperChatHandlers } from './chat/paperChatIpc'
@@ -366,6 +367,8 @@ function registerIpc(
   }
 
   registerPaperInsightHandlers(paperInsight!, validationOptions)
+  registerValidatedHandler('library:categories', libraryCategoriesRequestSchema, libraryCategoriesPageSchema,
+    (_event, request) => utilitySupervisor!.request('compute:library-categories', request, { timeoutMs: 120_000 }), validationOptions)
   registerPaperChatHandlers(paperChat!, async (documentId) => {
     const status = await utilitySupervisor!.request('chat:ensure-index', { documentId })
     jobScheduler?.wake()

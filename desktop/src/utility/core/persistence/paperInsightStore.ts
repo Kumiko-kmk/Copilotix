@@ -104,6 +104,40 @@ export class PaperInsightStore {
     return briefContextResultSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, context })
   }
 
+  /**
+   * What library categorisation needs to know cheaply: the text revision, whether there is text
+   * at all, and the field named by the paper's AI file card. A broken card only loses the name.
+   */
+  async categoryMeta(documentId: string): Promise<{ revision: string; readable: boolean; area: string | null }> {
+    const snapshot = await this.snapshot(documentId)
+    let area: string | null = null
+    try {
+      const state = await this.get(documentId)
+      if (state.status === 'ready' && 'brief' in state) area = state.brief.field.area
+    } catch { /* Uncategorised by name only; the content still counts. */ }
+    return { revision: snapshot.sourceRevision, readable: Boolean(snapshot.translated ?? snapshot.original), area }
+  }
+
+  /**
+   * A paper's representative text for categorisation: title plus the abstract, conclusion and most
+   * informative paragraphs. The translation is preferred so a mostly translated library is compared
+   * in one language.
+   */
+  async categoryText(documentId: string, signal: AbortSignal): Promise<string | null> {
+    signal.throwIfAborted()
+    const snapshot = await this.snapshot(documentId)
+    const artifact = snapshot.translated ?? snapshot.original
+    if (!artifact) return null
+    this.policy.resolveChild(snapshot.root, artifact.relativePath)
+    const markdown = await this.read(join(snapshot.root, artifact.relativePath), 32 * 1024 * 1024)
+    signal.throwIfAborted()
+    const context = snapshot.translated
+      ? buildBriefContext('', markdown, BRIEF_BUDGETS.standard)
+      : buildBriefContext(markdown, '', BRIEF_BUDGETS.standard)
+    const text = [context.title ?? '', ...context.excerpts.map((excerpt) => excerpt.text)].join('\n').trim()
+    return text || null
+  }
+
   async saveBrief(documentId: string, brief: PaperBrief, anchors: BriefAnchor[]): Promise<{ saved: true }> {
     const value = paperBriefSaveSchema.parse({ documentId, brief, anchors })
     const body = JSON.stringify(paperBriefRecordSchema.parse({ version: 2, ...value }))
