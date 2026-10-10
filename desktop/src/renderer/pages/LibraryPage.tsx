@@ -53,6 +53,13 @@ export default function LibraryPage(props: {
   const [phase, setPhase] = React.useState<DetailPhase>('closed')
   /** The glass has begun to clear: the panel's redaction follows it. */
   const [decryptReveal, setDecryptReveal] = React.useState(false)
+  /** Just back from the detail view: the browse panel fades in whole instead of rolling its title again. */
+  const [returning, setReturning] = React.useState(false)
+  React.useEffect(() => {
+    if (!returning) return
+    const timer = window.setTimeout(() => setReturning(false), 500)
+    return () => window.clearTimeout(timer)
+  }, [returning])
   const fileNumbers = React.useMemo(() => new Map(shelves.flatMap((shelf) => shelf.papers).map((paper, index) => [paper.id, index + 1])), [shelves])
   const showPage = React.useCallback((page: HTMLCanvasElement | null) => sceneRef.current?.setDetailPage(page), [])
   const [stats, setStats] = React.useState<ReturnType<PaperArchiveScene['getStats']> | null>(null)
@@ -95,13 +102,14 @@ export default function LibraryPage(props: {
         onDecryptReveal: () => setDecryptReveal(true),
         onDetailPhase: (next) => {
           if (next === 'opening' || next === 'closed') setDecryptReveal(false)
+          if (next === 'closed') setReturning(true)
           // Still mounted here: React re-renders after this callback.
           if (next === 'opening' || next === 'open') {
             const panel = panelRef.current?.getBoundingClientRect()
             // The titles glide from here into the detail header.
             const box = (selector: string): DOMRect | null => panelRef.current?.querySelector(selector)?.getBoundingClientRect() ?? null
             const heading = panelRef.current?.querySelector('.paper-archive-title')
-            if (panel?.height) morphFromRef.current = { panel, title: box('.paper-archive-title > span'), subtitle: box('.paper-archive-translated-title'), titleSize: heading ? Number.parseFloat(getComputedStyle(heading).fontSize) : 0 }
+            if (panel?.height) morphFromRef.current = { title: box('.paper-archive-title > span'), subtitle: box('.paper-archive-translated-title'), titleSize: heading ? Number.parseFloat(getComputedStyle(heading).fontSize) : 0 }
           }
           if (next !== 'closed') setSearchOpen(false)
           setPhase(next)
@@ -286,7 +294,7 @@ export default function LibraryPage(props: {
             onClose={() => sceneRef.current?.closeDetail()} insights={props.insights} />
         </div>
       ) : paper ? (
-        <article ref={panelRef} className="paper-archive-panel" aria-live="polite">
+        <article ref={panelRef} className={`paper-archive-panel${returning ? ' returning' : ''}`} aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
           <h2 key={paper.id} className="paper-archive-title"><span>{displayTitle}</span></h2>
           <BrowseTranslatedTitle paper={paper} />
@@ -332,11 +340,20 @@ export default function LibraryPage(props: {
 }
 
 const RULER_TICKS = 9
+/** File-card states of recently selected papers, so the browse panel never re-loads in view. */
+const notesCache = new Map<string, PaperInsightState>()
 
 /** Read keywords and the file card's summary together after selection settles. */
 function BrowsePaperNotes({ paper, source }: { paper: ArchivePaper; source?: PaperInsightSource }): React.JSX.Element {
   const [settled, setSettled] = React.useState(false)
-  const [state, setState] = React.useState<PaperInsightState | null>(null)
+  // Coming back from the detail view remounts this panel: start from what was already read.
+  const [state, setCachedState] = React.useState<PaperInsightState | null>(() => notesCache.get(paper.id) ?? null)
+  const setState = React.useCallback((next: PaperInsightState) => {
+    notesCache.delete(paper.id)
+    notesCache.set(paper.id, next)
+    if (notesCache.size > 64) notesCache.delete(notesCache.keys().next().value!)
+    setCachedState(next)
+  }, [paper.id])
   React.useEffect(() => {
     let current = true
     let updated = false
@@ -348,7 +365,7 @@ function BrowsePaperNotes({ paper, source }: { paper: ArchivePaper; source?: Pap
       source?.get(paper.id).then((next) => { if (current && !updated) setState(next) }, () => undefined)
     }, 180)
     return () => { current = false; window.clearTimeout(timer); stop?.() }
-  }, [paper.id, source])
+  }, [paper.id, source, setState])
   const details = useQuery({
     queryKey: ['document', paper.id], queryFn: () => window.copilotix.getDocument(paper.id),
     enabled: settled, staleTime: 30_000

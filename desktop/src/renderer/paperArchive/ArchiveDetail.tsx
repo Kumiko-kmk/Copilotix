@@ -22,7 +22,7 @@ export default function ArchiveDetail(props: {
   category: string
   fileNumber: number
   phase: Exclude<DetailPhase, 'closed'>
-  /** Boxes in the browse panel when extraction started: the panel stretches from it, the titles glide from theirs. */
+  /** Where the browse panel's titles were when extraction started; the detail titles glide from there. */
   morphFrom?: ArchiveMorph | null
   /** The glass has started to clear (or the file is already open): lift the redaction. */
   textReveal?: boolean
@@ -56,14 +56,26 @@ export default function ArchiveDetail(props: {
   const closing = props.phase === 'closing'
   const { morphFrom } = props
 
-  // Reveal the content from the browse panel's bounds, without decorative frame rules.
+  // In order: the titles glide up from the browse panel into the header first, and only then does
+  // the file unfold beneath them, so a rising title never passes through the redaction bars.
+  // Closing reverses it: the file fades first while the titles glide back down.
+  const reopenedRef = React.useRef(false)
   React.useLayoutEffect(() => {
     const article = articleRef.current
-    if (!article || !morphFrom || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!article || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (closing) reopenedRef.current = true
+    // Reopened while closing: the titles are still in place, so the file simply fades back in.
+    const glides = morphFrom && !(reopenedRef.current && !closing)
+    const body = [...article.children].filter((child): child is HTMLElement => child instanceof HTMLElement && child.tagName !== 'HEADER')
     const animations = [
-      ...stretchPanel(article, morphFrom.panel, closing),
-      ...glide(article.querySelector('header h2'), morphFrom.title, morphFrom.titleSize, closing),
-      ...glide(article.querySelector('header .paper-archive-translated-title'), morphFrom.subtitle, 0, closing)
+      ...body.map((element) => element.animate(
+        closing ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }],
+        closing ? BODY_CLOSE : { ...BODY_OPEN, delay: glides ? BODY_OPEN.delay : 0 }
+      )),
+      ...(glides && morphFrom ? [
+        ...glide(article.querySelector('header h2'), morphFrom.title, morphFrom.titleSize, closing),
+        ...glide(article.querySelector('header .paper-archive-translated-title'), morphFrom.subtitle, 0, closing)
+      ] : [])
     ]
     return () => animations.forEach((animation) => animation.cancel())
   }, [closing, morphFrom])
@@ -204,36 +216,19 @@ function Elapsed(): React.JSX.Element {
 }
 
 export interface ArchiveMorph {
-  panel: DOMRect
   title: DOMRect | null
   subtitle: DOMRect | null
   /** Font size of the browse title, so the detail title starts at that size. */
   titleSize: number
 }
 
-// The panel starts stretching once the search has mostly folded away, so the two never cross at
-// the top of the page. The titles ride with the same timing: the panel's clip opens upward exactly
-// as fast as they rise, so they stay inside it the whole way.
-const STRETCH_DELAY = 120
-const OPEN_TIMING: KeyframeAnimationOptions = { duration: 440, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }
-const GLIDE_TIMING: KeyframeAnimationOptions = { ...OPEN_TIMING, delay: STRETCH_DELAY }
+// The titles start after the search has mostly folded away (it needs 0.24 s), so a long title never
+// meets it at the top of the page; the file below unfolds as they settle.
+const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const GLIDE_TIMING: KeyframeAnimationOptions = { duration: 440, delay: 120, easing: EASE_OUT, fill: 'backwards' }
+const BODY_OPEN = { duration: 300, delay: 460, easing: EASE_OUT, fill: 'backwards' } satisfies KeyframeAnimationOptions
+const BODY_CLOSE: KeyframeAnimationOptions = { duration: 120, easing: 'ease-out', fill: 'forwards' }
 const CLOSE_TIMING: KeyframeAnimationOptions = { duration: 180, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }
-
-/** Reveal between the browse panel's box and the detail bounds using clip-path. */
-function stretchPanel(article: HTMLElement, from: DOMRect, closing: boolean): Animation[] {
-  const to = article.getBoundingClientRect()
-  if (!to.width || !to.height) return []
-  const top = Math.min(to.height, Math.max(0, from.top - to.top))
-  const bottom = Math.min(to.height - top, Math.max(0, to.bottom - from.bottom))
-  const left = Math.min(to.width, Math.max(0, from.left - to.left))
-  const right = Math.min(to.width - left, Math.max(0, to.right - from.right))
-  const full = 'inset(0px 0px 0px 0px)'
-  const narrow = `inset(${top}px ${right}px ${bottom}px ${left}px)`
-  const timing = closing ? CLOSE_TIMING : { ...OPEN_TIMING, delay: STRETCH_DELAY }
-  return [
-    article.animate(closing ? [{ clipPath: full }, { clipPath: narrow }] : [{ clipPath: narrow }, { clipPath: full }], timing)
-  ]
-}
 
 /** Move a header title from its place in the browse panel (scaled to that size) and back on close. */
 function glide(element: Element | null, from: DOMRect | null, fromSize: number, closing: boolean): Animation[] {

@@ -107,8 +107,13 @@
 .paper-archive-meta dd { margin: 0; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; }
 .paper-archive-meta > div { min-width: 0; }
 .paper-archive-meta dd { white-space: nowrap; }
-.paper-archive-keywords dd { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.5; user-select: text; }
-.paper-archive-summary dd { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; white-space: normal; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 3; user-select: text; }
+.paper-archive-keywords dd { height: 1.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.5; user-select: text; }
+/* Fixed at three lines: the panel is centred vertically, so a summary arriving late (or a shorter
+   one) would otherwise move the whole panel. */
+.paper-archive-summary dd { display: -webkit-box; height: calc(1.7em * 3); overflow: hidden; overflow-wrap: anywhere; white-space: normal; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 3; user-select: text; }
+/* Back from the detail view: the titles have just glided home, so the panel fades in as one. */
+.paper-archive-panel.returning { animation: paper-archive-fade .22s var(--ease-out) both; }
+.paper-archive-panel.returning :is(.paper-archive-title, .paper-archive-arrive) { animation: none; }
 
 .paper-archive-action {
   display: inline-flex; min-width: 172px; height: 44px; padding: 0 14px 0 2px;
