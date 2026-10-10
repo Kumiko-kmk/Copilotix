@@ -104,8 +104,7 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 
 ## 12. 當前狀態與入口
 
-- 文庫 UI 代碼與文檔已合入本地 `master`，後續開發入口為 `Copilotix-master-updated`；原 `Copilotix-library-ui` 保留為 detached worktree，不再使用已刪除的 UI 分支。1.1.0 已發布；一次性未簽章例外已用完，後續發布仍受正式簽章門禁。
-- 最近代碼清理提交 `299743d`：完整單元 678 通過／3 既有跳過，typecheck、lint、覆蓋率門禁、四 bundle／Utility smoke、七項 Electron 回歸通過。原始證據：`../investigation/code-cleanup-20261010/SUMMARY.md`；覆蓋率僅統計 Main／Core／Shared。該輪只更新源碼與開發構建，未更新發布包。
+- 當前開發入口為 `Copilotix-master-updated`／本地 `master`，包含文庫 UI 代碼與文檔。1.1.0 已發布；一次性未簽章例外已用完，後續發布仍受正式簽章門禁。
 - README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
 
 ## 13. 文庫頁與 AI 解讀

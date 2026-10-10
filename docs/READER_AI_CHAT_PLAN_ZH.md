@@ -2,17 +2,17 @@
 document_id: copilotix-reader-ai-chat-plan
 status: implemented-local-build-awaiting-live-acceptance
 owner: shared-agents
-branch: codex/reader-ai-chat
-updated: 2026-10-07
+branch: master
+updated: 2026-10-10
 ---
 
 # 單篇文獻 AI 問答：Agent 協作與維護契約
 
-此文件保留為 Agent 交接入口。已合併重複計劃、過時的 API 設定方案、逐輪 CI 排查與舊包體積紀錄；最新行為以本文件和源碼為準，最新驗證必須對應最新提交。根目錄 `AGENTS.md` 的 worktree、CI、發布及資料保護規則繼續適用。
+此文件維護當前功能契約與待驗收邊界，驗證必須對應最新提交。Worktree、CI、發布及資料保護規則見根目錄 `AGENTS.md`。
 
 ## 1. 工作邊界與目前功能
 
-- 工作分支 `codex/reader-ai-chat` 位於 `Copilotix-master-updated`。開始及交付前核對 HEAD 和未提交狀態；不得改動其他 Agent 的 worktree。
+- 維護入口為 `Copilotix-master-updated`／本地 `master`。開始及交付前核對 HEAD 和未提交狀態；不得改動其他 Agent 的 worktree。
 - 單篇文獻問答已實作：限定當前文獻、固定選區、流式回答、停止、Markdown／KaTeX、可信引用定位。2026-10-07 加入 Qwen／DeepSeek 切換及文獻目錄中的本地持久化。
 - 不合併 demo `codex/rag-review-20260923` 的 schema 5–7、向量或多文獻聊天；本功能保留現有 schema 4，不新增 migration。未来多文獻／向量／reranker 設計見 `RAG_DEVELOPMENT_PLAN_ZH.md` 和 `rag-implementation/`。
 - 不支持聯網搜索、工具調用或模型自行讀取本地文件；問題的依據仍限定為当前文獻的原文 evidence pack。已生成的舊記憶體對話無法在應用關閉後補回。
@@ -54,7 +54,7 @@ updated: 2026-10-07
 - 每篇同時一個請求，替代請求取消前一個；最多 8 篇在途。服務商各有獨立 FIFO，不排在翻譯後面。首字節約 30 秒、stream idle 約 60 秒；回答 32768 字元上限，IPC delta 有界且按 50 ms 合併。
 - 事件遵守 accepted → retrieving → evidence-ready → delta/citation → completed/failed/cancelled，帶 requestId、sequence。Renderer 校驗合法轉移、忽略重複／晚到事件、緩衝 ask 返回前的事件、停止後抑制晚到完成。
 - 閱讀器只顯示原文 Markdown、中文 Markdown、AI 問答三個頁籤；不再展示 JSON 頁籤，底層 layout JSON 和 ZIP 資料仍保留。問答首次開啟才掛載面板及觸發 ensure-index；只打開論文不得建索引。「添加到對話」加入選區，不自動切換頁籤，保留最多 8 個固定選區。
-- Enter 發送，Shift+Enter 換行，IME 不誤發；輸入框／模型選擇留在面板底部。停止後保留部分回答；失敗／取消可重試。引用按首次出現順序編號，hover 顯示來源、點擊核對版本後定位。
+- Enter 發送，Shift+Enter 換行，IME 不誤發；輸入框／模型選擇留在面板底部。停止後保留部分回答；失敗／取消可重試。引用按首次出現順序編號，點擊核對版本後定位來源，不添加懸停提示。
 - SafeMarkdown 禁止回答中的外部圖片／可執行鏈接／script 網路副作用；只顯示經驗證引用和 KaTeX 公式。長回答僅在用戶接近底部時自動跟隨，尊重 reduced-motion。
 
 ## 5. 代碼與測試入口
