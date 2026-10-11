@@ -31,6 +31,7 @@ import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnap
 import type { ReaderFigureGroup } from '../readerFigureGroups'
 import { recordReaderDuration } from '../readerPerformance'
 import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
+import { readerReferenceSections } from '../readerReferenceSections'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 /**
@@ -44,6 +45,7 @@ const SCROLL_IDLE_DELAY_MS = 120
 
 type RenderState =
   | { status: 'loading'; completedImages: number; totalImages: number }
+  | { status: 'preparing' }
   | { status: 'ready' }
   | { status: 'error'; message: string }
 
@@ -106,6 +108,7 @@ export default function MarkdownPane(props: {
     }
   }
   const contentRevision = contentRevisionRef.current.revision
+  const referenceSections = React.useMemo(() => readerReferenceSections(props.blocks), [props.blocks])
   const [annotationOwner] = React.useState(() => `reader-annotations-${crypto.randomUUID()}`)
   const selectionFrameRef = React.useRef<number | null>(null)
   const paletteTimerRef = React.useRef<number | null>(null)
@@ -120,6 +123,7 @@ export default function MarkdownPane(props: {
     totalImages: 0
   })
   const ready = renderState.status === 'ready'
+  const resourcesReady = renderState.status === 'preparing' || ready
   const readyRef = React.useRef(ready)
   readyRef.current = ready
 
@@ -160,6 +164,23 @@ export default function MarkdownPane(props: {
   }, [props.figureGroups])
   const figureRevision = contentRevision + '|' + props.pdfUrl
   const [figureStates, setFigureStates] = React.useState<{ revision: string; states: Record<string, FigureRenderState> }>({ revision: figureRevision, states: {} })
+  const minimapVisualRevision = React.useMemo(() => JSON.stringify([
+    figureRevision,
+    figureStates.revision === figureRevision
+      ? Object.keys(figureStates.states).filter(id => figureStates.states[id] === 'ready').sort()
+      : []
+  ]), [figureRevision, figureStates])
+  const figuresSettled = !props.pdfUrl || Array.from(figureGroupByBlockIndex.entries()).every(([index, group]) =>
+    group.status !== 'complete' || group.ownerBlockIndex !== index || props.blocks[index]?.role !== 'content' ||
+    (figureStates.revision === figureRevision &&
+      (figureStates.states[group.id] === 'ready' || figureStates.states[group.id] === 'failed'))
+  )
+  const markMinimapPrepared = React.useCallback(() => {
+    setRenderState(previous => previous.status === 'preparing' ? { status: 'ready' } : previous)
+  }, [])
+  React.useEffect(() => {
+    if (ready) onRenderReadyRef.current?.()
+  }, [ready])
   const setFigureState = React.useCallback((id: string, state: FigureRenderState) => {
     setFigureStates(previous => {
       const states = previous.revision === figureRevision ? previous.states : {}
@@ -197,7 +218,7 @@ export default function MarkdownPane(props: {
       return
     }
     const controller = new AbortController()
-    const images = Array.from(article.querySelectorAll<HTMLImageElement>('img:not([data-reader-figure-source])'))
+    const images = Array.from(article.querySelectorAll<HTMLImageElement>('img'))
     let completedImages = 0
     let timeoutId: number | null = null
 
@@ -212,7 +233,13 @@ export default function MarkdownPane(props: {
           )
         })
         const assets = Promise.all(images.map(async (image) => {
-          await waitForImage(image, controller.signal)
+          try {
+            await waitForImage(image, controller.signal)
+          } catch (error) {
+            // Whole-figure rendering has its own failure fallback; a broken
+            // constituent must not reject a successfully prepared PDF crop.
+            if (controller.signal.aborted || !image.hasAttribute('data-reader-figure-source')) throw error
+          }
           completedImages += 1
           if (!controller.signal.aborted) {
             setRenderState({ status: 'loading', completedImages, totalImages: images.length })
@@ -222,8 +249,7 @@ export default function MarkdownPane(props: {
         await Promise.race([Promise.all([assets, fonts]), timeout])
         await waitForAnimationFrames(2, controller.signal)
         if (!controller.signal.aborted) {
-          setRenderState({ status: 'ready' })
-          onRenderReadyRef.current?.()
+          setRenderState({ status: 'preparing' })
         }
       } catch (error) {
         if (controller.signal.aborted) return
@@ -332,11 +358,11 @@ export default function MarkdownPane(props: {
   }, [props.initialScrollTop, ready])
 
   React.useLayoutEffect(() => {
-    if (!ready || !articleRef.current) return
+    if (!resourcesReady || !figuresSettled || !articleRef.current) return
     const ranges = buildReaderHighlightRanges(articleRef.current, props.annotations)
     setYellowHighlightRanges(ranges.get('copilotix-highlight-yellow') ?? [])
     return registerReaderHighlightRanges(annotationOwner, ranges)
-  }, [annotationOwner, props.annotations, props.blocks, ready, renderAttempt, figureStates])
+  }, [annotationOwner, props.annotations, props.blocks, resourcesReady, figuresSettled, renderAttempt, figureStates])
 
   React.useEffect(() => {
     if (!props.active || !ready) {
@@ -521,7 +547,7 @@ export default function MarkdownPane(props: {
   }, [])
 
   return (
-    <div className="markdown-pane" ref={paneRef}>
+    <div className="markdown-pane" ref={paneRef} data-render-state={renderState.status}>
       <div
         id={documentId}
         className={`markdown-scroll markdown-render-${renderState.status}`}
@@ -530,12 +556,12 @@ export default function MarkdownPane(props: {
         aria-busy={!ready}
         data-render-state={renderState.status}
       >
-        {renderState.status === 'loading' ? (
+        {renderState.status === 'loading' || renderState.status === 'preparing' ? (
           <div className="markdown-render-status" role="status">
             <Spin size="large" />
             <span>正在渲染 Markdown…</span>
             {!allBlocksMounted ? <small>段落 {mountedCount} / {props.blocks.length}</small> : null}
-            {renderState.totalImages > 0 ? (
+            {renderState.status === 'loading' && renderState.totalImages > 0 ? (
               <small>图片 {renderState.completedImages} / {renderState.totalImages}</small>
             ) : null}
           </div>
@@ -564,6 +590,7 @@ export default function MarkdownPane(props: {
               <MarkdownBlockView
                 key={`${blockId}-${index}`}
                 block={block}
+                referenceSection={referenceSections.has(index)}
                 active={props.selection !== null && (figureGroup
                   ? figureGroup.ownerBlockIndex === index && figureGroup.mappingIds.includes(props.selection.mappingId)
                   : block.mappingIds.includes(props.selection.mappingId))}
@@ -605,13 +632,15 @@ export default function MarkdownPane(props: {
       </div>
       <MarkdownMinimap
         active={props.active}
-        ready={ready}
+        ready={ready || (resourcesReady && figuresSettled)}
         layoutRevision={layoutRevision}
+        visualRevision={minimapVisualRevision}
         controlledId={documentId}
         scrollerRef={containerRef}
         articleRef={articleRef}
         yellowHighlightRanges={yellowHighlightRanges}
         onDragStateChange={onMinimapDragStateChange}
+        onPrepared={markMinimapPrepared}
       />
     </div>
   )
@@ -639,6 +668,7 @@ function stringArraysEqual(left: string[], right: string[]): boolean {
 
 const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   block: ReaderBlock
+  referenceSection: boolean
   active: boolean
   assetBaseUrl: string
   pdfUrl?: string
@@ -687,7 +717,7 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
       data-mapping-ids={props.block.mappingIds.join(' ')}
       data-annotation-block-key={props.block.annotationKey}
       data-reader-role={props.block.role}
-      className={props.active ? 'markdown-block active' : 'markdown-block'}
+      className={'markdown-block' + (props.active ? ' active' : '') + (props.referenceSection ? ' reader-references' : '')}
       onClick={() => {
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return
         const mappingId = navigationMappingIds[0]
@@ -741,6 +771,7 @@ function FigureBlockPresentation(props: {
           key={props.pdfUrl + '|' + props.group.id}
           pdfUrl={props.pdfUrl}
           group={props.group}
+          preRender
           onRendered={props.onRendered}
           onStateChange={state => props.onStateChange(props.group.id, state)}
         />

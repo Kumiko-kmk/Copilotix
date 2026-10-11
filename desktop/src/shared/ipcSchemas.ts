@@ -362,6 +362,17 @@ export type SaveDocumentAsRequest = z.infer<typeof saveDocumentAsRequestSchema>
 export const saveDocumentAsResultSchema = z.object({ saved: z.boolean() }).strict()
 export type SaveDocumentAsResult = z.infer<typeof saveDocumentAsResultSchema>
 
+export const cacheDocumentFigureRequestSchema = z.object({
+  documentId: uuid,
+  figureId: z.string().min(1).max(512),
+  geometryKey: z.string().min(1).max(512),
+  sourceRevision: z.string().length(64).optional(),
+  pngBase64: z.string().min(1).max(46 * 1024 * 1024).optional()
+}).strict()
+export type CacheDocumentFigureRequest = z.infer<typeof cacheDocumentFigureRequestSchema>
+export const cacheDocumentFigureResultSchema = z.object({ imagePath: z.string().nullable(), sourceRevision: z.string().length(64) }).strict()
+export type CacheDocumentFigureResult = z.infer<typeof cacheDocumentFigureResultSchema>
+
 export const documentAnnotationViewSchema = z.enum(['original', 'translated'])
 export const documentAnnotationKindSchema = z.enum(['highlight', 'underline'])
 export const documentHighlightColorSchema = z.enum(['yellow', 'green', 'blue', 'pink', 'purple'])

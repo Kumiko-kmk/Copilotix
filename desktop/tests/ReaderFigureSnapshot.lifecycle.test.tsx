@@ -30,6 +30,19 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('figure rendering lifecycle', () => {
+  it('pre-renders an offscreen figure without waiting for an intersection notification', async () => {
+    const observe = vi.fn()
+    vi.stubGlobal('IntersectionObserver', class {
+      observe = observe
+      disconnect = vi.fn()
+    })
+    const onStateChange = vi.fn()
+    render(<ReaderFigureSnapshot preRender pdfUrl="prepared.pdf" group={group} onRendered={() => undefined} onStateChange={onStateChange} />)
+    await waitFor(() => expect(onStateChange).toHaveBeenCalledWith('ready'))
+    expect(observe).not.toHaveBeenCalled()
+    expect(renderPdf).toHaveBeenCalledTimes(1)
+  })
+
   it('does not start a PDF crop until it approaches the scroll viewport', async () => {
     let notify: IntersectionObserverCallback = () => undefined
     const disconnect = vi.fn()
@@ -45,6 +58,24 @@ describe('figure rendering lifecycle', () => {
     act(() => notify([{ isIntersecting: true }] as IntersectionObserverEntry[], {} as IntersectionObserver))
     await waitFor(() => expect(onStateChange).toHaveBeenCalledWith('ready'))
     expect(disconnect).toHaveBeenCalled()
+  })
+
+  it('limits pre-render concurrency and removes an abandoned crop from the queue', async () => {
+    const finish: Array<() => void> = []
+    renderPdf.mockImplementation(() => ({
+      promise: new Promise<void>(resolve => { finish.push(resolve) }), cancel: vi.fn()
+    }))
+    const state = vi.fn()
+    const figures = (count: number) => <>{Array.from({ length: count }, (_, index) =>
+      <ReaderFigureSnapshot key={index} preRender pdfUrl={'queue-' + index + '.pdf'} group={group}
+        onRendered={() => undefined} onStateChange={state} />
+    )}</>
+    const view = render(figures(3))
+    await waitFor(() => expect(renderPdf).toHaveBeenCalledTimes(2))
+    view.rerender(figures(2))
+    act(() => finish.forEach(resolve => resolve()))
+    await waitFor(() => expect(state.mock.calls.filter(([value]) => value === 'ready')).toHaveLength(2))
+    expect(renderPdf).toHaveBeenCalledTimes(2)
   })
 
   it('retains a retry action after a failed crop and can recover', async () => {

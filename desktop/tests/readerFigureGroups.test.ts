@@ -8,6 +8,28 @@ import {
 } from '../src/renderer/readerFigureGroups'
 
 describe('reader figure groups', () => {
+  it('retains PDF titles outside a single resource box using a clear caption corridor', () => {
+    const maps = [mapping('diagram', 1, 'image', [171, 68, 467, 241], 'diagram.jpg'),
+      mapping('caption', 2, 'image_caption', [104, 273, 505, 297], undefined, 'Figure 2: Attention diagrams.')]
+    expect(buildReaderFigureGeometries(maps)[0]).toMatchObject({ status: 'complete', cropBox: [100, 64, 509, 245] })
+    maps.push(mapping('foreign', 3, 'text', [105, 100, 150, 200], undefined, 'Independent body paragraph.'))
+    expect(buildReaderFigureGeometries(maps).filter(g => g.status === 'complete')).toEqual([])
+  })
+
+  it('uses both columns of one complete caption without cropping caption prose', () => {
+    const mappings = [
+      mapping('left-panel', 1, 'chart', [62, 46, 239, 217], 'left.jpg'),
+      mapping('caption-start', 2, 'chart_caption', [36, 224, 292, 295], undefined, 'Fig. 5 | Effect of MSA depth and cross-chain contacts. a, Backbone accuracy.'),
+      mapping('right-panel', 3, 'image', [271, 52, 535, 195], 'right.jpg'),
+      mapping('caption-continuation', 4, 'image_caption', [302, 224, 560, 295], undefined, 'number of non-gap residues for each position in the MSA. b, An intertwined homotrimer.')
+    ]
+    expect(buildReaderFigureGeometries(mappings)).toEqual([expect.objectContaining({
+      status: 'complete', cropBox: [58, 42, 539, 221], assetSources: ['left.jpg', 'right.jpg'],
+      mappingIds: ['left-panel', 'right-panel', 'caption-start', 'caption-continuation'],
+      captionMappingId: 'caption-start', fallbackLegendText: ''
+    })])
+  })
+
   it('projects adjacent charts and their graphical legend as one PDF region', () => {
     const mappings = [
       mapping('chart-a', 158, 'chart', [109, 518, 244, 618], 'a.jpg'),
@@ -197,6 +219,21 @@ describe('reader figure groups', () => {
     expect(buildReaderFigureGeometries([asset, caption])).toEqual([expect.objectContaining({
       status: 'complete', mappingIds: ['a', 'caption'], cropBox: [46, 96, 354, 204]
     })])
+  })
+
+  it('uses a spanning caption to own panels across a wider gutter and deduplicates layout caption text', () => {
+    const maps = [mapping('a', 1, 'chart', [140, 80, 275, 220], 'a.jpg'),
+      mapping('b', 2, 'chart', [310, 80, 450, 220], 'b.jpg'),
+      mapping('caption', 3, 'chart_caption', [120, 230, 500, 300], undefined, 'Fig. 1: A long caption.')]
+    const layout = JSON.stringify({ pdf_info: [{ page_idx: 11, page_size: [612, 792], para_blocks: [{
+      type: 'chart', blocks: [
+        { type: 'chart_body', bbox: [310, 80, 450, 220], lines: [{ spans: [{ image_path: 'b.jpg' }] }] },
+        { type: 'chart_caption', bbox: [120, 230, 500, 300], text: 'Fig. 1: A  long caption.' }
+      ]
+    }] }] })
+    const geometries = buildReaderFigureGeometries(maps, layout)
+    expect(geometries).toHaveLength(1)
+    expect(geometries[0]).toMatchObject({ status: 'complete', assetSources: ['a.jpg', 'b.jpg'] })
   })
 
   it('ignores malformed coordinates and preserves source blocks without inventing a crop', () => {

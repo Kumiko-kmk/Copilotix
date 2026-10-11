@@ -87,10 +87,12 @@ export default function MarkdownMinimap(props: {
   active: boolean
   ready: boolean
   layoutRevision: number
+  visualRevision?: string
   controlledId: string
   scrollerRef: React.RefObject<HTMLDivElement | null>
   articleRef: React.RefObject<HTMLElement | null>
   yellowHighlightRanges?: readonly Range[]
+  onPrepared?(): void
   onDragStateChange?(dragging: boolean): void
 }): React.JSX.Element {
   const railRef = React.useRef<HTMLDivElement>(null)
@@ -113,6 +115,8 @@ export default function MarkdownMinimap(props: {
   const onDragStateChangeRef = React.useRef(props.onDragStateChange)
   onDragStateChangeRef.current = props.onDragStateChange
   const [content, setContent] = React.useState<MarkdownMinimapContent>(emptyMinimapContent)
+  const onPreparedRef = React.useRef(props.onPrepared)
+  onPreparedRef.current = props.onPrepared
 
   const updateFrame = React.useCallback(() => {
     const rail = railRef.current
@@ -162,13 +166,10 @@ export default function MarkdownMinimap(props: {
     const scroller = props.scrollerRef.current
     const article = props.articleRef.current
     if (!rail || !scroller || !article) return
-    measurementCancelRef.current = scheduleIdleMeasurement(() => {
-      if (article.querySelector('.reader-figure-snapshot[data-rendered="false"][data-failed="false"]')) {
-        measurementCancelRef.current = null
-        return
-      }
+    const measure = (): void => {
       const key: MinimapSnapshotKey = {
         article,
+        visualRevision: props.visualRevision,
         width: article.getBoundingClientRect().width,
         railWidth: rail.clientWidth,
         railHeight: rail.clientHeight,
@@ -178,7 +179,10 @@ export default function MarkdownMinimap(props: {
         measurementCancelRef.current = null
         return
       }
-      if (snapshotRef.current?.article === article) {
+      if (
+        snapshotRef.current?.article === article &&
+        snapshotRef.current.visualRevision === key.visualRevision
+      ) {
         if (snapshotRef.current.width !== key.width) {
           resolveMarkdownLayout(article, () => {
             refreshNavigationAnchors(navigationRef.current, scroller)
@@ -201,12 +205,20 @@ export default function MarkdownMinimap(props: {
       recordReaderDuration('minimap-measure', startedAt)
       updateFrame()
       measurementCancelRef.current = null
-    })
+    }
+    // The first overview belongs to document preparation, not idle work after
+    // revealing the reader. Subsequent resize indexing remains deferred.
+    if (snapshotRef.current) {
+      measurementCancelRef.current = scheduleIdleMeasurement(measure)
+    } else {
+      const frame = window.requestAnimationFrame(measure)
+      measurementCancelRef.current = () => window.cancelAnimationFrame(frame)
+    }
     return () => {
       measurementCancelRef.current?.()
       measurementCancelRef.current = null
     }
-  }, [props.active, props.articleRef, props.layoutRevision, props.ready, props.scrollerRef, props.yellowHighlightRanges, updateFrame])
+  }, [props.active, props.articleRef, props.layoutRevision, props.ready, props.scrollerRef, props.visualRevision, props.yellowHighlightRanges, updateFrame])
 
   React.useLayoutEffect(() => {
     const rail = railRef.current
@@ -221,6 +233,12 @@ export default function MarkdownMinimap(props: {
     if (!layer) return
     renderFormulaLayer(layer, content.formulas)
   }, [content])
+
+  React.useLayoutEffect(() => {
+    if (props.active && props.ready && snapshotRef.current && content.geometry.railWidth > 0 && content.geometry.railHeight > 0) {
+      onPreparedRef.current?.()
+    }
+  }, [content, props.active, props.ready])
 
   React.useEffect(() => {
     if (!props.active || !props.ready) return
@@ -392,6 +410,7 @@ export default function MarkdownMinimap(props: {
 
 interface MinimapSnapshotKey {
   article: HTMLElement
+  visualRevision?: string
   width: number
   railWidth: number
   railHeight: number
@@ -465,6 +484,10 @@ export function captureStaticMarkdownMinimap(
 function resolveMarkdownLayout<T>(article: HTMLElement, measure: () => T): T {
   const blocks = Array.from(article.querySelectorAll<HTMLElement>('.markdown-block'))
   const visibility = blocks.map((block) => block.style.contentVisibility)
+  const articleVisibility = article.style.visibility
+  // Preparation measures the hidden article synchronously and restores it
+  // before the browser can paint; inherited visibility must not exclude text.
+  article.style.visibility = 'visible'
   // Resolve every offscreen block once instead of capturing its 48px estimated height.
   blocks.forEach((block) => { block.style.contentVisibility = 'visible' })
   try {
@@ -479,6 +502,7 @@ function resolveMarkdownLayout<T>(article: HTMLElement, measure: () => T): T {
     blocks.forEach((block, index) => { block.style.containIntrinsicBlockSize = `${heights[index]}px` })
     return content
   } finally {
+    article.style.visibility = articleVisibility
     blocks.forEach((block, index) => { block.style.contentVisibility = visibility[index]! })
   }
 }
@@ -549,6 +573,7 @@ export function measureMarkdownMinimapContent(
 
   const images = Array.from(article.querySelectorAll<HTMLImageElement | HTMLCanvasElement>('img, canvas.reader-figure-snapshot-canvas')).flatMap((image, index) => {
     if (!isVisibleMinimapContent(image)) return []
+    if (image instanceof HTMLCanvasElement && image.closest('.reader-figure-snapshot[data-rendered="false"]')) return []
     const bounds = image.getBoundingClientRect()
     const documentTop = bounds.top - scrollerBounds.top + scroller.scrollTop
     return [{

@@ -2,8 +2,9 @@ import { z } from 'zod'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
+import type { MultimodalChatMessage } from '@shared/chatMessages'
+export type { ChatMessage, ChatContentPart } from '@shared/chatMessages'
 
-export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 export type ChatFetcher = (url: string, init: RequestInit) => Promise<Response>
 export class ChatProviderError extends Error {
   constructor(readonly code: string, message: string, readonly retryAfterMs?: number) { super(message) }
@@ -21,7 +22,7 @@ export class ChatProvider {
   private readonly tails = new Map<PaperChatProvider, Promise<void>>()
   constructor(private readonly fetcher: ChatFetcher, private readonly options: { firstByteMs?: number; idleMs?: number; invalidate?(provider: PaperChatProvider): Promise<void> } = {}) {}
 
-  stream(input: { provider: PaperChatProvider; baseUrl: string; model: string; key: string; messages: ChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number }): Promise<ProviderTokenUsage | null> {
+  stream(input: { provider: PaperChatProvider; baseUrl: string; model: string; key: string; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number }): Promise<ProviderTokenUsage | null> {
     // The endpoint is never a renderer field, and even persisted settings must match the provider whitelist.
     const expected = input.provider === 'qwen' ? DEFAULT_SETTINGS.qwenBaseUrl : DEFAULT_SETTINGS.deepseekBaseUrl
     if (input.baseUrl !== expected) return Promise.reject(new ChatProviderError('PROVIDER_UNAVAILABLE', '问答服务地址不受支持'))
@@ -46,13 +47,15 @@ export class ChatProvider {
     }
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
     try {
-      const firstDeadline = Date.now() + (this.options.firstByteMs ?? 30_000)
+      const firstDeadline = Date.now() + (input.firstByteMs ?? this.options.firstByteMs ?? 30_000)
       arm(Math.max(1, firstDeadline - Date.now()))
       const body: Record<string, unknown> = {
         model: input.model, messages: input.messages, stream: true, stream_options: { include_usage: true },
         max_tokens: input.maxOutputTokens ?? (input.provider === 'deepseek' && input.model === 'deepseek-v4-pro' ? 32_768 : 8_192),
         ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
         ...(input.responseFormat ? { response_format: input.responseFormat } : {}),
+        ...(input.provider === 'qwen' && input.messages.some(message => Array.isArray(message.content))
+          ? { enable_thinking: false } : {}),
         ...(input.provider === 'deepseek' && ['deepseek-flash', 'deepseek-v4-pro'].includes(input.model)
           ? { thinking: { type: input.responseFormat || input.model === 'deepseek-flash' ? 'disabled' : 'enabled' } } : {})
       }

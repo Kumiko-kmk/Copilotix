@@ -7,6 +7,10 @@ export type FigureRenderState = 'pending' | 'ready' | 'failed'
 export const FIGURE_MAX_PIXELS = 8_000_000
 export const FIGURE_MAX_EDGE = 8192
 export const FIGURE_CACHE_BYTES = 64 * 1024 * 1024
+const FIGURE_RENDER_TIMEOUT_MS = 30_000
+const FIGURE_RENDER_CONCURRENCY = 2
+const pendingRenders: Array<() => void> = []
+let activeRenders = 0
 interface RegionEntry {
   promise: Promise<HTMLCanvasElement>
   controller: AbortController
@@ -22,6 +26,7 @@ export function figureRegionCacheStats(): { bytes: number; entries: number } {
 export default function ReaderFigureSnapshot(props: {
   pdfUrl: string
   group: ReaderFigureGroup
+  preRender?: boolean
   onRendered(): void
   onStateChange(state: FigureRenderState): void
 }): React.JSX.Element {
@@ -40,18 +45,23 @@ export default function ReaderFigureSnapshot(props: {
     let cancelled = false
     let started = false
     let release: (() => void) | undefined
+    let timeoutId: number | undefined
     const input = callbacks.current
     setState({ key, status: 'pending' })
     callbacks.current.onStateChange('pending')
-    // Detached/offscreen sources stay visible; the article need not wait for
-    // all of a long paper's PDF crops before becoming readable.
+    // Reader preparation includes offscreen crops. Other consumers can retain
+    // viewport-triggered rendering by omitting preRender.
     const start = (): void => {
       if (started || cancelled) return
       started = true
-      const width = Math.max(1, host.parentElement?.clientWidth ?? 600)
+      const article = host.closest<HTMLElement>('.markdown-body')
+      const width = Math.max(1, host.parentElement?.clientWidth || article?.clientWidth || 600)
       const request = acquireRegion(input.pdfUrl, input.group, width * Math.max(1, window.devicePixelRatio))
       release = request.release
-      void request.promise.then(source => {
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error('整图预渲染超时')), FIGURE_RENDER_TIMEOUT_MS)
+      })
+      void Promise.race([request.promise, timeout]).then(source => {
         if (cancelled || !canvasRef.current) return
         const canvas = canvasRef.current
         canvas.width = source.width
@@ -67,15 +77,15 @@ export default function ReaderFigureSnapshot(props: {
         setState({ key, status: 'failed' })
         callbacks.current.onStateChange('failed')
         callbacks.current.onRendered()
-      }).finally(() => { release?.(); release = undefined })
+      }).finally(() => { window.clearTimeout(timeoutId); release?.(); release = undefined })
     }
-    const observer = typeof IntersectionObserver === 'undefined' ? undefined : new IntersectionObserver(entries => {
+    const observer = input.preRender || typeof IntersectionObserver === 'undefined' ? undefined : new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) { observer?.disconnect(); start() }
     }, { root: host.closest('.markdown-scroll'), rootMargin: '320px' })
     if (observer) observer.observe(host)
     else start()
-    return () => { cancelled = true; observer?.disconnect(); release?.() }
-  }, [key, attempt])
+    return () => { cancelled = true; window.clearTimeout(timeoutId); observer?.disconnect(); release?.() }
+  }, [key, attempt, props.preRender])
 
   return (
     <div ref={hostRef} className="reader-figure-snapshot" data-rendered={status === 'ready'}
@@ -140,8 +150,35 @@ async function renderRegion(pdfUrl: string, group: ReaderFigureGroup, pixelWidth
   try {
     const document = await handle.promise
     signal.throwIfAborted()
-    return await renderDocumentRegion(document, group, pixelWidth, signal)
+    return await scheduleRegionRender(() => renderDocumentRegion(document, group, pixelWidth, signal), signal)
   } finally { signal.removeEventListener('abort', release); handle.release() }
+}
+
+function drainRegionRenders(): void {
+  while (activeRenders < FIGURE_RENDER_CONCURRENCY && pendingRenders.length) pendingRenders.shift()!()
+}
+
+function scheduleRegionRender(render: () => Promise<HTMLCanvasElement>, signal: AbortSignal): Promise<HTMLCanvasElement> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException('Aborted', 'AbortError')); return }
+    const cancel = (): void => {
+      const index = pendingRenders.indexOf(start)
+      if (index >= 0) pendingRenders.splice(index, 1)
+      signal.removeEventListener('abort', cancel)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    const start = (): void => {
+      signal.removeEventListener('abort', cancel)
+      activeRenders++
+      void Promise.resolve().then(render).then(resolve, reject).finally(() => {
+        activeRenders--
+        drainRegionRenders()
+      })
+    }
+    signal.addEventListener('abort', cancel, { once: true })
+    pendingRenders.push(start)
+    drainRegionRenders()
+  })
 }
 
 export function figurePixelSize(width: number, height: number, desiredWidth = 1200): [number, number] {

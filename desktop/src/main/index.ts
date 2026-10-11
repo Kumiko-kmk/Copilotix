@@ -1,4 +1,7 @@
 import { PaperInsightService } from './chat/paperInsightService'
+import { FigureInsightService } from './chat/figureInsightService'
+import { registerFigureInsightHandlers } from './chat/figureInsightIpc'
+import { figureInsightChangedSchema } from '@shared/figureInsight'
 import { registerPaperInsightHandlers } from './chat/paperInsightIpc'
 import { paperInsightChangedSchema } from '@shared/paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
@@ -19,6 +22,7 @@ import {
   BrowserWindow,
   dialog,
   Menu,
+  nativeImage,
   net,
   Notification,
   protocol,
@@ -40,6 +44,8 @@ import { probeOpenAiCompatibleCredential } from './translation/providers'
 import { refreshNetworkProxy } from './networkProxy'
 import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike } from './ipc'
 import {
+  cacheDocumentFigureRequestSchema,
+  cacheDocumentFigureResultSchema,
   appSettingsSchema,
   credentialValidationRequestSchema,
   credentialValidationResultSchema,
@@ -97,6 +103,7 @@ let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
 let paperChat: PaperChatService | null = null
 let paperInsight: PaperInsightService | null = null
+let figureInsight: FigureInsightService | null = null
 let jobScheduler: JobScheduler | null = null
 let startupPhase = 'module-load'
 const libraryGate = new LibraryAccessGate()
@@ -158,6 +165,26 @@ async function bootstrap(): Promise<void> {
   const logger = new JsonLineLogger(join(userData, 'copilotix-desktop.log'))
   const usageAnalytics = new UsageAnalyticsService(join(userData, 'usage-analytics-v1.json'))
   const chatProvider = new ChatProvider(fetcher, { invalidate: (provider) => settings.invalidateCredential(provider) })
+  figureInsight = new FigureInsightService({
+    settings: () => settings.get(),
+    key: provider => vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    descriptor: (request, signal) => utilitySupervisor!.request('compute:figure-insight-descriptor', request, { signal, timeoutMs: 30_000 }),
+    get: request => utilitySupervisor!.request('figureInsight:get', request),
+    save: request => utilitySupervisor!.request('figureInsight:save', request, { timeoutMs: 30_000 }),
+    stream: input => chatProvider.stream(input),
+    encodeImage: async png => {
+      if (png.length <= 2 * 1024 * 1024) return { bytes: png, mimeType: 'image/png' }
+      const image = nativeImage.createFromBuffer(png)
+      if (image.isEmpty()) throw new Error('无法编码整图')
+      const jpeg = image.toJPEG(98)
+      return jpeg.length < png.length ? { bytes: jpeg, mimeType: 'image/jpeg', jpegQuality: 98 } : { bytes: png, mimeType: 'image/png' }
+    },
+    recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
+    canStart: () => !libraryGate.busy && !libraryGate.restarting && !isQuitting,
+    changed: (request, state) => {
+      if (mainWindow && !mainWindow.webContents.isDestroyed()) sendValidatedEvent(mainWindow.webContents, 'figureInsight:changed', figureInsightChangedSchema, { ...request, state })
+    }
+  })
   paperChat = new PaperChatService({
     saveTurn: (documentId, turn) => utilitySupervisor!.request('chat:save-turn', { documentId, turn }),
     load: (request) => utilitySupervisor!.request('chat:load', request),
@@ -367,6 +394,7 @@ function registerIpc(
   }
 
   registerPaperInsightHandlers(paperInsight!, validationOptions)
+  registerFigureInsightHandlers(figureInsight!, validationOptions)
   registerValidatedHandler('library:categories', libraryCategoriesRequestSchema, libraryCategoriesPageSchema,
     (_event, request) => utilitySupervisor!.request('compute:library-categories', request, { timeoutMs: 120_000 }), validationOptions)
   registerPaperChatHandlers(paperChat!, async (documentId) => {
@@ -405,6 +433,7 @@ function registerIpc(
     }
     await utilitySupervisor.request('library:check', {})
     await paperInsight?.pause()
+    await figureInsight?.pause()
     try {
       await paperChat?.settle()
       await jobScheduler.shutdown()
@@ -415,7 +444,7 @@ function registerIpc(
       }
       return result
     } finally {
-      if (!libraryGate.restarting) { await jobScheduler.start(); paperInsight?.resume() }
+      if (!libraryGate.restarting) { await jobScheduler.start(); paperInsight?.resume(); figureInsight?.resume() }
     }
   }, validationOptions)
   registerValidatedHandler('settings:get', noRequestSchema, appSettingsSchema, () => settings.get(), validationOptions)
@@ -428,7 +457,7 @@ function registerIpc(
       || before.translationProvider !== next.translationProvider || before.chatConsentVersion !== next.chatConsentVersion
       || before.chatConsentProvider !== next.chatConsentProvider || before.qwenChatModel !== next.qwenChatModel
       || before.deepseekChatModel !== next.deepseekChatModel || before.autoGeneratePaperInsight !== next.autoGeneratePaperInsight
-      || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperInsight?.cancelAll()
+      || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) { paperInsight?.cancelAll(); figureInsight?.cancelAll() }
     return result
   }, validationOptions)
   registerValidatedHandler('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, (_event, request) => settings.validateCredential(request.name, request.value), validationOptions)
@@ -497,10 +526,10 @@ function registerIpc(
     return tasks.retry(documentId)
   }, validationOptions)
   registerValidatedHandler('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, async (_event, request) => {
-    return paperInsight!.deleteDocument(request.documentId, async () => {
+    return figureInsight!.deleteDocument(request.documentId, () => paperInsight!.deleteDocument(request.documentId, async () => {
       await paperChat?.settleDocument(request.documentId)
       return tasks.delete(request.documentId, request.deleteFiles)
-    })
+    }))
   }, validationOptions)
   registerValidatedHandler('documents:get', documentIdRequestSchema, documentDetailsSchema, async (_event, documentId) => {
     const details = projectDocumentDetails(await tasks.getDocument(documentId))
@@ -512,6 +541,9 @@ function registerIpc(
     if (!task) throw new Error('文档不存在')
     const result = await shell.openPath(task.outputDir)
     if (result) throw new Error(result)
+  }, validationOptions)
+  registerValidatedHandler('documents:cache-figure', cacheDocumentFigureRequestSchema, cacheDocumentFigureResultSchema, (_event, request) => {
+    return tasks.cacheFigure(request)
   }, validationOptions)
   registerValidatedHandler('documents:save-as', saveDocumentAsRequestSchema, saveDocumentAsResultSchema, async (_event, request) => {
     const task = await repository?.getTask(request.documentId)
@@ -564,7 +596,7 @@ function startNormalApp(): void {
     isQuitting = true
     if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
     event.preventDefault()
-    utilityShutdownPromise = Promise.all([paperChat?.settle(), paperInsight?.dispose()]).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
+    utilityShutdownPromise = Promise.all([paperChat?.settle(), paperInsight?.dispose(), figureInsight?.dispose()]).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
       app.quit()
     })
   })

@@ -1,4 +1,5 @@
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightCancelSchema, paperInsightChangedSchema } from '@shared/paperInsight'
+import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightCancelSchema, figureInsightChangedSchema } from '@shared/figureInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
 import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
@@ -7,6 +8,8 @@ import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchema
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { z } from 'zod'
 import {
+  cacheDocumentFigureRequestSchema,
+  cacheDocumentFigureResultSchema,
   appSettingsSchema,
   credentialValidationRequestSchema,
   credentialValidationResultSchema,
@@ -59,6 +62,19 @@ async function invokeValidated<Request, Response>(
 }
 
 const api: CopilotixDesktopApi = {
+  figureInsight: {
+    get: request => invokeValidated('figureInsight:get', figureInsightRequestSchema, figureInsightStateSchema, request),
+    generate: request => invokeValidated('figureInsight:generate', figureInsightRequestSchema, voidResponseSchema, request),
+    cancel: request => invokeValidated('figureInsight:cancel', figureInsightRequestSchema, figureInsightCancelSchema, request),
+    onChanged: listener => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const parsed = decodeIpcEvent(payload, figureInsightChangedSchema)
+        if (parsed) listener(parsed)
+      }
+      ipcRenderer.on('figureInsight:changed', handler)
+      return () => ipcRenderer.removeListener('figureInsight:changed', handler)
+    }
+  },
   libraryCategories: (request) => invokeValidated('library:categories', libraryCategoriesRequestSchema, libraryCategoriesPageSchema, request),
   paperInsight: {
     get: (request) => invokeValidated('paperInsight:get', paperInsightRequestSchema, paperInsightStateSchema, request),
@@ -123,6 +139,7 @@ const api: CopilotixDesktopApi = {
   deleteDocument: (request: DeleteDocumentRequest) =>
     invokeValidated('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, request),
   getDocument: (documentId: string) => invokeValidated('documents:get', documentIdRequestSchema, documentDetailsSchema, documentId),
+  cacheDocumentFigure: (request) => invokeValidated('documents:cache-figure', cacheDocumentFigureRequestSchema, cacheDocumentFigureResultSchema, request),
   openDocumentOutput: (documentId: string) =>
     invokeValidated('documents:open-output', documentIdRequestSchema, voidResponseSchema, documentId),
   saveDocumentAs: (request: SaveDocumentAsRequest) =>

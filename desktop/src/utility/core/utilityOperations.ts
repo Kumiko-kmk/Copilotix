@@ -1,5 +1,7 @@
 import { paperBriefSaveSchema } from '@shared/paperBrief/contracts'
 import { PaperInsightStore } from './persistence/paperInsightStore'
+import { FigureInsightStore } from './persistence/figureInsightStore'
+import { figureInsightRequestSchema, figureInsightSaveSchema } from '@shared/figureInsight'
 import { paperInsightRequestSchema } from '@shared/paperInsight'
 import { libraryCategoriesRequestSchema } from '@shared/libraryCategories'
 import { LibraryCategoryService } from './libraryCategoryService'
@@ -141,8 +143,12 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
   }
   const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const insightStore = () => new PaperInsightStore(requireRepository())
+  const figureInsightStore = () => new FigureInsightStore(requireRepository())
   const categories = new LibraryCategoryService(insightStore, requireRepository)
   const handlers: UtilityHandlerMap = {
+    'figureInsight:get': request => figureInsightStore().get(figureInsightRequestSchema.parse(request.payload)),
+    'compute:figure-insight-descriptor': (request, signal) => figureInsightStore().descriptor(figureInsightRequestSchema.parse(request.payload), signal),
+    'figureInsight:save': request => figureInsightStore().save(figureInsightSaveSchema.parse(request.payload)),
     // Reads every paper's text on first use: compute lane, so quick data requests are not held up.
     'compute:library-categories': (request, signal) => categories.page(libraryCategoriesRequestSchema.parse(request.payload).after ?? 0, signal),
     'insight:get': (request) => insightStore().get(paperInsightRequestSchema.parse(request.payload).documentId),

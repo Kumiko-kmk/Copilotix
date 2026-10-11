@@ -68,6 +68,14 @@ describe('ChatProvider', () => {
     const provider = new ChatProvider(() => new Promise(() => undefined), { firstByteMs: 10 })
     await expect(provider.stream(input())).rejects.toMatchObject({ code: 'RAG_TIMEOUT' })
   })
+  it('allows a vision request a longer first-byte budget without changing the shared default', async () => {
+    const provider = new ChatProvider(async () => {
+      await new Promise(resolve => setTimeout(resolve, 30))
+      return response(done)
+    }, { firstByteMs: 10 })
+    await expect(provider.stream({ ...input(), firstByteMs: 1000 })).resolves.toBeNull()
+    await expect(provider.stream(input())).rejects.toMatchObject({ code: 'RAG_TIMEOUT' })
+  })
   it('times out an idle stream and closes the reader', async () => {
     const cancel = vi.fn()
     const stream = new ReadableStream({ start(c) { c.enqueue(encoder.encode(packet('first'))) }, cancel })

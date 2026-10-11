@@ -107,6 +107,66 @@ describe('MarkdownMinimap', () => {
     expect(mapMinimapOffset(-50, anchors, 'source')).toBe(0)
   })
 
+  it('prepares the complete overview only after figure preparation is enabled', async () => {
+    const figures = <>
+      <img alt="source" />
+      <div className="reader-figure-snapshot" data-rendered="false" data-failed="false">
+        <canvas className="reader-figure-snapshot-canvas" />
+      </div>
+      <div className="reader-figure-snapshot" data-rendered="false" data-failed="false" />
+    </>
+    const view = render(<Harness revision={0} ready={false} visualRevision="sources" figures={figures} />)
+    const scroller = view.container.querySelector<HTMLElement>('.markdown-scroll')!
+    const article = view.container.querySelector('article')!
+    const rail = view.getByRole('scrollbar')
+    setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 1000, scrollTop: 0 })
+    Object.defineProperties(rail, {
+      clientHeight: { configurable: true, value: 400 },
+      clientWidth: { configurable: true, value: 60 }
+    })
+    vi.spyOn(article, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 400, 1000))
+    const heading = article.querySelector('h2')!
+    const headingBounds = vi.spyOn(heading, 'getBoundingClientRect').mockReturnValue(rect(0, 100, 300, 30))
+    const source = article.querySelector('img')!
+    const canvas = article.querySelector('canvas')!
+    vi.spyOn(source, 'getBoundingClientRect').mockReturnValue(rect(0, 200, 300, 100))
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(rect(0, 200, 300, 180))
+    expect(view.queryByRole('button', { name: '跳转到Chapter' })).toBeNull()
+    expect(measureMarkdownMinimapContent(article, scroller, 60, 400).images.map(image => image.element)).toEqual([source])
+
+    // Failed crops retain their sources; the completed crop is captured whole.
+    source.classList.add('reader-figure-hidden-source')
+    canvas.parentElement!.dataset.rendered = 'true'
+    article.querySelectorAll<HTMLElement>('.reader-figure-snapshot')[1]!.dataset.failed = 'true'
+    headingBounds.mockReturnValue(rect(0, 200, 300, 30))
+    const onPrepared = vi.fn()
+    view.rerender(<Harness revision={1} visualRevision="ready:first" figures={figures} onPrepared={onPrepared} />)
+    await waitFor(() => expect(onPrepared).toHaveBeenCalledTimes(1))
+    expect(view.getByRole('button', { name: '跳转到Chapter' })).toBeTruthy()
+    expect(measureMarkdownMinimapContent(article, scroller, 60, 400).images.map(image => image.element)).toEqual([canvas])
+  })
+
+  it('captures a hidden article and restores its visibility before announcing preparation', async () => {
+    const figures = <img alt="late source" />
+    const onPrepared = vi.fn()
+    const view = render(<Harness revision={0} figures={figures} onPrepared={onPrepared} />)
+    const scroller = view.container.querySelector<HTMLElement>('.markdown-scroll')!
+    const article = view.container.querySelector('article')!
+    const rail = view.getByRole('scrollbar')
+    setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 1000, scrollTop: 0 })
+    Object.defineProperties(rail, {
+      clientHeight: { configurable: true, value: 400 },
+      clientWidth: { configurable: true, value: 60 }
+    })
+    vi.spyOn(article, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 400, 1000))
+    article.style.visibility = 'hidden'
+    vi.spyOn(article.querySelector('h2')!, 'getBoundingClientRect').mockReturnValue(rect(0, 100, 300, 30))
+    view.rerender(<Harness revision={1} figures={figures} onPrepared={onPrepared} />)
+    await waitFor(() => expect(onPrepared).toHaveBeenCalledTimes(1))
+    expect(view.getByRole('button', { name: '跳转到Chapter' })).toBeTruthy()
+    expect(article.style.visibility).toBe('hidden')
+  })
+
   it('measures document content and indents headings by level', () => {
     const scroller = document.createElement('div')
     const article = document.createElement('article')
@@ -344,7 +404,7 @@ describe('MarkdownMinimap', () => {
   })
 })
 
-function Harness(props: { revision: number }): React.JSX.Element {
+function Harness(props: { revision: number; visualRevision?: string; figures?: React.ReactNode; ready?: boolean; onPrepared?(): void }): React.JSX.Element {
   const scrollerRef = React.useRef<HTMLDivElement>(null)
   const articleRef = React.useRef<HTMLElement>(null)
   return (
@@ -352,12 +412,15 @@ function Harness(props: { revision: number }): React.JSX.Element {
       <div ref={scrollerRef} className="markdown-scroll" id="markdown-test-document">
         <article ref={articleRef}>
           <div className="markdown-block"><h2>Chapter</h2></div>
+          {props.figures}
         </article>
       </div>
       <MarkdownMinimap
         active
-        ready
+        ready={props.ready ?? true}
         layoutRevision={props.revision}
+        visualRevision={props.visualRevision}
+        onPrepared={props.onPrepared}
         controlledId="markdown-test-document"
         scrollerRef={scrollerRef}
         articleRef={articleRef}

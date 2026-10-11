@@ -4,6 +4,8 @@ import {
   CORE_RPC_VERSION,
   CoreRpcProtocolError,
   coreJobKindSchema,
+  coreOperationSchema,
+  coreOperationRegistry,
   coreKnowledgeSchema,
   coreErrorResponseSchema,
   coreEventSchema,
@@ -22,6 +24,9 @@ import {
 const requestId = '00000000-0000-4000-8000-000000000001'
 
 describe('core RPC schemas', () => {
+  it('keeps dispatchable operation names aligned with the wire registry', () => {
+    expect([...coreOperationSchema.options].sort()).toEqual(Object.keys(coreOperationRegistry).sort())
+  })
   it('allows only the shared durable job kinds and keeps the payload metadata-only', () => {
     expect(coreJobKindSchema.options).toEqual(['parse', 'translate', 'rag-content-index', 'rag-embed', 'rag-delete'])
     for (const kind of coreJobKindSchema.options) {

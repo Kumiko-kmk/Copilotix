@@ -1,4 +1,5 @@
 import { briefContextResultSchema, paperBriefSaveSchema } from '@shared/paperBrief/contracts'
+import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightDescriptorSchema, figureInsightSaveSchema } from './figureInsight'
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightSavedSchema } from './paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from './libraryCategories'
 import { paperChatStatusRequestSchema, paperChatStatusSchema, paperContextRequestSchema, paperContextResultSchema } from './paperChatSchemas'
@@ -198,6 +199,7 @@ const coreOperationNames = [
   'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:record-revision',
   'knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed',
   'insight:get', 'insight:save-brief', 'insight:brief-context',
+  'figureInsight:get', 'figureInsight:save', 'compute:figure-insight-descriptor',
   'chat:ensure-index', 'chat:build-context',
   'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear',
   'annotations:list-snapshot', 'annotations:mutate',
@@ -456,6 +458,9 @@ export const coreTranslationPlanFinalizeResultSchema = translationPlanFinalizeRe
  * compute operations must add one entry here with strict schemas on both sides.
  */
 export const coreOperationRegistry = {
+  'figureInsight:get': { payload: figureInsightRequestSchema, result: figureInsightStateSchema },
+  'compute:figure-insight-descriptor': { payload: figureInsightRequestSchema, result: figureInsightDescriptorSchema },
+  'figureInsight:save': { payload: figureInsightSaveSchema, result: z.object({ saved: z.literal(true) }).strict() },
   'insight:get': { payload: paperInsightRequestSchema, result: paperInsightStateSchema },
   'insight:save-brief': { payload: paperBriefSaveSchema, result: paperInsightSavedSchema },
   'insight:brief-context': { payload: paperInsightRequestSchema, result: briefContextResultSchema },

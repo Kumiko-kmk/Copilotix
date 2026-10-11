@@ -3,6 +3,8 @@ import type { PaperChatLoadRequest, PaperChatPage, PaperChatSession } from './pa
 import type { RagStreamEvent } from './ragSchemas'
 import type { LibraryRequest, LibraryResult } from './librarySchemas'
 import type {
+  CacheDocumentFigureRequest,
+  CacheDocumentFigureResult,
   DeleteDocumentRequest,
   DocumentChangeEvent,
   DocumentDetails,
@@ -222,6 +224,12 @@ export interface WindowState {
 }
 
 export interface CopilotixDesktopApi {
+  figureInsight: {
+    get(request: import('./figureInsight').FigureInsightRequest): Promise<import('./figureInsight').FigureInsightState>
+    generate(request: import('./figureInsight').FigureInsightRequest): Promise<void>
+    cancel(request: import('./figureInsight').FigureInsightRequest): Promise<{ cancelled: boolean }>
+    onChanged(listener: (event: import('./figureInsight').FigureInsightRequest & { state: import('./figureInsight').FigureInsightState }) => void): () => void
+  }
   /** One page of the library's content categories (see shared/libraryCategories.ts). */
   libraryCategories(request: import('./libraryCategories').LibraryCategoriesRequest): Promise<import('./libraryCategories').LibraryCategoriesPage>
   paperInsight: {
@@ -254,6 +262,7 @@ export interface CopilotixDesktopApi {
   retryDocument(documentId: string): Promise<void>
   deleteDocument(request: DeleteDocumentRequest): Promise<void>
   getDocument(documentId: string): Promise<DocumentDetails>
+  cacheDocumentFigure?(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult>
   openDocumentOutput(documentId: string): Promise<void>
   saveDocumentAs(request: SaveDocumentAsRequest): Promise<SaveDocumentAsResult>
   listReaderAnnotations(request: ListReaderAnnotationsRequest): Promise<ReaderAnnotationSnapshot>

@@ -21,6 +21,7 @@ import type { PaperChatController } from '../usePaperChat'
 import type { ReaderViewId } from '../readerLayout'
 import { buildReaderFigureGeometries, projectReaderFigureGroups } from '../readerFigureGroups'
 import { createScrollSyncHub } from '../readerScrollSync'
+import { useFigureArtifacts } from '../useFigureArtifacts'
 
 /** AI chat lives in the same workbench as the readers; it is optional so the reader works without it. */
 export interface ReaderChatOptions {
@@ -101,6 +102,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     [props.annotations]
   )
   const figureGeometries = React.useMemo(() => buildReaderFigureGeometries(mappings, props.layoutJson), [mappings, props.layoutJson])
+  useFigureArtifacts(props.taskId, props.pdfUrl, figureGeometries)
   const originalFigureGroups = React.useMemo(
     () => projectReaderFigureGroups(figureGeometries, props.originalBlocks),
     [figureGeometries, props.originalBlocks]

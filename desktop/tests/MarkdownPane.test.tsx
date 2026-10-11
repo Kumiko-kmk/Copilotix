@@ -38,6 +38,12 @@ beforeEach(() => {
   decodeImage = vi.fn().mockResolvedValue(undefined)
   scrollIntoView = vi.fn()
   vi.stubGlobal('ResizeObserver', ResizeObserverMock)
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-minimap') ? 60 : 400
+  })
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-minimap') ? 400 : 200
+  })
   Object.defineProperty(HTMLImageElement.prototype, 'complete', {
     configurable: true,
     get: () => false
@@ -63,6 +69,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   cleanup()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -93,6 +100,7 @@ describe('MarkdownPane', () => {
     fireEvent.load(image)
     await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     expect(article.getAttribute('aria-hidden')).toBe('false')
+    expect(view.container.querySelector<HTMLCanvasElement>('.markdown-minimap-canvas')!.width).toBeGreaterThan(1)
     expect(decodeImage).toHaveBeenCalledTimes(1)
 
     view.rerender(
@@ -317,14 +325,17 @@ describe('MarkdownPane', () => {
       assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]} highlightColor="yellow"
       onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null}
       onSelect={select} onOpenFigurePdf={openPdf} />)
-    // Nonfigure image is still part of the article readiness contract.
-    const unrelated = view.container.querySelector<HTMLImageElement>('img[alt="Other"]')!
-    Object.defineProperty(unrelated, 'complete', { configurable: true, value: true })
-    fireEvent.load(unrelated)
-    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    // Sources and unrelated images decode before the overview is prepared.
+    for (const image of view.container.querySelectorAll<HTMLImageElement>('article img')) {
+      Object.defineProperty(image, 'complete', { configurable: true, value: true })
+      fireEvent.load(image)
+    }
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('preparing'))
+    expect(view.container.querySelector('article')?.getAttribute('aria-hidden')).toBe('true')
     const before = collectAnnotationBlockTexts(view.container.querySelector('article')!)
     expect(view.container.querySelectorAll('article img')).toHaveLength(2)
     act(() => figureMock.notify?.('failed'))
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     expect(view.container.querySelectorAll('article img')).toHaveLength(2)
     fireEvent.click(view.getByText('查看 PDF'))
     expect(openPdf).toHaveBeenCalledWith({ mappingId: 'caption', blockPosition: '0-caption', origin: 'markdown' })
