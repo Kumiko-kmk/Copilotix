@@ -4,6 +4,8 @@ import { acquirePdfDocument } from '../pdfDocumentCache'
 export interface DetailPage {
   canvas: HTMLCanvasElement
   pages: number | null
+  /** The key-figure sheet beside the first page (figureSpread.ts); the spread is composed when shown. */
+  figures?: { sheet: HTMLCanvasElement }
 }
 
 const PAGE_PIXEL_HEIGHT = 1600

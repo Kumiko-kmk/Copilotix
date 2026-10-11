@@ -28,7 +28,8 @@ well as runtime packages and explicitly lists packages without root license text
 This inventory supplements, and does not replace, embedded package notices.
 
 The paper archive (文库) page adapts motion curves, camera framing, materials,
-lighting and the cassette shell geometry from RhineLabUI
+lighting, the cassette shell geometry and the 360° model viewer (its
+model-viewer.ts and viewer-camera.ts, in archiveViewer.ts and viewerCamera.ts) from RhineLabUI
 (https://github.com/LBEILC/RhineLabUI), MIT License, Copyright (c) 2026 LBEILC.
 desktop/src/renderer/paperArchive/assets/archive-shell.glb contains only the shell
 meshes extracted from its public/assets/archive-cassette.glb. The full MIT notice

@@ -164,6 +164,8 @@ export interface PaperArchiveSceneOptions {
   onDetailFrame?(frame: DetailFrame): void
   /** The glass has started to clear: the panel's text redaction follows it. */
   onDecryptReveal?(): void
+  /** The fully extracted file was clicked: take it apart in the 360° viewer (archiveViewer.ts). */
+  onInspect?(paper: ArchivePaper): void
 }
 
 export interface DetailFrame {
@@ -795,6 +797,13 @@ export class PaperArchiveScene {
   activate(): void {
     const paper = paperAt(this.shelves, this.selected)
     if (paper) this.options.onActivate(paper)
+  }
+
+  private inspect(): void {
+    const paper = paperAt(this.shelves, this.selected)
+    if (!paper) return
+    if (this.options.onInspect) this.options.onInspect(paper)
+    else this.options.onActivate(paper)
   }
 
   dispose(): void {
@@ -1539,10 +1548,11 @@ export class PaperArchiveScene {
       if (cancelled || drag.moved || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 8) return
       const cell = this.pickCell(event.clientX, event.clientY)
       if (this.detailOpen) {
-        // Clicking the extracted paper opens it; clicking anywhere else puts it back.
+        // Clicking the extracted paper takes it apart in the viewer (or opens it when there is
+        // none); clicking anywhere else puts it back.
         if (cell && sameCell(cell, this.selected)) {
           if (this.phase === 'closing') this.openDetail()
-          else if (this.detailReady) this.activate()
+          else if (this.detailReady) this.inspect()
         }
         else this.closeDetail()
         return

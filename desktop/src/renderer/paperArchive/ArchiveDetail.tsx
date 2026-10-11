@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, ArrowRightOutlined, BlockOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { DocumentDetails } from '@shared/ipcSchemas'
 import type { PaperInsight, PaperInsightSource } from '@shared/paperInsight'
@@ -9,6 +9,8 @@ import type { DetailPhase } from './PaperArchiveScene'
 import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from './paperProfile'
 import BriefContent, { type BriefTab } from './BriefContent'
 import { useLineRedaction } from './lineRedaction'
+import { composeSpread, drawFigureSheet, loadSpreadCandidates, loadSpreadImages } from './figureSpread'
+import type { DetailPage } from './detailPage'
 
 type Tab = 'abstract' | 'structure' | 'insight' | BriefTab
 
@@ -30,6 +32,8 @@ export default function ArchiveDetail(props: {
   onPage(page: HTMLCanvasElement | null): void
   onOpen(): void
   onClose(): void
+  /** Take the file apart in the 360° viewer (ArchiveAnatomy.tsx). */
+  onInspect?(): void
   insights?: PaperInsightSource
 }): React.JSX.Element {
   const { paper, onPage } = props
@@ -94,12 +98,12 @@ export default function ArchiveDetail(props: {
     const key = `${paper.id}:${data.summary.updatedAt}`
     // pdf.js is loaded only when a paper is extracted.
     import('./detailPage')
-      .then(({ drawTextPage, loadDetailPage, renderPdfFirstPage }) => loadDetailPage(key, () => pdf
-        ? renderPdfFirstPage(data.pdfUrl)
+      .then(({ drawTextPage, loadDetailPage, renderPdfFirstPage }) => loadDetailPage(`${key}:spread`, () => pdf
+        ? renderSpread(paper.id, data.pdfUrl, data.assetBaseUrl, renderPdfFirstPage)
         : Promise.resolve(drawTextPage(profile.title ?? paper.displayName, profile.translatedAbstract ?? profile.abstract))))
       .then((page) => {
         if (cancelled) return
-        onPage(page.canvas)
+        onPage(page.figures ? composeSpread(page.canvas, page.figures.sheet) : page.canvas)
       })
       .catch(() => { /* The card stays frosted without a page; the fields still load. */ })
     return () => { cancelled = true }
@@ -189,10 +193,30 @@ export default function ArchiveDetail(props: {
           <button type="button" className="paper-archive-primary" onClick={props.onOpen}>
             <span>打开阅读</span><span className="paper-archive-primary-end"><kbd aria-hidden="true">Enter</kbd><ArrowRightOutlined aria-hidden="true" /></span>
           </button>
+          {props.onInspect ? (
+            <button type="button" className="paper-archive-action" disabled={props.phase !== 'open'} onClick={props.onInspect}>
+              <span>拆解档案</span><BlockOutlined aria-hidden="true" />
+            </button>
+          ) : null}
         </footer>
       </article>
     </>
   )
+}
+
+/**
+ * The card's face: the first page on the left and the key figures on a sheet of the same size on
+ * the right. The figure list loads while the page renders; without usable figures the card keeps
+ * the plain first page.
+ */
+async function renderSpread(documentId: string, pdfUrl: string, assetBaseUrl: string, renderPage: (url: string) => Promise<DetailPage>): Promise<DetailPage> {
+  const candidates = loadSpreadCandidates(documentId, assetBaseUrl).catch(() => [])
+  const page = await renderPage(pdfUrl)
+  const ranked = await candidates
+  if (!ranked.length) return page
+  const { width, height } = page.canvas
+  const figures = await loadSpreadImages(ranked, assetBaseUrl, { width, height }).catch(() => [])
+  return figures.length ? { ...page, figures: { sheet: drawFigureSheet(width, height, figures) } } : page
 }
 
 export interface ArchiveMorph {
