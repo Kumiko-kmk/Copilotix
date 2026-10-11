@@ -12,9 +12,11 @@ import type {
   ReaderChatSelection,
 } from '@shared/types'
 import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
+import type { PaperInsightSource } from '@shared/paperInsight'
 import MarkdownPane from './MarkdownPane'
 import PdfPane, { type PdfViewState } from './PdfPane'
 import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
+import PaperInsightActions from './PaperInsightActions'
 import type { PaperChatController } from '../usePaperChat'
 import type { ReaderViewId } from '../readerLayout'
 import { buildReaderFigureGeometries, projectReaderFigureGroups } from '../readerFigureGroups'
@@ -23,6 +25,7 @@ import { createScrollSyncHub } from '../readerScrollSync'
 /** AI chat lives in the same workbench as the readers; it is optional so the reader works without it. */
 export interface ReaderChatOptions {
   controller: PaperChatController
+  insights?: PaperInsightSource
   onOpenSettings(): void
   onCitation(selection: BlockSelection): void
 }
@@ -209,7 +212,9 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
         keepMounted: true,
         panelClassName: 'reader-tab-panel',
         render: ({ active, actionsHost }) => <>
-          {actionsHost ? createPortal(<ReaderChatToolbar chat={chat.controller} />, actionsHost) : null}
+          {actionsHost ? createPortal(<ReaderChatToolbar chat={chat.controller}>
+            <PaperInsightActions key={props.taskId} documentId={props.taskId} source={chat.insights} onOpenSettings={chat.onOpenSettings} />
+          </ReaderChatToolbar>, actionsHost) : null}
           <ReaderChatPanel
             documentId={props.taskId}
             chat={chat.controller}

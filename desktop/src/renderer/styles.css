@@ -439,7 +439,7 @@ button, input, select { font: inherit; }
 /* Compact reader chrome: 28px icon buttons and a 13px title leave more height for reading. */
 .reader-header .ant-btn { width: 28px; min-width: 28px; height: 28px; }
 .reader-header .ant-space { gap: 4px !important; }
-.reader-header .reader-insight-action { width: auto; padding-inline: 8px; font-size: 12px; }
+.reader-chat-toolbar .reader-insight-action { width: auto; height: 28px; padding-inline: 8px; font-size: 12px; }
 .reader-insight-status { display: block; max-width: 300px; white-space: normal; overflow-wrap: anywhere; font-size: 12px; font-variant-numeric: tabular-nums; }
 .reader-title.ant-typography { color: var(--ink); font-size: 13px; font-weight: 700; letter-spacing: .03em; }
 .reader-title { display: inline-block; max-width: 520px; }
@@ -601,6 +601,8 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-body h5 { margin-block: .835em; }
 .markdown-body h6 { margin-block: 1.165em; }
 .markdown-body p { margin: 6px 0; }
+.markdown-body p, .markdown-body li, .markdown-body dd, .paper-chat-turns .paper-chat-question { text-align: justify; }
+.markdown-body pre, .markdown-body table { text-align: start; }
 .markdown-body ul, .markdown-body ol, .markdown-body dl,
 .markdown-body blockquote, .markdown-body pre { margin-block: .5em; }
 .markdown-body hr { margin-block: .25em; }

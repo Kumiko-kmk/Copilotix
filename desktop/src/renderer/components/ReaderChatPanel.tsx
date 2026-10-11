@@ -33,7 +33,7 @@ async function saveConsent(version: number | null, provider: PaperChatProvider |
 }
 
 /** Lives in the reader's shared tab toolbar while the chat tab is active. */
-export function ReaderChatToolbar(props: { chat: PaperChatController }): React.JSX.Element | null {
+export function ReaderChatToolbar(props: { chat: PaperChatController; children?: React.ReactNode }): React.JSX.Element | null {
   const routing = useChatRouting(props.chat)
   const queryClient = useQueryClient()
   const [messageApi, contextHolder] = message.useMessage()
@@ -57,6 +57,7 @@ export function ReaderChatToolbar(props: { chat: PaperChatController }): React.J
   return (
     <div className="reader-chat-toolbar">
       {contextHolder}
+      {props.children}
       <Dropdown
         trigger={['click']}
         menu={{
