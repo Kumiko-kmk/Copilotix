@@ -300,6 +300,9 @@
 .paper-archive-detail header h2, .paper-archive-detail header .paper-archive-translated-title { position: relative; z-index: 3; }
 .paper-archive-redaction-ink { position: absolute; inset: 0; display: block; background: var(--ink); will-change: transform; }
 .paper-archive-reveal { position: relative; }
+/* Covered text is not painted, so the fading panel never shows it through half-transparent bars. */
+.paper-archive-detail[data-redacted] .paper-archive-reveal, .paper-archive-detail[data-redacted] .paper-archive-reveal * { color: transparent !important; }
+.paper-archive-detail[data-redacted] .paper-archive-reveal [data-archive-unredacted] { color: var(--muted) !important; }
 
 
 @media (max-width: 1180px) {

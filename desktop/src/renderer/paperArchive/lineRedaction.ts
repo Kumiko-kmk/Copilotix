@@ -33,6 +33,9 @@ export function useLineRedaction(
     // No cleanup: the bars must survive the render in which `reveal` turns true, and they are
     // replaced on the next measurement or removed with the panel.
     drawCovers(article, host)
+    // While covered the text itself is not painted: the panel fades in, and half-transparent bars
+    // over half-transparent text showed the text before the covers looked solid.
+    article.dataset.redacted = ''
     // Keep the bars aligned when the viewport, fonts, scroll position or the text itself change
     // while covered: a field that loads late moves everything below it.
     let active = true
@@ -49,6 +52,8 @@ export function useLineRedaction(
     const host = layer.current
     if (!host || !reveal || revealedRef.current) return
     revealedRef.current = true
+    // The bars are solid now and still in place: the text can be painted beneath them.
+    if (root.current) delete root.current.dataset.redacted
     const inks = [...host.querySelectorAll<HTMLElement>('.paper-archive-redaction-ink')]
     if (!inks.length || typeof inks[0]!.animate !== 'function') {
       host.replaceChildren()
@@ -81,7 +86,18 @@ function watchLayout(article: HTMLElement, host: HTMLElement, changed: () => voi
     if (frame) return
     frame = requestAnimationFrame(() => { frame = 0; changed() })
   }
-  const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule)
+  // A ResizeObserver reports every element once as soon as it is observed. That first report is
+  // not a change: treating it as one cancelled the bars two frames into their slide.
+  const sizes = new Map<Element, string>()
+  const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entries) => {
+    let moved = false
+    for (const entry of entries) {
+      const size = `${entry.contentRect.width}x${entry.contentRect.height}`
+      if (sizes.has(entry.target) && sizes.get(entry.target) !== size) moved = true
+      sizes.set(entry.target, size)
+    }
+    if (moved) schedule()
+  })
   resize?.observe(article)
   article.querySelectorAll<HTMLElement>(TARGETS).forEach((target) => resize?.observe(target))
   const mutation = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => {
