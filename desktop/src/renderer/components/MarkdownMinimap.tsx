@@ -826,7 +826,7 @@ function scheduleIdleMeasurement(callback: () => void): () => void {
 }
 
 function isVisibleMinimapContent(element: HTMLElement): boolean {
-  if (element.closest('script, style, noscript, template, [hidden], .katex-mathml, .reader-figure-hidden-source, .reader-figure-fallback')) return false
+  if (element.closest('script, style, noscript, template, [hidden], .katex-mathml, .reader-figure-hidden-source, .reader-figure-action')) return false
   const style = window.getComputedStyle(element)
   return style.display !== 'none' && style.visibility !== 'hidden'
 }

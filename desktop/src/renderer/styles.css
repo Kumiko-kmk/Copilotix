@@ -608,15 +608,13 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-body hr { margin-block: .25em; }
 .markdown-body .markdown-block > p { margin-block: 3px; text-indent: 2em; }
 .markdown-body img { display: block; max-width: 100%; height: auto; margin: 8px auto; object-fit: contain; }
-.reader-figure-hidden-source { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.reader-figure-hidden-source { display: none; }
 .reader-figure-snapshot { position: relative; width: 100%; max-width: 900px; margin: 7px auto 4px; overflow: hidden; background: white; user-select: none; }
 .reader-figure-snapshot-canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
-.reader-figure-snapshot[data-rendered="false"] .reader-figure-snapshot-canvas { visibility: hidden; }
+.reader-figure-snapshot[data-rendered="false"] .reader-figure-snapshot-canvas { display: none; }
 .reader-figure-snapshot[data-failed="true"] .reader-figure-snapshot-canvas { display: none; }
-.reader-figure-fallback { position: absolute; inset: 0; display: grid; align-content: center; gap: 8px; padding: 8px; color: var(--muted); background: var(--surface); font-size: 12px; line-height: 1.3; }
-.reader-figure-fallback-images { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: 6px; }
-.reader-figure-fallback-images img { width: 100%; margin: 0; }
-.reader-figure-fallback p { margin: 0; }
+.reader-figure-action { display: inline-block; margin: 4px 0 8px; padding: 2px 6px; border: 1px solid var(--rule); border-radius: 2px; color: var(--primary); background: transparent; cursor: pointer; font: inherit; font-size: 12px; }
+.reader-figure-action:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .reader-figure-caption { clear: both; width: 100%; margin: 0 auto 7px; }
 .reader-figure-caption > :first-child { margin-top: 0; }
 .markdown-body sub, .markdown-body sup { position: relative; vertical-align: baseline; font-size: .75em; line-height: 0; }

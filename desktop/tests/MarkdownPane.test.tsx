@@ -8,9 +8,18 @@ import { buildReaderDocumentBlocks } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
 import type { ReaderFigureGroup } from '../src/renderer/readerFigureGroups'
 import MarkdownPane, { MARKDOWN_BLOCKS_PER_FRAME, MARKDOWN_INITIAL_BLOCKS } from '../src/renderer/components/MarkdownPane'
+import { collectAnnotationBlockTexts } from '../src/renderer/readerAnnotations'
+
+const figureMock = vi.hoisted(() => ({
+  initial: 'ready' as string,
+  notify: undefined as ((state: string) => void) | undefined
+}))
 
 vi.mock('../src/renderer/components/ReaderFigureSnapshot', () => ({
-  default: () => <div className="reader-figure-snapshot" data-rendered="true">original PDF figure</div>
+  default: (props: { onStateChange(state: string): void }) => {
+    React.useEffect(() => { figureMock.notify = props.onStateChange; props.onStateChange(figureMock.initial) }, [])
+    return <div className="reader-figure-snapshot" data-reader-annotation-ignore="true" data-rendered="true">original PDF figure</div>
+  }
 }))
 
 let naturalWidth = 320
@@ -23,6 +32,8 @@ class ResizeObserverMock {
 }
 
 beforeEach(() => {
+  figureMock.initial = 'ready'
+  figureMock.notify = undefined
   naturalWidth = 320
   decodeImage = vi.fn().mockResolvedValue(undefined)
   scrollIntoView = vi.fn()
@@ -248,12 +259,18 @@ describe('MarkdownPane', () => {
       assetSources: ['images/a.jpg', 'images/b.jpg'],
       captionMappingId: 'caption',
       fallbackLegendText: 'original legend',
-      fallbackLegendMarkdown: '原始图例',
+      status: 'complete',
+      reason: 'test fixture',
+      members: [
+        { mappingId: 'chart-a', bbox: [10, 20, 250, 300], kind: 'asset', sourceAsset: 'images/a.jpg', sourceText: '' },
+        { mappingId: 'chart-b', bbox: [260, 20, 500, 300], kind: 'asset', sourceAsset: 'images/b.jpg', sourceText: '' },
+        { mappingId: 'label', bbox: [10, 20, 250, 300], kind: 'supporting', sourceText: '(a)' },
+        { mappingId: 'legend', bbox: [260, 20, 500, 300], kind: 'supporting', sourceText: 'original legend' }
+      ],
       ownerBlockIndex: 0,
       captionBlockIndex: 2,
       memberBlockIndexes: [0, 1, 2],
-      captionMarkdown: '图 4：模型比较。',
-      captionPrefixMarkdown: ''
+      captionMarkdown: '图 4：模型比较。'
     }
     const view = render(
       <MarkdownPane
@@ -279,6 +296,46 @@ describe('MarkdownPane', () => {
     expect(caption.textContent).toBe('图 4：模型比较。')
     expect(snapshot.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(view.container.querySelectorAll('.markdown-body img')).toHaveLength(0)
+  })
+
+  it('preserves pending/failed sources, mixed prose, unrelated images and annotation text when a crop becomes ready', async () => {
+    figureMock.initial = 'pending'
+    const blocks = [
+      { ...block('a', 'Before text.\n\n![](images/a.jpg)  \n(a)\n\n![Other](images/other.jpg)\n\nAfter text.'), mappingIds: ['a', 'prose', 'other'], annotationKey: 'content:0' },
+      { ...block('caption', '图 1：第一段。\n\n完整第二段。'), annotationKey: 'content:1' }
+    ]
+    const group: ReaderFigureGroup = {
+      id: 'mixed', pageIndex: 0, cropBox: [10, 20, 500, 300], pageSize: [612, 792],
+      mappingIds: ['a', 'caption'], assetSources: ['a.jpg'], captionMappingId: 'caption',
+      captionBlockPosition: '0-caption', status: 'complete', reason: 'fixture',
+      members: [{ mappingId: 'a', kind: 'supporting', bbox: [10, 20, 20, 30], sourceText: '(a)' }],
+      fallbackLegendText: '', ownerBlockIndex: 0, captionBlockIndex: 1, memberBlockIndexes: [0, 1],
+      captionMarkdown: '图 1：第一段。\n\n完整第二段。'
+    }
+    const openPdf = vi.fn(), select = vi.fn()
+    const view = render(<MarkdownPane active blocks={blocks} figureGroups={[group]} pdfUrl="copilotix-asset://task/original.pdf"
+      assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]} highlightColor="yellow"
+      onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null}
+      onSelect={select} onOpenFigurePdf={openPdf} />)
+    // Nonfigure image is still part of the article readiness contract.
+    const unrelated = view.container.querySelector<HTMLImageElement>('img[alt="Other"]')!
+    Object.defineProperty(unrelated, 'complete', { configurable: true, value: true })
+    fireEvent.load(unrelated)
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    const before = collectAnnotationBlockTexts(view.container.querySelector('article')!)
+    expect(view.container.querySelectorAll('article img')).toHaveLength(2)
+    act(() => figureMock.notify?.('failed'))
+    expect(view.container.querySelectorAll('article img')).toHaveLength(2)
+    fireEvent.click(view.getByText('查看 PDF'))
+    expect(openPdf).toHaveBeenCalledWith({ mappingId: 'caption', blockPosition: '0-caption', origin: 'markdown' })
+    expect(select).not.toHaveBeenCalled()
+    act(() => figureMock.notify?.('ready'))
+    expect(view.container.querySelectorAll('article img')).toHaveLength(1)
+    expect(view.getByText('Before text.')).toBeTruthy()
+    expect(view.getByText('After text.')).toBeTruthy()
+    expect(view.getByText('完整第二段。')).toBeTruthy()
+    expect(view.container.querySelector('[data-annotation-block-key="content:0"]')?.getAttribute('data-block-ids')).toBe('a caption prose other')
+    expect(collectAnnotationBlockTexts(view.container.querySelector('article')!)).toEqual(before)
   })
 
   it('uses instant PDF navigation without feeding the synthetic scroll back into selection', async () => {

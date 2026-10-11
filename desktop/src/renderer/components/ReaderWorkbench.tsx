@@ -131,6 +131,7 @@ export default function ReaderWorkbench(props: {
   onFocusGroup(groupId: string): void
   /** Bump to make sure a reading view is on screen (e.g. after a chat citation). */
   revealReadingNonce?: number
+  revealPdfNonce?: number
 }): React.JSX.Element {
   const rootRef = React.useRef<HTMLDivElement>(null)
   const layoutRef = React.useRef(props.layout)
@@ -276,6 +277,9 @@ export default function ReaderWorkbench(props: {
     const next = ensureReadingView(layout, available)
     if (next !== layout) changeRef.current(next)
   }, [props.revealReadingNonce])
+  React.useEffect(() => {
+    if (props.revealPdfNonce) setMaximized(null)
+  }, [props.revealPdfNonce])
 
   // Keyboard shortcuts, active while the reader (and so the workbench) is mounted.
   React.useEffect(() => {

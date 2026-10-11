@@ -58,6 +58,7 @@ export type ReaderViewSpecs = Partial<Record<ReaderViewId, ReaderViewSpec>>
 export interface ReaderViewsInput {
   pdfUrl?: string
   mappings?: BlockMapping[]
+  layoutJson?: string
   originalBlocks: ReaderBlock[]
   translatedBlocks: ReaderBlock[]
   translatedReady: boolean
@@ -69,6 +70,7 @@ export interface ReaderViewsInput {
   onAddToChat?(selection: ReaderChatSelection): void
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
+  onOpenFigurePdf?(selection: BlockSelection): void
   chat?: ReaderChatOptions
   /** Reading views currently on screen with scroll sync on; they lead and follow each other. */
   scrollSyncViews?: readonly ReaderViewId[]
@@ -98,14 +100,14 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     () => props.annotations.filter((annotation) => annotation.view === 'translated'),
     [props.annotations]
   )
-  const figureGeometries = React.useMemo(() => buildReaderFigureGeometries(mappings), [mappings])
+  const figureGeometries = React.useMemo(() => buildReaderFigureGeometries(mappings, props.layoutJson), [mappings, props.layoutJson])
   const originalFigureGroups = React.useMemo(
     () => projectReaderFigureGroups(figureGeometries, props.originalBlocks),
     [figureGeometries, props.originalBlocks]
   )
   const translatedFigureGroups = React.useMemo(
-    () => projectReaderFigureGroups(figureGeometries, props.translatedBlocks),
-    [figureGeometries, props.translatedBlocks]
+    () => projectReaderFigureGroups(figureGeometries, props.translatedBlocks, props.originalBlocks),
+    [figureGeometries, props.translatedBlocks, props.originalBlocks]
   )
   const { onReplaceAnnotations } = props
   const replaceOriginalAnnotations = React.useCallback(
@@ -138,6 +140,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           assetBaseUrl={props.assetBaseUrl}
           pdfUrl={props.pdfUrl}
           figureGroups={originalFigureGroups}
+          onOpenFigurePdf={props.onOpenFigurePdf}
           taskId={props.taskId}
           view="original"
           annotations={originalAnnotations}
@@ -164,6 +167,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
             assetBaseUrl={props.assetBaseUrl}
             pdfUrl={props.pdfUrl}
             figureGroups={translatedFigureGroups}
+            onOpenFigurePdf={props.onOpenFigurePdf}
             taskId={props.taskId}
             view="translated"
             annotations={translatedAnnotations}
@@ -228,7 +232,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     return specs
   }, [
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
-    props.onAddToChat, props.onSelect, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
+    props.onAddToChat, props.onSelect, props.onOpenFigurePdf, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
     props.taskStatus, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
     rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups

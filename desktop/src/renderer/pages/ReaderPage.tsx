@@ -19,6 +19,7 @@ import type { PaperInsightSource } from '@shared/paperInsight'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
   activeSyncedViews,
+  revealView,
   findGroup,
   groupOfView,
   listGroups,
@@ -34,6 +35,7 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
   const [layout, setLayout] = React.useState<ReaderLayout>(loadReaderLayout)
   const [focusedGroupId, setFocusedGroupId] = React.useState<string | null>(null)
   const [revealReadingNonce, setRevealReadingNonce] = React.useState(0)
+  const [revealPdfNonce, setRevealPdfNonce] = React.useState(0)
   const [selection, setSelection] = React.useState<BlockSelection | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -78,6 +80,11 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
     [markdown, mappings, translatedMarkdown, translatedSourceBlocks]
   )
   const selectBlock = React.useCallback((next: BlockSelection) => setSelection(next), [])
+  const openFigurePdf = React.useCallback((next: BlockSelection) => {
+    setLayout(current => revealView(current, 'pdf'))
+    setSelection(next)
+    setRevealPdfNonce(value => value + 1)
+  }, [])
 
   // Adding a selection never leaves the current reader; the chat tab shows the count.
   const { addSelection } = chat
@@ -164,9 +171,11 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
         focusedGroupId={focusedGroupId}
         onFocusGroup={setFocusedGroupId}
         revealReadingNonce={revealReadingNonce}
+        revealPdfNonce={revealPdfNonce}
         views={{
           pdfUrl: document.pdfUrl,
           mappings: document.mappings,
+          layoutJson: document.layoutJson,
           originalBlocks,
           translatedBlocks,
           translatedReady,
@@ -177,6 +186,7 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
           onReplaceAnnotations: replaceAnnotations,
           selection,
           onSelect: selectBlock,
+          onOpenFigurePdf: openFigurePdf,
           onAddToChat: addToChat,
           chat: chatOptions
         }}
@@ -196,6 +206,7 @@ function ReaderWorkspace(props: {
   focusedGroupId: string | null
   onFocusGroup(groupId: string): void
   revealReadingNonce: number
+  revealPdfNonce: number
   views: ReaderViewsInput
 }): React.JSX.Element {
   const scrollSyncViews = React.useMemo(() => activeSyncedViews(props.layout), [props.layout])
@@ -208,6 +219,7 @@ function ReaderWorkspace(props: {
       onLayoutChange={props.onLayoutChange}
       onFocusGroup={props.onFocusGroup}
       revealReadingNonce={props.revealReadingNonce}
+      revealPdfNonce={props.revealPdfNonce}
     />
   )
 }
