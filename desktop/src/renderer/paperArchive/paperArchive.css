@@ -222,12 +222,11 @@
 }
 .paper-archive-detail-back kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 3px; color: var(--muted); font: 10px/1.4 inherit; }
 .paper-archive-detail-back:hover { color: var(--archive-accent); }
-/* The file header lines up with the brand (eyebrow with eyebrow, title with 文库); the panel ends
-   at the extracted card's foot and keeps that height on every tab. Only the tab panel scrolls. */
+/* Keep the header aligned with the brand; use the page's remaining height for the abstract. */
 .paper-archive-detail {
   position: absolute; z-index: 2; top: var(--page-top); left: var(--archive-panel-left);
   width: var(--archive-detail-width); box-sizing: border-box;
-  height: max(360px, calc(var(--archive-detail-top) + var(--archive-detail-height) - var(--page-top)));
+  bottom: 26px;
 }
 .paper-archive-detail { display: flex; min-height: 0; padding: 18px 0 0; flex-direction: column; }
 .paper-archive-detail > * { flex: none; }
@@ -254,7 +253,6 @@
 }
 .paper-archive-tabs button small { font-size: 10px; font-variant-numeric: tabular-nums; }
 .paper-archive-tab-count { margin-left: 2px; color: var(--muted); font-size: 10.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.paper-archive-elapsed { font-variant-numeric: tabular-nums; }
 .paper-archive-primary-end { display: inline-flex; align-items: center; gap: 12px; }
 .paper-archive-primary kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, #fff 35%, transparent); border-radius: 3px; color: color-mix(in srgb, #fff 70%, transparent); font: 10px/1.4 inherit; letter-spacing: .04em; }
 .paper-archive-tabs button::after {
@@ -270,13 +268,9 @@
 }
 .paper-archive-tabs[data-indicator="moving"]::after { transition: transform .28s var(--ease-out), width .28s var(--ease-out); }
 .paper-archive-tabs button:hover { color: var(--ink); }
-.paper-archive-tabpanel { min-height: 64px; margin-top: 14px; padding-right: 8px; overflow: auto; overscroll-behavior: contain; animation: paper-archive-fade .15s ease both; }
-.paper-archive-tabpanel::-webkit-scrollbar { width: 8px; }
-.paper-archive-tabpanel::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 99px; background: rgba(120, 104, 82, .3) padding-box; }
+.paper-archive-tabpanel { min-height: 64px; margin-top: 14px; overflow: auto; scrollbar-width: none; overscroll-behavior: contain; animation: paper-archive-fade .15s ease both; }
+.paper-archive-tabpanel::-webkit-scrollbar { display: none; }
 .paper-archive-tabpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.paper-archive-tabpanel-head button, .paper-archive-insight small button {
-  padding: 2px 0; border: 0; border-bottom: 1px solid currentColor; background: transparent; color: var(--archive-accent); font-size: 12px; cursor: pointer;
-}
 .paper-archive-abstract { margin: 0; color: var(--text); font-size: 14px; line-height: 1.85; text-align: justify; user-select: text; }
 .paper-archive-translated-abstract { text-indent: 2em; overflow-wrap: anywhere; }
 .paper-archive-outline { margin: 0; padding-left: 0; list-style: none; counter-reset: section; }
@@ -324,9 +318,7 @@
 .paper-archive-brief-content p { margin: 6px 0; }
 .paper-archive-brief-content ul, .paper-archive-brief-content ol { margin: 6px 0; padding-left: 20px; }
 .paper-archive-brief-content dd { margin: 0 0 8px; }
-.paper-archive-brief-note, .paper-archive-brief-status { color: var(--muted); font-size: 11px; line-height: 1.6; }
-.paper-archive-brief-status { margin-top: 12px; }
-.paper-archive-brief-status button { padding: 2px 6px; border: 0; background: transparent; color: var(--archive-accent); text-decoration: underline; cursor: pointer; }
+.paper-archive-brief-note { color: var(--muted); font-size: 11px; line-height: 1.6; }
 .paper-archive-badge { display: inline-block; margin-right: 6px; padding: 1px 5px; border: 1px solid var(--muted-surface); border-radius: 3px; font-size: 10px; }
 .paper-archive-badge.needs-review { color: var(--archive-index-partial); border-color: currentColor; }
 .paper-archive-finding { padding-bottom: 12px; border-bottom: 1px solid var(--muted-surface); }

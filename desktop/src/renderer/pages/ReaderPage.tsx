@@ -15,6 +15,8 @@ import { IpcClientError } from '@shared/ipc'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutations'
 import ReaderWorkbench from '../components/ReaderWorkbench'
 import DocumentLifecycleActions from '../components/DocumentLifecycleActions'
+import PaperInsightActions from '../components/PaperInsightActions'
+import type { PaperInsightSource } from '@shared/paperInsight'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
   activeSyncedViews,
@@ -27,7 +29,7 @@ import {
   type ReaderViewId
 } from '../readerLayout'
 
-export default function ReaderPage(props: { documentId: string; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
+export default function ReaderPage(props: { documentId: string; insights?: PaperInsightSource; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
   const queryClient = useQueryClient()
   const chat = usePaperChat(props.documentId)
   const [layout, setLayout] = React.useState<ReaderLayout>(loadReaderLayout)
@@ -147,6 +149,7 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
       <header className="reader-header">
         <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
         <Space>
+          <PaperInsightActions key={document.summary.id} documentId={document.summary.id} source={props.insights} onOpenSettings={props.onOpenSettings} />
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
           <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />
           <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>

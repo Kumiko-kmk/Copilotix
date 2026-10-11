@@ -2,7 +2,8 @@ import React from 'react'
 import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { DocumentDetails } from '@shared/ipcSchemas'
-import type { PaperInsight, PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
+import type { PaperInsight, PaperInsightSource } from '@shared/paperInsight'
+import { usePaperInsight } from '../usePaperInsight'
 import type { ArchivePaper } from './archiveShelves'
 import type { DetailPhase } from './PaperArchiveScene'
 import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from './paperProfile'
@@ -174,7 +175,7 @@ export default function ArchiveDetail(props: {
           {activeTab === 'abstract' ? (
             <>
               <div className="paper-archive-tabpanel-head">
-                <span className="paper-archive-eyebrow">ABSTRACT</span>
+                <span className="paper-archive-eyebrow" data-archive-unredacted>ABSTRACT</span>
               </div>
               <p className="paper-archive-abstract paper-archive-translated-abstract">{abstract ?? (profile ? '暂无译文摘要。' : '正在读取…')}</p>
             </>
@@ -182,17 +183,8 @@ export default function ArchiveDetail(props: {
             profile?.sections.length
               ? <ol className="paper-archive-outline">{profile.sections.map((section) => <li key={section}>{section}</li>)}</ol>
               : <p className="paper-archive-abstract">{profile ? '未识别到章节标题。' : '正在读取…'}</p>
-          ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} onRegenerate={insight.generate} /> : <p className="paper-archive-abstract">生成档案卡后可查看研究问题、证据、发现与阅读路线。</p>}
+          ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} /> : <p className="paper-archive-abstract">在阅读器中生成档案卡后，可在这里查看研究问题、证据、发现与局限。</p>}
         </section>
-        {props.insights && insight.state?.status !== 'unavailable' ? <div className="paper-archive-brief-status" role="status">
-          {insight.state?.status === 'generating' ? <>AI 正在阅读这篇论文…<Elapsed /> <button type="button" onClick={() => { void props.insights?.cancel?.(paper.id).catch(() => undefined) }}>取消生成</button></>
-            : <>
-              {insight.state?.status === 'failed' ? insight.state.error
-                : briefState ? `${briefState.brief.provenance.model.name} · ${briefState.stale ? '论文内容已更新' : briefState.promptOutdated ? '可用新版提示词重新生成' : 'AI 档案卡'}`
-                  : ready ? '旧版解读可继续阅读，可升级为新版档案卡。' : '尚未生成 AI 档案卡。'}
-              {insight.state ? <button type="button" onClick={insight.generate}>{ready ? '重新生成档案卡' : '生成 AI 档案卡'}</button> : null}
-            </>}
-        </div> : null}
         <footer className="paper-archive-detail-actions">
           <button type="button" className="paper-archive-primary" onClick={props.onOpen}>
             <span>打开阅读</span><span className="paper-archive-primary-end"><kbd aria-hidden="true">Enter</kbd><ArrowRightOutlined aria-hidden="true" /></span>
@@ -201,18 +193,6 @@ export default function ArchiveDetail(props: {
       </article>
     </>
   )
-}
-
-/** Time since the generating state appeared, as m:ss; a detailed brief can take a minute or two. */
-function Elapsed(): React.JSX.Element {
-  const [start] = React.useState(() => Date.now())
-  const [now, setNow] = React.useState(start)
-  React.useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
-  const seconds = Math.floor((now - start) / 1000)
-  return <span className="paper-archive-elapsed"> {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>
 }
 
 export interface ArchiveMorph {
@@ -253,39 +233,7 @@ function Field(props: { index: number; label: string; value: string | null; wide
   )
 }
 
-function usePaperInsight(documentId: string, source?: PaperInsightSource) {
-  const [state, setState] = React.useState<PaperInsightState | null>(null)
-  const [ready, setReady] = React.useState<Extract<PaperInsightState, { status: 'ready' }> | null>(null)
-  const generation = React.useRef(0)
-  React.useEffect(() => {
-    const version = ++generation.current
-    let updated = false
-    setState(null)
-    setReady(null)
-    if (!source) return
-    const accept = (next: PaperInsightState): void => {
-      if (generation.current !== version) return
-      setState(next)
-      if (next.status === 'ready') setReady(next)
-    }
-    const stop = source.subscribe((id, next) => { if (id === documentId) { updated = true; accept(next) } })
-    source.get(documentId).then((next) => { if (!updated) accept(next) }, () => {
-      if (!updated) accept({ status: 'failed', error: '无法读取本地档案卡，请重试。' })
-    })
-    return () => { generation.current++; stop() }
-  }, [documentId, source])
-  const generate = (): void => {
-    if (!source) return
-    const version = generation.current
-    setState({ status: 'generating' })
-    source.generate(documentId).catch(() => {
-      if (generation.current === version) setState({ status: 'failed', error: '无法开始生成，请稍后重试。' })
-    })
-  }
-  return { state, ready, generate }
-}
-
-function InsightView(props: { insight: PaperInsight; stale: boolean; onRegenerate(): void }): React.JSX.Element {
+function InsightView(props: { insight: PaperInsight; stale: boolean }): React.JSX.Element {
   const { insight } = props
   const list = (label: string, items: string[]): React.ReactNode => items.length ? (
     <div><dt>{label}</dt><dd><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></dd></div>
@@ -300,7 +248,7 @@ function InsightView(props: { insight: PaperInsight; stale: boolean; onRegenerat
         {list('主要发现', insight.findings)}
         {list('局限', insight.limitations)}
       </dl>
-      <small>{insight.model.name}{props.stale ? ' · 论文内容已更新，' : ' · '}<button type="button" onClick={props.onRegenerate}>重新生成</button></small>
+      <small>{insight.model.name}{props.stale ? ' · 论文内容已更新' : ''}</small>
     </div>
   )
 }

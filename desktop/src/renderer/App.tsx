@@ -141,7 +141,7 @@ export default function App(): React.JSX.Element {
         {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} /> : null}
         {view.name === 'reader' ? (
           <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>
-            <ReaderPage documentId={view.documentId} onBack={() => setView({ name: view.returnTo ?? 'new' })} onOpenSettings={() => setView({ name: 'settings' })} />
+            <ReaderPage documentId={view.documentId} insights={insights} onBack={() => setView({ name: view.returnTo ?? 'new' })} onOpenSettings={() => setView({ name: 'settings' })} />
           </React.Suspense>
         ) : null}
         {!settings && view.name !== 'reader' && view.name !== 'library' ? <div className="page-loading">正在加载…</div> : null}

@@ -115,7 +115,7 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - 每分類一列，列／行循環並記住論文 ID；右下角列數等於分類數，分類名十二字固定寬度居中，箭頭位置固定。分類算法、分頁與緩存只在 [內容分類](docs/LIBRARY_CATEGORIES_ZH.md) 維護。
 - 瀏覽標題移除末尾 `.pdf`，固定兩行高度、單行垂直居中、超出省略；譯文標題固定一行，沒有譯文留空。停留選中論文 180ms 後讀取，與詳情共用 query cache；不另調模型。
 - 選中頁元信息只含單行關鍵詞（空格分隔，按寬度縮至 11px，仍超出省略）及下方總結（v2 `tldr`／v1 `summary`）；不顯示類型、日期、生成狀態。詳情標題下同樣顯示譯文標題，不重複類型／學科／總結；證據基礎與檢驗方式暫保留，替代資訊待使用者決定。
-- 詳情摘要只顯示譯文，缺失明示，首行縮排兩字；HTTP(S) 連結保留目標、下劃線且可換行。無 v2 時保留結構／舊解讀頁；v2 分頁與生成欄位以 [Paper Brief](docs/PAPER_BRIEF_ZH.md) 為準。
+- 詳情摘要只顯示譯文，缺失明示，首行縮排兩字；ABSTRACT 不參與遮擋，正文仍沿用解密動畫。詳情延伸至頁面底部，「打开阅读」靠下，隱藏捲動條並保留滾輪／鍵盤捲動。生成操作在閱讀器頂欄「档案卡」點擊選單。HTTP(S) 連結保留目標、下劃線且可換行。無 v2 時保留結構／舊解讀頁；v2 分頁與生成欄位以 [Paper Brief](docs/PAPER_BRIEF_ZH.md) 為準。
 - 生成授權、取消、併發、存儲與兼容只在 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md) 維護。後續已提出但未實作：預設同意並自動生成；接手時須同步設定、Main／IPC 授權與流程，不能把已移除 unavailable 底部狀態列當成已改授權。既有 15 篇真實生成結果已保存，批次證據在 `../investigation/paper-brief-bulk-20261010/SUMMARY.md`，不代表人工品質驗收。
 - 發布時間戳由 `runtime-file-times.mjs` 只更新 staging runtime，避免 Electron 資源顯示 1980 年；不修改依賴、內容、簽章或用戶文庫。
 
@@ -129,5 +129,5 @@ pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:r
 - 搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦，Enter 選首項，Tab 選結果，IME 不誤觸並取消慣性。瀏覽 Esc 先收搜尋；抽出期間檢索收合且 inert、結果關閉，Esc 關詳情並移焦回文庫。收合 0.24 秒內完成，詳情拉伸延遲 120ms 才到達頂部，兩者不交疊；返回時詳情先淡出，橫線 0.2 秒後展開、文字 0.38 秒後展開。搜尋結果與選中頁關鍵詞／總結載入時淡入；詳情分頁以單一滑動指示線切換。WebGL 失敗仍可搜尋進 Reader。
 - `closing` 保留舊文獻／封面／模型：面板 180ms 淡出且 inert，模型／鏡頭 320ms 收回後卸載。僅一個待選目標，方向輸入累積、搜尋覆蓋；目標移除即取消，收回中重開同篇接續姿態並清掉待選；reduced-motion 直接收回。
 - `entryScanTime` 把入場掃描平段壓至約 0.25 秒；肩部在滑入結束時升起。`ARRAY_SCREEN_SHIFT` 將選中卡移向左下（-4%／10% 視口）；瀏覽／詳情共用 `--archive-panel-left` 與 `--archive-detail-width`。
-- `onDetailFrame` 寫入 `--archive-detail-top/height`，詳情頂端與品牌對齊、底端至卡片下緣；分頁高度固定，僅正文捲動，floor veil 遮蓋陣列。不加裝飾框線；返回按鈕在卡片下方。標題位置必須在 opening 時從仍掛載的瀏覽面板捕捉；reduced-motion 跳過。
+- `onDetailFrame` 寫入 `--archive-detail-top/height` 供 floor veil 遮蓋陣列；詳情頂端與品牌對齊、底端保留 26px 頁面邊距，分頁高度固定，僅正文捲動。不加裝飾框線；返回按鈕在卡片下方。標題位置必須在 opening 時從仍掛載的瀏覽面板捕捉；reduced-motion 跳過。
 - 展開後 ≤8.3M 像素，用 2 倍顯示器 DPR，放不下回原生 DPR（≤2），透射全解析度；靜止不重繪，收回恢復瀏覽上限。`applyResolution` 只標記，下一幀開頭 `flushResolution` 後立即渲染，禁止在幀間直接改緩衝區尺寸造成空白幀；首頁貼圖按展開後設備像素高度重採樣。

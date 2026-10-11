@@ -439,6 +439,8 @@ button, input, select { font: inherit; }
 /* Compact reader chrome: 28px icon buttons and a 13px title leave more height for reading. */
 .reader-header .ant-btn { width: 28px; min-width: 28px; height: 28px; }
 .reader-header .ant-space { gap: 4px !important; }
+.reader-header .reader-insight-action { width: auto; padding-inline: 8px; font-size: 12px; }
+.reader-insight-status { display: block; max-width: 300px; white-space: normal; overflow-wrap: anywhere; font-size: 12px; font-variant-numeric: tabular-nums; }
 .reader-title.ant-typography { color: var(--ink); font-size: 13px; font-weight: 700; letter-spacing: .03em; }
 .reader-title { display: inline-block; max-width: 520px; }
 /* Reader workbench: editor-style tab groups in nested row/column splits. */

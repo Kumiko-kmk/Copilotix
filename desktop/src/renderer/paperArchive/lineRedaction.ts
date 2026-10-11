@@ -108,7 +108,7 @@ function drawCovers(article: HTMLElement, host: HTMLElement): void {
     const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT)
     let node: Node | null
     while ((node = walker.nextNode())) {
-      if (!node.textContent?.trim()) continue
+      if (!node.textContent?.trim() || node.parentElement?.closest('[data-archive-unredacted]')) continue
       const range = document.createRange()
       range.selectNodeContents(node)
       if (typeof range.getClientRects !== 'function') return
