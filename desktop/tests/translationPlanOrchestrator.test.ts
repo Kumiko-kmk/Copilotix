@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TaskComputePort } from '../src/core/ports'
-import { PathPolicy } from '../src/main/pathPolicy'
+import { PathPolicy } from '@core/pathPolicy'
 import { TranslationCredentialError, TranslationHttpError, type TranslationProvider } from '../src/main/translation/providers'
 import { TranslationPlanOrchestrator, withRetry } from '../src/main/translation/translationPlanOrchestrator'
 import type {

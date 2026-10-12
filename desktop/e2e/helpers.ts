@@ -8,7 +8,7 @@ import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { ArtifactKind } from '../src/core/types'
-import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from '../src/shared/e2eLaunchPolicy'
+import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from './launchPolicy'
 import { credentialServiceForRuntime, WindowsCredentialVault, type CredentialAccount } from '../src/main/credentialVault'
 import {
   alignMarkdownBlocks,

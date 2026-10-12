@@ -42,12 +42,6 @@ export interface JobClaimRequest {
   kind?: JobKind
 }
 
-export interface JobClaim {
-  job: Job
-  leaseOwner: string
-  leaseExpiresAt: string
-}
-
 export interface JobListQuery {
   documentId?: string
   kind?: JobKind

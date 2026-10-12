@@ -10,7 +10,7 @@ import { buildBriefContext, clip } from '@shared/paperBrief/context'
 import { FIGURE_INSIGHT_MAX_IMAGE_BYTES, FIGURE_INSIGHT_PROMPT_VERSION, figureInsightDescriptorSchema,
   figureInsightLocationSchema, figureInsightRecordSchema, figureInsightSaveSchema,
   type FigureInsightRequest, type FigureInsightDescriptor, type FigureInsightSave, type FigureInsightState, type FigureInsightRecord } from '@shared/figureInsight'
-import { PathPolicy } from './pathPolicy'
+import { PathPolicy } from '@core/pathPolicy'
 import type { V2TaskRepositoryCompat } from './v2TaskRepositoryCompat'
 
 const hash = (value: string | Buffer): string => createHash('sha256').update(value).digest('hex')

@@ -4,7 +4,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
 import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
-import type { PathPolicyPort } from './pathPolicy'
+import type { PathPolicyPort } from '@core/ports'
 import type {
   AppSettings,
   CopilotixTask,
@@ -25,9 +25,9 @@ import {
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { normalizeEnabledProviders, normalizeProviderOrder } from '@shared/providerPolicy'
 import type { ArtifactReference } from './taskRepositoryCompat'
-import { PathPolicy, resolveLexicalWithinRoot } from './pathPolicy'
+import { PathPolicy, resolveLexicalWithinRoot } from '@core/pathPolicy'
 import { V2Database } from './v2Database'
-import { projectDocumentSummary } from './documentProjection'
+import { projectDocumentSummary } from '@shared/documentSummary'
 import { SqliteJobRepository } from './sqliteJobRepository'
 
 export interface CompatDocumentRow {
@@ -550,35 +550,9 @@ export class V2TaskRepositoryCompat {
     return this.translationBlocksByJob.all(taskId, job.id) as unknown as TranslationBlockRecord[]
   }
 
-  updateTranslationRun(taskId: string, total: number, completed: number, failed: number): void {
-    this.database.transaction(() => {
-      const job = this.latestJob(taskId, 'translate')
-      if (!job) throw new Error('翻译作业尚未创建')
-      const checkpoint = {
-        ...parseObject(job.checkpoint_json),
-        totalBlocks: total,
-        completedBlocks: completed,
-        failedBlocks: failed
-      }
-      this.database.connection.prepare('UPDATE jobs SET checkpoint_json=?, updated_at=? WHERE id=?')
-        .run(JSON.stringify(checkpoint), new Date().toISOString(), job.id)
-    })
-  }
-
   getCache(cacheKey: string): string | null {
     const row = this.database.connection.prepare('SELECT translated_markdown FROM translation_cache WHERE cache_key=?').get(cacheKey) as { translated_markdown: string } | undefined
     return row?.translated_markdown ?? null
-  }
-
-  putCache(cacheKey: string, translated: string, provider: string, model: string): void {
-    this.database.transaction(() => {
-      this.database.connection.prepare(`
-        INSERT INTO translation_cache(cache_key,translated_markdown,provider,model,created_at)
-        VALUES(?,?,?,?,?)
-        ON CONFLICT(cache_key) DO UPDATE SET translated_markdown=excluded.translated_markdown,
-          provider=excluded.provider,model=excluded.model,created_at=excluded.created_at
-      `).run(cacheKey, translated, provider, model, new Date().toISOString())
-    })
   }
 
   listReaderAnnotations(taskId: string): ReaderAnnotation[] {

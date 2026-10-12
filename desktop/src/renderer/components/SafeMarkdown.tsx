@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeTableMath from '../rehypeTableMath'
 import type { Citation } from '@shared/ragSchemas'
-import { figureAssetName, isFigureLabel } from '../readerFigureGroups'
+import { figureAssetName, isFigureLabel } from '@shared/readerFigureGroups'
 
 const markdownSanitizeSchema = {
   ...defaultSchema,

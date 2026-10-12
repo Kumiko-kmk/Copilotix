@@ -92,10 +92,6 @@ export class AsyncSemaphore {
     if (!Number.isInteger(limit) || limit < 1) throw new Error('Semaphore limit must be positive')
   }
 
-  get activeCount(): number {
-    return this.active
-  }
-
   get availableCount(): number {
     return Math.max(0, this.limit - this.active)
   }
@@ -213,10 +209,6 @@ export class JobScheduler extends EventEmitter {
     return this.active.size
   }
 
-  getLeaseOwner(): string {
-    return this.leaseOwner
-  }
-
   /** Wake a running scheduler after a command enqueues or requeues work. */
   wake(): void {
     if (this.state !== 'running' || !this.hasRunner()) return
@@ -236,10 +228,6 @@ export class JobScheduler extends EventEmitter {
     }
   }
 
-  unregisterRunner(kind: JobKind): void {
-    delete this.runners[kind]
-  }
-
   async start(): Promise<void> {
     if (this.state === 'running') return
     if (this.state === 'stopping') throw new Error('Job scheduler is stopping')
@@ -251,11 +239,6 @@ export class JobScheduler extends EventEmitter {
       this.schedulePoll()
       this.scheduleHeartbeat()
     }
-  }
-
-  async pollNow(): Promise<void> {
-    if (this.state !== 'running' || !this.hasRunner()) return
-    await this.pollOnce()
   }
 
   async cancel(jobId: string): Promise<void> {

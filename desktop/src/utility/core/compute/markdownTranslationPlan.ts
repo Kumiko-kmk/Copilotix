@@ -49,7 +49,8 @@ import {
   type TableTranslationPlan,
   type TableTranslationUnit
 } from './tableTranslation'
-import { PathPolicy, type PathPolicyPort } from '../persistence/pathPolicy'
+import { PathPolicy } from '@core/pathPolicy'
+import type { PathPolicyPort } from '@core/ports'
 import type { TranslationJobBinding, V2TaskRepositoryCompat } from '../persistence/v2TaskRepositoryCompat'
 
 const processor = unified()
@@ -419,12 +420,6 @@ export class MarkdownTranslationPlanManager {
       hashes: { translated: translatedHash, manifest: manifestHash, checkpoint: checkpointHash }
     }
     return translationPlanFinalizeResultSchema.parse(result)
-  }
-
-  /** Useful to lifecycle code when a utility process is drained. */
-  clear(taskId?: string, jobId?: string): void {
-    if (taskId && jobId) this.plans.delete(planKey(taskId, jobId))
-    else this.plans.clear()
   }
 
   private async ensurePlan(taskId: string, jobId: string): Promise<PlanState> {

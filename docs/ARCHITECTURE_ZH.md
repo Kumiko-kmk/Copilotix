@@ -16,7 +16,7 @@
 | 数据库文件 | `copilotix-desktop-v2.sqlite3`，位于上述 `userData` 目录 |
 | 结果目录 | `<outputRoot>\documents-v2\{documentId}`；`documentId` 为 UUID |
 | 当前产品能力 | Parser API 解析、Markdown/表格翻译、PDF 与 Markdown 阅读、映射和阅读标注、可恢复作业与验证发布 |
-| RAG / 问答 | 单篇问答已接入；RAG 已落地范围见第 10 节 |
+| 问答 | 单篇问答与其切块索引已接入；多文献 RAG 路线已放弃（第 10 节） |
 
 本文只讨论 `desktop/` 运行时。Desktop 连接 MinerU 在线 v4 API，不依赖 Python CLI 或本地解析模型。旧 Python 引擎和 Docker 配置已从当前 master 工作树移除。
 
@@ -47,24 +47,40 @@ Utility Process（受监督；SQLite 与 compute 的唯一拥有者）
 5. 文件内容、PDF、ZIP、完整 Markdown、HTML、Buffer、TypedArray 和 stream 不通过 RPC 搬运；跨进程只传受限 JSON、路径/作业/产物标识及小型结果。
 6. 所有跨边界数据都必须有明确 schema、最大尺寸、错误码和取消/超时语义；没有“先传过去再由另一端猜测”的隐式契约。
 
-## 3. 代码地图
+## 3. 代码地图与模块边界
 
-| 路径 | 权威职责 | 边界 |
+### 3.1 依赖方向（已用 import 图核对，无反向或跨层依赖）
+
+```text
+renderer ──▶ shared ◀── preload
+main ──▶ core ──▶ shared ◀── utility ──▶ core
+```
+
+- `shared`：三端共用的纯 TS，不得导入 Node/Electron/DOM 专有 API；跨层契约（schema、DTO、版本常量）只在这里定义一次。
+- `core`：Main 与 Utility 共用的 Node 侧基础件（Core RPC 客户端、作业模型与端口、PathPolicy、block mapping）；Renderer 不得导入。
+- `renderer` 只依赖 `shared`；`main` 与 `utility` 互不导入，只经 Core RPC 通信。
+
+### 3.2 模块表
+
+| 模块 | 主要文件 | 职责与边界 |
 |---|---|---|
-| `desktop/src/renderer` | React 页面、阅读器、视图状态和选区 | 只能使用 `window.copilotix` |
-| `desktop/src/preload` | `contextBridge` API、IPC 编解码 | 只能暴露显式领域方法 |
-| `desktop/src/main/index.ts` | Electron 生命周期、窗口、组装、IPC 注册、托盘 | 不直接持有数据库连接 |
-| `desktop/src/main/ipc.ts` | sender/frame/URL 校验、IPC envelope 和 schema 驱动 handler | 所有新增 IPC 必须经过此层 |
-| `desktop/src/main/utilitySupervisor.ts` | Utility 启动、ready、超时、重启、drain/shutdown | 正常应用的 Utility 生命周期入口 |
-| `desktop/src/main/*Runner.ts`、`jobScheduler.ts` | parse/translate 作业执行与调度 | 只能通过 JobRepository/Compute port 改状态 |
-| `desktop/src/main/parserClient.ts`、`translation/` | 官方 API、翻译 Provider、网络重试 | Token/Key 只在 Main/Vault 侧 |
-| `desktop/src/utility` | Utility 进程入口、RPC loop、SQLite 与 compute handler | 不导入 renderer、credential 或网络 adapter |
-| `desktop/src/utility/core/persistence` | v2 数据库、Repository、Job、PathPolicy | 数据库连接只在 Utility |
-| `desktop/src/utility/core/compute` | 导入、hash、解析归一化、映射和翻译计划 | 通过受限 Core operation 调用 |
-| `desktop/src/shared` | IPC/Core RPC schema、DTO、纯函数和版本常量 | 是跨层契约的单一来源 |
-| `desktop/tests` | Vitest 单元/集成/契约/质量门禁 | 不等同 GUI E2E |
-| `desktop/e2e` | Playwright Electron 场景 | 只能在具备原生 Renderer/GPU 条件的环境运行 |
-| `desktop/scripts` | bundle smoke、发布审计、原子发布和 packaged smoke | 不得被普通测试当作清理脚本调用 |
+| 跨层契约 | `shared/ipcSchemas.ts`、`types.ts`、`coreRpcSchemas.ts`、`ragSchemas.ts`、`paperChat*Schemas.ts`、`paperInsight.ts`、`figureInsight.ts`、`librarySchemas.ts`、`libraryCategories.ts`、`translationPlanProtocol.ts` | 所有 IPC／RPC／磁盘 JSON 的 Zod 契约；`documentSummary.ts` 是文档摘要唯一投影 |
+| 文档纯逻辑 | `shared/markdownBlocks.ts`、`standardMarkdown.ts`、`mathDelimiters.ts`、`readerDocument.ts`、`readerAnnotations.ts`、`readerFigureGroups.ts`、`readerFigureLayout.ts`、`figureArtifacts.ts`、`titleNaming.ts`、`paperBrief/` | 无 I/O 的解析、映射、导出投影与提示词构造，可在任意进程运行 |
+| Node 基础件 | `core/coreClient.ts`、`jobs.ts`、`types.ts`、`ports.ts`、`pathPolicy.ts`、`blockMapping.ts` | `pathPolicy.ts` 是 Main 与 Utility 共用的唯一路径约束实现 |
+| Preload 桥 | `preload/index.ts`、`ipcClient.ts` | 只暴露 `window.copilotix` 显式领域方法 |
+| Main：外壳与 IPC | `main/index.ts`、`ipc.ts`、`libraryAccessGate.ts`、`assetProtocol.ts`、`singleInstance.ts`、`networkProxy.ts`、`logger.ts` | 生命周期、窗口、托盘、IPC 注册；所有 handler 经 `registerValidatedHandler` |
+| Main：Utility 桥 | `utilitySupervisor.ts`、`electronUtilityFork.ts`、`utilityEntryPath.ts`、`rpc*.ts`、`taskRepositoryCompat.ts` | Utility 生命周期与 RPC 代理；`rpc*` 只把端口方法映射为固定 operation |
+| Main：文档与作业 | `taskService.ts`、`documentCommandService.ts`、`documentProjection.ts`、`artifactService.ts`、`figureArtifactStore.ts`、`jobScheduler.ts`、`*JobRunner.ts`、`progressReporter.ts` | 导入／重试／删除／导出与 durable job 执行；只经 JobRepository／TaskCompute 端口改状态 |
+| Main：外部服务 | `parserClient.ts`、`fileUploader.ts`、`translation/`、`chat/chatProvider.ts`、`credentialVault.ts`、`settingsService.ts`、`usageAnalyticsService.ts` | 网络、凭据与设置；Token／Key 不离开 Main |
+| Main：AI 功能 | `chat/paperChatService.ts`、`paperInsightService.ts`、`figureInsightService.ts` 及各自 `*Ipc.ts` | 问答、档案卡（Paper Brief v2）、图片解读的授权、队列与取消 |
+| Utility：运行时 | `utility/index.ts`、`coreUtilityRuntime.ts`、`core/utilityOperations.ts` | RPC loop、operation registry 与 data／compute／exclusive 三通道 |
+| Utility：持久化 | `core/persistence/v2Database.ts`、`v2TaskRepositoryCompat.ts`、`sqliteJobRepository.ts`、`sqliteRagRepository.ts`、`paperChatStore.ts`、`paperInsightStore.ts`、`figureInsightStore.ts` | SQLite 与文献目录内 JSON 的唯一读写者 |
+| Utility：计算 | `core/compute/markdownTranslationPlan.ts`、`tableTranslation.ts`、`structureAwareChunker.ts`、`ragContentIndexService.ts`、`libraryCategories.ts` 及 `core/paperContextBuilder.ts`、`libraryCategoryService.ts`、`libraryMaintenance.ts` | 翻译计划、问答切块与证据、文库分类、备份／恢复／迁移 |
+| Renderer：外壳与页面 | `App.tsx`、`pages/`、`components/{WindowControls,PageBrand,CopilotixWordmark,EdgeDock,HomeScene,HomeWidgets}.tsx`、`documentCache.ts` | 视图路由与文档列表缓存 |
+| Renderer：阅读工作台 | `components/{ReaderWorkbench,ReaderViews,PdfPane,MarkdownPane,MarkdownMinimap,SafeMarkdown,ReaderFigureSnapshot,DocumentLifecycleActions}.tsx`、`reader*.ts`、`pdf*.ts`、`annotationMutations.ts`、`rehypeTableMath.ts`、`useFigureArtifacts.ts` | 四视图工作台、PDF／Markdown 渲染、同步、标注 |
+| Renderer：问答与解读 | `components/ReaderChatPanel.tsx`、`PaperInsightActions.tsx`、`usePaperChat.ts`、`usePaperInsight.ts` | 只经 `window.copilotix` 调用 |
+| Renderer：文库 | `pages/LibraryPage.tsx`、`paperArchive/` | Three.js 档案场景、详情与拆解视图（懒加载） |
+| 测试与发布 | `tests/`、`e2e/`（含 `launchPolicy.ts`）、`scripts/` | 不属于运行时 bundle |
 
 四个构建 bundle 分别来自 `main`、`preload`、`renderer`、`utility`，输出到 `desktop/out/`；测试和输出目录不属于源码契约。
 
@@ -130,7 +146,7 @@ Main 先验证 sender，再解析请求；handler 结果再次验证，schema �
 | 取消 | `cancel` 以 requestId 取消活动 operation，并传播 AbortSignal |
 | 超时 | supervisor/CoreClient 默认 handshake `10s`、request `30s`；调用者可传更短的 operation timeout |
 
-当前 registry 只保留 Main 实际调用的操作：`database:*`、`library:*`、`settings:*`、任务/文档（含批量插入）、作业、artifact revision、`knowledge:*`、标注快照/修改以及 `compute:*`（导入、归一化、映射、RAG 内容索引和翻译计划）。旧的逐块翻译、翻译缓存、整表标注替换等未被调用的 operation 已移除，Utility 内部仍可直接使用对应 Repository 方法。增加 operation 必须添加严格 payload/result schema、registry 项、两端 handler、取消/超时测试，并评估 1 MiB 上限。
+当前 registry 只保留 Main 实际调用的操作：`database:*`、`library:*`、`settings:*`、任务/文档（含批量插入）、作业、artifact revision、`insight:*`／`figureInsight:*`、`chat:*`、标注快照/修改以及 `compute:*`（导入、归一化、映射、问答索引、文库分类、图片解读描述和翻译计划）。旧的逐块翻译、翻译缓存、整表标注替换与 `knowledge:*` 等未被调用的 operation 已移除，Utility 内部仍可直接使用对应 Repository 方法。增加 operation 必须添加严格 payload/result schema、registry 项、两端 handler、取消/超时测试，并评估 1 MiB 上限。
 
 文库列表（`tasks:list`、`documents:list`）按 `(createdAt DESC, id ASC)` 做 keyset 分页：请求 `{ after? }`，响应 `{ items, next }`；Utility 每页最多 200 行并按 512 KiB 字节预算截断，Main 的 `RpcTaskRepository` 循环取完。这样大型文库不会触及 1 MiB 上限。Utility 端每页只用两次查询（文档 + 其 parse/translate 作业）完成投影，没有逐文档查询。
 
@@ -188,7 +204,7 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 ### 6.3 PathPolicy
 
-Main 和 Utility 各有对应 `PathPolicy` port/实现。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
+`core/pathPolicy.ts` 是 Main 与 Utility 共用的唯一 `PathPolicy` 实现（端口见 `core/ports.ts`）。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
 
 1. 拒绝 NUL、绝对跨平台路径和 `..` 段；
 2. 先做 lexical containment，再做 realpath containment；
@@ -259,9 +275,9 @@ PDF -> Utility 流式导入/hash -> v2 document/job
     -> sandbox Reader（PDF、Markdown、标注）
 ```
 
-## 10. RAG 與 Reader 問答邊界
+## 10. Reader 問答與索引邊界
 
-RAG 已落地／待實作範圍見 [分步索引](rag-implementation/README.md)，單篇文獻問答見 [維護契約](READER_AI_CHAT_PLAN_ZH.md)。切塊與持久化不代表 FTS／向量／多篇檢索已接入；來源身份始終綁定 artifact／revision／hash，不把 BlockMapping.id 當成跨文檔身份。
+單篇文獻問答、切塊索引與證據構造見 [維護契約](READER_AI_CHAT_PLAN_ZH.md)。多文獻 FTS／向量／混合檢索路線已於 2026-10-12 放棄並刪除相關代碼與計劃；schema 4 的 rag_* 語義／向量表及 `rag-embed`／`rag-delete` 作業類型只為 migration checksum 與舊庫兼容保留：除刪除文檔／內容換版時的兼容清理（FK RESTRICT 要求）外不再讀寫。來源身份始終綁定 artifact／revision／hash，不把 BlockMapping.id 當成跨文檔身份。
 
 ## 11. 公开 API 打包与 verified atomic release
 
@@ -306,6 +322,14 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 
 任何 DoD 未满足都只能标记为 partial/proposed，不能使用“已完成”作为发布结论。
 
-## 14. 維護與後續事項
+## 14. 已知結構債（未處理）
+
+- `v2TaskRepositoryCompat.ts`（約 1300 行）仍以舊 `CopilotixTask` 投影同時承擔文檔、artifact、翻譯塊、標註、設置；宜按聚合拆成獨立 Repository，Main 側 `TaskRepositoryCompat` 隨之收窄。
+- `main/index.ts` 內聯約 20 個 IPC handler；宜按 `chat/*Ipc.ts` 的模式拆出文檔、文庫、設置、窗口註冊模組。
+- 過大單文件：`paperArchive/PaperArchiveScene.ts`、`compute/markdownTranslationPlan.ts`、`MarkdownPane.tsx`、`MarkdownMinimap.tsx`、`PdfPane.tsx`。
+- Renderer 根目錄平鋪十餘個 reader／pdf 模組，待按「閱讀工作台／文庫」分子目錄；搬移前先與其他 worktree 協調以免衝突。
+- `ragSchemas`／`sqliteRagRepository`／`rag-content-index` 的 rag 前綴已名不副實；作業類型字串已持久化，只能改代碼名。`database:flush` operation 目前 Main 未調用。
+
+## 15. 維護與後續事項
 
 協作、文檔精簡、本地驗證與發布授權統一見根 [AGENTS.md](../AGENTS.md)。變更前定位 port／schema／handler／repository，跨邊界修改須保留兼容、回滾與相關回歸。macOS／Linux 的 Vault、原生窗口、路徑、打包與簽名尚未完成发布驗收。

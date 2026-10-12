@@ -8,7 +8,6 @@ import { splitMarkdownMath } from './mathDelimiters'
 import { renderToString } from 'katex'
 
 /** Public artifacts use CommonMark + GFM tables and the explicit $ / $$ math extension. */
-export const MARKDOWN_FORMAT_VERSION = 'commonmark-gfm-math-v1'
 export const READER_MARKDOWN_FORMAT_VERSION = 'markdown-html-math-v1'
 
 interface Node {

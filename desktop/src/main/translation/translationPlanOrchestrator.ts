@@ -19,7 +19,7 @@ import type { CredentialName, CopilotixTask, TranslationProviderId } from '@shar
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { TranslationProvider } from './providers'
 import { TranslationCredentialError, TranslationHttpError } from './providers'
-import { PathPolicy } from '../pathPolicy'
+import { PathPolicy } from '@core/pathPolicy'
 
 const MAX_TRANSLATION_SEGMENT_LENGTH = 4_000
 const MAX_TRANSLATION_PLAN_PAGE = 32

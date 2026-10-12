@@ -66,12 +66,6 @@ export class ViewerCameraMotion {
     this.apply()
   }
 
-  /** Whether the rendered camera has reached the requested pose. */
-  settled(goal: PerspectiveCamera, target: Vector3): boolean {
-    return !this.resetting && this.focus.distanceToSquared(target) < 1e-8 &&
-      this.camera.position.distanceToSquared(goal.position) < 1e-6
-  }
-
   private interpolate(from: Spherical, to: Spherical, angle: number, radius: number): void {
     // Interpolate logarithmic distance so zoom in and zoom out feel symmetric.
     this.pose.radius = Math.exp(MathUtils.lerp(Math.log(from.radius), Math.log(to.radius), radius))

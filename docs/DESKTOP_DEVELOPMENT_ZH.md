@@ -2,7 +2,7 @@
 
 Copilotix 是个人开发的 Electron 论文阅读客户端。当前版本连接 MinerU 在线 v4 API，在本地保存解析产物并生成简体中文 Markdown，不包含本地解析引擎或模型。
 
-完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`ARCHITECTURE_ZH.md`](ARCHITECTURE_ZH.md)；RAG 未来计划见 [`RAG_DEVELOPMENT_PLAN_ZH.md`](RAG_DEVELOPMENT_PLAN_ZH.md)。
+完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`ARCHITECTURE_ZH.md`](ARCHITECTURE_ZH.md)。
 
 ## 当前架构基线
 
@@ -70,7 +70,7 @@ Copilotix.exe --copilotix-packaged-smoke
 
 ## 功能与隐私
 
-当前提供 PDF 导入、官方解析、Markdown／表格翻译、阅读工作台、映射联动、标注、导出、文库与档案卡、单篇论文问答。问答边界见 [维护契约](READER_AI_CHAT_PLAN_ZH.md)；RAG 检索进度见 [分步索引](rag-implementation/README.md)。
+当前提供 PDF 导入、官方解析、Markdown／表格翻译、阅读工作台、映射联动、标注、导出、文库与档案卡、单篇论文问答。问答与索引边界见 [维护契约](READER_AI_CHAT_PLAN_ZH.md)；多文献 RAG 路线已放弃。
 
 PDF 会上传到 Parser 服务返回的预签名地址；待翻译文本会发送到所选翻译 Provider。Token 只发送到代码中固定的 Parser API 来源；API Key 进入 Credential Manager，不写 SQLite、Renderer、日志或结果 ZIP。日志会遮蔽 Token、API Key、Authorization 和预签名 URL 查询参数，不记录论文正文。
 

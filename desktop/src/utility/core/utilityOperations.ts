@@ -35,9 +35,6 @@ import {
   coreJobManualRetryPayloadSchema,
   coreJobRecoverExpiredPayloadSchema,
   coreJobEventsPayloadSchema,
-  coreKnowledgeGetPayloadSchema,
-  coreSemanticConsentPayloadSchema,
-  coreEnsureEmbeddingPayloadSchema,
   coreSettingsMigrationPayloadSchema,
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
@@ -59,8 +56,7 @@ import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
 import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sqliteJobRepository'
 import { SqliteRagRepository, SqliteRagRepositoryError } from './persistence/sqliteRagRepository'
-import { RagDomainService } from './ragDomainService'
-import { PathPolicy } from './persistence/pathPolicy'
+import { PathPolicy } from '@core/pathPolicy'
 import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
 import { RagContentIndexError, RagContentIndexService } from './compute/ragContentIndexService'
 
@@ -71,7 +67,6 @@ interface UtilityPersistenceState {
   repository?: V2TaskRepositoryCompat
   jobRepository?: SqliteJobRepository
   ragRepository?: SqliteRagRepository
-  ragService?: RagDomainService
   ragContentIndexService?: RagContentIndexService
   translationPlanManager?: MarkdownTranslationPlanManager
   databasePath?: string
@@ -122,9 +117,9 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     if (!state.jobRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
     return state.jobRepository
   }
-  const requireRagService = (): RagDomainService => {
-    if (!state.ragService) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
-    return state.ragService
+  const requireRagRepository = (): SqliteRagRepository => {
+    if (!state.ragRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
+    return state.ragRepository
   }
   const requireRagContentIndexService = (): RagContentIndexService => {
     if (!state.ragContentIndexService) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
@@ -163,13 +158,11 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       signal.throwIfAborted()
       const { documentId } = paperChatStatusRequestSchema.parse(request.payload)
       requireRepository().ensureContentIndex(documentId)
-      const k = requireRagService().getKnowledge(documentId)
+      const rag = requireRagRepository()
+      const k = rag.getDocumentKnowledge(documentId) ?? rag.ensureDocumentKnowledge(documentId)
       return { state: k?.localState ?? 'unindexed', progress: k?.localProgress ?? 0, contentRevisionId: k?.activeContentRevisionId ?? null }
     },
-    'chat:build-context': (request, signal) => {
-      if (!state.ragRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
-      return new PaperContextBuilder(state.ragRepository).build(paperContextRequestSchema.parse(request.payload), signal)
-    },
+    'chat:build-context': (request, signal) => new PaperContextBuilder(requireRagRepository()).build(paperContextRequestSchema.parse(request.payload), signal),
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {
       if (!state.databasePath) throw new Error('文档库尚未初始化')
@@ -181,7 +174,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'database:init': async (request) => {
       const payload = coreDatabaseInitPayloadSchema.parse(request.payload)
       validateBootstrapPaths(payload.databasePath, payload.outputRoot)
-      if (state.databasePath === payload.databasePath && state.outputRoot === payload.outputRoot && state.repository && state.jobRepository && state.ragService && state.ragContentIndexService) return { initialized: true }
+      if (state.databasePath === payload.databasePath && state.outputRoot === payload.outputRoot && state.repository && state.jobRepository && state.ragRepository && state.ragContentIndexService) return { initialized: true }
       closeState(state)
       try {
         await mkdir(dirname(payload.databasePath), { recursive: true })
@@ -190,7 +183,6 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
         state.repository = new V2TaskRepositoryCompat(state.database, new PathPolicy())
         state.jobRepository = new SqliteJobRepository(state.database)
         state.ragRepository = new SqliteRagRepository(state.database)
-        state.ragService = new RagDomainService(state.database, state.ragRepository, state.jobRepository)
         state.ragContentIndexService = new RagContentIndexService(state.database, state.ragRepository, new PathPolicy())
         state.translationPlanManager = new MarkdownTranslationPlanManager(state.repository, new PathPolicy(), { outputRoot: payload.outputRoot })
         state.databasePath = payload.databasePath
@@ -269,18 +261,6 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const payload = coreDocumentMetadataPayloadSchema.parse(request.payload)
       requireRepository().updateDocumentMetadata(payload.id, payload.patch)
       return { changed: true }
-    },
-    'knowledge:get': (request) => {
-      const payload = coreKnowledgeGetPayloadSchema.parse(request.payload)
-      return requireRagService().getKnowledge(payload.documentId)
-    },
-    'knowledge:set-semantic-consent': (request) => {
-      const payload = coreSemanticConsentPayloadSchema.parse(request.payload)
-      return requireRagService().setSemanticConsent(payload.documentId, payload.consent, payload.now)
-    },
-    'knowledge:ensure-embed': (request) => {
-      const payload = coreEnsureEmbeddingPayloadSchema.parse(request.payload)
-      return requireRagService().ensureEmbeddingJob(payload)
     },
     'artifacts:record-revision': (request) => {
       const payload = request.payload as { taskId: string; kind: Parameters<V2TaskRepositoryCompat['recordArtifactRevision']>[1]; path: string; checksum: string; metadata?: Record<string, unknown>; jobId?: string }
@@ -410,7 +390,6 @@ function closeState(state: UtilityPersistenceState): void {
     state.translationPlanManager = undefined
     state.repository = undefined
     state.jobRepository = undefined
-    state.ragService = undefined
     state.ragRepository = undefined
     state.ragContentIndexService = undefined
   } finally {

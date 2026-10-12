@@ -2,10 +2,9 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { randomUUID } from 'node:crypto'
 import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
-import { paperInsightRecordSchema, paperInsightSchema, PAPER_INSIGHT_MAX_BYTES, type PaperInsight, type PaperInsightState, type PaperInsightContext } from '@shared/paperInsight'
+import { paperInsightRecordSchema, PAPER_INSIGHT_MAX_BYTES, type PaperInsightState } from '@shared/paperInsight'
 import type { V2TaskRepositoryCompat } from './v2TaskRepositoryCompat'
-import { PathPolicy } from './pathPolicy'
-import { selectInsightExcerpts } from '../paperInsightContext'
+import { PathPolicy } from '@core/pathPolicy'
 import { buildBriefContext, BRIEF_BUDGETS } from '@shared/paperBrief/context'
 import { PAPER_BRIEF_PROMPT_VERSION } from '@shared/paperBrief/prompt'
 import { paperBriefRecordSchema, paperBriefSaveSchema, briefContextResultSchema, PAPER_BRIEF_MAX_BYTES, type BriefContextResult, type BriefAnchor } from '@shared/paperBrief/contracts'
@@ -72,20 +71,6 @@ export class PaperInsightStore {
     } catch (error) { if (missing(error)) return { status: 'missing' }; throw error }
   }
 
-  async context(documentId: string, budgetBytes: number, signal: AbortSignal): Promise<PaperInsightContext> {
-    signal.throwIfAborted()
-    const snapshot = await this.snapshot(documentId)
-    const artifact = snapshot.translated ?? snapshot.original
-    if (!artifact) throw new Error('论文尚未完成解析')
-    this.policy.resolveChild(snapshot.root, artifact.relativePath)
-    // Preserve the lstat check on the lexical path (resolveChild resolves links).
-    const markdown = await this.read(join(snapshot.root, artifact.relativePath), 32 * 1024 * 1024)
-    signal.throwIfAborted()
-    const after = await this.snapshot(documentId)
-    if (after.sourceRevision !== snapshot.sourceRevision) throw new Error('论文内容正在更新，请重试')
-    return { documentId, sourceRevision: snapshot.sourceRevision, language: snapshot.translated ? 'translated' : 'original', ...selectInsightExcerpts(markdown, budgetBytes) }
-  }
-
   async briefContext(documentId: string, signal: AbortSignal): Promise<BriefContextResult> {
     signal.throwIfAborted()
     const snapshot = await this.snapshot(documentId)
@@ -142,12 +127,6 @@ export class PaperInsightStore {
     const value = paperBriefSaveSchema.parse({ documentId, brief, anchors })
     const body = JSON.stringify(paperBriefRecordSchema.parse({ version: 2, ...value }))
     return this.commit(documentId, 'brief.v2.json', body, PAPER_BRIEF_MAX_BYTES)
-  }
-
-  async save(documentId: string, raw: PaperInsight): Promise<{ saved: true }> {
-    const insight = paperInsightSchema.parse(raw)
-    const body = JSON.stringify(paperInsightRecordSchema.parse({ version: 1, documentId, insight }))
-    return this.commit(documentId, 'insight.v1.json', body, PAPER_INSIGHT_MAX_BYTES)
   }
 
   private async commit(documentId: string, name: string, body: string, maxBytes: number): Promise<{ saved: true }> {

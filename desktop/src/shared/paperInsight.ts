@@ -32,17 +32,8 @@ export type PaperInsightState = z.infer<typeof paperInsightStateSchema>
 export const paperInsightRequestSchema = z.object({ documentId: z.uuid() }).strict()
 export const paperInsightChangedSchema = paperInsightRequestSchema.extend({ state: paperInsightStateSchema }).strict()
 export const paperInsightRecordSchema = paperInsightRequestSchema.extend({ version: z.literal(1), insight: paperInsightSchema }).strict()
-export const paperInsightSaveSchema = paperInsightRequestSchema.extend({ insight: paperInsightSchema }).strict()
 export const paperInsightSavedSchema = z.object({ saved: z.literal(true) }).strict()
 export const paperInsightCancelSchema = z.object({ cancelled: z.boolean() }).strict()
-export const paperInsightContextRequestSchema = paperInsightRequestSchema.extend({ budgetBytes: z.number().int().min(2048).max(8192) }).strict()
-export const paperInsightContextSchema = z.object({
-  documentId: z.uuid(), sourceRevision: text(512), language: z.enum(['original', 'translated']),
-  excerpts: z.array(z.object({ section: text(200), text: text(8192) }).strict()).min(1).max(32),
-  truncated: z.boolean()
-}).strict()
-export type PaperInsightContext = z.infer<typeof paperInsightContextSchema>
-
 /** What the archive page needs; App wires it to IPC once the pipeline exists. */
 export interface PaperInsightSource {
   get(documentId: string): Promise<PaperInsightState>

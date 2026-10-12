@@ -1,7 +1,7 @@
 import React from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { acquirePdfDocument } from '../pdfDocumentCache'
-import type { ReaderFigureGroup } from '../readerFigureGroups'
+import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
 
 export type FigureRenderState = 'pending' | 'ready' | 'failed'
 export const FIGURE_MAX_PIXELS = 8_000_000

@@ -15,10 +15,6 @@ import { z } from 'zod'
 export const PAPER_BRIEF_SCHEMA_VERSION = 2
 
 export const PAPER_TYPES = ['empirical', 'method', 'theoretical', 'system', 'resource', 'review', 'position', 'case_study', 'qualitative', 'other'] as const
-export const PAPER_TYPE_LABELS: Record<typeof PAPER_TYPES[number], string> = {
-  empirical: '实证研究', method: '方法研究', theoretical: '理论研究', system: '系统与工程', resource: '数据集与基准',
-  review: '综述', position: '观点与展望', case_study: '案例研究', qualitative: '质性研究', other: '其他'
-}
 export const FINDING_STRENGTHS = ['strong', 'moderate', 'limited', 'unclear'] as const
 export const FINDING_STRENGTH_LABELS: Record<typeof FINDING_STRENGTHS[number], string> = {
   strong: '证据充分', moderate: '证据一般', limited: '证据有限', unclear: '无法判断'

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@shared/readerDocument'
 import { buildReaderDocumentBlocks } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
-import type { ReaderFigureGroup } from '../src/renderer/readerFigureGroups'
+import type { ReaderFigureGroup } from '../src/shared/readerFigureGroups'
 import MarkdownPane, { MARKDOWN_BLOCKS_PER_FRAME, MARKDOWN_INITIAL_BLOCKS } from '../src/renderer/components/MarkdownPane'
 import { collectAnnotationBlockTexts } from '../src/renderer/readerAnnotations'
 

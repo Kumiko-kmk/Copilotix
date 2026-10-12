@@ -28,7 +28,7 @@ import {
 } from '../readerAnnotations'
 import MarkdownMinimap from './MarkdownMinimap'
 import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnapshot'
-import type { ReaderFigureGroup } from '../readerFigureGroups'
+import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
 import { recordReaderDuration } from '../readerPerformance'
 import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
 import { readerReferenceSections } from '../readerReferenceSections'

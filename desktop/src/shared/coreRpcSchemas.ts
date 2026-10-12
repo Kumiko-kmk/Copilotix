@@ -133,62 +133,6 @@ const coreArtifactKindSchema = z.enum([
   'source_pdf', 'parsed_markdown', 'layout', 'block_mappings', 'content_list', 'translated_markdown', 'manifest'
 ])
 
-/**
- * Knowledge lifecycle DTOs contain only bounded identities, state, progress,
- * and retry metadata.  Source text, vectors, paths, provider URLs, and
- * credentials are Utility-owned and are intentionally absent from this
- * process boundary.
- */
-const coreKnowledgeStateErrorSchema = z.object({
-  code: z.string().min(1).max(128).refine(noNul),
-  message: z.string().max(4_096).refine(noNul),
-  retryable: z.boolean(),
-  retryAfterMs: z.number().int().min(0).max(86_400_000).nullable()
-}).strict()
-const coreLocalIndexStateSchema = z.enum(['unindexed', 'queued', 'indexing', 'ready', 'stale', 'failed'])
-const coreSemanticIndexStateSchema = z.enum(['disabled', 'requires-consent', 'requires-credential', 'queued', 'indexing', 'ready', 'stale', 'failed'])
-const coreVectorIndexStateSchema = z.enum(['queued', 'building', 'ready', 'stale', 'failed'])
-export const coreKnowledgeSchema = z.object({
-  documentId: coreIdSchema,
-  localState: coreLocalIndexStateSchema,
-  localProgress: z.number().int().min(0).max(100),
-  localError: coreKnowledgeStateErrorSchema.nullable(),
-  activeContentRevisionId: coreIdSchema.nullable(),
-  semanticConsent: z.boolean(),
-  semanticState: coreSemanticIndexStateSchema,
-  semanticProgress: z.number().int().min(0).max(100),
-  semanticError: coreKnowledgeStateErrorSchema.nullable(),
-  semanticContentRevisionId: coreIdSchema.nullable(),
-  activeVectorIndexId: coreIdSchema.nullable(),
-  semanticProfileId: coreIdSchema.nullable(),
-  updatedAt: coreTimestampSchema
-}).strict()
-
-export const coreKnowledgeGetPayloadSchema = z.object({ documentId: coreIdSchema }).strict()
-export const coreKnowledgeGetResultSchema = coreKnowledgeSchema.nullable()
-export const coreSemanticConsentPayloadSchema = z.object({
-  documentId: coreIdSchema,
-  consent: z.boolean(),
-  now: coreTimestampSchema.optional()
-}).strict()
-export const coreSemanticConsentResultSchema = coreKnowledgeSchema
-export const coreEnsureEmbeddingPayloadSchema = z.object({
-  documentId: coreIdSchema,
-  profileId: coreIdSchema,
-  now: coreTimestampSchema.optional()
-}).strict()
-export const coreEmbeddingJobResultSchema = z.object({
-  documentId: coreIdSchema,
-  profileId: coreIdSchema,
-  contentRevisionId: coreIdSchema,
-  vectorIndexId: coreIdSchema,
-  jobId: coreIdSchema,
-  jobKind: z.literal('rag-embed'),
-  jobStatus: coreJobStatusSchema,
-  vectorIndexState: coreVectorIndexStateSchema,
-  semanticState: coreSemanticIndexStateSchema
-}).strict()
-
 const coreOperationNames = [
   'ping', 'cancel', 'drain', 'shutdown',
   'database:init', 'database:flush', 'database:close', 'library:check', 'library:manage',
@@ -197,7 +141,6 @@ const coreOperationNames = [
   'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
   'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
   'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:record-revision',
-  'knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed',
   'insight:get', 'insight:save-brief', 'insight:brief-context',
   'figureInsight:get', 'figureInsight:save', 'compute:figure-insight-descriptor',
   'chat:ensure-index', 'chat:build-context',
@@ -506,9 +449,6 @@ export const coreOperationRegistry = {
   'documents:get-summary': { payload: coreTaskIdPayloadSchema, result: documentSummarySchema.nullable() },
   'documents:update-metadata': { payload: coreDocumentMetadataPayloadSchema, result: coreMutationResultSchema },
   'artifacts:record-revision': { payload: coreArtifactRecordPayloadSchema, result: coreMutationResultSchema },
-  'knowledge:get': { payload: coreKnowledgeGetPayloadSchema, result: coreKnowledgeGetResultSchema },
-  'knowledge:set-semantic-consent': { payload: coreSemanticConsentPayloadSchema, result: coreSemanticConsentResultSchema },
-  'knowledge:ensure-embed': { payload: coreEnsureEmbeddingPayloadSchema, result: coreEmbeddingJobResultSchema },
   'annotations:list-snapshot': { payload: coreAnnotationsSnapshotPayloadSchema, result: coreAnnotationsSnapshotResultSchema },
   'annotations:mutate': { payload: coreAnnotationsMutatePayloadSchema, result: coreAnnotationsMutateResultSchema },
   'compute:hash-file': { payload: coreHashFilePayloadSchema, result: coreHashFileResultSchema },

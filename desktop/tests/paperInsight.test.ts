@@ -7,10 +7,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { paperInsightContentSchema, paperInsightRequestSchema, paperInsightSchema, paperInsightStateSchema, type PaperInsight, type PaperInsightContext, type PaperInsightState } from '@shared/paperInsight'
-import { PaperInsightService, buildInsightMessages, insightBudget, type PaperInsightDependencies } from '../src/main/chat/paperInsightService'
+import { paperInsightContentSchema, paperInsightRecordSchema, paperInsightRequestSchema, paperInsightSchema, paperInsightStateSchema, type PaperInsight, type PaperInsightState } from '@shared/paperInsight'
+import { PaperInsightService, type PaperInsightDependencies } from '../src/main/chat/paperInsightService'
 import { PaperInsightStore } from '../src/utility/core/persistence/paperInsightStore'
-import { selectInsightExcerpts } from '../src/utility/core/paperInsightContext'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const fs = await importOriginal<typeof import('node:fs/promises')>()
@@ -48,17 +47,6 @@ describe('structured paper insight', () => {
     expect(paperInsightSchema.safeParse({ ...insight(), model: { provider: 'qwen', name: 'deepseek-flash' } }).success).toBe(false)
     expect(paperInsightRequestSchema.safeParse({ documentId: '../escape' }).success).toBe(false)
     expect(paperInsightStateSchema.safeParse({ status: 'missing', insight: insight() }).success).toBe(false)
-  })
-  it.each(['qwen', 'deepseek'] as const)('budgets mixed UTF-8 text and prioritizes conclusion for %s', (provider) => {
-    const markdown = '# 标题\n开篇\n# Abstract\n' + '摘要😀'.repeat(4000) + '\n# Method\n方法\n# Conclusion\n结论\n# References\nDO NOT SEND\n' + Array.from({ length: 40 }, (_, i) => `# Section ${i}\n${'x'.repeat(1000)}`).join('\n')
-    const selected = selectInsightExcerpts(markdown, insightBudget(provider))
-    const ctx: PaperInsightContext = { documentId: randomUUID(), sourceRevision: 'rev', language: 'translated', ...selected }
-    expect(Buffer.byteLength(JSON.stringify(selected))).toBeLessThan(10_000)
-    const messages = buildInsightMessages(ctx)
-    expect(Buffer.byteLength(JSON.stringify(messages))).toBeLessThan(16_384)
-    expect(JSON.stringify(messages)).toContain('Conclusion')
-    expect(JSON.stringify(messages)).not.toMatch(/DO NOT SEND|�/u)
-    expect(selected.truncated).toBe(true)
   })
   it.each(['key', 'consent', 'unverified', 'provider'])('does not send paper content when %s is unavailable', async (kind) => {
     const f = fixture()
@@ -147,14 +135,22 @@ async function diskFixture() {
   const store = new PaperInsightStore(repository)
   return { root, id, store, repository, revise: () => { revision++ } }
 }
+/** v1 insights are no longer generated; existing files are only read, so tests seed them directly. */
+async function writeV1(f: Awaited<ReturnType<typeof diskFixture>>, sourceRevision: string) {
+  await mkdir(join(f.root, 'insight'), { recursive: true })
+  await writeFile(join(f.root, 'insight', 'insight.v1.json'), JSON.stringify(paperInsightRecordSchema.parse({ version: 1, documentId: f.id, insight: insight(sourceRevision) })))
+}
+async function briefFor(f: Awaited<ReturnType<typeof diskFixture>>) {
+  const context = await f.store.briefContext(f.id, new AbortController().signal)
+  const brief = assembleBrief(briefContent, context.context, { provider: 'deepseek', model: 'deepseek-flash', sourceRevision: context.sourceRevision })
+  return { context, brief, anchors: context.context.excerpts.map(({ id, section, text }) => ({ id, section, text })) }
+}
 describe('paper insight atomic storage', () => {
   it('prefers v2, preserves v1, separates prompt updates from source staleness and reopens anchors', async () => {
     const f = await diskFixture()
-    const context = await f.store.briefContext(f.id, new AbortController().signal)
+    const { context, brief, anchors } = await briefFor(f)
     expect(context.context.language).toBe('original')
-    const brief = assembleBrief(briefContent, context.context, { provider: 'deepseek', model: 'deepseek-flash', sourceRevision: context.sourceRevision })
-    await f.store.save(f.id, insight(context.sourceRevision))
-    const anchors = context.context.excerpts.map(({ id, section, text }) => ({ id, section, text }))
+    await writeV1(f, context.sourceRevision)
     await f.store.saveBrief(f.id, { ...brief, provenance: { ...brief.provenance, promptVersion: 'older-prompt' } }, anchors)
     expect(await new PaperInsightStore(f.repository).get(f.id)).toMatchObject({ status: 'ready', brief: { checks: brief.checks }, anchors, stale: false, promptOutdated: true })
     expect(await readdir(join(f.root, 'insight'))).toEqual(['brief.v2.json', 'insight.v1.json'])
@@ -175,42 +171,34 @@ describe('paper insight atomic storage', () => {
     expect(context.context.language).toBe('translated')
     expect(JSON.stringify(context)).toContain('翻译内容')
   })
-  it('supports old missing files, translated sources, durable reopen and revision staleness', async () => {
+  it('reads old missing and v1 files with revision staleness', async () => {
     const f = await diskFixture()
     expect(await f.store.get(f.id)).toEqual({ status: 'missing' })
-    const context = await f.store.context(f.id, 6144, new AbortController().signal)
-    expect(context.language).toBe('translated'); expect(JSON.stringify(context)).toContain('翻译内容'); expect(JSON.stringify(context)).not.toContain(f.root)
-    await f.store.save(f.id, insight(context.sourceRevision))
+    const { context } = await briefFor(f)
+    await writeV1(f, context.sourceRevision)
     expect(await new PaperInsightStore(f.repository).get(f.id)).toMatchObject({ status: 'ready', stale: false })
     f.revise(); expect(await f.store.get(f.id)).toMatchObject({ status: 'ready', stale: true })
-    expect(await readdir(join(f.root, 'insight'))).toEqual(['insight.v1.json'])
-  })
-  it('keeps the committed file when validation fails, ignores interrupted temps and rejects corruption', async () => {
-    const f = await diskFixture()
-    await f.store.save(f.id, insight())
-    const path = join(f.root, 'insight', 'insight.v1.json'), prior = await readFile(path, 'utf8')
-    await expect(f.store.save(f.id, { ...insight(), method: 'x'.repeat(4001) })).rejects.toThrow()
-    expect(await readFile(path, 'utf8')).toBe(prior)
     await writeFile(join(f.root, 'insight', '.pending-interrupted'), 'partial')
     expect((await f.store.get(f.id)).status).toBe('ready')
-    await writeFile(path, '{broken'); await expect(f.store.get(f.id)).rejects.toThrow()
+    await writeFile(join(f.root, 'insight', 'insight.v1.json'), '{broken'); await expect(f.store.get(f.id)).rejects.toThrow()
   })
-  it('preserves the prior committed file and removes the temp after a permanent rename failure', async () => {
+  it('keeps the committed brief when validation fails', async () => {
     const f = await diskFixture()
-    await f.store.save(f.id, insight())
-    const path = join(f.root, 'insight', 'insight.v1.json'), prior = await readFile(path, 'utf8')
-    vi.mocked(rename).mockRejectedValueOnce(Object.assign(new Error('disk failure'), { code: 'EIO' }))
-    await expect(f.store.save(f.id, { ...insight(), summary: 'replacement' })).rejects.toThrow('disk failure')
+    const { brief, anchors } = await briefFor(f)
+    await f.store.saveBrief(f.id, brief, anchors)
+    const path = join(f.root, 'insight', 'brief.v2.json'), prior = await readFile(path, 'utf8')
+    await expect(f.store.saveBrief(f.id, { ...brief, tldr: '' }, anchors)).rejects.toThrow()
     expect(await readFile(path, 'utf8')).toBe(prior)
-    expect(await readdir(join(f.root, 'insight'))).toEqual(['insight.v1.json'])
+    expect(await readdir(join(f.root, 'insight'))).toEqual(['brief.v2.json'])
   })
   it('rejects an insight directory junction and cancelled content reads', async () => {
     const f = await diskFixture(), outside = join(f.root, 'outside')
+    const { brief, anchors } = await briefFor(f)
     await mkdir(outside)
     await symlink(outside, join(f.root, 'insight'), process.platform === 'win32' ? 'junction' : 'dir')
-    await expect(f.store.save(f.id, insight())).rejects.toThrow('目录')
+    await expect(f.store.saveBrief(f.id, brief, anchors)).rejects.toThrow('目录')
     expect(await readdir(outside)).toEqual([])
     const controller = new AbortController(); controller.abort()
-    await expect(f.store.context(f.id, 6144, controller.signal)).rejects.toThrow()
+    await expect(f.store.briefContext(f.id, controller.signal)).rejects.toThrow()
   })
 })

@@ -7,7 +7,6 @@ import {
   type CoreTransport
 } from '@core/coreClient'
 import type {
-  CoreEvent,
   CoreOperation,
   CoreOperationPayload,
   CoreOperationResult
@@ -93,7 +92,6 @@ export class UtilitySupervisor {
   private readonly errorListener?: (code: CoreClientErrorCode) => void
   private readonly stateListener?: (state: UtilitySupervisorState) => void
   private bootstrapConfig: UtilityBootstrapConfig | undefined
-  private readonly eventListeners = new Set<(event: CoreEvent) => void>()
   private state: UtilitySupervisorState = 'idle'
   private record: UtilityRecord | undefined
   private restartTimer: ReturnType<typeof setTimeout> | undefined
@@ -129,16 +127,8 @@ export class UtilitySupervisor {
     return this.restartAttempts
   }
 
-  getPendingCount(): number {
-    return this.record?.client.getPendingCount() ?? 0
-  }
-
   isStopped(): boolean {
     return this.state === 'stopped' || this.state === 'failed'
-  }
-
-  setBootstrapConfig(config: UtilityBootstrapConfig): void {
-    this.bootstrapConfig = validateBootstrapConfig(config)
   }
 
   async start(): Promise<void> {
@@ -163,11 +153,6 @@ export class UtilitySupervisor {
     const generation = ++this.generation
     void this.spawn(generation)
     return this.startPromise
-  }
-
-  onEvent(listener: (event: CoreEvent) => void): () => void {
-    this.eventListeners.add(listener)
-    return () => this.eventListeners.delete(listener)
   }
 
   request<K extends CoreOperation>(
@@ -238,11 +223,6 @@ export class UtilitySupervisor {
       onProtocolError: (error) => this.reportError(error.code),
       onStateChange: (state) => {
         if (state === 'failed') this.reportError(CORE_UNAVAILABLE)
-      }
-    })
-    record.client.onEvent((event) => {
-      for (const listener of this.eventListeners) {
-        try { listener(event) } catch { /* observer failures cannot kill supervision */ }
       }
     })
 

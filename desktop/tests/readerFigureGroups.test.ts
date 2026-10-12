@@ -5,7 +5,7 @@ import {
   buildReaderFigureGeometries,
   buildReaderFigureGroups,
   projectReaderFigureGroups
-} from '../src/renderer/readerFigureGroups'
+} from '../src/shared/readerFigureGroups'
 
 describe('reader figure groups', () => {
   it('retains PDF titles outside a single resource box using a clear caption corridor', () => {

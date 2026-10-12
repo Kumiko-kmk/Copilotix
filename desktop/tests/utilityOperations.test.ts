@@ -300,7 +300,7 @@ describe('utility persistence lifecycle', () => {
     }
   })
 
-  it('routes knowledge consent and embedding precondition errors through Utility handlers', async () => {
+  it('reports an unindexed chat knowledge row for a document without parsed content', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-knowledge-operations-'))
     try {
       const outputRoot = join(root, 'output')
@@ -331,17 +331,8 @@ describe('utility persistence lifecycle', () => {
         updatedAt: '2026-01-01T00:00:00.000Z'
       }
       await persistence.handlers['tasks:insert-many']!({ payload: { tasks: [task] } } as never, signal)
-      await expect(persistence.handlers['knowledge:get']!({ payload: { documentId: task.id } } as never, signal)).resolves.toMatchObject({
-        documentId: task.id,
-        localState: 'unindexed',
-        semanticConsent: false
-      })
-      await expect(persistence.handlers['knowledge:set-semantic-consent']!({
-        payload: { documentId: task.id, consent: true }
-      } as never, signal)).resolves.toMatchObject({ semanticConsent: true, semanticState: 'requires-credential' })
-      await expect(persistence.handlers['knowledge:ensure-embed']!({
-        payload: { documentId: task.id, profileId: 'embedding-default' }
-      } as never, signal)).rejects.toThrow(expect.objectContaining({ code: 'RAG_CONTENT_NOT_READY' }))
+      await expect(persistence.handlers['chat:ensure-index']!({ payload: { documentId: task.id } } as never, signal))
+        .resolves.toEqual({ state: 'unindexed', progress: 0, contentRevisionId: null })
       await persistence.close()
     } finally {
       await rm(root, { recursive: true, force: true })

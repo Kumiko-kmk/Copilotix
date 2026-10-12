@@ -3,7 +3,7 @@ document_id: copilotix-reader-ai-chat-plan
 status: implemented-local-build-awaiting-live-acceptance
 owner: shared-agents
 branch: master
-updated: 2026-10-10
+updated: 2026-10-12
 ---
 
 # 單篇文獻 AI 問答：Agent 協作與維護契約
@@ -14,7 +14,7 @@ updated: 2026-10-10
 
 - 維護入口為 `Copilotix-master-updated`／本地 `master`。開始及交付前核對 HEAD 和未提交狀態；不得改動其他 Agent 的 worktree。
 - 單篇文獻問答已實作：限定當前文獻、固定選區、流式回答、停止、Markdown／KaTeX、可信引用定位。2026-10-07 加入 Qwen／DeepSeek 切換及文獻目錄中的本地持久化。
-- 不合併 demo `codex/rag-review-20260923` 的 schema 5–7、向量或多文獻聊天；本功能保留現有 schema 4，不新增 migration。未来多文獻／向量／reranker 設計見 `RAG_DEVELOPMENT_PLAN_ZH.md` 和 `rag-implementation/`。
+- 多文獻／向量／reranker 的 RAG 路線已於 2026-10-12 放棄，相關計劃文檔、`knowledge:*` RPC 與嵌入／向量 Repository 代碼已刪除；不合併 demo `codex/rag-review-20260923` 的 schema 5–7。schema 4 中 rag_* 的語義／向量表與 `rag-embed`／`rag-delete` 作業類型只為 migration checksum 與舊庫兼容保留；除刪除文檔／內容換版時的兼容清理外不再讀寫。
 - 不支持聯網搜索、工具調用或模型自行讀取本地文件；問題的依據仍限定為当前文獻的原文 evidence pack。已生成的舊記憶體對話無法在應用關閉後補回。
 
 ## 2. 服務商、模型與授权
@@ -46,7 +46,13 @@ updated: 2026-10-10
 - 現有文庫備份／恢復／遷移會遍歷完整文獻目錄，因此 chat 文件隨文獻一併複製並校驗；維護前等待問答停止，避免背景寫入破壞快照。卸載默認保留文庫，明確清除資料時沿用已登記 documents-v2/<id> 的邊界，无新增外部清理目錄。
 - 恢復的引用仍需核對當前 contentRevisionId；過期引用提示重新提問，不以舊引用位置導覽新文獻。
 
-## 4. 證據、串流與 UI 契約
+## 4. 問答索引（切塊）
+
+- 首次打開問答時 `chat:ensure-index` 依已登記的 parsed Markdown＋block mapping 計算 contentRevisionId 並排入 `rag-content-index` 作業；`compute:rag-content-index` 只跨進程傳 documentId／contentRevisionId。Utility 只讀已登記且屬於該文檔的 artifact，檢查 PathPolicy、普通文件與 hash；未登記／越界／內容不一致不可重試，臨時 I/O 可重試。
+- `structureAwareChunker.ts` 複用 remark／GFM／math AST 與 block alignment，按 heading、paragraph、list、code、formula、table、caption、other 切塊；只拆超過 700 估算 token 的葉子，優先句子／詞邊界，不截斷代理對；offset 為 UTF-16、overlap 0。寬表拆分帶最小表頭且 confidence=range；無 mapping 時頁碼為空、confidence=none。策略改動須更新 chunker fingerprint。
+- 全量 chunk 校驗後由 `SqliteRagRepository.replaceChunksAndActivate` 單事務發布並切換 active revision，舊 active 標為 stale；新 revision 失敗或取消保留舊 ready／100%，首次取消回 queued。切塊零網絡。
+
+## 5. 證據、串流與 UI 契約
 
 - `PaperContextBuilder` 只讀當前激活版本的 chunks。短文按原文順序提供全文；長文依次選固定選區及相鄰 chunk、摘要／引言、輕量詞法排名與大綱，去重並披露 truncated。默認 budget 48000 字元、wire 256 KiB。中文問題配長英文文獻的詞法檢索仍有限，優先使用固定選區；英語 query rewriting 為可選後續。
 - 原文 quote／mapping／revision 必須匹配；譯文選區以 mapping 回到原文，只把譯文當未驗證參考。fragment offset 使用 UTF-16，保存引用 locator 與 provenance。
@@ -57,19 +63,19 @@ updated: 2026-10-10
 - Enter 發送，Shift+Enter 換行，IME 不誤發；輸入框／模型選擇留在面板底部。停止後保留部分回答；失敗／取消可重試。引用按首次出現順序編號，點擊核對版本後定位來源，不添加懸停提示。
 - SafeMarkdown 禁止回答中的外部圖片／可執行鏈接／script 網路副作用；只顯示經驗證引用和 KaTeX 公式。長回答僅在用戶接近底部時自動跟隨，尊重 reduced-motion。
 
-## 5. 代碼與測試入口
+## 6. 代碼與測試入口
 
 | 邊界 | 入口 |
 | --- | --- |
 | 共享契約 | shared/paperChatSchemas.ts、paperChatStorageSchemas.ts、ragSchemas.ts、types.ts、coreRpcSchemas.ts |
 | Main／Preload | main/chat/paperChatService.ts、paperChatIpc.ts、chatProvider.ts、main/index.ts、preload/index.ts |
-| Utility | utility/core/paperContextBuilder.ts、persistence/paperChatStore.ts、utilityOperations.ts |
-| UI | renderer/usePaperChat.ts、components/ReaderChatPanel.tsx、paperChat.css、ReaderTextPane.tsx、pages/ReaderPage.tsx |
-| 回歸 | paperChatContracts、paperChatService、paperChatUtility、paperChatStore、chatProvider、ReaderChatPanel、paperContextBuilder、ReaderTextPane；e2e/paper-chat.spec.ts |
+| Utility | utility/core/paperContextBuilder.ts、compute/structureAwareChunker.ts、compute/ragContentIndexService.ts、persistence/{paperChatStore,sqliteRagRepository}.ts、utilityOperations.ts；Main 側 ragContentIndexJobRunner.ts、rpcRagContentIndexer.ts |
+| UI | renderer/usePaperChat.ts、components/ReaderChatPanel.tsx、paperChat.css、MarkdownPane.tsx、pages/ReaderPage.tsx |
+| 回歸 | paperChatContracts、paperChatService、paperChatUtility、paperChatStore、chatProvider、ReaderChatPanel、paperContextBuilder、ragContracts、ragPersistence、ragContentIndexJobRunner、structureAwareChunker；e2e/paper-chat.spec.ts |
 
 新增持久化回歸覆蓋：真實本地文件重新讀取、文獻隔離、45 輪分頁、完整引用／草稿／模型、取消和清空次序、損壞文件保留、目錄 junction 拒絕、Core RPC 全鏈路和 Renderer reload。E2E 用隔離 vault 與假 Key，只模擬 provider HTTP，不讀寫真人憑據或調用付費 API。
 
-## 6. 驗證與真人验收
+## 7. 驗證與真人验收
 
 本地驗證、遠端授權與 CI 門禁遵循根 [AGENTS.md](../AGENTS.md)，此處只保留問答驗收場景。
 

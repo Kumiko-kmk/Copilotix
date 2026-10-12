@@ -130,6 +130,7 @@ export default function ArchiveDetail(props: {
       const frame = requestAnimationFrame(() => { list.dataset.indicator = 'moving' })
       return () => cancelAnimationFrame(frame)
     }
+    return undefined
   }, [activeTab, tabs.length, brief])
 
   return (

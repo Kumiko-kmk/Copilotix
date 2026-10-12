@@ -203,7 +203,6 @@ export const storageGrowthPointSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
   totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 }).strict()
-export type StorageGrowthPoint = z.infer<typeof storageGrowthPointSchema>
 export const storageInfoSchema = z.object({
   rootPath: boundedPath,
   exists: z.boolean(),

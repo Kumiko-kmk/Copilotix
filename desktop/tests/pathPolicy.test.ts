@@ -2,8 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PathPolicy, resolveLexicalWithinRoot } from '@main/pathPolicy'
-import { PathPolicy as UtilityPathPolicy } from '../src/utility/core/persistence/pathPolicy'
+import { PathPolicy, resolveLexicalWithinRoot } from '@core/pathPolicy'
 
 const directories: string[] = []
 
@@ -64,7 +63,7 @@ describe('PathPolicy', () => {
   })
 })
 
-describe.each([['Main', PathPolicy], ['Utility', UtilityPathPolicy]] as const)('%s real path aliases', (_name, Policy) => {
+describe('PathPolicy real path aliases', () => {
   it('accepts equivalent root spellings for existing and future children but rejects real escapes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'copilotix-path-alias-'))
     directories.push(directory)
@@ -78,7 +77,7 @@ describe.each([['Main', PathPolicy], ['Utility', UtilityPathPolicy]] as const)('
     await symlink(outside, join(actualRoot, 'escape'), kind)
     await writeFile(join(actualRoot, 'existing.txt'), 'fixture')
     const canonicalRoot = await realpath(actualRoot)
-    const policy = new Policy()
+    const policy = new PathPolicy()
     expect(policy.resolveChild(aliasRoot, join(canonicalRoot, 'existing.txt'))).toBe(join(canonicalRoot, 'existing.txt'))
     expect(policy.resolveChild(aliasRoot, join(canonicalRoot, 'future', 'file.txt'))).toBe(join(canonicalRoot, 'future', 'file.txt'))
     expect(policy.resolveChild(canonicalRoot, join(aliasRoot, 'future.txt'))).toBe(join(canonicalRoot, 'future.txt'))

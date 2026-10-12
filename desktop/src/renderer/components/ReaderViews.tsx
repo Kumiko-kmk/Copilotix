@@ -19,7 +19,7 @@ import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
 import PaperInsightActions from './PaperInsightActions'
 import type { PaperChatController } from '../usePaperChat'
 import type { ReaderViewId } from '../readerLayout'
-import { buildReaderFigureGeometries, projectReaderFigureGroups } from '../readerFigureGroups'
+import { buildReaderFigureGeometries, projectReaderFigureGroups } from '@shared/readerFigureGroups'
 import { createScrollSyncHub } from '../readerScrollSync'
 import { useFigureArtifacts } from '../useFigureArtifacts'
 

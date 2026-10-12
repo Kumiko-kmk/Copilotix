@@ -15,7 +15,6 @@ export const figureInsightContentSchema = z.object({
   overview: z.string().trim().max(240),
   takeaway: z.string().trim().max(160)
 }).strict().refine(v => v.displayWeight === 0 || Boolean(v.overview && v.takeaway), '非零评分需要概述和要点')
-export type FigureInsightContent = z.infer<typeof figureInsightContentSchema>
 
 export const figureInsightModelSchema = z.union([
   z.object({ provider: z.literal('qwen'), name: z.enum(['qwen3.8-flash', 'qwen3.8-max']) }).strict(),

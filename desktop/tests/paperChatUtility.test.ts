@@ -11,7 +11,6 @@ import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { SqliteRagRepository } from '../src/utility/core/persistence/sqliteRagRepository'
 import { SqliteJobRepository } from '../src/utility/core/persistence/sqliteJobRepository'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import { RagDomainService } from '../src/utility/core/ragDomainService'
 import { RagContentIndexService } from '../src/utility/core/compute/ragContentIndexService'
 import { createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
 
@@ -24,7 +23,7 @@ describe('paper chat Utility integration', () => {
       const rag = new SqliteRagRepository(database)
       const jobs = new SqliteJobRepository(database)
       const indexer = new RagContentIndexService(database, rag)
-      const operations = createUtilityOperationHandlers({ database, repository, ragRepository: rag, ragService: new RagDomainService(database, rag, jobs), ragContentIndexService: indexer })
+      const operations = createUtilityOperationHandlers({ database, repository, jobRepository: jobs, ragRepository: rag, ragContentIndexService: indexer })
       const documentId = randomUUID()
       const now = new Date().toISOString()
       const text = '# Abstract\n\nAttention is the main contribution.\n'
