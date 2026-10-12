@@ -44,6 +44,10 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
     return this.classList.contains('markdown-minimap') ? 400 : 200
   })
+  // The pane becomes ready only after the minimap's first overview, which needs a laid-out scroller.
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-scroll') ? 1_000 : 0
+  })
   Object.defineProperty(HTMLImageElement.prototype, 'complete', {
     configurable: true,
     get: () => false
@@ -280,6 +284,9 @@ describe('MarkdownPane', () => {
       memberBlockIndexes: [0, 1, 2],
       captionMarkdown: '图 4：模型比较。'
     }
+    // The crop is ready on first render, which unmounts the source images the pane still waits on;
+    // they are cached local assets here, so they count as decoded without a load event.
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', { configurable: true, get: () => true })
     const view = render(
       <MarkdownPane
         active

@@ -25,6 +25,17 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ResizeObserverMock)
   scrollIntoView = vi.fn()
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView })
+  // A Markdown pane becomes ready only after its minimap's first overview, which needs a laid-out
+  // rail and scroller; every other element keeps jsdom's zero metrics.
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-minimap') ? 60 : 0
+  })
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-minimap') ? 400 : this.classList.contains('markdown-scroll') ? 200 : 0
+  })
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-scroll') ? 1_000 : 0
+  })
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     value: vi.fn((query: string) => ({
@@ -36,6 +47,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 

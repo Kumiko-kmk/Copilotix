@@ -3,6 +3,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   resolve: { alias: { '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@main': resolve(__dirname, 'src/main') } },
+  // Mirrors the renderer config: the paper archive embeds its cassette model with `?inline`.
+  assetsInclude: ['**/*.glb'],
   test: {
     environment: 'node',
     // Windows + coverage instrumentation can exceed the default 5 s for React views.

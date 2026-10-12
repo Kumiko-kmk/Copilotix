@@ -67,7 +67,8 @@ export default function ArchiveDetail(props: {
   const reopenedRef = React.useRef(false)
   React.useLayoutEffect(() => {
     const article = articleRef.current
-    if (!article || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    // Like the redaction bars, the file simply appears where the Web Animations API is missing.
+    if (!article || typeof article.animate !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     if (closing) reopenedRef.current = true
     // Reopened while closing: the titles are still in place, so the file simply fades back in.
     const glides = morphFrom && !(reopenedRef.current && !closing)
