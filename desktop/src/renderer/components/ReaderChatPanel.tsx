@@ -1,4 +1,5 @@
 import React from 'react'
+import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
 import { Button, Dropdown, Empty, Input, Progress, Select, message } from 'antd'
 import { ArrowUpOutlined, BorderOutlined, CloseOutlined, MoreOutlined } from '@ant-design/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -9,7 +10,7 @@ import type { PaperChatController, PaperChatTurn } from '../usePaperChat'
 import SafeMarkdown from './SafeMarkdown'
 import './paperChat.css'
 
-const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek' }
+const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek', codex: 'Codex' }
 const SUGGESTIONS = ['总结这篇论文的主要贡献', '解释论文的核心方法', '实验得出了哪些结论？']
 
 /** Provider, model and readiness derived from the shared translation settings. */
@@ -17,11 +18,12 @@ function useChatRouting(chat: PaperChatController) {
   const settingsQuery = useQuery<AppSettings>({ queryKey: ['settings'], queryFn: () => window.copilotix.getSettings() })
   const settings = settingsQuery.data
   const provider = settings ? resolvePaperChatProvider(settings, chat.selectedModel?.provider) : null
-  const configured = Boolean(settings && provider && settings.credentials[provider].state === 'valid')
-  const defaultModel = provider === 'qwen' ? settings?.qwenChatModel ?? 'qwen-plus' : settings?.deepseekChatModel ?? 'deepseek-flash'
+  const codexQuery = useQuery({ queryKey: ['codex', settings?.codex], queryFn: () => window.copilotix.codex.inspect({ settings: settings?.codex ?? DEFAULT_CODEX_SETTINGS }), enabled: provider === 'codex', staleTime: 60_000, retry: false })
+  const configured = Boolean(settings && provider && (provider === 'codex' ? codexQuery.data?.state === 'ready' : settings.credentials[provider].state === 'valid'))
+  const defaultModel = provider === 'codex' ? settings?.codex?.chatModel ?? 'default' : provider === 'qwen' ? settings?.qwenChatModel ?? 'qwen-plus' : settings?.deepseekChatModel ?? 'deepseek-flash'
   const selectedModel = chat.selectedModel?.provider === provider ? chat.selectedModel.model : defaultModel
   const model = provider ? resolvePaperChatModel(provider, selectedModel) : ''
-  const models = provider ? PAPER_CHAT_MODELS[provider] : []
+  const models = provider === 'codex' ? codexQuery.data?.models.map(model => model.id) ?? [] : provider ? PAPER_CHAT_MODELS[provider] : []
   const validModel = Boolean(provider && models.includes(model))
   const consented = Boolean(settings && provider && hasPaperChatConsent(settings, provider))
   return { settings, provider, configured, model, models, validModel, consented }
@@ -85,7 +87,7 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
         size="small" variant="borderless" aria-label="问答服务商" className="reader-chat-provider"
         value={provider} disabled={props.locked} popupMatchSelectWidth={false} placement="topLeft" placeholder="服务商"
         options={(Object.keys(PROVIDER_LABELS) as PaperChatProvider[]).map((value) => ({ value, label: PROVIDER_LABELS[value], title: '', disabled: !routing.settings?.enabledTranslationProviders.includes(value) }))}
-        onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: resolvePaperChatModel(value, value === 'qwen' ? routing.settings?.qwenChatModel : routing.settings?.deepseekChatModel) })}
+        onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: resolvePaperChatModel(value, value === 'codex' ? routing.settings?.codex?.chatModel : value === 'qwen' ? routing.settings?.qwenChatModel : routing.settings?.deepseekChatModel) })}
       />
       <Select
         title=""
@@ -236,7 +238,7 @@ export default function ReaderChatPanel(props: {
         {consentOpen ? (
           <div className="paper-chat-consent" role="group" aria-label="同意发送论文片段">
             <strong>同意发送论文片段</strong>
-            <p>接收方：{routing.provider === 'qwen' ? '阿里云 Qwen' : 'DeepSeek'}，模型：{routing.model}。API 与当前翻译服务共用。</p>
+            <p>接收方：{routing.provider === 'codex' ? 'Codex（本机登录的模型服务）' : routing.provider === 'qwen' ? '阿里云 Qwen' : 'DeepSeek'}，模型：{routing.model}。连接与当前翻译服务共用。</p>
             <p>会发送当前问题、最近的对话、选中文本与当前论文片段；短论文可能发送完整的已解析文本。可在「⋯」菜单撤销后续发送授权，但不会远程删除服务商已收到的数据。</p>
             <div className="paper-chat-consent-actions">
               <Button size="small" onClick={() => setConsentOpen(false)}>取消</Button>

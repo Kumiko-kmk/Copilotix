@@ -289,7 +289,7 @@ export default function LibraryPage(props: {
       {unsupported ? (
         <div className="paper-archive-panel paper-archive-empty" role="status">
           <h2>当前环境无法显示三维文库</h2>
-          <p>可以使用右上角搜索打开论文，或在任务管理中浏览全部论文。</p>
+          <p>可以使用右上角搜索查找论文，选择搜索结果即可打开阅读。</p>
         </div>
       ) : empty ? (
         <div className="paper-archive-panel paper-archive-empty" role="status">

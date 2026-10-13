@@ -229,6 +229,26 @@ describe('minimum sizes and scroll sync toggle', () => {
 })
 
 describe('workbench keyboard shortcuts and maximize', () => {
+  it('shows a failed missing original with a retry action while leaving populated panes readable', async () => {
+    const retry = vi.fn(async () => undefined)
+    const view = render(<Workbench input={{ ...BASE_INPUT, originalBlocks: [], translatedReady: false, translatedBlocks: [], taskStatus: 'failed', taskError: 'fetch failed', onRetry: retry }} />)
+    expect(view.getByRole('alert').textContent).toContain('原文未生成，文档处理失败')
+    expect(view.getByRole('alert').textContent).toContain('检查网络或代理')
+    fireEvent.click(view.getByRole('button', { name: '重试文档处理' }))
+    await waitFor(() => expect(retry).toHaveBeenCalledOnce())
+    fireEvent.click(view.getByRole('tab', { name: /Markdown（中文）/u }))
+    expect(view.getByRole('alert').textContent).toContain('译文未生成')
+    view.rerender(<Workbench input={{ ...BASE_INPUT, taskStatus: 'failed', taskError: '翻译失败' }} />)
+    await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeTruthy())
+    expect(view.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows processing state instead of an empty original while parsing', () => {
+    const view = render(<Workbench input={{ ...BASE_INPUT, originalBlocks: [], taskStatus: 'parsing' }} />)
+    expect(view.getByRole('status').textContent).toContain('原文正在准备中')
+    expect(view.queryByRole('button', { name: '重试文档处理' })).toBeNull()
+  })
+
   it('switches, closes, restores and splits views from the keyboard', async () => {
     const view = render(<Harness />)
     const selected = (): string | null => view.container.querySelector('[role="tab"][aria-selected="true"] .reader-tab-label')?.textContent ?? null

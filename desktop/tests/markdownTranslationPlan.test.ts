@@ -10,7 +10,7 @@ import { flattenSegments, TRANSLATION_PIPELINE_VERSION, type TableTranslationReq
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import { PathPolicy } from '@core/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111'
 const roots: string[] = []

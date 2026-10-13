@@ -61,7 +61,7 @@ describe('paper chat Utility integration', () => {
       await reopened.handlers['chat:clear']!({ payload: { documentId } } as never, signal)
       expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([])
       const migration = database.connection.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as { version: number }
-      expect(migration.version).toBe(4)
+      expect(migration.version).toBe(5)
       const cancelled = new AbortController(); cancelled.abort()
       await expect(ensure({ payload: { documentId } } as never, cancelled.signal)).rejects.toThrow()
       await expect(ensure({ payload: { documentId: randomUUID() } } as never, signal)).rejects.toMatchObject({ code: 'QUERY_SCOPE_INVALID' })

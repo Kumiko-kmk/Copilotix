@@ -5,7 +5,7 @@
 ## 生成與生命週期
 
 - 解析完成即可手動生成。沿用首選且已啟用的 Qwen／DeepSeek、閱讀器共用預設模型、已驗證 Key 與版本 2 論文片段發送授權；缺任何一項都不發送正文。
-- 「翻译完成后自动生成 AI 解读」預設關閉；開啟後只在翻譯成功時排隊，已有未過期結果就跳過，不追溯批量生成。關閉會取消排隊／生成任務。生成使用模型 API，產生額外費用。
+- 翻譯成功後一律自動排隊生成 AI 解讀（2026-10-13 使用者決定，設定頁不提供開關）；`autoGeneratePaperInsight` 只為設定 schema 兼容保留，讀取時恆為 true、舊值 false 被忽略。已有未過期結果就跳過，解析完成不觸發，不追溯批量生成。發送前仍檢查問答同意與已驗證的 Key／Codex 登入；未滿足時不發送。生成使用模型服務，產生額外費用。
 - 每篇 single-flight、全域最多 2 條管線、300 秒時限，共用 provider FIFO／限流。格式校驗失敗修復一次；網路、授權與限流錯誤不盲目重試。
 - 刪除論文、文庫維護與退出均先阻止新生成、取消並等待落盤；取消不能中斷已開始的原子提交。失敗不覆蓋已保存結果。
 
@@ -18,3 +18,5 @@
 - PathPolicy 限定文獻目錄並拒絕鏈接。寫入使用獨佔 `.pending-*`、fsync、atomic rename；Windows EPERM／EACCES／EBUSY 最多約 6.3 秒重試，永久失敗保留舊檔並清理臨時檔。備份／恢復／遷移包含完整文獻樹；明確授權的卸載清理包含 v1、v2 與臨時檔。
 
 摘錄、提示詞、檢查限制與真實 API 驗證見 [Paper Brief v2](PAPER_BRIEF_ZH.md)。測試入口：`paperBrief.test.ts`、`paperInsight.test.ts`、`paperInsightIpc.test.ts`、`chatProvider.test.ts`、備份與卸載清理測試，以及 `e2e/paper-insight.spec.ts`／`paper-archive.spec.ts`。Mock 測試驗證流程，不代表模型品質。
+
+Codex 可作為已啟用的首選服務：沿用版本 2 發送授權，使用服務連接中選定的 Codex 問答模型；不讀取 API Key。圖片還需模型支持 image，否則明確失敗。結果仍經既有 schema／grounding 校驗與原子保存。運行時與資料庫 provider 擴展見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)，設定步驟見 [服務配置](wiki/Service-Setup.md)。

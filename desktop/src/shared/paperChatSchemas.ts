@@ -5,27 +5,29 @@ import type { AppSettings } from './types'
 export const CHAT_CONSENT_VERSION = 2
 export const PAPER_CHAT_DEFAULT_BUDGET = 48_000
 export const PAPER_CHAT_MAX_BYTES = 256 * 1024
-export const paperChatProviderSchema = z.enum(['qwen', 'deepseek'])
+export const paperChatProviderSchema = z.enum(['qwen', 'deepseek', 'codex'])
 export type PaperChatProvider = z.infer<typeof paperChatProviderSchema>
 export const chatModelSchema = z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9_.:/-]+$/u)
 export const qwenChatModelSchema = z.enum(['qwen-plus', 'qwen3.8-flash', 'qwen3.8-max'])
 export const deepseekChatModelSchema = z.enum(['deepseek-flash', 'deepseek-v4-pro'])
-export const supportedChatModelSchema = z.union([qwenChatModelSchema, deepseekChatModelSchema])
+export const supportedChatModelSchema = chatModelSchema
 export const contentIdentitySchema = citationLocatorSchema.shape.contentRevisionId
 // Follow the existing translation configuration; the legacy chatProvider is ignored.
 export function resolvePaperChatProvider(settings: Pick<AppSettings, 'translationProvider' | 'enabledTranslationProviders'>, selected?: PaperChatProvider): PaperChatProvider | null {
   const provider = selected ?? settings.translationProvider
-  return (provider === 'qwen' || provider === 'deepseek') && settings.enabledTranslationProviders.includes(provider) ? provider : null
+  return (provider === 'qwen' || provider === 'deepseek' || provider === 'codex') && settings.enabledTranslationProviders.includes(provider) ? provider : null
 }
 export function hasPaperChatConsent(settings: Pick<AppSettings, 'chatConsentVersion' | 'chatConsentProvider' | 'translationProvider' | 'enabledTranslationProviders'>, provider: PaperChatProvider): boolean {
   return settings.chatConsentVersion === CHAT_CONSENT_VERSION && (settings.chatConsentProvider ?? resolvePaperChatProvider(settings)) === provider
 }
 export const PAPER_CHAT_MODELS: Record<PaperChatProvider, readonly string[]> = {
   qwen: qwenChatModelSchema.options,
+  codex: [],
   deepseek: deepseekChatModelSchema.options
 }
 // Old custom selections fall back without discarding the paper's saved chat.
 export function resolvePaperChatModel(provider: PaperChatProvider, model?: string | null): string {
+  if (provider === 'codex') return model?.trim() || 'default'
   const models = PAPER_CHAT_MODELS[provider]
   return model && models.includes(model) ? model : models[0]!
 }
@@ -45,7 +47,7 @@ export const paperChatAskRequestSchema = z.object({
   history: paperChatHistorySchema,
   model: supportedChatModelSchema.optional(),
   provider: paperChatProviderSchema.optional()
-}).strict().refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES, 'Request exceeds byte budget')
+}).strict().refine(value => value.provider === 'codex' || !value.model || [...PAPER_CHAT_MODELS.qwen, ...PAPER_CHAT_MODELS.deepseek].includes(value.model), 'Unsupported cloud model').refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES, 'Request exceeds byte budget')
 export const paperChatAskResultSchema = z.object({ requestId: ragUuidSchema }).strict()
 export const paperChatCancelRequestSchema = paperChatAskResultSchema
 export const paperChatCancelResultSchema = z.object({ cancelled: z.boolean() }).strict()

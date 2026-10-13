@@ -3,8 +3,8 @@ import { executableProviderOrder, normalizeEnabledProviders, normalizeProviderOr
 
 describe('translation provider policy', () => {
   it('restores legacy preferred-provider order and rejects malformed stored policies', () => {
-    expect(normalizeProviderOrder(undefined, 'deepseek')).toEqual(['deepseek', 'qwen', 'bing', 'transmart'])
-    expect(normalizeProviderOrder(['qwen', 'qwen'], 'qwen')).toEqual(['qwen', 'deepseek', 'bing', 'transmart'])
+    expect(normalizeProviderOrder(undefined, 'deepseek')).toEqual(['deepseek', 'qwen', 'bing', 'transmart', 'codex'])
+    expect(normalizeProviderOrder(['qwen', 'qwen'], 'qwen')).toEqual(['qwen', 'deepseek', 'bing', 'transmart', 'codex'])
     expect(normalizeEnabledProviders([], ['qwen', 'deepseek', 'bing', 'transmart'])).toEqual(['qwen', 'deepseek', 'bing', 'transmart'])
   })
 

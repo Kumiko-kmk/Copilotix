@@ -13,7 +13,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     const window = await app.firstWindow()
     await expect.poll(() => window.evaluate(() => typeof window.copilotix?.paperInsight?.get)).toBe('function')
     const initial = await window.evaluate(() => window.copilotix.getSettings())
-    expect(initial.autoGeneratePaperInsight).toBe(false)
+    expect(initial.autoGeneratePaperInsight).toBe(true)
     expect(initial.credentials.qwen.state).toBe('missing')
     // Consent alone never enables a network call without a verified key.
     await window.evaluate(async () => {
@@ -106,10 +106,8 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     await window.locator('[data-edge-dock="top"]').hover()
     await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '设置' }).click()
     await window.getByRole('button', { name: '模型设置' }).click()
-    const automatic = window.getByRole('checkbox', { name: '翻译完成后自动生成 AI 解读' })
-    await expect(automatic).not.toBeChecked()
-    await automatic.check()
-    await window.getByRole('button', { name: /保存/u }).click()
-    await expect.poll(() => window.evaluate(async () => (await window.copilotix.getSettings()).autoGeneratePaperInsight)).toBe(true)
+    // Automatic briefs are always on: no switch is offered.
+    await expect(window.getByRole('checkbox', { name: '翻译完成后自动生成 AI 解读' })).toHaveCount(0)
+    expect((await window.evaluate(() => window.copilotix.getSettings())).autoGeneratePaperInsight).toBe(true)
   } finally { await app?.close(); await workspace.cleanup() }
 })

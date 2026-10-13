@@ -1,3 +1,4 @@
+import type { ModelGateway } from './modelGateway'
 import { randomUUID } from 'node:crypto'
 import { PAPER_CHAT_DEFAULT_BUDGET, PAPER_CHAT_MODELS, paperChatAskRequestSchema, paperContextResultSchema, resolvePaperChatProvider, resolvePaperChatModel, hasPaperChatConsent, type PaperChatAskRequest, type PaperChatProvider, type PaperContext, type PaperContextRequest } from '@shared/paperChatSchemas'
 import { canTransitionRagStreamEvent, citationSchema, ragErrorCodeSchema, ragStreamEventSchema, RAG_MAX_STREAM_DELTA_CHARS, type RagStreamEvent, type RagStreamEventType, type RagErrorCode } from '@shared/ragSchemas'
@@ -18,7 +19,7 @@ export interface PaperChatDependencies {
   settings(): Promise<AppSettings>
   key(provider: PaperChatProvider): Promise<string | null>
   buildContext(request: PaperContextRequest, signal: AbortSignal): Promise<PaperContext>
-  stream(input: { provider: PaperChatProvider; baseUrl: string; model: string; key: string; messages: ChatMessage[]; signal: AbortSignal; onDelta(text: string): void }): Promise<ProviderTokenUsage | null>
+  stream: ModelGateway['stream']
   recordUsage(provider: PaperChatProvider, usage: ProviderTokenUsage): Promise<void>
   log(details: { requestId: string; provider: PaperChatProvider; model: string; durationMs: number; code: string; totalTokens: number }): void
 }
@@ -45,13 +46,13 @@ export class PaperChatService {
     if (this.destroyed) throw new ChatProviderError('RAG_CANCELLED', '问答窗口已关闭')
     const settings = await this.deps.settings()
     const provider = resolvePaperChatProvider(settings, request.provider)
-    if (!provider) throw new ChatProviderError('CHAT_PROVIDER_REQUIRED', '请启用 Qwen 或 DeepSeek，并在问答中选择服务商')
-    const model = request.model ?? resolvePaperChatModel(provider, provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
-    if (!PAPER_CHAT_MODELS[provider].includes(model)) throw new ChatProviderError('RAG_INVALID_STATE', '请选择当前服务商支持的问答模型')
+    if (!provider) throw new ChatProviderError('CHAT_PROVIDER_REQUIRED', '请启用 Qwen、DeepSeek 或 Codex，并在问答中选择服务商')
+    const model = request.model ?? resolvePaperChatModel(provider, provider === 'codex' ? settings.codex?.chatModel : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
+    if (provider !== 'codex' && !PAPER_CHAT_MODELS[provider].includes(model)) throw new ChatProviderError('RAG_INVALID_STATE', '请选择当前服务商支持的问答模型')
     if (!hasPaperChatConsent(settings, provider)) throw new ChatProviderError('CHAT_CONSENT_REQUIRED', '请先同意向服务商发送论文片段')
-    const key = await this.deps.key(provider)
-    if (!key) throw new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '请先保存模型 API Key')
-    if (settings.credentials[provider].state !== 'valid') throw new ChatProviderError('CHAT_CREDENTIAL_UNVERIFIED', '请先验证模型 API Key')
+    const key = provider === 'codex' ? null : await this.deps.key(provider)
+    if (provider !== 'codex' && !key) throw new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '请先保存模型 API Key')
+    if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') throw new ChatProviderError('CHAT_CREDENTIAL_UNVERIFIED', '请先验证模型 API Key')
     if (this.destroyed) throw new ChatProviderError('RAG_CANCELLED', '问答窗口已关闭')
     let previousRun = this.byDocument.get(request.documentId)
     while (previousRun) {
@@ -116,7 +117,7 @@ export class PaperChatService {
     return this.deps.clear(documentId)
   }
 
-  private async execute(run: Run, request: PaperChatAskRequest, settings: AppSettings, provider: PaperChatProvider, key: string): Promise<void> {
+  private async execute(run: Run, request: PaperChatAskRequest, settings: AppSettings, provider: PaperChatProvider, key: string | null): Promise<void> {
     const signal = run.controller.signal
     const model = run.turn.model
     const start = Date.now()
@@ -166,9 +167,9 @@ export class PaperChatService {
       // Recheck authorization after asynchronous retrieval / queueing.
       const latest = await abortable(this.deps.settings(), signal)
       if (!hasPaperChatConsent(latest, provider) || resolvePaperChatProvider(latest, request.provider) !== provider) throw new ChatProviderError('CHAT_CONSENT_REQUIRED', '服务商或问答授权已变更，请重新确认')
-      if (latest.credentials[provider].state !== 'valid') throw new ChatProviderError('CHAT_CREDENTIAL_UNVERIFIED', '模型凭据已变更，请重新验证')
+      if (provider !== 'codex' && latest.credentials[provider].state !== 'valid') throw new ChatProviderError('CHAT_CREDENTIAL_UNVERIFIED', '模型凭据已变更，请重新验证')
       const usage = await abortable(this.deps.stream({
-        provider, baseUrl: provider === 'qwen' ? settings.qwenBaseUrl : settings.deepseekBaseUrl, model, key,
+        lane: 'interactive', provider, baseUrl: provider === 'qwen' ? settings.qwenBaseUrl : settings.deepseekBaseUrl, model, key,
         messages: buildPaperChatMessages(request, context), signal,
         onDelta: (delta) => {
           if (signal.aborted) return

@@ -3,7 +3,7 @@ import type { CitationLocator } from '@shared/ragSchemas'
 export type JsonObject = Record<string, unknown>
 
 export type DocumentId = string
-export type DocumentTranslationProvider = 'qwen' | 'deepseek' | 'bing' | 'transmart'
+export type DocumentTranslationProvider = 'qwen' | 'deepseek' | 'bing' | 'transmart' | 'codex'
 
 /**
  * Durable work kinds.  The chat index job shares the job table and state

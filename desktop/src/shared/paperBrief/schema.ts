@@ -82,7 +82,7 @@ export const paperBriefSchema = paperBriefContentSchema.extend({
   checks: z.array(findingCheckSchema).max(6),
   provenance: z.object({
     promptVersion: text(64),
-    model: z.object({ provider: z.enum(['qwen', 'deepseek']), name: text(80) }).strict(),
+    model: z.object({ provider: z.enum(['qwen', 'deepseek', 'codex']), name: text(80) }).strict(),
     generatedAt: z.iso.datetime(),
     /** Same meaning as the v1 insight: artifact revisions of the parsed/translated Markdown. */
     sourceRevision: text(512),

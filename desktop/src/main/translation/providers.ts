@@ -15,6 +15,7 @@ type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Re
 type UsageObserver = (provider: 'qwen' | 'deepseek', usage: ProviderTokenUsage) => void | Promise<void>
 
 const PROVIDER_CONCURRENCY: Readonly<Record<TranslationProviderId, number>> = Object.freeze({
+  codex: 1,
   qwen: 3,
   deepseek: 3,
   bing: 1,

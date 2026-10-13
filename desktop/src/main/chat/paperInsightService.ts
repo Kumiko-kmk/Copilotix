@@ -1,10 +1,12 @@
+import { z } from 'zod'
+import { paperBriefContentSchema } from '@shared/paperBrief/schema'
+import type { ModelGateway } from './modelGateway'
 import { assembleBrief, buildBriefMessages, buildBriefRepairMessage, clipPreviousAnswer, parseBriefResponse, PAPER_BRIEF_REQUEST, PAPER_BRIEF_MAX_REQUEST_BYTES, type PaperBrief } from '@shared/paperBrief'
 import type { BriefContextResult, BriefAnchor } from '@shared/paperBrief/contracts'
 import { paperInsightStateSchema, paperInsightRequestSchema, type PaperInsightState } from '@shared/paperInsight'
 import { hasPaperChatConsent, resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { AppSettings } from '@shared/types'
 import type { Job } from '@core/types'
-import type { ChatProvider } from './chatProvider'
 import { ChatProviderError } from './chatProvider'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
 
@@ -14,7 +16,7 @@ export interface PaperInsightDependencies {
   get(documentId: string): Promise<PaperInsightState>
   context(documentId: string, signal: AbortSignal): Promise<BriefContextResult>
   save(documentId: string, brief: PaperBrief, anchors: BriefAnchor[]): Promise<unknown>
-  stream: ChatProvider['stream']
+  stream: ModelGateway['stream']
   recordUsage(provider: PaperChatProvider, usage: ProviderTokenUsage): Promise<void>
   changed(documentId: string, state: PaperInsightState): void
   canStart(): boolean
@@ -44,12 +46,12 @@ export class PaperInsightService {
   private async authorization() {
     const settings = await this.deps.settings()
     const provider = resolvePaperChatProvider(settings)
-    if (!provider) return { reason: '请在设置中将已启用的 Qwen 或 DeepSeek 设为首选服务商。' } as const
+    if (!provider) return { reason: '请在设置中将已启用的 Qwen、DeepSeek 或 Codex 设为首选服务商。' } as const
     if (!hasPaperChatConsent(settings, provider)) return { reason: '请先在阅读器 AI 问答中同意向服务商发送论文片段。' } as const
-    const key = await this.deps.key(provider)
-    if (!key) return { reason: '请先在服务连接中保存模型 API Key。' } as const
-    if (settings.credentials[provider].state !== 'valid') return { reason: '请先在服务连接中验证模型 API Key。' } as const
-    const model = resolvePaperChatModel(provider, provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
+    const key = provider === 'codex' ? null : await this.deps.key(provider)
+    if (provider !== 'codex' && !key) return { reason: '请先在服务连接中保存模型 API Key。' } as const
+    if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') return { reason: '请先在服务连接中验证模型 API Key。' } as const
+    const model = resolvePaperChatModel(provider, provider === 'codex' ? settings.codex?.chatModel : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
     return { settings, provider, key, model } as const
   }
 
@@ -104,7 +106,6 @@ export class PaperInsightService {
       let auth = await this.authorization()
       signal.throwIfAborted()
       if (auth.reason !== undefined) { this.emit(documentId, { status: 'unavailable', reason: auth.reason }); return }
-      if (run.automatic && !auth.settings.autoGeneratePaperInsight) { this.emit(documentId, stored); return }
       const context = await this.deps.context(documentId, signal)
       if (context.documentId !== documentId) throw new Error('scope mismatch')
       const messages = buildBriefMessages(context.context)
@@ -113,12 +114,11 @@ export class PaperInsightService {
         auth = await this.authorization()
         signal.throwIfAborted()
         if (auth.reason !== undefined) { this.emit(documentId, { status: 'unavailable', reason: auth.reason }); return }
-        if (run.automatic && !auth.settings.autoGeneratePaperInsight) { this.emit(documentId, stored); return }
         let answer = ''
         const usage = await this.deps.stream({
           provider: auth.provider, model: auth.model, key: auth.key,
           baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
-          signal, messages, ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
+          signal, messages, ...(auth.provider === 'codex' ? { outputSchema: z.toJSONSchema(paperBriefContentSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
           onDelta: (delta) => {
             signal.throwIfAborted()
             if (answer.length + delta.length > 32_768) throw new Error('output budget exceeded')
@@ -183,8 +183,8 @@ export class PaperInsightService {
   }
   async onJobChanged(job: Pick<Job, 'kind' | 'status' | 'documentId'>): Promise<void> {
     if (!['translate', 'parse'].includes(job.kind) || job.status !== 'succeeded' || !this.deps.canStart() || this.paused || this.destroyed) return
-    const settings = await this.deps.settings()
-    if (job.kind === 'translate' && settings.autoGeneratePaperInsight) await this.generate(job.documentId, true)
+    // Every completed translation queues its brief; consent and a verified key are still checked before sending.
+    if (job.kind === 'translate') await this.generate(job.documentId, true)
     else this.emit(job.documentId, await this.get(job.documentId))
   }
 }

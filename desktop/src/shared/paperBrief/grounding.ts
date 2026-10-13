@@ -102,7 +102,7 @@ export function groundBrief(content: PaperBriefContent, context: BriefContext): 
 }
 
 export interface BriefProvenanceInput {
-  provider: 'qwen' | 'deepseek'
+  provider: 'qwen' | 'deepseek' | 'codex'
   model: string
   sourceRevision: string
   generatedAt?: string

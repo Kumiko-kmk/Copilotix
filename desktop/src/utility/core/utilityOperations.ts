@@ -56,7 +56,7 @@ import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
 import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sqliteJobRepository'
 import { SqliteRagRepository, SqliteRagRepositoryError } from './persistence/sqliteRagRepository'
-import { PathPolicy } from '@core/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
 import { RagContentIndexError, RagContentIndexService } from './compute/ragContentIndexService'
 
@@ -444,6 +444,7 @@ async function importPdf(
     throw new CoreUtilityOperationError('CORE_NOT_FOUND', 'PDF source is unavailable', false)
   }
   if (!sourceInfo.isFile()) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'PDF source must be a regular file', false)
+  if (sourceInfo.size === 0) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'PDF source is empty', false)
   if (sourceInfo.size > MAX_PDF_BYTES) throw new CoreUtilityOperationError('CORE_LIMIT_EXCEEDED', 'PDF exceeds the supported size limit', false)
   const policy = new PathPolicy()
   await mkdir(state.outputRoot, { recursive: true })
@@ -459,12 +460,14 @@ async function importPdf(
 
   const hash = createHash('sha256')
   let size = 0
+  let header = Buffer.alloc(0)
   let published = false
   try {
     const hashing = new Transform({
       transform(chunk, _encoding, callback) {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
         size += buffer.length
+        if (header.length < 1024) header = Buffer.concat([header, buffer.subarray(0, 1024 - header.length)])
         if (size > MAX_PDF_BYTES) {
           callback(new CoreUtilityOperationError('CORE_LIMIT_EXCEEDED', 'PDF exceeds the supported size limit', false))
           return
@@ -479,6 +482,9 @@ async function importPdf(
       createWriteStream(partial, { flags: 'wx' }),
       { signal }
     )
+    if (size === 0 || !/%PDF-\d\.\d/u.test(header.toString('latin1'))) {
+      throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Invalid PDF header', false)
+    }
     const handle = await open(partial, 'r+')
     try {
       await handle.sync()

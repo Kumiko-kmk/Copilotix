@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  resolve: { alias: { '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@main': resolve(__dirname, 'src/main') } },
+  resolve: { alias: { '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@runtime': resolve(__dirname, 'src/runtime'), '@main': resolve(__dirname, 'src/main') } },
   // Mirrors the renderer config: the paper archive embeds its cassette model with `?inline`.
   assetsInclude: ['**/*.glb'],
   test: {
@@ -25,6 +25,7 @@ export default defineConfig({
         'src/main/**/*.tsx',
         'src/core/**/*.ts',
         'src/core/**/*.tsx',
+        'src/runtime/**/*.ts',
         'src/shared/**/*.ts',
         'src/shared/**/*.tsx'
       ],

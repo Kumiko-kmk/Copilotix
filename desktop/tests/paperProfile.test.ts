@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractPaperProfile } from '../src/renderer/paperArchive/paperProfile'
+import { cleanInline, extractPaperProfile } from '../src/renderer/paperArchive/paperProfile'
 
 const ORIGINAL = [
   'Provided proper attribution is provided, the tables may be reproduced.',
@@ -36,6 +36,11 @@ const TRANSLATED = [
 ].join('\n\n')
 
 describe('paper profile', () => {
+  it('decodes Markdown escapes without stripping literal underscores or mathematical text', () => {
+    expect(cleanInline('在 x\\_i 与 y\\_j 上编码函数，参考\\[5\\]，**加粗**与`a_b`。')).toBe('在 x_i 与 y_j 上编码函数，参考[5]，加粗与a_b。')
+    expect(cleanInline('公式 $x_i + y_j$ 与 $a < b$。')).toBe('公式 x_i + y_j 与 a < b。')
+    expect(cleanInline('Literal \\\\_path and https://example.com/a_b_c', true)).toBe('Literal \\_path and https://example.com/a_b_c')
+  })
   it('preserves abstract link destinations in autolink, Markdown and HTML forms', () => {
     const url = 'https://github.com/hojonathanho/diffusion'
     for (const link of [`<${url}>`, `[代码](${url})`, `<a href="${url}">代码</a>`, `<${url}/some_code_here>`]) {

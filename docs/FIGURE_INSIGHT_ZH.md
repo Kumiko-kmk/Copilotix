@@ -74,3 +74,5 @@ Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RP
 含排錯的已返回用量為輸入 **174,428**、輸出 **5,644** tokens。按 [DeepSeek 當日官方價格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)（週末閒時，輸入全按未命中 1 元／百萬、輸出 4 元／百萬）估 **0.197004 元人民幣**；續跑快照已去重，未返回 usage 的中斷請求不計入，未讀取帳單，不能當作實際扣款。
 
 使用者要求停止額外驗證前，圖片解析／保存、ChatProvider、Core RPC 四組 **47 項**針對性測試通過。後續維護了 RPC 名稱一致性、圖片首包預算及 JPEG 傳輸身份的回歸用例，依使用者要求未再執行；未跑 smoke、E2E、應用重建或打包。最近一次 typecheck 尚有既有 `renderer/paperArchive/ArchiveDetail.tsx:120` 的 TS7030，不宣稱全倉型別檢查通過。
+
+Codex 可作為已啟用的首選服務：沿用版本 2 發送授權，使用服務連接中選定的 Codex 問答模型；不讀取 API Key。圖片還需模型支持 image，否則明確失敗。結果仍經既有 schema／grounding 校驗與原子保存。運行時與資料庫 provider 擴展見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)，設定步驟見 [服務配置](wiki/Service-Setup.md)。

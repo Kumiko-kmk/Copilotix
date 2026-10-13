@@ -52,14 +52,13 @@ export default function TutorialPage(props: {
   const [apiError, setApiError] = React.useState('')
   const [readerOpened, setReaderOpened] = React.useState(false)
   const [replaying, setReplaying] = React.useState(() => window.localStorage.getItem('copilotix:tutorial:replay') === '1')
-  const [apiVerified, setApiVerified] = React.useState(() => window.localStorage.getItem(TUTORIAL_API_VERIFIED_KEY) === '1')
   const [activeId, setActiveId] = React.useState(() => window.localStorage.getItem('copilotix:tutorial:active-id'))
   const [messageApi, contextHolder] = message.useMessage()
   const sample = replaying ? lastImported : activeId
     ? props.documents.find((document) => document.id === activeId) ?? lastImported
     : props.documents.find((document) => document.sourceHash === TUTORIAL_PAPER_SHA256) ?? lastImported
   const parserReady = props.settings.credentials.parser.state === 'valid'
-  const apiStepComplete = parserReady && apiVerified
+  const apiStepComplete = parserReady
   const taskComplete = sample?.workflow.status === 'completed'
   const canRead = sample && ['translating', 'partial', 'completed'].includes(sample.workflow.status)
   const progress = stageProgress(sample ?? null)
@@ -89,7 +88,6 @@ export default function TutorialPage(props: {
       }
       props.onSettingsSaved(saved.settings)
       window.localStorage.setItem(TUTORIAL_API_VERIFIED_KEY, '1')
-      setApiVerified(true)
       setApiToken('')
       setApiOpen(false)
       messageApi.success('MinerU API 已自动验证并保存')
@@ -131,7 +129,6 @@ export default function TutorialPage(props: {
     setLastImported(null)
     setActiveId(null)
     setReaderOpened(false)
-    setApiVerified(false)
     setReplaying(true)
   }
 

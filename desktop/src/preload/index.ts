@@ -1,3 +1,4 @@
+import { codexProbeSchema, codexStatusSchema } from '@shared/codex'
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightCancelSchema, paperInsightChangedSchema } from '@shared/paperInsight'
 import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightCancelSchema, figureInsightChangedSchema } from '@shared/figureInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
@@ -62,6 +63,10 @@ async function invokeValidated<Request, Response>(
 }
 
 const api: CopilotixDesktopApi = {
+  codex: {
+    inspect: request => invokeValidated('codex:inspect', codexProbeSchema, codexStatusSchema, request),
+    selectExecutable: () => invokeValidated('codex:select-executable', noRequestSchema, outputDirectorySchema, undefined)
+  },
   figureInsight: {
     get: request => invokeValidated('figureInsight:get', figureInsightRequestSchema, figureInsightStateSchema, request),
     generate: request => invokeValidated('figureInsight:generate', figureInsightRequestSchema, voidResponseSchema, request),

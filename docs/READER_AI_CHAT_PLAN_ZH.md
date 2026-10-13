@@ -19,9 +19,9 @@ updated: 2026-10-12
 
 ## 2. 服務商、模型與授权
 
-- 默認沿用當前啟用的翻譯服務商；問答面板可另選已啟用的 Qwen 或 DeepSeek，獨立切換問答模型，不改翻譯模型。API 地址和 Key 共用「服務連接」，不新增第二套 API 設定。
-- 舊 `chatProvider` 設定欄位僅兼容讀取，不參與路由。舊客戶端省略 request.provider 時仍沿用翻譯服務商；新客戶端可明確指定 Qwen／DeepSeek。停用服務商、失效 Key、未驗證 Key 均不得發送。
-- 問答只支持預設模型：Qwen `qwen-plus`（日常）、`qwen3.8-flash`（快速）、`qwen3.8-max`（高階）；DeepSeek `deepseek-flash`、`deepseek-v4-pro`。不支持自訂名稱，IPC／Main 按服務商驗證預設清單；舊設定與 session 中的自訂型號回退到服務商預設值，既有 turn 保留歷史型號、回答與引用。翻譯專用 `qwen-mt-plus` 留在翻譯設定。
+- 默認沿用當前啟用的翻譯服務商；問答面板可另選已啟用的 Qwen、DeepSeek 或 Codex，獨立切換問答模型，不改翻譯模型。API 地址和 Key 共用「服務連接」，不新增第二套 API 設定。
+- 舊 `chatProvider` 設定欄位僅兼容讀取，不參與路由。舊客戶端省略 request.provider 時仍沿用翻譯服務商；新客戶端可明確指定 Qwen／DeepSeek／Codex。停用服務商、失效 Key、未驗證 Key 均不得發送。
+- 遠端 API 問答支持預設模型：Qwen `qwen-plus`（日常）、`qwen3.8-flash`（快速）、`qwen3.8-max`（高階）；DeepSeek `deepseek-flash`、`deepseek-v4-pro`。不支持自訂名稱，IPC／Main 按服務商驗證預設清單；舊設定與 session 中的自訂型號回退到服務商預設值，既有 turn 保留歷史型號、回答與引用。翻譯專用 `qwen-mt-plus` 留在翻譯設定。
 - DeepSeek 官方接口：Flash 顯式關閉 thinking；Pro 啟用 thinking，預留 32768 output tokens。SSE 僅把 content 當作回答，reasoning_content 不混入回答或歷史。本功能不使用 tools，後續輪次無須回傳 reasoning_content。
 - 模型清單核對來源：[DeepSeek 模型](https://api-docs.deepseek.com/quick_start/pricing/)、[思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)、[Qwen 官方清單](https://www.alibabacloud.com/help/en/model-studio/models)。區域可用性與真實 Key 需人工驗收。
 - Key 保存在系統 Credential Vault；Renderer 不接觸 Key、base URL 或任意文件路徑。首次發送須展示接收服務商、模型與將發送的問題／近期對話／選區／論文片段；現有 consent version 2 向後兼容；舊授權只覆蓋當時翻譯服務商，新授權記錄 chatConsentProvider，切換接收方需重新同意。撤銷授權只停止後續發送，不刪服務商已收到的資料。
@@ -80,3 +80,5 @@ updated: 2026-10-12
 本地驗證、遠端授權與 CI 門禁遵循根 [AGENTS.md](../AGENTS.md)，此處只保留問答驗收場景。
 
 人工驗收使用隔離資料目錄：兩篇文獻分別提問；退出應用並重開；驗證問題、回答、引用、草稿和模型保留；停止回答／清空後重開；備份或遷移後再讀取；更新解析版本後點舊引用。真實 Qwen／DeepSeek 的效果、延遲、模型區域可用性與 Windows 視覺／安裝體驗仍由真人驗收，假 HTTP 與 CI 綠燈不能替代。
+
+Codex 例外：不使用 API Key，驗證本機登入並從目錄取得模型；不可用時提示手動重選，保留 session 原型號，不自動回退。兩條隊列、隔離和 migration 5 的兼容／恢復見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)。

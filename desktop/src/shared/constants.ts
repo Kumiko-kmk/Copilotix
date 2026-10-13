@@ -1,3 +1,4 @@
+import { DEFAULT_CODEX_SETTINGS } from './codex'
 import type { AppSettings } from './types'
 import { TRANSLATION_PROVIDER_IDS } from './providerPolicy'
 
@@ -7,18 +8,19 @@ export const MAX_PDF_PAGES = 600
 export const CREDENTIAL_SERVICE = 'Copilotix-Translation'
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  codex: DEFAULT_CODEX_SETTINGS,
   outputRoot: '',
   formulaEnabled: true,
   tableEnabled: true,
   translationProvider: 'qwen',
   translationProviderOrder: [...TRANSLATION_PROVIDER_IDS],
-  enabledTranslationProviders: [...TRANSLATION_PROVIDER_IDS],
+  enabledTranslationProviders: TRANSLATION_PROVIDER_IDS.filter(id => id !== 'codex'),
   qwenBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   qwenModel: 'qwen-mt-plus',
   deepseekBaseUrl: 'https://api.deepseek.com',
   deepseekModel: 'deepseek-flash',
   chatProvider: null,
-  autoGeneratePaperInsight: false,
+  autoGeneratePaperInsight: true,
   qwenChatModel: 'qwen-plus',
   deepseekChatModel: 'deepseek-flash',
   chatConsentProvider: null,

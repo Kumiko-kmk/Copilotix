@@ -193,6 +193,12 @@ test('lays out service credentials as compact connection cards', async () => {
     await expect(window.getByRole('region', { name: 'APIKey 用量分析' })).toBeVisible()
     await expect(window.locator('.settings-page')).toHaveCSS('overflow', 'hidden')
     expect(await window.locator('.settings-page').evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true)
+    await expect(window.getByRole('region', { name: 'Codex 连接' })).toBeVisible()
+    for (const size of [[1440, 900], [1100, 700]] as const) {
+      await app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0]?.setSize(width, height), size)
+      await expect.poll(() => window.locator('.settings-content-body').evaluate((element) => element.scrollHeight <= element.clientHeight && element.querySelector('.usage-dashboard')!.getBoundingClientRect().bottom <= element.getBoundingClientRect().bottom + 1)).toBe(true)
+    }
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await capture(window, 'settings-services-reference.png')
   } finally {
     await app.close()
@@ -228,12 +234,18 @@ test('reorders and enables translation providers with explicit persistent saves'
       const bounds = element.getBoundingClientRect()
       return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
     }))
-    expect(modelCardBounds).toHaveLength(4)
+    expect(modelCardBounds).toHaveLength(5)
     for (const [index, bounds] of modelCardBounds.entries()) {
       expect(bounds.x).toBeCloseTo(modelCardBounds[0]!.x, 0)
-      expect(bounds.height).toBeGreaterThanOrEqual(82)
+      expect(bounds.height).toBeGreaterThanOrEqual(52)
       if (index > 0) expect(bounds.y).toBeGreaterThan(modelCardBounds[index - 1]!.y)
     }
+    // The whole model page, including the AI note, fits without scrolling down to the minimum window.
+    for (const size of [[1440, 900], [1100, 700]] as const) {
+      await app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0]?.setSize(width, height), size)
+      await expect.poll(() => window.locator('.settings-content-body').evaluate((element) => element.scrollHeight <= element.clientHeight && [...element.querySelectorAll('.model-priority-card')].every((card) => card.getBoundingClientRect().bottom <= element.getBoundingClientRect().bottom + 1))).toBe(true)
+    }
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await capture(window, 'settings-models-reference.png')
 
     await window.getByRole('button', { name: '移动千问 / Qwen' }).dragTo(window.locator('[data-provider="bing"]'))

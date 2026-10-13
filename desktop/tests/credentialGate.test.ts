@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { AppSettings, CopilotixTask } from '@shared/types'
 import type { Job } from '../src/core/jobs'
 import { ParseJobRunner } from '../src/main/parseJobRunner'
-import { PathPolicy } from '@core/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import { ParserApiError } from '../src/main/parserClient'
 import { TranslationJobRunner } from '../src/main/translationJobRunner'
 

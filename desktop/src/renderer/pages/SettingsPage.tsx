@@ -1,5 +1,5 @@
 import React from 'react'
-import { CheckCircleOutlined, CloseCircleOutlined, DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, ReloadOutlined } from '@ant-design/icons'
+import { DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Button, Checkbox, Input, Typography, message } from 'antd'
 import type {
   AppSettings,
@@ -11,7 +11,10 @@ import type {
   TranslationProviderId
 } from '@shared/types'
 import type { StorageInfo, UsageAnalytics, UsageAnalyticsDay } from '@shared/ipcSchemas'
+import { CodexSettingsCard } from '../components/CodexSettingsCard'
+import { ServiceCard } from '../components/ServiceCard'
 import PageBrand from '../components/PageBrand'
+import type { SettingsNavigationGuard } from '../settingsNavigation'
 
 type Section = 'connections' | 'models' | 'storage'
 
@@ -38,6 +41,7 @@ const STATUS_LABELS: Record<CredentialValidation, string> = {
 }
 
 const MODEL_DETAILS: Record<TranslationProviderId, { label: string; description: string }> = {
+  codex: { label: 'Codex', description: '通过本机 Codex 提供大语言模型翻译与论文分析' },
   deepseek: { label: 'DeepSeek', description: '通过 DeepSeek API 提供大语言模型翻译' },
   qwen: { label: '千问 / Qwen', description: '通过阿里云百炼 API 提供专业翻译模型' },
   transmart: { label: 'Transmart', description: '通过腾讯交互翻译网页接口提供机器翻译' },
@@ -47,6 +51,7 @@ const MODEL_DETAILS: Record<TranslationProviderId, { label: string; description:
 export default function SettingsPage(props: {
   settings: AppSettings
   onSaved(settings: AppSettings): void
+  onNavigationGuardChange?(guard: SettingsNavigationGuard | null): void
 }): React.JSX.Element {
   const [section, setSection] = React.useState<Section>('connections')
   const [draft, setDraft] = React.useState<AppSettings>(props.settings)
@@ -67,7 +72,7 @@ export default function SettingsPage(props: {
     const previous = previousSettingsRef.current
     setDraft((current) => ({
       ...props.settings,
-      autoGeneratePaperInsight: current.autoGeneratePaperInsight !== previous.autoGeneratePaperInsight ? current.autoGeneratePaperInsight : props.settings.autoGeneratePaperInsight,
+      codex: JSON.stringify(current.codex) !== JSON.stringify(previous.codex) ? current.codex : props.settings.codex,
       outputRoot: current.outputRoot !== previous.outputRoot ? current.outputRoot : props.settings.outputRoot,
       formulaEnabled: current.formulaEnabled !== previous.formulaEnabled ? current.formulaEnabled : props.settings.formulaEnabled,
       tableEnabled: current.tableEnabled !== previous.tableEnabled ? current.tableEnabled : props.settings.tableEnabled,
@@ -184,7 +189,7 @@ export default function SettingsPage(props: {
     }
   }, [credentials, messageApi])
 
-  const save = React.useCallback(async () => {
+  const save = React.useCallback(async (): Promise<boolean> => {
     setSaving(true)
     try {
       const credentialMutations: Partial<Record<CredentialName, CredentialMutation>> = {}
@@ -218,8 +223,10 @@ export default function SettingsPage(props: {
       })
       if (Object.keys(errors).length > 0) messageApi.warning('普通设置及有效凭据已保存，请修正失败字段')
       else messageApi.success('设置已保存')
+      return Object.keys(errors).length === 0
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : String(error))
+      return false
     } finally {
       setSaving(false)
     }
@@ -289,6 +296,12 @@ export default function SettingsPage(props: {
     setCredentialErrors({})
   }, [props.settings])
 
+  const onNavigationGuardChange = props.onNavigationGuardChange
+  React.useLayoutEffect(() => {
+    onNavigationGuardChange?.({ dirty: hasUnsavedChanges, busy: saving || testing !== null || libraryAction !== null, save, discard })
+  }, [onNavigationGuardChange, hasUnsavedChanges, saving, testing, libraryAction, save, discard])
+  React.useLayoutEffect(() => () => onNavigationGuardChange?.(null), [onNavigationGuardChange])
+
   return (
     <section className="page settings-page">
       {contextHolder}
@@ -307,14 +320,15 @@ export default function SettingsPage(props: {
                 title="MinerU"
                 badge="必需"
                 name="parser"
-                status={draft.credentials.parser}
+                state={draft.credentials.parser.state}
+                stateLabel={draft.credentials.parser.message ?? STATUS_LABELS[draft.credentials.parser.state]}
               >
                 <CredentialEditor
                   name="parser"
-                status={draft.credentials.parser}
-                draft={credentials.parser}
-                error={credentialErrors.parser}
-                testing={testing === 'parser'}
+                  status={draft.credentials.parser}
+                  draft={credentials.parser}
+                  error={credentialErrors.parser}
+                  testing={testing === 'parser'}
                   onDraft={(patch) => updateCredentialDraft('parser', patch)}
                   onValidate={() => void validate('parser')}
                 />
@@ -323,7 +337,8 @@ export default function SettingsPage(props: {
                 title="DeepSeek"
                 badge="可选"
                 name="deepseek"
-                status={draft.credentials.deepseek}
+                state={draft.credentials.deepseek.state}
+                stateLabel={draft.credentials.deepseek.message ?? STATUS_LABELS[draft.credentials.deepseek.state]}
               >
                 <CredentialEditor
                   name="deepseek"
@@ -339,7 +354,8 @@ export default function SettingsPage(props: {
                 title="Qwen"
                 badge="可选"
                 name="qwen"
-                status={draft.credentials.qwen}
+                state={draft.credentials.qwen.state}
+                stateLabel={draft.credentials.qwen.message ?? STATUS_LABELS[draft.credentials.qwen.state]}
               >
                 <CredentialEditor
                   name="qwen"
@@ -351,13 +367,14 @@ export default function SettingsPage(props: {
                   onValidate={() => void validate('qwen')}
                 />
               </ServiceCard>
+              <CodexSettingsCard value={draft.codex} onChange={codex => setDraft(current => ({ ...current, codex }))} />
               <UsageDashboard analytics={usageAnalytics} />
             </section>
           ) : null}
           {section === 'models' ? (
             <section className="settings-section model-priority" aria-label="模型设置">
               <div className="model-priority-card">
-                <div className="model-priority-heading">大语言模型优先级</div>
+                <div className="model-priority-heading"><strong>大语言模型优先级</strong><span className="model-request-order"><span>请求顺序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).map((provider) => MODEL_DETAILS[provider].label.replace(' / Qwen', '')).join(' → ')}</strong></span></div>
                 <div className="model-priority-list" role="list" aria-label="翻译模型优先级">
                   {draft.translationProviderOrder.map((provider, index) => {
                     const details = MODEL_DETAILS[provider]
@@ -404,11 +421,6 @@ export default function SettingsPage(props: {
                     )
                   })}
                 </div>
-                <div className="model-request-order"><span>请求顺序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).map((provider) => MODEL_DETAILS[provider].label.replace(' / Qwen', '')).join(' → ')}</strong></div>
-              </div>
-              <div className="model-priority-card">
-                <Checkbox checked={draft.autoGeneratePaperInsight} onChange={(event) => setDraft((current) => ({ ...current, autoGeneratePaperInsight: event.target.checked }))}>翻译完成后自动生成 AI 解读</Checkbox>
-                <p>使用首选 Qwen 或 DeepSeek 的问答模型，需已验证密钥并同意发送论文片段。每篇解读会产生额外 API 费用；默认关闭，已有且未过期的解读不会重复生成。</p>
               </div>
             </section>
           ) : null}
@@ -526,30 +538,6 @@ function CredentialEditor(props: {
   )
 }
 
-function StatusIndicator(props: { status: CredentialStatus }): React.JSX.Element {
-  const icon = props.status.state === 'valid' ? <CheckCircleOutlined /> : props.status.state === 'invalid' ? <CloseCircleOutlined /> : null
-  return <span className={`credential-status status-${props.status.state}`}>{icon}<span>{props.status.message ?? STATUS_LABELS[props.status.state]}</span></span>
-}
-
-function ServiceCard(props: {
-  title: string
-  badge: string
-  name: CredentialName
-  status: CredentialStatus
-  children: React.ReactNode
-}): React.JSX.Element {
-  const header = <>
-    <span className="service-card-identity"><strong>{props.title}</strong><span className="service-card-badge">{props.badge}</span></span>
-    <span className="service-card-summary"><StatusIndicator status={props.status} /></span>
-  </>
-  return (
-    <section className="service-card expanded" data-provider={props.name}>
-      <div className="service-card-header">{header}</div>
-      <div className="service-card-body">{props.children}</div>
-    </section>
-  )
-}
-
 function UsageDashboard(props: { analytics: UsageAnalytics | null }): React.JSX.Element {
   const days = props.analytics?.days ?? emptyAnalyticsDays(84)
   return (
@@ -589,25 +577,27 @@ function TokenTrendChart(props: { days: UsageAnalyticsDay[] }): React.JSX.Elemen
   const insetX = 18
   const insetTop = 16
   const insetBottom = 24
-  const values = props.days.flatMap((day) => [day.deepseekTokens, day.qwenTokens])
+  const values = props.days.flatMap((day) => [day.deepseekTokens, day.qwenTokens, day.codexTokens ?? 0])
   const maximum = Math.max(1, ...values)
-  const points = (key: 'deepseekTokens' | 'qwenTokens'): string => props.days.map((day, index) => {
+  const points = (key: 'deepseekTokens' | 'qwenTokens' | 'codexTokens'): string => props.days.map((day, index) => {
     const x = insetX + (index / Math.max(1, props.days.length - 1)) * (width - insetX * 2)
-    const y = insetTop + (1 - day[key] / maximum) * (height - insetTop - insetBottom)
+    const y = insetTop + (1 - (day[key] ?? 0) / maximum) * (height - insetTop - insetBottom)
     return `${x.toFixed(1)},${y.toFixed(1)}`
   }).join(' ')
   const deepseekTotal = props.days.reduce((sum, day) => sum + day.deepseekTokens, 0)
+  const codexTotal = props.days.reduce((sum, day) => sum + (day.codexTokens ?? 0), 0)
   const qwenTotal = props.days.reduce((sum, day) => sum + day.qwenTokens, 0)
   return (
     <article className="usage-panel token-panel">
       <header className="usage-panel-header">
         <span><strong>模型 Token</strong><small>最近 30 天</small></span>
-        <span className="token-legend"><i className="deepseek" />DeepSeek {compactNumber(deepseekTotal)}<i className="qwen" />Qwen {compactNumber(qwenTotal)}</span>
+        <span className="token-legend"><i className="deepseek" />DeepSeek {compactNumber(deepseekTotal)}<i className="qwen" />Qwen {compactNumber(qwenTotal)}<i className="codex" />Codex {compactNumber(codexTotal)}</span>
       </header>
       <svg className="token-trend-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={`DeepSeek ${deepseekTotal} Token，Qwen ${qwenTotal} Token`}>
         {[0, 0.5, 1].map((ratio) => <line key={ratio} x1={insetX} x2={width - insetX} y1={insetTop + ratio * (height - insetTop - insetBottom)} y2={insetTop + ratio * (height - insetTop - insetBottom)} className="token-grid-line" />)}
         <polyline points={points('deepseekTokens')} className="token-line deepseek" />
         <polyline points={points('qwenTokens')} className="token-line qwen" />
+        <polyline points={points('codexTokens')} className="token-line codex" />
       </svg>
     </article>
   )

@@ -49,7 +49,7 @@ import {
   type TableTranslationPlan,
   type TableTranslationUnit
 } from './tableTranslation'
-import { PathPolicy } from '@core/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import type { PathPolicyPort } from '@core/ports'
 import type { TranslationJobBinding, V2TaskRepositoryCompat } from '../persistence/v2TaskRepositoryCompat'
 
@@ -1259,7 +1259,7 @@ function isPlanMetadata(value: unknown): value is PlanMetadata {
 }
 
 function isTranslationProviderId(value: unknown): value is TranslationProviderId {
-  return value === 'qwen' || value === 'deepseek' || value === 'bing' || value === 'transmart'
+  return value === 'codex' || value === 'qwen' || value === 'deepseek' || value === 'bing' || value === 'transmart'
 }
 
 function arraysEqual(left: unknown, right: unknown): boolean {

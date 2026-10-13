@@ -38,6 +38,14 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
   const [revealPdfNonce, setRevealPdfNonce] = React.useState(0)
   const [selection, setSelection] = React.useState<BlockSelection | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
+  const retryDocument = React.useCallback(async () => {
+    try {
+      await window.copilotix.retryDocument(props.documentId)
+      messageApi.success('已重新排队，将保留已完成的内容')
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '重试失败，请稍后再试')
+    }
+  }, [messageApi, props.documentId])
 
   const documentQuery = useQuery<DocumentDetails>({
     queryKey: ['document', props.documentId],
@@ -154,8 +162,8 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
     <section className="reader-page">
       {contextHolder}
       <header className="reader-header">
-        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
-        <Space>
+        <div className="reader-header-heading"><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></div>
+        <Space className="reader-header-actions">
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
           <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />
           <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
@@ -180,6 +188,8 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
           translatedBlocks,
           translatedReady,
           taskStatus: document.summary.workflow.status,
+          taskError: document.summary.workflow.error,
+          onRetry: retryDocument,
           assetBaseUrl: document.assetBaseUrl,
           taskId: document.summary.id,
           annotations,

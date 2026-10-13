@@ -35,7 +35,7 @@ describe('SettingsPage credential editor', () => {
     expect(within(dashboard).queryByText(/份文/u)).toBeNull()
     expect(within(dashboard).getByText('模型 Token')).toBeTruthy()
     expect(dashboard.querySelectorAll('.activity-heatmap .activity-cell')).toHaveLength(84)
-    expect(dashboard.querySelectorAll('.token-line')).toHaveLength(2)
+    expect(dashboard.querySelectorAll('.token-line')).toHaveLength(3)
   })
 
   it('keeps all services open and sends direct replacement or delete mutations explicitly', async () => {
@@ -128,7 +128,7 @@ describe('SettingsPage credential editor', () => {
     await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
     expect(saveSettings.mock.calls[0]![0]).toMatchObject({
       translationProvider: 'deepseek',
-      translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart']
+      translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart', 'codex']
     })
     expect(screen.getByText('DeepSeek → 千问 → Bing → Transmart')).toBeTruthy()
   })

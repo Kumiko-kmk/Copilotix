@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { posix, win32 } from 'node:path'
-import type { PathPolicyPort } from './ports'
+import type { PathPolicyPort } from '@core/ports'
 
 export type PathFlavor = 'posix' | 'win32'
 

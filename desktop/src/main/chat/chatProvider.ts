@@ -20,9 +20,9 @@ const packetSchema = z.object({
 export class ChatProvider {
   private readonly cooldowns = new Map<PaperChatProvider, number>()
   private readonly tails = new Map<PaperChatProvider, Promise<void>>()
-  constructor(private readonly fetcher: ChatFetcher, private readonly options: { firstByteMs?: number; idleMs?: number; invalidate?(provider: PaperChatProvider): Promise<void> } = {}) {}
+  constructor(private readonly fetcher: ChatFetcher, private readonly options: { firstByteMs?: number; idleMs?: number; invalidate?(provider: Exclude<PaperChatProvider, 'codex'>): Promise<void> } = {}) {}
 
-  stream(input: { provider: PaperChatProvider; baseUrl: string; model: string; key: string; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number }): Promise<ProviderTokenUsage | null> {
+  stream(input: { provider: Exclude<PaperChatProvider, 'codex'>; baseUrl: string; model: string; key: string; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number }): Promise<ProviderTokenUsage | null> {
     // The endpoint is never a renderer field, and even persisted settings must match the provider whitelist.
     const expected = input.provider === 'qwen' ? DEFAULT_SETTINGS.qwenBaseUrl : DEFAULT_SETTINGS.deepseekBaseUrl
     if (input.baseUrl !== expected) return Promise.reject(new ChatProviderError('PROVIDER_UNAVAILABLE', '问答服务地址不受支持'))

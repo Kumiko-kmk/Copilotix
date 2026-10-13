@@ -54,10 +54,12 @@ Utility Process（受监督；SQLite 与 compute 的唯一拥有者）
 ```text
 renderer ──▶ shared ◀── preload
 main ──▶ core ──▶ shared ◀── utility ──▶ core
+main ──▶ runtime ──▶ core ◀── runtime ◀── utility
 ```
 
 - `shared`：三端共用的纯 TS，不得导入 Node/Electron/DOM 专有 API；跨层契约（schema、DTO、版本常量）只在这里定义一次。
-- `core`：Main 与 Utility 共用的 Node 侧基础件（Core RPC 客户端、作业模型与端口、PathPolicy、block mapping）；Renderer 不得导入。
+- `core`：Main 与 Utility 共用的纯逻辑、Core RPC 客户端、作业模型与端口、block mapping；不得导入 Node/Electron 或 runtime 层，Renderer 不得导入。
+- `runtime`：Main 与 Utility 共用的 Node 运行时实现；`PathPolicy` 在此实现 `core/ports.ts` 的路径端口，Renderer 与 shared/core 不得导入。
 - `renderer` 只依赖 `shared`；`main` 与 `utility` 互不导入，只经 Core RPC 通信。
 
 ### 3.2 模块表
@@ -66,7 +68,7 @@ main ──▶ core ──▶ shared ◀── utility ──▶ core
 |---|---|---|
 | 跨层契约 | `shared/ipcSchemas.ts`、`types.ts`、`coreRpcSchemas.ts`、`ragSchemas.ts`、`paperChat*Schemas.ts`、`paperInsight.ts`、`figureInsight.ts`、`librarySchemas.ts`、`libraryCategories.ts`、`translationPlanProtocol.ts` | 所有 IPC／RPC／磁盘 JSON 的 Zod 契约；`documentSummary.ts` 是文档摘要唯一投影 |
 | 文档纯逻辑 | `shared/markdownBlocks.ts`、`standardMarkdown.ts`、`mathDelimiters.ts`、`readerDocument.ts`、`readerAnnotations.ts`、`readerFigureGroups.ts`、`readerFigureLayout.ts`、`figureArtifacts.ts`、`titleNaming.ts`、`paperBrief/` | 无 I/O 的解析、映射、导出投影与提示词构造，可在任意进程运行 |
-| Node 基础件 | `core/coreClient.ts`、`jobs.ts`、`types.ts`、`ports.ts`、`pathPolicy.ts`、`blockMapping.ts` | `pathPolicy.ts` 是 Main 与 Utility 共用的唯一路径约束实现 |
+| Core 契约与基础件 | `core/coreClient.ts`、`jobs.ts`、`types.ts`、`ports.ts`、`blockMapping.ts` | 文件系统路径实现位于 `runtime/pathPolicy.ts`，由 Main 与 Utility 共用 |
 | Preload 桥 | `preload/index.ts`、`ipcClient.ts` | 只暴露 `window.copilotix` 显式领域方法 |
 | Main：外壳与 IPC | `main/index.ts`、`ipc.ts`、`libraryAccessGate.ts`、`assetProtocol.ts`、`singleInstance.ts`、`networkProxy.ts`、`logger.ts` | 生命周期、窗口、托盘、IPC 注册；所有 handler 经 `registerValidatedHandler` |
 | Main：Utility 桥 | `utilitySupervisor.ts`、`electronUtilityFork.ts`、`utilityEntryPath.ts`、`rpc*.ts`、`taskRepositoryCompat.ts` | Utility 生命周期与 RPC 代理；`rpc*` 只把端口方法映射为固定 operation |
@@ -204,7 +206,7 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 ### 6.3 PathPolicy
 
-`core/pathPolicy.ts` 是 Main 与 Utility 共用的唯一 `PathPolicy` 实现（端口见 `core/ports.ts`）。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
+`runtime/pathPolicy.ts` 是 Main 与 Utility 共用的唯一 `PathPolicy` 实现（端口见 `core/ports.ts`）。实现从 Core 移入 runtime 层，导出的类与词法校验函数、磁盘路径规则及恢复语义保持不变；无需数据库或 IPC migration。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
 
 1. 拒绝 NUL、绝对跨平台路径和 `..` 段；
 2. 先做 lexical containment，再做 realpath containment；
@@ -333,3 +335,14 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 ## 15. 維護與後續事項
 
 協作、文檔精簡、本地驗證與發布授權統一見根 [AGENTS.md](../AGENTS.md)。變更前定位 port／schema／handler／repository，跨邊界修改須保留兼容、回滾與相關回歸。macOS／Linux 的 Vault、原生窗口、路徑、打包與簽名尚未完成发布驗收。
+
+
+## Codex provider（本机 App Server）
+
+- Main 的 `runtime/codexRuntime.ts` 通过 `codex.exe app-server --listen stdio://` 建立 JSON-RPC；`modelGateway.ts` 统一远端与 Codex 流式调用，翻译适配器保留现有表格 ID 校验。翻译、问答、Paper Brief 和图片解读共享此运行时；不提供 embeddings 或 PDF 解析替代。
+- `shared/codex.ts` 定义可兼容旧设置的可选配置与状态。Preload 只开放经 Main 校验的检查／模型测试与原生选执行文件 IPC；无令牌接口。模型、视觉输入和推理强度来自当前模型目录，模型缺失显式失败。旧四服务顺序可读取，默认追加但不启用 Codex；翻译回退顺序在 Codex 处截止。
+- 交互与后台各一条 FIFO，每次请求启动独立进程及 ephemeral thread；最终回答流、token usage、结构化 schema 经原业务校验后落盘。只接受已验证的 CLI 0.159.x。子进程不经 shell，工作目录在 userData 的 codex-runtime，不使用项目目录。
+- 会话级覆盖关闭 shell、MCP、应用、插件、浏览器、联网搜索、记忆和子代理，设置只读沙箱、无持久历史、忽略项目文档；启动时读回隔离配置。工具请求一律拒绝并终止任务。覆盖不写入用户配置。用户文档、图片与历史均作为不可信内容；图片只接收应用已验证的 PNG/JPEG 数据。
+- 初始化 RPC 15 秒，生成空闲 120 秒、总计 10 分钟；排队取消立即返回，运行取消请求 turn/interrupt，5 秒后关闭进程。进程异常、非成功完成、空结果和工具尝试均不能当作成功；退出关闭所有进程。不会静默切换模型或其他供应商。诊断不记录提示正文、图片或令牌。
+- SQLite migration **5 / add-codex-provider** 仅扩展 documents、translation_blocks、translation_cache 的 provider 约束；迁移 1–4 不改，复制原数据并恢复索引。仅在事务外临时关闭外键，提交前检查外键，异常回滚并恢复外键开关；沿用迁移前快照。旧程序不可直接打开 schema 5，回退需用迁移前快照恢复，不删除用户原库。聊天／解读 JSON 增加 codex 枚举，既有内容不改写；token 统计兼容缺失的 Codex 计数。
+- 回归入口：codexConnection、codexRuntime、codexIntegration、providerPolicy、v2Database 测试；真实调用仅显式 `COPILOTIX_CODEX_LIVE=1` 运行 e2e/codex.spec.ts，使用合成论文。2026-10-13 本机 111 个测试文件通过（759 通过、3 跳过），类型检查与 lint 通过；合成文本翻译、表格、证据问答、Brief schema／引用、图片解读和取消实测成功，Electron 设置→授权→真实问答→引用落盘流程通过；不替代真实论文人工质量审阅或远端 CI。使用步骤见 [服务配置](wiki/Service-Setup.md)。

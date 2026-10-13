@@ -20,7 +20,7 @@ import type {
   UsageAnalytics
 } from './ipcSchemas'
 
-export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart'
+export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart' | 'codex'
 
 export type CredentialName = 'parser' | 'qwen' | 'deepseek'
 
@@ -60,6 +60,7 @@ export type TaskStatus =
   | 'failed'
 
 export interface AppSettings {
+  codex?: import('./codex').CodexSettings
   outputRoot: string
   formulaEnabled: boolean
   tableEnabled: boolean
@@ -71,11 +72,11 @@ export interface AppSettings {
   deepseekBaseUrl: string
   deepseekModel: string
   /** Legacy persisted field, ignored by chat routing; use translationProvider. */
-  chatProvider: 'qwen' | 'deepseek' | null
+  chatProvider: 'qwen' | 'deepseek' | 'codex' | null
   autoGeneratePaperInsight: boolean
   qwenChatModel: string
   deepseekChatModel: string
-  chatConsentProvider: 'qwen' | 'deepseek' | null
+  chatConsentProvider: 'qwen' | 'deepseek' | 'codex' | null
   chatConsentVersion: number | null
   credentials: CredentialStatuses
 }
@@ -224,6 +225,7 @@ export interface WindowState {
 }
 
 export interface CopilotixDesktopApi {
+  codex: import('./codex').CodexApi
   figureInsight: {
     get(request: import('./figureInsight').FigureInsightRequest): Promise<import('./figureInsight').FigureInsightState>
     generate(request: import('./figureInsight').FigureInsightRequest): Promise<void>

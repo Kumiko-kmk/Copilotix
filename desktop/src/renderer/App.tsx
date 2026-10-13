@@ -1,4 +1,5 @@
 import React from 'react'
+import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
 import type { AppSettings } from '@shared/types'
@@ -15,6 +16,7 @@ import {
   type DocumentListCache
 } from './documentCache'
 import { loadLibraryCategories } from './paperArchive/libraryCategoriesClient'
+import type { SettingsNavigationGuard } from './settingsNavigation'
 
 const ReaderPage = React.lazy(() => import('./pages/ReaderPage'))
 // Three.js is only loaded once the archive is opened.
@@ -32,6 +34,43 @@ export default function App(): React.JSX.Element {
     subscribe: (listener) => window.copilotix.paperInsight.onChanged(({ documentId, state }) => listener(documentId, state))
   }), [])
   const [view, setView] = React.useState<View>({ name: 'new' })
+  const viewRef = React.useRef(view)
+  viewRef.current = view
+  const settingsGuard = React.useRef<SettingsNavigationGuard | null>(null)
+  const [guardBusy, setGuardBusy] = React.useState(false)
+  const [pendingView, setPendingView] = React.useState<View | null>(null)
+  const [leaving, setLeaving] = React.useState(false)
+  const leavingRef = React.useRef(false)
+  const onNavigationGuardChange = React.useCallback((guard: SettingsNavigationGuard | null) => {
+    settingsGuard.current = guard
+    setGuardBusy(Boolean(guard?.busy))
+  }, [])
+  const requestViewChange = React.useCallback((next: View) => {
+    if (leavingRef.current) return
+    if (viewRef.current.name === 'settings' && next.name !== 'settings' && (settingsGuard.current?.dirty || settingsGuard.current?.busy)) {
+      setPendingView(next)
+    } else setView(next)
+  }, [])
+  const saveAndLeave = async (): Promise<void> => {
+    const guard = settingsGuard.current
+    if (!pendingView || !guard || guard.busy || leavingRef.current) return
+    const destination = pendingView
+    leavingRef.current = true
+    setLeaving(true)
+    try {
+      if (await guard.save()) setView(destination)
+    } finally {
+      setPendingView(null)
+      leavingRef.current = false
+      setLeaving(false)
+    }
+  }
+  const discardAndLeave = (): void => {
+    if (!pendingView || guardBusy || leavingRef.current) return
+    settingsGuard.current?.discard()
+    setView(pendingView)
+    setPendingView(null)
+  }
   const settingsQuery = useQuery<AppSettings>({
     queryKey: ['settings'],
     queryFn: () => window.copilotix.getSettings()
@@ -48,8 +87,8 @@ export default function App(): React.JSX.Element {
     const key = 'copilotix:tutorial:seen:v1'
     if (window.localStorage.getItem(key)) return
     window.localStorage.setItem(key, '1')
-    setView({ name: 'tutorial' })
-  }, [settingsQuery.isSuccess, documentsQuery.isSuccess, documents.length])
+    requestViewChange({ name: 'tutorial' })
+  }, [settingsQuery.isSuccess, documentsQuery.isSuccess, documents.length, requestViewChange])
 
   React.useEffect(() => {
     const stop = window.copilotix.onDocumentsChanged((change) => {
@@ -78,17 +117,17 @@ export default function App(): React.JSX.Element {
         queryClient.removeQueries({ queryKey: ['annotations', documentId] })
       }
     })
-    const stopOpen = window.copilotix.onOpenDocument((documentId) => setView({ name: 'reader', documentId }))
+    const stopOpen = window.copilotix.onOpenDocument((documentId) => requestViewChange({ name: 'reader', documentId }))
     return () => {
       stop()
       stopOpen()
     }
-  }, [queryClient])
+  }, [queryClient, requestViewChange])
 
   // The reader returns to where it was opened from; the home page otherwise.
-  const openDocument = React.useCallback((documentId: string) => setView({ name: 'reader', documentId }), [])
-  const openFromLibrary = React.useCallback((documentId: string) => setView({ name: 'reader', documentId, returnTo: 'library' }), [])
-  const openFromTutorial = React.useCallback((documentId: string) => setView({ name: 'reader', documentId, returnTo: 'tutorial' }), [])
+  const openDocument = React.useCallback((documentId: string) => requestViewChange({ name: 'reader', documentId }), [requestViewChange])
+  const openFromLibrary = React.useCallback((documentId: string) => requestViewChange({ name: 'reader', documentId, returnTo: 'library' }), [requestViewChange])
+  const openFromTutorial = React.useCallback((documentId: string) => requestViewChange({ name: 'reader', documentId, returnTo: 'tutorial' }), [requestViewChange])
   const onSettingsSaved = React.useCallback((next: AppSettings) => {
     queryClient.setQueryData(['settings'], next)
   }, [queryClient])
@@ -98,10 +137,10 @@ export default function App(): React.JSX.Element {
       {view.name === 'new' ? null : <div className="titlebar-brand" aria-hidden="true">COPILOTIX</div>}
       <EdgeDock label="展开主导航" persistent={<WindowControls />}>
         <nav className="top-navigation" aria-label="主导航">
-          <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => setView({ name: 'new' })} />
-          <NavigationButton active={view.name === 'library'} icon={<AppstoreOutlined />} label="文库" onClick={() => setView({ name: 'library' })} />
-          <NavigationButton active={view.name === 'settings'} icon={<SettingOutlined />} label="设置" onClick={() => setView({ name: 'settings' })} />
-          <NavigationButton active={view.name === 'tutorial'} icon={<ReadOutlined />} label="新手教程" onClick={() => setView({ name: 'tutorial' })} />
+          <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => requestViewChange({ name: 'new' })} />
+          <NavigationButton active={view.name === 'library'} icon={<AppstoreOutlined />} label="文库" onClick={() => requestViewChange({ name: 'library' })} />
+          <NavigationButton active={view.name === 'settings'} icon={<SettingOutlined />} label="设置" onClick={() => requestViewChange({ name: 'settings' })} />
+          <NavigationButton active={view.name === 'tutorial'} icon={<ReadOutlined />} label="新手教程" onClick={() => requestViewChange({ name: 'tutorial' })} />
           <a className="top-navigation-item" href="https://github.com/Kumiko-kmk/Copilotix" target="_blank" rel="noreferrer" aria-label="打开 GitHub">
             <GithubOutlined /><span>GitHub</span>
           </a>
@@ -113,16 +152,16 @@ export default function App(): React.JSX.Element {
             settings={settings}
             documents={documents}
             onOpenDocument={openDocument}
-            onOpenLibrary={() => setView({ name: 'library' })}
+            onOpenLibrary={() => requestViewChange({ name: 'library' })}
             // New papers appear at the head of "继续阅读" with their progress.
             onCreated={() => void queryClient.invalidateQueries({ queryKey: ['documents'] })}
-            onOpenSettings={() => setView({ name: 'settings' })}
-            onOpenTutorial={() => setView({ name: 'tutorial' })}
+            onOpenSettings={() => requestViewChange({ name: 'settings' })}
+            onOpenTutorial={() => requestViewChange({ name: 'tutorial' })}
           />
         ) : null}
         {view.name === 'library' ? (
           <React.Suspense fallback={<div className="page-loading">正在加载文库…</div>}>
-            <LibraryPage insights={insights} loadCategories={loadLibraryCategories} documents={documents} onOpen={openFromLibrary} onCreate={() => setView({ name: 'new' })} />
+            <LibraryPage insights={insights} loadCategories={loadLibraryCategories} documents={documents} onOpen={openFromLibrary} onCreate={() => requestViewChange({ name: 'new' })} />
           </React.Suspense>
         ) : null}
         {view.name === 'tutorial' && settings ? <TutorialPage
@@ -136,16 +175,25 @@ export default function App(): React.JSX.Element {
               documents: [document, ...(current?.documents ?? []).filter((item) => item.id !== document.id)]
             }))
           }}
-          onClose={() => setView({ name: 'new' })}
+          onClose={() => requestViewChange({ name: 'new' })}
         /> : null}
-        {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} /> : null}
+        {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange} /> : null}
         {view.name === 'reader' ? (
           <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>
-            <ReaderPage documentId={view.documentId} insights={insights} onBack={() => setView({ name: view.returnTo ?? 'new' })} onOpenSettings={() => setView({ name: 'settings' })} />
+            <ReaderPage documentId={view.documentId} insights={insights} onBack={() => requestViewChange({ name: view.returnTo ?? 'new' })} onOpenSettings={() => requestViewChange({ name: 'settings' })} />
           </React.Suspense>
         ) : null}
         {!settings && view.name !== 'reader' && view.name !== 'library' ? <div className="page-loading">正在加载…</div> : null}
       </main>
+      <Modal title="有未保存的设置" open={pendingView !== null} closable={!leaving} maskClosable={!leaving}
+        onCancel={() => { if (!leaving) setPendingView(null) }}
+        footer={[
+          <Button key="stay" disabled={leaving} onClick={() => setPendingView(null)}>继续编辑</Button>,
+          <Button key="discard" disabled={leaving || guardBusy} onClick={discardAndLeave}>放弃并离开</Button>,
+          <Button key="save" type="primary" loading={leaving} disabled={guardBusy} onClick={() => void saveAndLeave()}>保存并离开</Button>
+        ]}>
+        <p>离开前保存修改，或放弃本次未保存的更改。</p>
+      </Modal>
     </div>
   )
 }

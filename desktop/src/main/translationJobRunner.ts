@@ -1,3 +1,5 @@
+import { CodexTranslationProvider } from './translation/codexTranslationProvider'
+import type { CodexRuntime } from '@runtime/codexRuntime'
 import type { JobRunner, JobRunnerInput, JobRunnerResult } from '@core/jobs'
 import { JobRunnerError } from '@core/jobs'
 import type { TaskComputePort } from '@core/ports'
@@ -15,6 +17,7 @@ import type { UsageAnalyticsRecorder } from './usageAnalyticsService'
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 export interface TranslationJobRunnerOptions {
+  codex?: CodexRuntime
   repository: TaskRepositoryCompat
   settingsService: SettingsService
   vault: CredentialVault
@@ -49,6 +52,7 @@ export class TranslationJobRunner implements JobRunner {
     const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher, (provider, usage) =>
       this.options.usageAnalytics?.recordTokens(provider, usage)
     )
+    if (this.options.codex) providers.set('codex', new CodexTranslationProvider(settings.codex?.translationModel ?? 'default', this.options.codex, usage => this.options.usageAnalytics?.recordTokens('codex', usage)))
     const providerOrder = executableProviderOrder(
       settings.translationProviderOrder,
       settings.enabledTranslationProviders,

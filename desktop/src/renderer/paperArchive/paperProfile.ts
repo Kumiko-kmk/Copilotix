@@ -1,3 +1,10 @@
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+
+const inlineParser = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
+
 /**
  * Structured facts about a paper, read from its parsed (and translated) Markdown.
  * Only paper content is used; import time, file paths and job state are not part of it.
@@ -72,30 +79,26 @@ function splitBlocks(markdown: string): Block[] {
 
 /** Strip Markdown and HTML decoration down to readable text. */
 export function cleanInline(text: string, preserveLinks = false): string {
-  const destinations: string[] = []
-  if (preserveLinks) {
-    // Autolinks look like HTML tags to the generic cleaner. Keep their destinations;
-    // descriptive Markdown and HTML links also need the URL in an abstract.
-    text = text.replace(/<(https?:\/\/[^<>\s]+)>/giu, '$1')
-      .replace(/<a\b[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/giu,
-        (_, url: string, label: string) => label.trim() === url ? url : `${label} (${url})`)
-      .replace(/(?<!!)\[([^\]]*)\]\((https?:\/\/[^\s)]+)(?:\s+["'][^"']*["'])?\)/giu,
-        (_, label: string, url: string) => !label.trim() || label.trim() === url ? url : `${label} (${url})`)
-    text = text.replace(/https?:\/\/[^\s<>]+/giu, (url) => {
-      destinations.push(url)
-      return `\uE000${destinations.length - 1}\uE001`
-    })
-  }
-  return text
-    .replace(/<sup>.*?<\/sup>/giu, '')
+  const prepared = text
+    .replace(/<sup>.*?<\/sup>/gisu, '')
+    .replace(/<(https?:\/\/[^<>\s]+)>/giu, '$1')
+    .replace(/<a\b[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/giu,
+      (_, url: string, label: string) => `[${label}](${url})`)
     // Real tags only, so a bare `<` in maths cannot swallow the rest of the paragraph.
     .replace(/<\/?[A-Za-z][^<>\n]{0,300}>/gu, '')
-    .replace(/!\[[^\]]*\]\([^)]*\)/gu, '')
-    .replace(/\[([^\]]*)\]\((?:mailto:)?[^)]*\)/gu, '$1')
-    .replace(/[*_`]{1,3}([^*_`]+)[*_`]{1,3}/gu, '$1')
-    .replace(/\s+/gu, ' ')
-    .trim()
-    .replace(/\uE000(\d+)\uE001/gu, (_, index: string) => destinations[Number(index)] ?? '')
+  return projectInline(inlineParser.parse(prepared), preserveLinks).replace(/\s+/gu, ' ').trim()
+}
+
+interface InlineNode { type: string; value?: string; url?: string; children?: InlineNode[] }
+
+function projectInline(node: InlineNode, preserveLinks: boolean): string {
+  if (node.type === 'image' || node.type === 'imageReference') return ''
+  if (node.value !== undefined) return node.value
+  const text = (node.children ?? []).map(child => projectInline(child, preserveLinks)).join(node.type === 'root' ? ' ' : '')
+  if (preserveLinks && node.type === 'link' && node.url && /^https?:\/\//iu.test(node.url)) {
+    return !text || text === node.url ? node.url : `${text} (${node.url})`
+  }
+  return text
 }
 
 function firstTitle(blocks: Block[]): string | null {

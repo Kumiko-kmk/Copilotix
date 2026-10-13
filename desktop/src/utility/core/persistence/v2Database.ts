@@ -572,7 +572,50 @@ CREATE TABLE app_migrations (
     version: 4,
     name: 'add-rag-persistence-and-job-kinds',
     sql: RAG_PERSISTENCE_MIGRATION_SQL
-  }
+  },
+  { version: 5, name: 'add-codex-provider', sql: `
+CREATE TABLE documents_codex_rebuild (
+  id TEXT PRIMARY KEY CHECK (length(id) > 0 AND instr(id, char(0)) = 0),
+  original_filename TEXT NOT NULL CHECK (length(original_filename) > 0 AND instr(original_filename, char(0)) = 0),
+  display_title TEXT CHECK (display_title IS NULL OR instr(display_title, char(0)) = 0),
+  storage_path TEXT NOT NULL CHECK (length(storage_path) > 0 AND instr(storage_path, char(0)) = 0),
+  source_checksum TEXT NOT NULL CHECK (length(source_checksum) > 0),
+  translation_provider TEXT NOT NULL CHECK (translation_provider IN ('qwen', 'deepseek', 'bing', 'transmart', 'codex')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(storage_path)
+) STRICT;
+INSERT INTO documents_codex_rebuild SELECT * FROM documents;
+DROP TABLE documents;
+ALTER TABLE documents_codex_rebuild RENAME TO documents;
+CREATE INDEX idx_documents_source_checksum ON documents(source_checksum);
+CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
+CREATE TABLE translation_blocks_codex_rebuild (
+  job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  block_id TEXT NOT NULL,
+  source_hash TEXT NOT NULL,
+  source_markdown TEXT NOT NULL,
+  translated_markdown TEXT,
+  provider TEXT CHECK (provider IS NULL OR provider IN ('qwen', 'deepseek', 'bing', 'transmart', 'codex')),
+  model TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'failed')),
+  error TEXT,
+  PRIMARY KEY(job_id, block_id)
+) STRICT;
+INSERT INTO translation_blocks_codex_rebuild SELECT * FROM translation_blocks;
+DROP TABLE translation_blocks;
+ALTER TABLE translation_blocks_codex_rebuild RENAME TO translation_blocks;
+CREATE TABLE translation_cache_codex_rebuild (
+  cache_key TEXT PRIMARY KEY,
+  translated_markdown TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('qwen', 'deepseek', 'bing', 'transmart', 'codex')),
+  model TEXT NOT NULL,
+  created_at TEXT NOT NULL
+) STRICT;
+INSERT INTO translation_cache_codex_rebuild SELECT * FROM translation_cache;
+DROP TABLE translation_cache;
+ALTER TABLE translation_cache_codex_rebuild RENAME TO translation_cache;
+` }
 ])
 
 export class V2Database {
@@ -659,16 +702,22 @@ export class V2Database {
         return
       }
 
-      this.transaction(() => {
-        if (!hasLedger) this.createMigrationLedger()
-        for (const migration of pending) {
-          const checksum = checksumFor(migration)
-          this.connection.exec(migration.sql)
-          this.connection
-            .prepare('INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES(?,?,?,?)')
-            .run(migration.version, migration.name, checksum, new Date().toISOString())
-        }
-      })
+      // Table rebuilds preserve IDs and referencing rows; foreign keys are checked before commit.
+      const rebuildProviders = pending.some(migration => migration.name === 'add-codex-provider')
+      if (rebuildProviders) this.connection.exec('PRAGMA foreign_keys = OFF;')
+      try {
+        this.transaction(() => {
+          if (!hasLedger) this.createMigrationLedger()
+          for (const migration of pending) {
+            const checksum = checksumFor(migration)
+            this.connection.exec(migration.sql)
+            this.connection
+              .prepare('INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES(?,?,?,?)')
+              .run(migration.version, migration.name, checksum, new Date().toISOString())
+          }
+          if (this.connection.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Migration violated foreign keys')
+        })
+      } finally { this.connection.exec('PRAGMA foreign_keys = ON;') }
     } catch (error) {
       if (snapshotPath) throw new V2MigrationError(snapshotPath, error)
       throw error

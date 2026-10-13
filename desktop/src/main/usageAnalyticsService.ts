@@ -6,7 +6,7 @@ import type { UsageAnalytics } from '@shared/ipcSchemas'
 interface StoredUsageAnalytics {
   version: 1
   pagesByDocument: Record<string, { date: string; pages: number }>
-  tokenDays: Record<string, { deepseek: number; qwen: number }>
+  tokenDays: Record<string, { deepseek: number; qwen: number; codex?: number }>
 }
 
 export interface ProviderTokenUsage {
@@ -38,13 +38,13 @@ export class UsageAnalyticsService implements UsageAnalyticsRecorder {
   }
 
   async recordTokens(provider: TranslationProviderId, usage: ProviderTokenUsage, at = new Date()): Promise<void> {
-    if (provider !== 'deepseek' && provider !== 'qwen') return
+    if (provider !== 'deepseek' && provider !== 'qwen' && provider !== 'codex') return
     const total = nonNegativeInteger(usage.totalTokens)
     if (total === 0) return
     const state = await this.statePromise
     const date = localDateKey(at)
     const current = state.tokenDays[date] ?? { deepseek: 0, qwen: 0 }
-    current[provider] = safeAdd(current[provider], total)
+    current[provider] = safeAdd(current[provider] ?? 0, total)
     state.tokenDays[date] = current
     await this.persist(state)
   }
@@ -52,7 +52,7 @@ export class UsageAnalyticsService implements UsageAnalyticsRecorder {
   async snapshot(tasks: readonly CopilotixTask[], dayCount = 84, now = new Date()): Promise<UsageAnalytics> {
     const state = await this.statePromise
     const days = buildDayRange(dayCount, now)
-    const byDate = new Map(days.map((date) => [date, { date, documents: 0, pages: 0, deepseekTokens: 0, qwenTokens: 0 }]))
+    const byDate = new Map(days.map((date) => [date, { date, documents: 0, pages: 0, deepseekTokens: 0, qwenTokens: 0, codexTokens: 0 }]))
     for (const task of tasks) {
       const day = byDate.get(localDateKey(new Date(task.createdAt)))
       if (day) day.documents += 1
@@ -66,6 +66,7 @@ export class UsageAnalyticsService implements UsageAnalyticsRecorder {
       if (!day) continue
       day.deepseekTokens = nonNegativeInteger(tokens.deepseek)
       day.qwenTokens = nonNegativeInteger(tokens.qwen)
+      day.codexTokens = nonNegativeInteger(tokens.codex)
     }
     return { days: [...byDate.values()] }
   }
@@ -135,7 +136,7 @@ function sanitizeTokens(value: Record<string, unknown>): StoredUsageAnalytics['t
   const result: StoredUsageAnalytics['tokenDays'] = {}
   for (const [date, candidate] of Object.entries(value).slice(-366)) {
     if (!isRecord(candidate)) continue
-    result[date.slice(0, 10)] = { deepseek: nonNegativeInteger(candidate.deepseek), qwen: nonNegativeInteger(candidate.qwen) }
+    result[date.slice(0, 10)] = { deepseek: nonNegativeInteger(candidate.deepseek), qwen: nonNegativeInteger(candidate.qwen), codex: nonNegativeInteger(candidate.codex) }
   }
   return result
 }

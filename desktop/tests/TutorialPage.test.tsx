@@ -21,6 +21,18 @@ const sample: DocumentSummary = {
 }
 
 describe('TutorialPage', () => {
+  it('uses existing valid credentials without a tutorial marker, but blocks invalid or unverified credentials', () => {
+    Object.defineProperty(window, 'copilotix', { configurable: true, value: {} as CopilotixDesktopApi })
+    const props = { documents: [], onSettingsSaved: vi.fn(), onOpenReader: vi.fn(), onImported: vi.fn(), onClose: vi.fn() }
+    const settings = { ...DEFAULT_SETTINGS, credentials: { ...DEFAULT_SETTINGS.credentials, parser: { state: 'valid' as const } } }
+    const view = render(<TutorialPage {...props} settings={settings} />)
+    expect((screen.getByRole('button', { name: '选择文档' }) as HTMLButtonElement).disabled).toBe(false)
+    for (const state of ['unknown', 'invalid', 'missing'] as const) {
+      view.rerender(<TutorialPage {...props} settings={{ ...settings, credentials: { ...settings.credentials, parser: { state } } }} />)
+      expect((screen.getByRole('button', { name: '选择文档' }) as HTMLButtonElement).disabled).toBe(true)
+    }
+  })
+
   it('guides a new user to configure MinerU before importing the bundled paper', () => {
     Object.defineProperty(window, 'copilotix', { configurable: true, value: {} as CopilotixDesktopApi })
     render(<TutorialPage settings={DEFAULT_SETTINGS} documents={[]} onSettingsSaved={vi.fn()} onOpenReader={vi.fn()} onImported={vi.fn()} onClose={vi.fn()} />)
@@ -86,13 +98,9 @@ describe('TutorialPage', () => {
     render(<TutorialPage settings={settings} documents={[previous]} onSettingsSaved={vi.fn()} onOpenReader={vi.fn()} onImported={onImported} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: '重新体验教程' }))
     expect(window.localStorage.getItem('copilotix:tutorial:replay')).toBe('1')
-    expect((screen.getByRole('button', { name: '选择文档' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '选择文档' }) as HTMLButtonElement).disabled).toBe(false)
     expect(window.localStorage.getItem('copilotix:tutorial:api-verified:v1')).toBeNull()
     expect(previous.workflow.status).toBe('completed')
-    fireEvent.click(screen.getByRole('button', { name: '输入申领到的 API' }))
-    fireEvent.change(screen.getByLabelText('MinerU Token'), { target: { value: 'test-token' } })
-    fireEvent.click(screen.getByRole('button', { name: '验证并保存' }))
-    await waitFor(() => expect((screen.getByRole('button', { name: '选择文档' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: '选择文档' }))
     await waitFor(() => expect(importTutorialPaper).toHaveBeenCalledWith(true))
     await waitFor(() => expect(onImported).toHaveBeenCalledWith(next))

@@ -111,11 +111,11 @@ describe('structured paper insight', () => {
     expect(remove).toHaveBeenCalledOnce()
     await f.service.dispose()
   })
-  it('defaults automatic generation off, enables only translation completion and skips fresh results', async () => {
+  it('always generates after translation completion, never after parsing, and skips fresh results', async () => {
     const f = fixture()
-    await f.service.onJobChanged({ kind: 'translate', status: 'succeeded', documentId: f.id })
+    await f.service.onJobChanged({ kind: 'parse', status: 'succeeded', documentId: f.id })
     expect(f.deps.stream).not.toHaveBeenCalled()
-    f.settings.autoGeneratePaperInsight = true
+    f.settings.autoGeneratePaperInsight = false // a stale stored value no longer turns it off
     await f.service.onJobChanged({ kind: 'translate', status: 'succeeded', documentId: f.id }); await idle(f)
     await vi.waitFor(async () => expect((await f.service.get(f.id)).status).toBe('ready'))
     await f.service.onJobChanged({ kind: 'translate', status: 'succeeded', documentId: f.id }); await idle(f)

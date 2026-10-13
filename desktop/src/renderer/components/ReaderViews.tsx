@@ -1,6 +1,6 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
-import { Badge, Empty, Tag } from 'antd'
+import { Badge, Button, Tag } from 'antd'
 import { FilePdfOutlined, FileTextOutlined, MessageOutlined, TranslationOutlined } from '@ant-design/icons'
 import type { ReaderBlock } from '@shared/readerDocument'
 import type {
@@ -22,6 +22,7 @@ import type { ReaderViewId } from '../readerLayout'
 import { buildReaderFigureGeometries, projectReaderFigureGroups } from '@shared/readerFigureGroups'
 import { createScrollSyncHub } from '../readerScrollSync'
 import { useFigureArtifacts } from '../useFigureArtifacts'
+import { canRetry } from '../documentStatus'
 
 /** AI chat lives in the same workbench as the readers; it is optional so the reader works without it. */
 export interface ReaderChatOptions {
@@ -64,6 +65,8 @@ export interface ReaderViewsInput {
   translatedBlocks: ReaderBlock[]
   translatedReady: boolean
   taskStatus: DocumentWorkflowStatus
+  taskError?: string | null
+  onRetry?(): Promise<void>
   assetBaseUrl: string
   taskId: string
   annotations: ReaderAnnotation[]
@@ -136,7 +139,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
         label: 'Markdown',
         icon: <FileTextOutlined />,
         panelClassName: 'reader-tab-panel',
-        render: ({ active }) => active ? <MarkdownPane
+        render: ({ active }) => !props.originalBlocks.some(block => block.role === 'content' && block.markdown.trim()) ? <ReaderDocumentState view="original" status={props.taskStatus} error={props.taskError} onRetry={props.onRetry} /> : active ? <MarkdownPane
           active
           blocks={props.originalBlocks}
           assetBaseUrl={props.assetBaseUrl}
@@ -182,7 +185,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
             initialScrollTop={scrollPositionsRef.current.translated}
             onScrollTopChange={rememberTranslatedScroll}
             scrollSync={syncHub.channel('translated')}
-          /> : null) : <Empty className="translation-empty" description={translationLabel(props.taskStatus)} />}
+          /> : null) : <ReaderDocumentState view="translated" status={props.taskStatus} error={props.taskError} onRetry={props.onRetry} />}
         </>
       }
     }
@@ -235,13 +238,39 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   }, [
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
     props.onAddToChat, props.onSelect, props.onOpenFigurePdf, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
-    props.taskStatus, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
+    props.taskStatus, props.taskError, props.onRetry, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
     rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups
   ])
 }
 
 const EMPTY_MAPPINGS: BlockMapping[] = []
+
+function ReaderDocumentState(props: {
+  view: 'original' | 'translated'
+  status: DocumentWorkflowStatus
+  error?: string | null
+  onRetry?(): Promise<void>
+}): React.JSX.Element {
+  const [retrying, setRetrying] = React.useState(false)
+  const failed = props.status === 'failed' || props.status === 'partial'
+  const pending = ['queued', 'uploading', 'parsing', 'translating'].includes(props.status)
+  const content = props.view === 'original' ? '原文' : '译文'
+  const title = failed ? `${content}未生成，文档处理失败` : pending ? `${content}正在准备中` : `暂无${content}`
+  const retry = async (): Promise<void> => {
+    if (retrying || !props.onRetry) return
+    setRetrying(true)
+    try { await props.onRetry() } finally { setRetrying(false) }
+  }
+  const error = props.error && /fetch failed|failed to fetch|network|net::|econn|timeout/iu.test(props.error)
+    ? '网络请求失败，请检查网络或代理设置后重试。'
+    : props.error
+  return <div className="reader-document-state" role={failed ? 'alert' : 'status'}>
+    <strong>{title}</strong>
+    <p>{error || (pending ? '处理完成后内容会自动显示，你可以先查看 PDF。' : '你可以先查看 PDF，或重试文档处理。')}</p>
+    {canRetry(props.status) && props.onRetry ? <Button loading={retrying} onClick={() => void retry()}>重试文档处理</Button> : null}
+  </div>
+}
 
 function ChatTabLabel(props: { controller: PaperChatController }): React.JSX.Element {
   const pinned = props.controller.pinned.length

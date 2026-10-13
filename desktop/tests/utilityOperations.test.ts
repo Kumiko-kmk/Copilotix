@@ -105,6 +105,20 @@ describe('utility persistence lifecycle', () => {
     }
   })
 
+  it.each([Buffer.alloc(0), Buffer.from('Plain text disguised as PDF'), Buffer.from('x'.repeat(1024) + '%PDF-1.7')])('rejects invalid PDFs before publishing artifacts', async (bytes) => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-invalid-import-'))
+    try {
+      const sourcePath = join(root, 'invalid.pdf')
+      await writeFile(sourcePath, bytes)
+      const outputRoot = join(root, 'output')
+      const documentId = '11111111-1111-4111-8111-111111111111'
+      const persistence = createUtilityOperationHandlers({ outputRoot })
+      await expect(persistence.handlers['compute:import-pdf']!({ payload: { sourcePath, documentId } } as never, new AbortController().signal)).rejects.toMatchObject({ code: 'CORE_PROTOCOL_ERROR' })
+      const directory = join(outputRoot, 'documents-v2', documentId)
+      expect(await readdir(directory).catch(() => [])).toEqual([])
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
   it('publishes normalized artifacts only after validation and is idempotent', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-normalize-'))
     try {

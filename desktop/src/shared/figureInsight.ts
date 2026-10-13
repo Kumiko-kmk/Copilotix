@@ -18,7 +18,8 @@ export const figureInsightContentSchema = z.object({
 
 export const figureInsightModelSchema = z.union([
   z.object({ provider: z.literal('qwen'), name: z.enum(['qwen3.8-flash', 'qwen3.8-max']) }).strict(),
-  z.object({ provider: z.literal('deepseek'), name: z.literal('deepseek-flash') }).strict()
+  z.object({ provider: z.literal('deepseek'), name: z.literal('deepseek-flash') }).strict(),
+  z.object({ provider: z.literal('codex'), name: z.string().min(1).max(128) }).strict()
 ])
 export const figureInsightLocationSchema = z.object({
   figureId: z.string().min(1).max(256),
@@ -67,5 +68,6 @@ export const figureInsightSaveSchema = figureInsightRequestSchema.extend({ sourc
 export type FigureInsightSave = z.infer<typeof figureInsightSaveSchema>
 
 export function resolveFigureInsightModel(provider: z.infer<typeof paperChatProviderSchema>, selected: string): string {
+  if (provider === 'codex') return selected
   return provider === 'deepseek' ? 'deepseek-flash' : selected === 'qwen3.8-max' ? selected : 'qwen3.8-flash'
 }

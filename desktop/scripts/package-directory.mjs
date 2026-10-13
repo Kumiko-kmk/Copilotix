@@ -236,6 +236,25 @@ export async function assertLocalDependencyGraph(repository, desktop) {
   await requireFile(nativeBinding)
 }
 
+/** Opt in to the pinned, locally installed Electron distribution for offline packaging. */
+export async function resolveInstalledElectronDist(environment = process.env) {
+  const requested = environment.COPILOTIX_USE_INSTALLED_ELECTRON
+  if (requested === undefined || requested === '') return undefined
+  if (requested !== '1') throw new Error('COPILOTIX_USE_INSTALLED_ELECTRON must be 1 when enabled')
+  const packageJson = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
+  const expectedVersion = assertPackagedSmokeVersions(packageJson).electronVersion
+  const require = createRequire(join(desktopDirectory, 'package.json'))
+  const installedManifest = require.resolve('electron/package.json')
+  const installedPackage = JSON.parse(await readFile(installedManifest, 'utf8'))
+  const distribution = join(dirname(installedManifest), 'dist')
+  const distributionVersion = (await readFile(join(distribution, 'version'), 'utf8')).trim()
+  if (installedPackage.version !== expectedVersion || distributionVersion !== expectedVersion) {
+    throw new Error(`Installed Electron must match ${expectedVersion}; received ${installedPackage.version}/${distributionVersion}`)
+  }
+  await requireFile(join(distribution, 'electron.exe'))
+  return realpath(distribution)
+}
+
 export async function runElectronBuilder(outputDirectory, { forceCodeSigning = false } = {}) {
   if (typeof outputDirectory !== 'string' || !outputDirectory) throw new TypeError('Electron-builder output directory is required')
   if (typeof forceCodeSigning !== 'boolean') throw new TypeError('forceCodeSigning must be a boolean')
@@ -252,10 +271,12 @@ export async function runElectronBuilder(outputDirectory, { forceCodeSigning = f
   if (!licenseInventory.packageCount) throw new Error('No dependency license inventory could be generated')
   process.stdout.write(`Dependency licenses: ${licenseInventory.packageCount} packages; ${licenseInventory.packagesWithoutLicenseText} without root license text (see inventory)\n`)
   let runtimePackager
+  const electronDist = await resolveInstalledElectronDist()
   await build({
     projectDir: desktopDirectory,
     targets: createTargets([Platform.WINDOWS], 'dir', 'x64'),
     config: {
+      ...(electronDist ? { electronDist } : {}),
       directories: { output: resolvedOutput },
       afterPack: async (context) => {
         await applyReleaseFusesAfterPack(context)

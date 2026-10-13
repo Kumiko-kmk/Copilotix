@@ -10,7 +10,7 @@ export default defineConfig({
         exclude: ['p-queue', 'remark-gfm', 'remark-math', 'remark-parse', 'remark-stringify', 'unified', 'uuid', 'zod']
       })
     ],
-    resolve: { alias: { '@shared': resolve('src/shared'), '@core': resolve('src/core'), '@main': resolve('src/main') } }
+    resolve: { alias: { '@shared': resolve('src/shared'), '@core': resolve('src/core'), '@runtime': resolve('src/runtime'), '@main': resolve('src/main') } }
   },
   preload: {
     plugins: [externalizeDepsPlugin({ exclude: ['zod'] })],

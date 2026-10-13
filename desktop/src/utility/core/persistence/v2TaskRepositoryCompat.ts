@@ -25,7 +25,7 @@ import {
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { normalizeEnabledProviders, normalizeProviderOrder } from '@shared/providerPolicy'
 import type { ArtifactReference } from './taskRepositoryCompat'
-import { PathPolicy, resolveLexicalWithinRoot } from '@core/pathPolicy'
+import { PathPolicy, resolveLexicalWithinRoot } from '@runtime/pathPolicy'
 import { V2Database } from './v2Database'
 import { projectDocumentSummary } from '@shared/documentSummary'
 import { SqliteJobRepository } from './sqliteJobRepository'
@@ -36,7 +36,7 @@ export interface CompatDocumentRow {
   display_title: string | null
   storage_path: string
   source_checksum: string
-  translation_provider: 'qwen' | 'deepseek' | 'bing' | 'transmart'
+  translation_provider: 'qwen' | 'deepseek' | 'bing' | 'transmart' | 'codex'
   created_at: string
   updated_at: string
 }
@@ -184,12 +184,14 @@ export class V2TaskRepositoryCompat {
       translationProvider: enabledTranslationProviders[0]!,
       translationProviderOrder,
       enabledTranslationProviders,
+      codex: stored.codex ?? DEFAULT_SETTINGS.codex,
       qwenBaseUrl: stored.qwenBaseUrl ?? DEFAULT_SETTINGS.qwenBaseUrl,
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
       deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
       chatProvider: stored.chatProvider ?? DEFAULT_SETTINGS.chatProvider,
-      autoGeneratePaperInsight: stored.autoGeneratePaperInsight === true,
+      // Automatic AI briefs after translation are always on; an old stored false is ignored.
+      autoGeneratePaperInsight: true,
       qwenChatModel: resolvePaperChatModel('qwen', stored.qwenChatModel),
       deepseekChatModel: resolvePaperChatModel('deepseek', stored.deepseekChatModel),
       chatConsentProvider: stored.chatConsentProvider ?? null,

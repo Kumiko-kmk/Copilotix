@@ -16,7 +16,7 @@ export const paperInsightContentSchema = z.object({
 }).strict()
 export const paperInsightSchema = paperInsightContentSchema.extend({
   model: z.object({ provider: paperChatProviderSchema, name: supportedChatModelSchema }).strict()
-    .refine((model) => PAPER_CHAT_MODELS[model.provider].includes(model.name)),
+    .refine((model) => model.provider === 'codex' || PAPER_CHAT_MODELS[model.provider].includes(model.name)),
   generatedAt: z.iso.datetime(), sourceRevision: text(512)
 }).strict()
 export type PaperInsight = z.infer<typeof paperInsightSchema>

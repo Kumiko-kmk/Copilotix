@@ -1,3 +1,5 @@
+import type { ModelGateway } from './modelGateway'
+import { z } from 'zod'
 import { createHash } from 'node:crypto'
 import { lstat, readFile } from 'node:fs/promises'
 import { FIGURE_INSIGHT_MAX_REQUEST_BYTES, figureInsightContentSchema, figureInsightRequestSchema, figureInsightUploadSchema,
@@ -6,7 +8,7 @@ import { FIGURE_INSIGHT_MAX_REQUEST_BYTES, figureInsightContentSchema, figureIns
 import { buildFigureInsightMessages } from '@shared/figureInsightPrompt'
 import { resolvePaperChatProvider, hasPaperChatConsent, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { AppSettings } from '@shared/types'
-import { abortable, type ChatProvider } from './chatProvider'
+import { abortable } from './chatProvider'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
 
 export interface FigureInsightDependencies {
@@ -15,7 +17,7 @@ export interface FigureInsightDependencies {
   descriptor(request: FigureInsightRequest, signal: AbortSignal): Promise<FigureInsightDescriptor>
   get(request: FigureInsightRequest): Promise<FigureInsightState>
   save(request: FigureInsightSave): Promise<unknown>
-  stream: ChatProvider['stream']
+  stream: ModelGateway['stream']
   recordUsage(provider: PaperChatProvider, usage: ProviderTokenUsage): Promise<void>
   canStart(): boolean
   changed(request: FigureInsightRequest, state: FigureInsightState): void
@@ -78,11 +80,11 @@ export class FigureInsightService {
 
   private async authorize() {
     const settings = await this.deps.settings(), provider = resolvePaperChatProvider(settings)
-    if (!provider) throw new FigureAuthorizationError('请启用 Qwen 或 DeepSeek 服务。')
+    if (!provider) throw new FigureAuthorizationError('请启用 Qwen、DeepSeek 或 Codex 服务。')
     if (!hasPaperChatConsent(settings, provider)) throw new FigureAuthorizationError('请先在 AI 问答中同意向所选服务商发送论文内容。')
-    const key = await this.deps.key(provider)
-    if (!key || settings.credentials[provider].state !== 'valid') throw new FigureAuthorizationError('请先保存并验证模型 API Key。')
-    const name = resolveFigureInsightModel(provider, provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
+    const key = provider === 'codex' ? null : await this.deps.key(provider)
+    if (provider !== 'codex' && (!key || settings.credentials[provider].state !== 'valid')) throw new FigureAuthorizationError('请先保存并验证模型 API Key。')
+    const name = resolveFigureInsightModel(provider, provider === 'codex' ? settings.codex?.chatModel ?? 'default' : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
     const model = figureInsightModelSchema.parse({ provider, name })
     return { settings, provider, key, model }
   }
@@ -116,7 +118,7 @@ export class FigureInsightService {
         let answer = ''
         const usage = await this.deps.stream({ provider: auth.provider, model: auth.model.name, key: auth.key,
           baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
-          messages, signal, temperature: 0.2, maxOutputTokens: 1400, responseFormat: { type: 'json_object' },
+          messages, signal, ...(auth.provider === 'codex' ? { outputSchema: z.toJSONSchema(figureInsightContentSchema) } : {}), temperature: 0.2, maxOutputTokens: 1400, responseFormat: { type: 'json_object' },
           maxRequestBytes: FIGURE_INSIGHT_MAX_REQUEST_BYTES,
           firstByteMs: 120_000,
           onDelta: delta => { signal.throwIfAborted(); if (answer.length + delta.length > 8192) throw new Error('output too large'); answer += delta }

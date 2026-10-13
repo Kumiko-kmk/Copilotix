@@ -1,3 +1,4 @@
+import { codexSettingsSchema, DEFAULT_CODEX_SETTINGS } from './codex'
 import { paperChatProviderSchema, qwenChatModelSchema, deepseekChatModelSchema } from './paperChatSchemas'
 import { z } from 'zod'
 import type {
@@ -31,7 +32,7 @@ const boundedPath = z.string().min(1).max(32_768).refine(noNul, '路径不能包
 const safeName = z.string().min(1).max(32_768).refine(noNul, '名称不能包含 NUL 字符')
 const timestamp = z.string().min(1).max(128)
 
-export const translationProviderIdSchema = z.enum(['qwen', 'deepseek', 'bing', 'transmart'])
+export const translationProviderIdSchema = z.enum(['qwen', 'deepseek', 'bing', 'transmart', 'codex'])
 export const taskStatusSchema = z.enum(['uploading', 'parsing', 'translating', 'partial', 'completed', 'failed'])
 
 export const credentialNameSchema: z.ZodType<CredentialName> = z.enum(['parser', 'qwen', 'deepseek'])
@@ -51,11 +52,11 @@ export const credentialStatusesSchema: z.ZodType<CredentialStatuses> = z.object(
   deepseek: credentialStatusSchemaPlaceholder()
 }).strict()
 
-const translationProviderOrderSchema = z.array(translationProviderIdSchema).length(4).refine(
-  (providers) => new Set(providers).size === 4,
+const translationProviderOrderSchema = z.array(translationProviderIdSchema).min(4).max(5).refine(
+  (providers) => new Set(providers).size === providers.length && (providers.length === 5 || !providers.includes('codex')),
   '翻译模型顺序必须完整且不能重复'
 )
-const enabledTranslationProvidersSchema = z.array(translationProviderIdSchema).min(1).max(4).refine(
+const enabledTranslationProvidersSchema = z.array(translationProviderIdSchema).min(1).max(5).refine(
   (providers) => new Set(providers).size === providers.length,
   '启用的翻译模型不能重复'
 )
@@ -92,11 +93,12 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   translationProvider: translationProviderIdSchema,
   translationProviderOrder: translationProviderOrderSchema,
   enabledTranslationProviders: enabledTranslationProvidersSchema,
+  codex: codexSettingsSchema.default(DEFAULT_CODEX_SETTINGS),
   qwenBaseUrl: z.string().min(1).max(2_048),
   qwenModel: z.string().min(1).max(512),
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
-  autoGeneratePaperInsight: z.boolean().default(false),
+  autoGeneratePaperInsight: z.boolean().default(true),
   chatProvider: paperChatProviderSchema.nullable().default(null),
   qwenChatModel: qwenChatModelSchema.default('qwen-plus').catch('qwen-plus'),
   deepseekChatModel: deepseekChatModelSchema.default('deepseek-flash').catch('deepseek-flash'),
@@ -115,11 +117,12 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
   translationProvider: translationProviderIdSchema,
   translationProviderOrder: translationProviderOrderSchema,
   enabledTranslationProviders: enabledTranslationProvidersSchema,
+  codex: codexSettingsSchema.default(DEFAULT_CODEX_SETTINGS),
   qwenBaseUrl: z.string().min(1).max(2_048),
   qwenModel: z.string().min(1).max(512),
   deepseekBaseUrl: z.string().min(1).max(2_048),
   deepseekModel: z.string().min(1).max(512),
-  autoGeneratePaperInsight: z.boolean().default(false),
+  autoGeneratePaperInsight: z.boolean().default(true),
   chatProvider: paperChatProviderSchema.nullable().default(null),
   qwenChatModel: qwenChatModelSchema.default('qwen-plus'),
   deepseekChatModel: deepseekChatModelSchema.default('deepseek-flash'),
@@ -209,7 +212,7 @@ export const storageInfoSchema = z.object({
   documentCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   fileCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-  categories: z.array(storageCategorySchema).length(4),
+  categories: z.array(storageCategorySchema).min(4).max(5),
   growth: z.array(storageGrowthPointSchema).length(14)
 }).strict()
 export type StorageInfo = z.infer<typeof storageInfoSchema>
@@ -218,6 +221,7 @@ export const usageAnalyticsDaySchema = z.object({
   documents: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   pages: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   deepseekTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  codexTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   qwenTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 }).strict()
 export type UsageAnalyticsDay = z.infer<typeof usageAnalyticsDaySchema>

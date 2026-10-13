@@ -1,3 +1,6 @@
+import { CodexRuntime } from '@runtime/codexRuntime'
+import { ModelGateway } from './chat/modelGateway'
+import { codexProbeSchema, codexStatusSchema, DEFAULT_CODEX_SETTINGS } from '@shared/codex'
 import { PaperInsightService } from './chat/paperInsightService'
 import { FigureInsightService } from './chat/figureInsightService'
 import { registerFigureInsightHandlers } from './chat/figureInsightIpc'
@@ -87,7 +90,7 @@ import { ParseJobRunner } from './parseJobRunner'
 import { TranslationJobRunner } from './translationJobRunner'
 import { RagContentIndexJobRunner } from './ragContentIndexJobRunner'
 import { RpcRagContentIndexer } from './rpcRagContentIndexer'
-import { PathPolicy } from '@core/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import { formatPackagedSmokeMarker, shouldRunPackagedSmoke } from '@shared/packagedSmoke'
 import { inspectStorage } from './storageService'
 import { resolveUtilityEntryPath } from './utilityEntryPath'
@@ -102,6 +105,7 @@ let documentRevision = 0
 let documentSummaries = new Map<string, DocumentSummary>()
 let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
+let codex: CodexRuntime | null = null
 let paperChat: PaperChatService | null = null
 let paperInsight: PaperInsightService | null = null
 let figureInsight: FigureInsightService | null = null
@@ -165,14 +169,16 @@ async function bootstrap(): Promise<void> {
   await settings.initialize()
   const logger = new JsonLineLogger(join(userData, 'copilotix-desktop.log'))
   const usageAnalytics = new UsageAnalyticsService(join(userData, 'usage-analytics-v1.json'))
+  codex = new CodexRuntime(join(userData, 'codex-runtime'), async () => (await settings.get()).codex ?? DEFAULT_CODEX_SETTINGS)
   const chatProvider = new ChatProvider(fetcher, { invalidate: (provider) => settings.invalidateCredential(provider) })
+  const modelGateway = new ModelGateway(chatProvider, codex)
   figureInsight = new FigureInsightService({
     settings: () => settings.get(),
-    key: provider => vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    key: provider => provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
     descriptor: (request, signal) => utilitySupervisor!.request('compute:figure-insight-descriptor', request, { signal, timeoutMs: 30_000 }),
     get: request => utilitySupervisor!.request('figureInsight:get', request),
     save: request => utilitySupervisor!.request('figureInsight:save', request, { timeoutMs: 30_000 }),
-    stream: input => chatProvider.stream(input),
+    stream: input => modelGateway.stream(input),
     encodeImage: async png => {
       if (png.length <= 2 * 1024 * 1024) return { bytes: png, mimeType: 'image/png' }
       const image = nativeImage.createFromBuffer(png)
@@ -193,19 +199,19 @@ async function bootstrap(): Promise<void> {
     saveSession: (documentId, session) => utilitySupervisor!.request('chat:save-session', { documentId, session }),
     clear: (documentId) => utilitySupervisor!.request('chat:clear', { documentId }),
     settings: () => settings.get(),
-    key: (provider) => vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    key: (provider) => provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
     buildContext: (request, signal) => utilitySupervisor!.request('chat:build-context', request, { signal, timeoutMs: 10_000 }),
-    stream: (input) => chatProvider.stream(input),
+    stream: (input) => modelGateway.stream(input),
     recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
     log: (details) => logger.info('paper-chat', details)
   })
   paperInsight = new PaperInsightService({
     settings: () => settings.get(),
-    key: (provider) => vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    key: (provider) => provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
     get: (documentId) => utilitySupervisor!.request('insight:get', { documentId }),
     context: (documentId, signal) => utilitySupervisor!.request('insight:brief-context', { documentId }, { signal, timeoutMs: 10_000 }),
     save: (documentId, brief, anchors) => utilitySupervisor!.request('insight:save-brief', { documentId, brief, anchors }),
-    stream: (input) => chatProvider.stream(input),
+    stream: (input) => modelGateway.stream(input),
     recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
     canStart: () => !libraryGate.busy && !libraryGate.restarting && !isQuitting,
     changed: (documentId, state) => {
@@ -277,6 +283,7 @@ async function bootstrap(): Promise<void> {
     }
   }))
   jobScheduler.registerRunner('translate', new TranslationJobRunner({
+    codex,
     repository,
     settingsService: settings,
     vault,
@@ -448,6 +455,11 @@ function registerIpc(
       if (!libraryGate.restarting) { await jobScheduler.start(); paperInsight?.resume(); figureInsight?.resume() }
     }
   }, validationOptions)
+  registerValidatedHandler('codex:inspect', codexProbeSchema, codexStatusSchema, (_event, request) => codex!.inspect(request.settings, request.testModel), validationOptions)
+  registerValidatedHandler('codex:select-executable', noRequestSchema, outputDirectorySchema, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, { title: '选择 codex.exe', properties: ['openFile'], filters: [{ name: 'Codex', extensions: ['exe'] }] })
+    return result.canceled ? null : result.filePaths[0] ?? null
+  }, validationOptions)
   registerValidatedHandler('settings:get', noRequestSchema, appSettingsSchema, () => settings.get(), validationOptions)
   registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, async (_event, update) => {
     const before = await settings.get()
@@ -457,7 +469,7 @@ function registerIpc(
     if (before.enabledTranslationProviders.join(',') !== next.enabledTranslationProviders.join(',')
       || before.translationProvider !== next.translationProvider || before.chatConsentVersion !== next.chatConsentVersion
       || before.chatConsentProvider !== next.chatConsentProvider || before.qwenChatModel !== next.qwenChatModel
-      || before.deepseekChatModel !== next.deepseekChatModel || before.autoGeneratePaperInsight !== next.autoGeneratePaperInsight
+      || before.deepseekChatModel !== next.deepseekChatModel
       || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) { paperInsight?.cancelAll(); figureInsight?.cancelAll() }
     return result
   }, validationOptions)
@@ -597,7 +609,7 @@ function startNormalApp(): void {
     isQuitting = true
     if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
     event.preventDefault()
-    utilityShutdownPromise = Promise.all([paperChat?.settle(), paperInsight?.dispose(), figureInsight?.dispose()]).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
+    utilityShutdownPromise = Promise.all([paperChat?.settle(), paperInsight?.dispose(), figureInsight?.dispose()]).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => { codex?.close(); return utilitySupervisor!.shutdown() }).catch(() => undefined).then(() => {
       app.quit()
     })
   })
