@@ -162,6 +162,7 @@
       "installerIcon": "resources/icon.ico",
       "uninstallerIcon": "resources/icon.ico",
       "installerSidebar": "resources/installer-sidebar.bmp",
+      "installerHeader": "resources/installer-header.bmp",
       "uninstallerSidebar": "resources/installer-sidebar.bmp",
       "include": "resources/installer.nsh"
     },

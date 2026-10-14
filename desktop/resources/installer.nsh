@@ -32,6 +32,17 @@ LangString copilotixWelcome 2052 "此向导将为当前 Windows 用户安装 Cop
 LangString copilotixWelcome 1028 "此精靈將為目前 Windows 使用者安裝 Copilotix。$\r$\n$\r$\n您可以選擇程式安裝位置。文檔庫的位置在應用程式的文件儲存設定中管理，與安裝位置獨立。$\r$\n$\r$\n升級或解除安裝前，請從系統匣選單退出 Copilotix，等待背景任務停止。解除安裝預設保留資料；可在精靈中選擇同時移除文檔庫、設定和憑證。"
 LangString copilotixWelcome 1033 "This wizard installs Copilotix for your current Windows account.$\r$\n$\r$\nYou can choose where the program is installed. Manage the separate document library location in the app's file storage settings.$\r$\n$\r$\nBefore upgrading or uninstalling, choose Exit in the system tray and wait for background tasks to stop. Uninstall keeps your data by default; its wizard offers optional library, settings and credential removal."
 
+LangString copilotixProjectLink 2052 "访问 Copilotix 项目主页"
+LangString copilotixProjectLink 1028 "造訪 Copilotix 專案首頁"
+LangString copilotixProjectLink 1033 "Visit the Copilotix project page"
+
+; The finish page offers the project page beside builder's "Run Copilotix" option.
+!ifndef BUILD_UNINSTALLER
+  !define MUI_FINISHPAGE_LINK "$(copilotixProjectLink)"
+  !define MUI_FINISHPAGE_LINK_LOCATION "https://github.com/Kumiko-kmk/Copilotix"
+  !define MUI_FINISHPAGE_LINK_COLOR "5B58D6"
+!endif
+
 !macro customWelcomePage
   !define MUI_WELCOMEPAGE_TEXT "$(copilotixWelcome)"
   !insertmacro MUI_PAGE_WELCOME

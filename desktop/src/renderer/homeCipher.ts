@@ -8,7 +8,9 @@ import { rgbChannels } from './theme'
  * opens, one where the user clicks, and otherwise only rarely. A front scrambles the glyphs it
  * crosses in the accent and leaves library papers behind it — original or translated titles —
  * which fade back into the field after a few seconds. The wordmark decodes in step with
- * every front (homeWave.ts). Static under reduced motion; paused while hidden or unfocused.
+ * every front (homeWave.ts); a new wave first fades out the titles the last one left. Between
+ * waves the field keeps flickering so it never reads as a still image. Static under reduced
+ * motion; paused while hidden or unfocused.
  */
 export interface CipherTitle {
   /** Original and, once read, translated title. */
@@ -29,7 +31,12 @@ const AUTO_WAVE_SECONDS = 75
 const AUTO_WAVE_SPREAD = 45
 const REVEAL_SECONDS = 7
 const REVEAL_FADE = 1.4
-const FLICKER_SECONDS = 0.25
+/** A new wave clears the titles still showing from the last one this quickly. */
+const CLEAR_FADE = 0.45
+/** The idle field keeps changing: every tick some glyphs change, appear or vanish, and one may spark. */
+const FLICKER_SECONDS = 0.08
+const FLICKER_SHARE = 0.006
+const SPARK_CHANCE = 0.22
 /** Foreground blocks the field keeps clear of. */
 const HERO_SELECTORS = '.copilotix-wordmark, .new-parse-heading, .upload-entry, .tutorial-entry, .token-required, .import-options, .selected-files'
 /** Clicks on these act on the page, not the backdrop. */
@@ -90,6 +97,10 @@ export function startCipherField(
   let accent = '91, 88, 214'
   let glyph = new Uint8Array(0)
   let shade = new Float32Array(0)
+  /** Each cell's glyph strength when shown, and its chance of being shown. */
+  let strength = new Float32Array(0)
+  let density = new Float32Array(0)
+  let revealFade = new Float32Array(0)
   let mask = new Float32Array(0)
   let flash = new Float32Array(0)
   let revealUntil = new Float32Array(0)
@@ -161,6 +172,9 @@ export function startCipherField(
     const count = columns * rows
     glyph = new Uint8Array(count).map(() => Math.floor(Math.random() * IDLE_POOL.length))
     shade = new Float32Array(count)
+    strength = new Float32Array(count)
+    density = new Float32Array(count)
+    revealFade = new Float32Array(count)
     mask = new Float32Array(count)
     flash = new Float32Array(count)
     revealUntil = new Float32Array(count)
@@ -191,8 +205,9 @@ export function startCipherField(
         const calm = 0.45 + 0.55 * smooth(0.2, 1.1, Math.hypot(dx, dy))
         mask[index] = nearest < cellWidth ? 0 : (0.35 + 0.65 * smooth(cellWidth, halo, nearest)) * calm
         // Rows are as tight as the wordmark's, so only clusters of cells carry a glyph.
-        const density = 0.06 + 0.4 * smooth(0.32, 0.78, valueNoise(x / 230 + 7, y / 230 + 3))
-        shade[index] = hash(column * 1.7 + 3, row * 2.3 + 11) < density ? (0.07 + 0.08 * valueNoise(x / 90, y / 90)) * mask[index]! : 0
+        density[index] = 0.16 + 0.44 * smooth(0.25, 0.8, valueNoise(x / 230 + 7, y / 230 + 3))
+        strength[index] = (0.06 + 0.08 * valueNoise(x / 90, y / 90)) * mask[index]!
+        shade[index] = Math.random() < density[index]! ? strength[index]! : 0
       }
     }
     paintBase()
@@ -245,6 +260,13 @@ export function startCipherField(
     if (reduced) return
     const speed = WAVE_SPEED * Math.min(1.4, Math.max(0.7, width / 1440))
     const reach = Math.max(Math.hypot(x, y), Math.hypot(width - x, y), Math.hypot(x, height - y), Math.hypot(width - x, height - y))
+    // Titles still showing from the previous wave fade out at once instead of piling up.
+    for (let index = 0; index < reveal.length; index++) {
+      if (reveal[index] === null || revealUntil[index]! - elapsed <= CLEAR_FADE) continue
+      const remaining = Math.min(1, (revealUntil[index]! - elapsed) / revealFade[index]!)
+      revealUntil[index] = elapsed + CLEAR_FADE * remaining
+      revealFade[index] = CLEAR_FADE
+    }
     waves.push({ x, y, start: elapsed, speed, reach })
     placeTitles()
     emitHomeWave({ x: x + left, y: y + top, start: performance.now(), speed: speed / 1000 })
@@ -261,13 +283,19 @@ export function startCipherField(
     if (elapsed >= nextFlicker) {
       nextFlicker = elapsed + FLICKER_SECONDS
       baseContext.font = font
-      for (let count = Math.ceil(columns * rows * 0.004); count > 0; count--) {
+      for (let count = Math.ceil(columns * rows * FLICKER_SHARE); count > 0; count--) {
         const index = Math.floor(Math.random() * columns * rows)
-        if (shade[index]! < 0.005) continue
+        if (strength[index]! < 0.005) continue
+        // Mostly a new glyph; now and then a cell appears or empties, so the field never settles.
+        if (Math.random() < 0.3) shade[index] = Math.random() < density[index]! ? strength[index]! : 0
         glyph[index] = Math.floor(Math.random() * IDLE_POOL.length)
         baseContext.clearRect(cellX(index % columns), cellY(Math.floor(index / columns)), cellWidth, rowHeight)
         drawBaseCell(index)
         dirty = true
+      }
+      if (Math.random() < SPARK_CHANCE) {
+        const index = Math.floor(Math.random() * columns * rows)
+        if (mask[index]! > 0 && reveal[index] === null) flash[index] = Math.max(flash[index]!, 0.55)
       }
     }
     const band = cellWidth * 1.8
@@ -288,6 +316,7 @@ export function startCipherField(
               reveal[index] = char
               revealWide[index] = pendingWide[index]!
               revealUntil[index] = elapsed + REVEAL_SECONDS
+              revealFade[index] = REVEAL_FADE
               pending[index] = null
             }
           }
@@ -330,7 +359,7 @@ export function startCipherField(
         flash[index] = 0
         const text = reveal[index]
         if (text) {
-          const fade = Math.min(1, (revealUntil[index]! - elapsed) / REVEAL_FADE)
+          const fade = Math.min(1, (revealUntil[index]! - elapsed) / revealFade[index]!)
           context.fillStyle = `rgba(${ink}, ${(0.82 * fade * Math.max(0.7, mask[index]!)).toFixed(3)})`
           context.fillText(text, x + (wide ? cellWidth : cellWidth / 2), y + rowHeight / 2)
         } else if (shade[index]! >= 0.005) {

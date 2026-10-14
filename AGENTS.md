@@ -44,7 +44,7 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 - 不重複導覽標題、不用空白標題佔位、不加專屬外層 margin／padding／max-width；首張卡片的頂、左、右邊緣須與基準一致。
 - 卡片內距可自訂；以 `section`／`aria-label` 保留與導覽一致的區域名稱。測試驗證可按名稱查找、無重複標題及共用根類別。
 - 使用者已選擇設定離開確認：應用內離開設定頁時，有草稿須提供「保存并离开／放弃并离开／继续编辑」。保存失敗或憑據部分失敗留在原頁並保留失敗欄位；未保存 API Key 僅留記憶體。設定內頁籤切換保留草稿、不彈確認。
-- 設定「主題外觀」：`theme.ts` 六套紙墨主題寫入 :root 色 token（`--surface`／`--sheet`／`--ink`／`--primary`… 及文庫 3D 用 `--theme-archive-*`），antd、canvas 與 Three.js 均從 token 讀色；存於 localStorage `copilotix.theme.v1`、即時生效，不屬設定草稿與離開確認。新增顏色一律用 token，語義色（成功／警告／錯誤）、PDF 疊層與高亮色板除外。
+- 設定「主題外觀」：`theme.ts` 共六套（三淺三深，主題卡不加文字說明）寫入 :root 色 token（`--surface`／`--sheet`／`--ink`／`--on-ink`／`--primary`… 及文庫 3D 用 `--theme-archive-*`）；深色主題另切 antd darkAlgorithm、`color-scheme`、`--lift`、黑色 `--shadow-ink` 與 `--shell-edge`，PDF 頁面保持白紙。antd、canvas 與 Three.js 均從 token 讀色；存於 localStorage `copilotix.theme.v1`、即時生效，不屬設定草稿與離開確認。新增顏色一律用 token，語義色（成功／警告／錯誤）、PDF 疊層與高亮色板除外。
 
 ## 4. 文檔庫維護契約
 
@@ -65,6 +65,7 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 - 強制目前使用者安裝，允許選位置。安裝／卸載發現應用運行時提示退出，不強制結束背景隊列。
 - 卸載預設保留資料、憑據與獨立文庫；只有明確勾選清除、Main 第二次原生確認後，獨立 Utility 才按唯讀清單驗證並安全清理。覆蓋升級／靜默卸載不得清資料；新增憑據或儲存結構須同步卸載清單與路徑驗證。
 - Setup、主程式、內嵌卸載器均受正式簽章門禁。必要驗收入口：`pnpm desktop:test:installer:wizard`、`pnpm desktop:test:installer`；腳本拒絕覆蓋既有安裝。
+- 安裝精靈視覺：`scripts/generate-installer-assets.ps1` 生成字陣風格的 sidebar（164×314）與內頁 header（150×57）BMP；完成頁有專案主頁連結。頁面順序、控件 ID 與歡迎／選項／完成頁文案不變（wizard 測試依賴）。
 
 ## 7. 閱讀器、併發與問答契約
 
@@ -112,7 +113,7 @@ Codex 的進程隔離、兩條 FIFO、取消／超時、migration 5 恢復與測
 
 - 當前開發入口為 `Copilotix-master-updated`／本地 `master`，包含文庫 UI 代碼與文檔。1.1.0 已發布；一次性未簽章例外已用完，後續發布仍受正式簽章門禁。
 - README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
-- 首頁背景為「解密字陣」`homeCipher.ts`：字元網格按字標實測字寬／行高對齊，避開前景塊；波浪只由開頁、點擊或 75–120 秒一次的自動波觸發，單向擴散不反彈，經 `homeWave.ts` 與字標逐字解碼同步；波後只浮現文庫論文的原文或譯文標題，不加編號（譯文標題閒時讀最近 10 篇，僅保留標題）。其餘六個背景方案原型（`gallery.html`）與舊等高線實作保存在 `docs/design/home-backdrops/`，不參與構建。
+- 首頁背景為「解密字陣」`homeCipher.ts`：字元網格按字標實測字寬／行高對齊，避開前景塊；波浪只由開頁、點擊或 75–120 秒一次的自動波觸發，單向擴散不反彈，經 `homeWave.ts` 與字標逐字解碼同步；波後只浮現文庫論文的原文或譯文標題，不加編號（譯文標題閒時讀最近 10 篇，僅保留標題）；新波出發時上一波的標題 0.45 秒內淡出。待機字陣較密並持續閃爍、增減及零星紫色火花，避免被當成靜態背景。其餘六個背景方案原型（`gallery.html`）與舊等高線實作保存在 `docs/design/home-backdrops/`，不參與構建。
 
 ## 13. 文庫頁與 AI 解讀
 

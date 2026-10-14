@@ -21,7 +21,7 @@
 .paper-chat-index-progress { width: 220px; }
 .paper-chat-welcome p { margin: 0 0 18px; font-size: 14px; line-height: 1.7; }
 .paper-chat-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.paper-chat-suggestions button { padding: 6px 14px; border: 0; border-radius: 4px; color: var(--ink); background: color-mix(in srgb, #fff 45%, transparent); cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .03em; transition: color .15s ease, background-color .15s ease; }
+.paper-chat-suggestions button { padding: 6px 14px; border: 0; border-radius: 4px; color: var(--ink); background: var(--lift); cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .03em; transition: color .15s ease, background-color .15s ease; }
 .paper-chat-suggestions button:hover, .paper-chat-suggestions button:focus-visible { color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, transparent); outline: 0; }
 
 /* Composer aligns with the markdown-body column above it. */
@@ -35,7 +35,7 @@
 .paper-chat-pin button { display: grid; width: 20px; height: 20px; padding: 0; place-items: center; border: 0; border-radius: 2px; color: var(--muted); background: transparent; cursor: pointer; font-size: 10px; }
 .paper-chat-pin button:hover:not(:disabled), .paper-chat-pin button:focus-visible { color: var(--text); background: color-mix(in srgb, var(--primary) 14%, transparent); outline: 0; }
 .paper-chat-pin button:disabled { cursor: not-allowed; opacity: .45; }
-.paper-chat-input { display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 6px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet); box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--ink) 45%, transparent); transition: border-color .15s ease, box-shadow .15s ease; }
+.paper-chat-input { display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 6px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet); box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--shadow-ink) 45%, transparent); transition: border-color .15s ease, box-shadow .15s ease; }
 .paper-chat-input:focus-within { border-color: var(--rule-strong); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent); }
 .paper-chat-input-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .paper-chat-input textarea.ant-input { padding: 3px 0; background: transparent; font-size: 14px; line-height: 1.6; }

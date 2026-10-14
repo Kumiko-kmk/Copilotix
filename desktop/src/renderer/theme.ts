@@ -3,7 +3,8 @@
  * tokens; styles.css, the antd provider, canvas backdrops and the archive's 3D scene all read
  * those tokens, so a theme applies everywhere at once. Values stay plain hex because canvas and
  * three.js parse them directly. The choice is a per-device preference kept in localStorage
- * (like the reader layout), applied before the first render.
+ * (like the reader layout), applied before the first render. Dark themes also switch antd to
+ * its dark algorithm and keep shadows black.
  */
 export interface ThemeColors {
   /** Page and window paper. */
@@ -17,16 +18,17 @@ export interface ThemeColors {
   text: string
   /** Headings, ink rules and primary buttons. */
   ink: string
+  /** Text set on ink: primary buttons, the drag ghost label. */
+  onInk: string
   muted: string
   /** The one accent: selection, focus, links, scans. */
   primary: string
   primarySoft: string
-  /** The library's 3D floor, cards and index inlays. */
+  /** The library's 3D floor, cards, index inlays and the diffuser inside each cassette. */
   archiveFloor: string
   archiveCard: string
   archiveEdge: string
   archiveIndex: string
-  /** The diffuser seen through each frosted cassette. */
   archiveTray: string
 }
 
@@ -35,53 +37,41 @@ export interface ThemeDefinition {
   name: string
   /** Latin name, set as the eyebrow. */
   label: string
-  description: string
+  dark: boolean
   colors: ThemeColors
 }
 
+const light = (id: string, name: string, label: string, colors: Omit<ThemeColors, 'onInk'>): ThemeDefinition =>
+  ({ id, name, label, dark: false, colors: { ...colors, onInk: '#ffffff' } })
+const dark = (id: string, name: string, label: string, colors: Omit<ThemeColors, 'onInk'>): ThemeDefinition =>
+  ({ id, name, label, dark: true, colors: { ...colors, onInk: colors.surface } })
+
+/** Three paper themes and three night themes, each with its own accent. */
 export const THEMES: readonly ThemeDefinition[] = [
-  {
-    id: 'archive', name: '档案纸', label: 'Archive paper', description: '暖白纸面、墨色字、靛紫标记，Copilotix 的原色。',
-    colors: {
-      surface: '#f7f2e8', sheet: '#fffdf8', mutedSurface: '#efe8dc', border: '#dcd4c7', text: '#27231e', ink: '#2f2a24', muted: '#7d7569',
-      primary: '#5b58d6', primarySoft: '#ecebfb', archiveFloor: '#dccdbb', archiveCard: '#fff7ed', archiveEdge: '#fff5e9', archiveIndex: '#e4d6c5', archiveTray: '#806447'
-    }
-  },
-  {
-    id: 'celadon', name: '青瓷', label: 'Celadon', description: '冷调瓷白配松烟墨，釉青作标记，安静耐看。',
-    colors: {
-      surface: '#eef1ec', sheet: '#fafcf9', mutedSurface: '#e1e7e1', border: '#cbd5cd', text: '#1f2826', ink: '#24302d', muted: '#6b7873',
-      primary: '#2f7d6d', primarySoft: '#dcece6', archiveFloor: '#c9d4cc', archiveCard: '#f6faf6', archiveEdge: '#f2f7f3', archiveIndex: '#d3ddd6', archiveTray: '#5d7a6d'
-    }
-  },
-  {
-    id: 'cinnabar', name: '朱砂', label: 'Cinnabar', description: '宣纸底、焦墨字、朱砂印泥红，像钤了印的旧书页。',
-    colors: {
-      surface: '#f5efe4', sheet: '#fffcf6', mutedSurface: '#ece3d4', border: '#dccfbd', text: '#2a2320', ink: '#2b211d', muted: '#7f7062',
-      primary: '#b8432f', primarySoft: '#f6e3db', archiveFloor: '#dccab3', archiveCard: '#fff6ec', archiveEdge: '#fdf2e6', archiveIndex: '#e6d4c0', archiveTray: '#86553e'
-    }
-  },
-  {
-    id: 'aizome', name: '蓝染', label: 'Aizome', description: '靛蓝染布的深蓝与灰白，冷静、专注，适合长时间阅读。',
-    colors: {
-      surface: '#eef0f3', sheet: '#fafbfd', mutedSurface: '#e1e5ec', border: '#cdd3de', text: '#1d2230', ink: '#1f2638', muted: '#6c7386',
-      primary: '#2c4f96', primarySoft: '#dfe6f4', archiveFloor: '#c8cfdc', archiveCard: '#f7f9fc', archiveEdge: '#f2f5fa', archiveIndex: '#d2d9e6', archiveTray: '#5a6886'
-    }
-  },
-  {
-    id: 'amber', name: '琥珀', label: 'Amber library', description: '老图书馆的灯下纸色，咖啡墨与琥珀金，温暖而沉稳。',
-    colors: {
-      surface: '#f3ebdd', sheet: '#fdf8ef', mutedSurface: '#e9dfcc', border: '#d8c9b0', text: '#2e2419', ink: '#33281c', muted: '#80705c',
-      primary: '#a8641a', primarySoft: '#f3e3c8', archiveFloor: '#d6c2a2', archiveCard: '#fcf3e4', archiveEdge: '#faefdc', archiveIndex: '#e2d0b2', archiveTray: '#7f5a31'
-    }
-  },
-  {
-    id: 'graphite', name: '石墨', label: 'Graphite', description: '中性灰白与石墨黑，一点信号橙，像一台精密仪器。',
-    colors: {
-      surface: '#f2f2f0', sheet: '#fcfcfb', mutedSurface: '#e6e6e3', border: '#d2d2ce', text: '#1d1d1f', ink: '#1f1f21', muted: '#73736f',
-      primary: '#e5532a', primarySoft: '#fbe4dc', archiveFloor: '#d0d0cc', archiveCard: '#fafaf8', archiveEdge: '#f5f5f3', archiveIndex: '#dadad6', archiveTray: '#6c6c68'
-    }
-  }
+  light('archive', '档案纸', 'Archive paper', {
+    surface: '#f7f2e8', sheet: '#fffdf8', mutedSurface: '#efe8dc', border: '#dcd4c7', text: '#27231e', ink: '#2f2a24', muted: '#7d7569',
+    primary: '#5b58d6', primarySoft: '#ecebfb', archiveFloor: '#dccdbb', archiveCard: '#fff7ed', archiveEdge: '#fff5e9', archiveIndex: '#e4d6c5', archiveTray: '#806447'
+  }),
+  light('celadon', '青瓷', 'Celadon', {
+    surface: '#eef1ec', sheet: '#fafcf9', mutedSurface: '#e1e7e1', border: '#cbd5cd', text: '#1f2826', ink: '#24302d', muted: '#6b7873',
+    primary: '#2f7d6d', primarySoft: '#dcece6', archiveFloor: '#c9d4cc', archiveCard: '#f6faf6', archiveEdge: '#f2f7f3', archiveIndex: '#d3ddd6', archiveTray: '#5d7a6d'
+  }),
+  light('cinnabar', '朱砂', 'Cinnabar', {
+    surface: '#f5efe4', sheet: '#fffcf6', mutedSurface: '#ece3d4', border: '#dccfbd', text: '#2a2320', ink: '#2b211d', muted: '#7f7062',
+    primary: '#b8432f', primarySoft: '#f6e3db', archiveFloor: '#dccab3', archiveCard: '#fff6ec', archiveEdge: '#fdf2e6', archiveIndex: '#e6d4c0', archiveTray: '#86553e'
+  }),
+  dark('archive-night', '夜档', 'Night archive', {
+    surface: '#1b1916', sheet: '#24211d', mutedSurface: '#2c2823', border: '#3b362f', text: '#e4ddd1', ink: '#f1eadf', muted: '#999082',
+    primary: '#9693f5', primarySoft: '#2b2a46', archiveFloor: '#26221d', archiveCard: '#3a352e', archiveEdge: '#4b453c', archiveIndex: '#4a4339', archiveTray: '#0f0d0b'
+  }),
+  dark('midnight', '深靛', 'Midnight indigo', {
+    surface: '#11151d', sheet: '#191e29', mutedSurface: '#202634', border: '#30394b', text: '#d9dfec', ink: '#e9edf6', muted: '#858ea4',
+    primary: '#7fa6ff', primarySoft: '#1e2a46', archiveFloor: '#192030', archiveCard: '#272f43', archiveEdge: '#353f58', archiveIndex: '#323b51', archiveTray: '#090c13'
+  }),
+  dark('espresso', '焦糖', 'Espresso', {
+    surface: '#1a1510', sheet: '#241d16', mutedSurface: '#2c241b', border: '#3f3429', text: '#e9dece', ink: '#f4e9d7', muted: '#a29178',
+    primary: '#e6a24c', primarySoft: '#3a2b17', archiveFloor: '#271f17', archiveCard: '#3a2f23', archiveEdge: '#4b3d2e', archiveIndex: '#493c2c', archiveTray: '#100c08'
+  })
 ]
 
 export const DEFAULT_THEME = THEMES[0]!
@@ -91,7 +81,7 @@ let current: ThemeDefinition = DEFAULT_THEME
 
 const TOKENS: ReadonlyArray<[string, keyof ThemeColors]> = [
   ['--app-bg', 'surface'], ['--surface', 'surface'], ['--sheet', 'sheet'], ['--muted-surface', 'mutedSurface'],
-  ['--border', 'border'], ['--text', 'text'], ['--ink', 'ink'], ['--muted', 'muted'],
+  ['--border', 'border'], ['--text', 'text'], ['--ink', 'ink'], ['--on-ink', 'onInk'], ['--muted', 'muted'],
   ['--primary', 'primary'], ['--primary-soft', 'primarySoft'],
   ['--theme-archive-floor', 'archiveFloor'], ['--theme-archive-card', 'archiveCard'], ['--theme-archive-edge', 'archiveEdge'], ['--theme-archive-index', 'archiveIndex'], ['--theme-archive-tray', 'archiveTray']
 ]
@@ -117,6 +107,13 @@ export function applyTheme(theme: ThemeDefinition, root: HTMLElement = document.
   current = theme
   root.dataset.colorTheme = theme.id
   for (const [property, key] of TOKENS) root.style.setProperty(property, theme.colors[key])
+  // Lifted panels, shadows and the window edge differ in kind, not just colour, at night.
+  root.style.setProperty('--lift', theme.dark ? 'color-mix(in srgb, #fff 5%, transparent)' : 'color-mix(in srgb, #fff 40%, transparent)')
+  root.style.setProperty('--lift-strong', theme.dark ? 'color-mix(in srgb, #fff 9%, transparent)' : 'color-mix(in srgb, #fff 62%, transparent)')
+  root.style.setProperty('--shadow-ink', theme.dark ? '#000000' : theme.colors.ink)
+  root.style.setProperty('--shell-edge', theme.dark ? 'rgba(255, 255, 255, .08)' : 'rgba(255, 255, 255, .72)')
+  root.style.setProperty('--theme-archive-card-selected', theme.dark ? mixHex(theme.colors.archiveCard, theme.colors.ink, 0.45) : '#ffffff')
+  root.style.colorScheme = theme.dark ? 'dark' : 'light'
   for (const listener of listeners) listener(theme)
 }
 

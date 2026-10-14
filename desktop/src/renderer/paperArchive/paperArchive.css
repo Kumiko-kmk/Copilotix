@@ -4,7 +4,7 @@
   /* Floor, cards, edges and index inlays follow the colour theme (theme.ts); read by the 3D scene. */
   --archive-floor: var(--theme-archive-floor);
   --archive-card: var(--theme-archive-card);
-  --archive-card-selected: #ffffff;
+  --archive-card-selected: var(--theme-archive-card-selected);
   --archive-edge: var(--theme-archive-edge);
   --archive-tray: var(--theme-archive-tray);
   --archive-accent: var(--primary);
@@ -169,7 +169,7 @@
 /* Inspection marks of the decrypting card (PaperArchiveScene.drawInspection, after RhineLabUI). */
 .paper-archive-inspection { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--ink); fill: currentColor; opacity: 0; pointer-events: none; }
 .paper-archive-inspection path { fill: none; stroke: currentColor; stroke-width: 2; }
-.paper-archive-stats { position: absolute; z-index: 4; bottom: 64px; left: var(--archive-gutter); padding: 6px 10px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 82%, transparent); color: #fff; font: 11px/1.5 ui-monospace, Consolas, monospace; pointer-events: none; }
+.paper-archive-stats { position: absolute; z-index: 4; bottom: 64px; left: var(--archive-gutter); padding: 6px 10px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 82%, transparent); color: var(--on-ink); font: 11px/1.5 ui-monospace, Consolas, monospace; pointer-events: none; }
 /* Opacity and transform only, so the HUD roll stays on the compositor above the live canvas. */
 @keyframes paper-archive-roll { from { opacity: 0; transform: translateY(45%); } to { opacity: 1; transform: none; } }
 @keyframes paper-archive-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -258,7 +258,7 @@
 .paper-archive-tabs button small { font-size: 10px; font-variant-numeric: tabular-nums; }
 .paper-archive-tab-count { margin-left: 2px; color: var(--muted); font-size: 10.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .paper-archive-primary-end { display: inline-flex; align-items: center; gap: 12px; }
-.paper-archive-primary kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, #fff 35%, transparent); border-radius: 3px; color: color-mix(in srgb, #fff 70%, transparent); font: 10px/1.4 inherit; letter-spacing: .04em; }
+.paper-archive-primary kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, var(--on-ink) 35%, transparent); border-radius: 3px; color: color-mix(in srgb, var(--on-ink) 70%, transparent); font: 10px/1.4 inherit; letter-spacing: .04em; }
 .paper-archive-tabs button::after {
   position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--archive-accent);
   content: ""; transform: scaleX(0); transform-origin: left; transition: transform .18s var(--ease-out);
@@ -289,7 +289,7 @@
 .paper-archive-detail > .paper-archive-tabpanel { flex: 1 1 0; }
 .paper-archive-primary {
   display: inline-flex; min-width: 230px; height: 42px; padding: 0 18px; align-items: center; justify-content: space-between;
-  border: 0; border-radius: 2px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 650; letter-spacing: .1em; cursor: pointer;
+  border: 0; border-radius: 2px; background: var(--ink); color: var(--on-ink); font-size: 13px; font-weight: 650; letter-spacing: .1em; cursor: pointer;
   transition: background .18s ease;
 }
 .paper-archive-primary .anticon { transition: transform .28s var(--ease-spring); }
@@ -382,7 +382,7 @@
   border: 0; background: transparent; color: var(--ink); font-size: 13px; font-weight: 650; letter-spacing: .1em; cursor: pointer;
   transition: background-color .2s ease, color .2s ease;
 }
-.paper-archive-viewer-actions button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.paper-archive-viewer-actions button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
 .paper-archive-viewer-actions button:not([aria-pressed="true"]):not(:disabled):hover { color: var(--archive-accent); }
 .paper-archive-viewer-actions button:disabled { cursor: default; opacity: .5; }
 .paper-archive-viewer-reset {

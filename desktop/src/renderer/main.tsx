@@ -11,14 +11,16 @@ import './styles.css'
 restoreTheme()
 
 function Root(): React.JSX.Element {
-  const [colors, setColors] = React.useState(() => currentTheme().colors)
-  React.useEffect(() => onThemeChange((next) => setColors(next.colors)), [])
-  const shadow = rgbChannels(colors.ink)
+  const [active, setActive] = React.useState(() => currentTheme())
+  React.useEffect(() => onThemeChange(setActive), [])
+  const { colors } = active
+  const shadow = active.dark ? '0, 0, 0' : rgbChannels(colors.ink)
+  const rule = rgbChannels(colors.ink)
   return (
     <ConfigProvider
       locale={zhCN}
       theme={{
-        algorithm: theme.defaultAlgorithm,
+        algorithm: active.dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         // Archive language (文库): square corners, flat surfaces, ink primary actions that turn to the accent on hover.
         token: {
           colorPrimary: colors.primary,
@@ -39,14 +41,15 @@ function Root(): React.JSX.Element {
           Button: {
             colorPrimary: colors.ink,
             colorPrimaryHover: colors.primary,
-            colorPrimaryActive: mixHex(colors.primary, '#000000', 0.2),
+            colorPrimaryActive: mixHex(colors.primary, active.dark ? '#ffffff' : '#000000', 0.2),
+            primaryColor: colors.onInk,
             primaryShadow: 'none',
             defaultShadow: 'none',
             dangerShadow: 'none',
             fontWeight: 600,
             // Disabled buttons stay flat on the paper instead of turning into grey blocks.
             colorBgContainerDisabled: 'transparent',
-            borderColorDisabled: `rgba(${shadow}, .18)`
+            borderColorDisabled: `rgba(${rule}, .18)`
           },
           Modal: { borderRadiusLG: 3 },
           Tag: { borderRadiusSM: 2 }
