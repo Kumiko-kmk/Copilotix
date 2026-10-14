@@ -18,6 +18,6 @@
 
 ## 驗證與待辦邊界
 
-- 日常依 `AGENTS.md`：不預設跑本地測試，commit、push 後核對最新 SHA 的全套 Actions。CI 驗證 NSIS、體積、fuses、清單／SHA、packaged smoke、隔離安裝／升級／卸載／重裝、下載及解壓；不能套用舊提交的數量／綠燈。
+- 日常依 `AGENTS.md` 執行受影響用例或核心回歸；一般 push／PR 不跑安裝驗收。版本 tag 或手動 `full_validation` 才驗證 NSIS、體積、fuses、清單／SHA、packaged smoke、隔離安裝／升級／卸載／重裝、下載及解壓；不能套用舊提交的綠燈。
 - 人工安装验证必須使用 GUID 隔離目錄，核對中文／空格路徑、桌面捷徑、運行中保護與取消。不得覆蓋或卸載本機日常安裝。單元清理測試不能替代原生 wizard 验收。
 - 自動更新、MSIX／Store、跨平台安裝器仍为後續範圍；受信任簽章状态以当前 policy 和实际发布证据為準。

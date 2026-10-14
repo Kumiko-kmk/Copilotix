@@ -24,7 +24,7 @@
 6. 操作失败前未切换时，原库不变。磁盘可能保留 .copilotix-* 暂存目录，不能把它当完整备份。确认不再需要后由用户清理。
 7. 成功切换后维护锁持续到重启，防止旧缓存继续写入。
 
-验证范围以本次实际测试结果为准。相关测试：libraryMaintenance.test.ts、libraryAccessGate.test.ts、LibrarySettings.test.tsx。
+验证范围以本次实际测试结果为准。相关测试：libraryMaintenance.test.ts、libraryAccessGate.test.ts、SettingsPage.test.tsx；界面用例由显式 UI 回归执行。
 
 ## 数据库升级保护与恢复
 

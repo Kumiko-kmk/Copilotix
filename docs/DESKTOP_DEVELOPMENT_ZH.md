@@ -41,17 +41,23 @@ pnpm desktop:dev
 
 ## 测试与实际门禁
 
-```powershell
-pnpm desktop:lint
-pnpm desktop:typecheck
-pnpm desktop:test:coverage
-```
+日常修改先跑受影响的测试；需要扩大检查时使用以下入口，不默认执行全部验收：
 
-当前 Vitest coverage gate（`desktop/vitest.config.ts`）是：lines `80%`、statements `80%`、functions `80%`、branches `75%`。统计范围主要是 `src/main/**`、`src/core/**`、`src/shared/**`，renderer、preload、utility、测试、生成文件及纯类型文件等按配置排除；新代码不可通过扩大排除项规避门禁。
+| 命令 | 范围 |
+| --- | --- |
+| `pnpm desktop:test:changed` | 与 Git 未提交修改有关的核心测试 |
+| `pnpm desktop:test` | 快速核心回归，不加载大型 React 页面和发布脚本 |
+| `pnpm desktop:test:ui` | 显式运行 DOM／React 回归 |
+| `pnpm desktop:test:full` | 所有保留的单元与集成测试 |
+| `pnpm desktop:test:e2e` | 源码启动和窗口操作 smoke，无需安装包 |
+| `pnpm desktop:test:e2e:full` | 全部 Electron 回归，需要发布产物的用例也包含在内 |
+| `pnpm desktop:test:coverage` | 完整回归与覆盖率，仅用于完整验收 |
 
-CI 还执行 bundle build、verified directory release、脚本/发布校验和 Playwright E2E。真实 API、真实翻译、真实 PDF 和 GUI E2E 是有条件的验证，不得用未运行的本机命令补写通过结论。
+普通 push／PR 的 `build` 检查执行 lint、typecheck、核心回归、四 bundle 和启动 smoke。版本 tag 或手动 `full_validation` 才增加完整覆盖率、Electron 回归、打包、安装／升级／卸载及下载校验。发布签章、资料保留和打包内建完整性检查仍保留。
 
-本地驗證是否執行、實際通過範圍與環境限制以根 [AGENTS.md](../AGENTS.md) 為入口。CLI smoke 不代表 GUI 驗收；測試啟動策略不改產品或 CI 的 sandbox。
+覆盖率阈值仍为 lines/statements/functions `80%`、branches `75%`，仅在显式完整检查中执行。真实 API、真实翻译及个人 GUI 配置仍需单独授权和实际验证。
+
+同类测试合并维护；不为布局常数、CSS 字符串或简单辅助函数单独建立套件。取消、恢复、持久化、路径隔离和凭证保护保留行为回归。流程入口与验证边界见根 [AGENTS.md](../AGENTS.md)。
 
 ## 构建与发布
 

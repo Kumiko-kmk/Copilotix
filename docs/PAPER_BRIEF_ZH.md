@@ -19,4 +19,4 @@
 - schema／格式失敗只追加一次截短回答與具體錯誤；重試仍檢查授權及預算。Provider 只在明確拒絕可選參數時省略該參數重送，不改問答預設。
 - 修改提示詞、選段或欄位契約時更新 `PAPER_BRIEF_PROMPT_VERSION`；不同版本只提示重新生成，不自動令全庫過期。
 
-測試入口：`paperBrief.test.ts`、`paperInsight.test.ts`、`paperInsightIpc.test.ts`、`e2e/paper-insight.spec.ts`。流程測試不等於模型品質；跨學科人工品質評估仍未完成。
+測試入口：`paperBrief.test.ts`、`paperInsight.test.ts`、`ipcContracts.test.ts`、`e2e/paper-insight.spec.ts`。流程測試不等於模型品質；跨學科人工品質評估仍未完成。

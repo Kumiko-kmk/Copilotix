@@ -17,6 +17,6 @@
 - sourceRevision 由原文與譯文 artifact ID、revision、hash 決定；變更才標 stale。promptVersion 不同只提示可重新生成，不觸發全庫過期或自動升級。
 - PathPolicy 限定文獻目錄並拒絕鏈接。寫入使用獨佔 `.pending-*`、fsync、atomic rename；Windows EPERM／EACCES／EBUSY 最多約 6.3 秒重試，永久失敗保留舊檔並清理臨時檔。備份／恢復／遷移包含完整文獻樹；明確授權的卸載清理包含 v1、v2 與臨時檔。
 
-摘錄、提示詞、檢查限制與真實 API 驗證見 [Paper Brief v2](PAPER_BRIEF_ZH.md)。測試入口：`paperBrief.test.ts`、`paperInsight.test.ts`、`paperInsightIpc.test.ts`、`chatProvider.test.ts`、備份與卸載清理測試，以及 `e2e/paper-insight.spec.ts`／`paper-archive.spec.ts`。Mock 測試驗證流程，不代表模型品質。
+摘錄、提示詞、檢查限制與真實 API 驗證見 [Paper Brief v2](PAPER_BRIEF_ZH.md)。測試入口：`paperBrief.test.ts`、`paperInsight.test.ts`、`ipcContracts.test.ts`、`chatProvider.test.ts`、備份與卸載清理測試，以及 `e2e/paper-insight.spec.ts`／`paper-archive.spec.ts`。Mock 測試驗證流程，不代表模型品質。
 
 Codex 可作為已啟用的首選服務：沿用版本 2 發送授權，使用服務連接中選定的 Codex 問答模型；不讀取 API Key。圖片還需模型支持 image，否則明確失敗。結果仍經既有 schema／grounding 校驗與原子保存。運行時與資料庫 provider 擴展見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)，設定步驟見 [服務配置](wiki/Service-Setup.md)。

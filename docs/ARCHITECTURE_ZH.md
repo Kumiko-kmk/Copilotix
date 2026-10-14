@@ -306,7 +306,7 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 | functions | 80% |
 | branches | 75% |
 
-覆盖统计 `src/main/**`、`src/core/**`、`src/shared/**`；明确排除 renderer、preload、utility、测试、生成目录、Main Electron bootstrap/utility fork 以及纯类型文件。CI 的 Desktop job 实际执行 `lint`、`typecheck`、`test:coverage`、`build:bundles`、`release:from-built` 和 `test:e2e`；任一质量门禁失败都不能称为发布通过。不要用一次本地单元测试结果代替 coverage gate。
+覆盖统计 `src/main/**`、`src/core/**`、`src/shared/**`，范围与阈值由 `vitest.config.ts` 维护。一般 push／PR 执行 lint、typecheck、快速核心回归、四 bundle 和源码启动 smoke；版本 tag 或手动 `full_validation` 才执行完整覆盖率、全量 Electron、打包和安装验收。发布门禁失败不能称为发布通过；日常核心回归也不代表完整发布验收。
 
 单元/集成测试至少覆盖：Core RPC schema/1 MiB/超时/取消、sender/frame/URL、Utility ready/restart/drain、STRICT migration/checksum、Repository/lease/checkpoint/retry、PathPolicy/符号链接、流式导入与 atomic artifact、翻译 cache/表格协议、映射/标注以及 release transaction/manifest/fuse/packaged smoke。真实 API、真实翻译和真实 PDF 属于 opt-in fixture，不是所有 PR 的默认证据。
 
@@ -345,4 +345,4 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 - 会话级覆盖关闭 shell、MCP、应用、插件、浏览器、联网搜索、记忆和子代理，设置只读沙箱、无持久历史、忽略项目文档；启动时读回隔离配置。工具请求一律拒绝并终止任务。覆盖不写入用户配置。用户文档、图片与历史均作为不可信内容；图片只接收应用已验证的 PNG/JPEG 数据。
 - 初始化 RPC 15 秒，生成空闲 120 秒、总计 10 分钟；排队取消立即返回，运行取消请求 turn/interrupt，5 秒后关闭进程。进程异常、非成功完成、空结果和工具尝试均不能当作成功；退出关闭所有进程。不会静默切换模型或其他供应商。诊断不记录提示正文、图片或令牌。
 - SQLite migration **5 / add-codex-provider** 仅扩展 documents、translation_blocks、translation_cache 的 provider 约束；迁移 1–4 不改，复制原数据并恢复索引。仅在事务外临时关闭外键，提交前检查外键，异常回滚并恢复外键开关；沿用迁移前快照。旧程序不可直接打开 schema 5，回退需用迁移前快照恢复，不删除用户原库。聊天／解读 JSON 增加 codex 枚举，既有内容不改写；token 统计兼容缺失的 Codex 计数。
-- 回归入口：codexConnection、codexRuntime、codexIntegration、providerPolicy、v2Database 测试；真实调用仅显式 `COPILOTIX_CODEX_LIVE=1` 运行 e2e/codex.spec.ts，使用合成论文。2026-10-13 本机 111 个测试文件通过（759 通过、3 跳过），类型检查与 lint 通过；合成文本翻译、表格、证据问答、Brief schema／引用、图片解读和取消实测成功，Electron 设置→授权→真实问答→引用落盘流程通过；不替代真实论文人工质量审阅或远端 CI。使用步骤见 [服务配置](wiki/Service-Setup.md)。
+- 回归入口：codexConnection、codexRuntime、codexIntegration、credentialGate、v2Database 测试；真实调用仅显式 `COPILOTIX_CODEX_LIVE=1` 运行 e2e/codex.spec.ts，使用合成论文。2026-10-13 本机 111 个测试文件通过（759 通过、3 跳过），类型检查与 lint 通过；合成文本翻译、表格、证据问答、Brief schema／引用、图片解读和取消实测成功，Electron 设置→授权→真实问答→引用落盘流程通过；不替代真实论文人工质量审阅或远端 CI。使用步骤见 [服务配置](wiki/Service-Setup.md)。
