@@ -16,8 +16,24 @@ test('Codex settings and grounded chat use the local app-server without API keys
     await page.locator('[data-edge-dock="top"]').hover()
     await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /设置$/u }).click()
     const card = page.getByRole('region', { name: 'Codex 连接' })
-    await card.getByRole('button', { name: '检测连接' }).click()
+    await card.getByRole('button', { name: '测试连接' }).click()
     await expect(card.getByRole('status')).toContainText('本机 Codex 已登录', { timeout: 30_000 })
+    await expect(page.locator('#codex-executable')).toHaveValue(/codex\.exe$/iu)
+    const remoteButton = page.locator('[data-provider="qwen"] .credential-validate')
+    const localButton = card.getByRole('button', { name: '测试连接' })
+    const remoteBox = await remoteButton.boundingBox(), localBox = await localButton.boundingBox()
+    expect(Math.abs(remoteBox!.x - localBox!.x)).toBeLessThan(2)
+    if (process.env.CODEX_TEST_MODEL) {
+      for (const label of ['Codex 翻译模型', 'Codex 问答模型']) {
+        await card.getByRole('combobox', { name: label }).locator('xpath=ancestor::*[contains(@class, "ant-select") and not(contains(@class, "ant-select-selection"))][1]').click()
+        const listId = await card.getByRole('combobox', { name: label }).getAttribute('aria-controls')
+        await page.locator(`[id^="${listId}_"] .ant-select-item-option-content`).filter({ hasText: new RegExp(`^${process.env.CODEX_TEST_MODEL}( · 识图)?$`, 'iu') }).click()
+      }
+      await card.getByRole('button', { name: '测试模型' }).click()
+      await expect(card.locator('.credential-status')).toHaveText('验证成功', { timeout: 120_000 })
+    }
+    await page.screenshot({ path: join(__dirname, '../../..', 'investigation/codex-live/settings-updated.png') })
+
     await page.getByRole('button', { name: '保存全部更改' }).click()
     await page.getByRole('button', { name: /模型设置/u }).click()
     await page.getByRole('checkbox', { name: '启用Codex', exact: true }).check()
@@ -33,14 +49,13 @@ test('Codex settings and grounded chat use the local app-server without API keys
     await page.locator('[data-edge-dock="top"]').hover()
     await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /新解析$/u }).click()
     await openPaperFromHome(page, documentId)
-    await page.locator('.reader-tab', { hasText: 'AI 问答' }).click()
+    await page.locator('.reader-tab', { hasText: 'Chat' }).click()
     const input = page.getByRole('textbox', { name: '向当前论文提问' })
     await expect(input).toBeEnabled({ timeout: 30_000 })
     await input.fill('方法 A 的准确率是多少？请引用论文证据。')
     await expect(page.getByRole('button', { name: '发送', exact: true })).toBeEnabled({ timeout: 30_000 })
     await page.getByRole('button', { name: '发送', exact: true }).click()
-    await expect(page.getByRole('group', { name: '同意发送论文片段' })).toContainText('Codex')
-    await page.getByRole('button', { name: '同意并发送', exact: true }).click()
+    await expect(page.getByRole('group', { name: '同意发送论文片段' })).toHaveCount(0)
     await expect(page.getByRole('log', { name: '问答记录' })).toContainText('90', { timeout: 120_000 })
     await expect.poll(async () => {
       const saved = await page.evaluate(id => window.copilotix.paperChat.load({ documentId: id }), documentId)

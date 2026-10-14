@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CodexRuntime, CODEX_OVERRIDES } from '../src/runtime/codexRuntime'
 import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
 
-const state = vi.hoisted(() => ({ scenario: 'success', starts: [] as unknown[], turns: [] as unknown[], connections: [] as EventEmitter[] }))
-vi.mock('node:fs/promises', () => ({ access: vi.fn().mockResolvedValue(undefined), mkdir: vi.fn().mockResolvedValue(undefined) }))
+const state = vi.hoisted(() => ({ scenario: 'success', starts: [] as unknown[], turns: [] as unknown[], connections: [] as EventEmitter[], snapshot: '' }))
+vi.mock('node:fs/promises', () => ({ access: vi.fn().mockResolvedValue(undefined), mkdir: vi.fn().mockResolvedValue(undefined), readFile: vi.fn(async () => { if (!state.snapshot) throw new Error('missing'); return state.snapshot }), writeFile: vi.fn(async (_path, data) => { state.snapshot = data }), rename: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('node:child_process', () => ({ execFile: Object.assign(() => undefined, { [Symbol.for('nodejs.util.promisify.custom')]: async () => ({ stdout: 'codex-cli 0.159.2' }) }) }))
 vi.mock('../src/runtime/codexConnection', () => ({ CodexConnection: class extends EventEmitter {
   constructor() { super(); state.connections.push(this) }
@@ -38,7 +38,7 @@ vi.mock('../src/runtime/codexConnection', () => ({ CodexConnection: class extend
     return {}
   }
 } }))
-afterEach(() => { state.scenario = 'success'; state.starts = []; state.turns = []; state.connections = []; vi.useRealTimers() })
+afterEach(() => { state.snapshot = ''; state.scenario = 'success'; state.starts = []; state.turns = []; state.connections = []; vi.useRealTimers() })
 function fixture() {
   const runtime = new CodexRuntime('C:/work', async () => ({ ...DEFAULT_CODEX_SETTINGS, executable: 'C:/Codex/codex.exe' }))
   const delta = vi.fn(), controller = new AbortController()
@@ -46,6 +46,16 @@ function fixture() {
   return { runtime, delta, controller, input }
 }
 describe('Codex generation lifecycle', () => {
+  it('restores verified connection snapshots across runtime restarts', async () => {
+    const settings = { ...DEFAULT_CODEX_SETTINGS, executable: 'C:/Codex/codex.exe' }
+    const first = new CodexRuntime('C:/work', async () => settings)
+    expect((await first.inspect(settings, 'test-model')).verifiedModels).toContain('test-model')
+    first.close()
+    const second = new CodexRuntime('C:/work', async () => settings)
+    expect((await second.cached(settings))?.verifiedModels).toContain('test-model')
+    expect((await second.inspect(settings)).verifiedModels).toContain('test-model')
+    second.close()
+  })
   it('streams final-answer deltas once, excludes commentary and preserves usage', async () => {
     const f = fixture()
     await expect(f.runtime.generate(f.input)).resolves.toEqual({ promptTokens: 2, completionTokens: 2, totalTokens: 4 })

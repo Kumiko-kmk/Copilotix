@@ -194,15 +194,16 @@ export class V2TaskRepositoryCompat {
       autoGeneratePaperInsight: true,
       qwenChatModel: resolvePaperChatModel('qwen', stored.qwenChatModel),
       deepseekChatModel: resolvePaperChatModel('deepseek', stored.deepseekChatModel),
-      chatConsentProvider: stored.chatConsentProvider ?? null,
-      chatConsentVersion: stored.chatConsentVersion ?? null,
+      chatConsentProvider: null,
+      chatConsentVersion: null,
       credentials: DEFAULT_SETTINGS.credentials
     }
   }
 
   saveSettings(settings: AppSettings): void {
-    const hidden = new Set(['credentials'])
+    const hidden = new Set(['credentials', 'chatConsentProvider', 'chatConsentVersion'])
     this.database.transaction(() => {
+      this.database.connection.exec("DELETE FROM settings WHERE key IN ('chatConsentProvider', 'chatConsentVersion')")
       const statement = this.database.connection.prepare(
         'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
       )

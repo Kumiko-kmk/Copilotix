@@ -48,10 +48,9 @@ describe('structured paper insight', () => {
     expect(paperInsightRequestSchema.safeParse({ documentId: '../escape' }).success).toBe(false)
     expect(paperInsightStateSchema.safeParse({ status: 'missing', insight: insight() }).success).toBe(false)
   })
-  it.each(['key', 'consent', 'unverified', 'provider'])('does not send paper content when %s is unavailable', async (kind) => {
+  it.each(['key', 'unverified', 'provider'])('does not send paper content when %s is unavailable', async (kind) => {
     const f = fixture()
     if (kind === 'key') f.deps.key = async () => null
-    if (kind === 'consent') f.settings.chatConsentVersion = null
     if (kind === 'unverified') f.settings.credentials.qwen = { state: 'invalid' }
     if (kind === 'provider') f.settings.enabledTranslationProviders = []
     expect((await f.service.get(f.id)).status).toBe('unavailable')

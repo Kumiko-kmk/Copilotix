@@ -2,9 +2,9 @@ import React from 'react'
 import { canTransitionRagStreamEvent, type Citation, type RagStreamEventType, type RagStreamEvent } from '@shared/ragSchemas'
 import { paperChatPinnedSchema, supportedChatModelSchema, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ReaderChatSelection } from '@shared/types'
-import { emptyPaperChatSession, type PaperChatSession } from '@shared/paperChatStorageSchemas'
+import { emptyPaperChatSession, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
 
-export interface PaperChatTurn { question: string; answer: string; citations: Record<string, Citation>; status: 'pending' | 'completed' | 'failed' | 'cancelled' }
+export interface PaperChatTurn extends Partial<Pick<StoredPaperChatTurn, 'id' | 'model' | 'provider' | 'createdAt' | 'completedAt' | 'durationMs' | 'usage'>> { question: string; answer: string; citations: Record<string, Citation>; status: 'pending' | 'completed' | 'failed' | 'cancelled' }
 
 export function usePaperChat(documentId: string) {
   const [sessionState, setSessionState] = React.useState({ documentId, session: emptyPaperChatSession(), ready: false })
@@ -60,7 +60,7 @@ export function usePaperChat(documentId: string) {
         if (index !== items.length - 1 || turn.status !== 'pending') return turn
         if (event.type === 'delta') return { ...turn, answer: turn.answer + event.delta }
         if (event.type === 'citation' && event.citation.evidenceId) return { ...turn, citations: { ...turn.citations, [event.citation.evidenceId]: event.citation } }
-        if (event.type === 'completed') return { ...turn, answer: event.answer ?? turn.answer, status: 'completed' }
+        if (event.type === 'completed') return { ...turn, answer: event.answer ?? turn.answer, ...event.metadata, status: 'completed' }
         if (event.type === 'failed' || event.type === 'cancelled') return { ...turn, status: event.type }
         return turn
       }))
@@ -143,13 +143,15 @@ export function usePaperChat(documentId: string) {
     const epoch = ++state.epoch
     state.pending = true; state.requestId = null; state.buffered = []; state.sequence = -1; state.type = null
     setBusy(true); setError('')
-    setTurns((items) => [...items, { question, answer: '', citations: {}, status: 'pending' }])
+    const localCreatedAt = new Date().toISOString()
+    setTurns((items) => [...items, { question, model, provider, createdAt: localCreatedAt, answer: '', citations: {}, status: 'pending' }])
     const history = turns.filter((t) => t.status === 'completed').slice(-6).flatMap((t) => [
       { role: 'user' as const, content: t.question.slice(0, 2_000) },
       { role: 'assistant' as const, content: t.answer.slice(0, 2_000) }
     ])
     try {
-      const { requestId } = await window.copilotix.paperChat.ask({ documentId, question, pinned, history, ...(model ? { model: supportedChatModelSchema.parse(model) } : {}), ...(provider ? { provider } : {}) })
+      const { requestId, createdAt } = await window.copilotix.paperChat.ask({ documentId, question, pinned, history, ...(model ? { model: supportedChatModelSchema.parse(model) } : {}), ...(provider ? { provider } : {}) })
+      if (documentEpoch.current === generation) setTurns(items => items.map(turn => turn.createdAt === localCreatedAt && turn.question === question ? { ...turn, id: requestId, createdAt: createdAt ?? localCreatedAt } : turn))
       if (epoch !== state.epoch) { void window.copilotix.paperChat.cancel({ requestId }).catch(() => undefined); return }
       if (state.pending) {
         state.requestId = requestId
@@ -164,6 +166,14 @@ export function usePaperChat(documentId: string) {
     }
   }, [documentId, pinned, turns])
 
+  const deleteTurn = React.useCallback(async (turn: PaperChatTurn): Promise<void> => {
+    if (active.current.pending || loadingOlder) throw new Error('请等待当前操作完成后再删除')
+    const epoch = documentEpoch.current
+    if (turn.id && turn.createdAt) await window.copilotix.paperChat.deleteTurn({ documentId, turnId: turn.id, createdAt: turn.createdAt })
+    if (documentEpoch.current !== epoch) return
+    setTurns(items => items.filter(item => turn.id ? item.id !== turn.id : item !== turn))
+  }, [documentId, loadingOlder])
+
   const clear = React.useCallback(async () => {
     const epoch = ++documentEpoch.current
     if (active.current.pending) stop()
@@ -177,7 +187,7 @@ export function usePaperChat(documentId: string) {
   }, [documentId, stop])
 
   return {
-    pinned, turns, busy, error, loaded: sessionState.ready && sessionState.documentId === documentId, loading, next, loadingOlder, loadOlder, selectedModel, setSelectedModel, draft, setDraft, ask, stop, clear, addSelection,
+    pinned, turns, busy, error, loaded: sessionState.ready && sessionState.documentId === documentId, loading, next, loadingOlder, loadOlder, selectedModel, setSelectedModel, draft, setDraft, ask, stop, clear, deleteTurn, addSelection,
     removePin: (index: number) => updateSession({ pinned: pinned.filter((_, i) => i !== index) })
   }
 }

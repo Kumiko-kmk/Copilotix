@@ -3,7 +3,7 @@ import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightCancelS
 import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightCancelSchema, figureInsightChangedSchema } from '@shared/figureInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
-import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
+import { paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
@@ -64,6 +64,7 @@ async function invokeValidated<Request, Response>(
 
 const api: CopilotixDesktopApi = {
   codex: {
+    cached: settings => invokeValidated('codex:cached', codexProbeSchema.shape.settings, codexStatusSchema.nullable(), settings),
     inspect: request => invokeValidated('codex:inspect', codexProbeSchema, codexStatusSchema, request),
     selectExecutable: () => invokeValidated('codex:select-executable', noRequestSchema, outputDirectorySchema, undefined)
   },
@@ -98,6 +99,7 @@ const api: CopilotixDesktopApi = {
     load: (request) => invokeValidated('paper-chat:load', paperChatLoadRequestSchema, paperChatPageSchema, request),
     session: (request) => invokeValidated('paper-chat:session', paperChatDocumentRequestSchema, paperChatSessionSchema, request),
     saveSession: (request) => invokeValidated('paper-chat:save-session', paperChatSaveSessionSchema, paperChatSavedSchema, request),
+    deleteTurn: request => invokeValidated('paper-chat:delete-turn', paperChatDeleteTurnSchema, paperChatDeletedSchema, request),
     clear: (request) => invokeValidated('paper-chat:clear', paperChatDocumentRequestSchema, paperChatClearedSchema, request),
     ask: (request) => invokeValidated('paper-chat:ask', paperChatAskRequestSchema, paperChatAskResultSchema, request),
     cancel: (request) => invokeValidated('paper-chat:cancel', paperChatCancelRequestSchema, paperChatCancelResultSchema, request),

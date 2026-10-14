@@ -3,7 +3,7 @@ import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightDesc
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightSavedSchema } from './paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from './libraryCategories'
 import { paperChatStatusRequestSchema, paperChatStatusSchema, paperContextRequestSchema, paperContextResultSchema } from './paperChatSchemas'
-import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from './paperChatStorageSchemas'
+import { paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from './paperChatStorageSchemas'
 import { z } from 'zod'
 import { libraryCoreRequestSchema, libraryResultSchema } from './librarySchemas'
 import {
@@ -144,7 +144,7 @@ const coreOperationNames = [
   'insight:get', 'insight:save-brief', 'insight:brief-context',
   'figureInsight:get', 'figureInsight:save', 'compute:figure-insight-descriptor',
   'chat:ensure-index', 'chat:build-context',
-  'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear',
+  'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear', 'chat:delete-turn',
   'annotations:list-snapshot', 'annotations:mutate',
   'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
   'compute:rag-content-index', 'compute:library-categories',
@@ -412,6 +412,7 @@ export const coreOperationRegistry = {
   'chat:save-turn': { payload: paperChatSaveTurnSchema, result: paperChatSavedSchema },
   'chat:session': { payload: paperChatDocumentRequestSchema, result: paperChatSessionSchema },
   'chat:save-session': { payload: paperChatSaveSessionSchema, result: paperChatSavedSchema },
+  'chat:delete-turn': { payload: paperChatDeleteTurnSchema, result: paperChatDeletedSchema },
   'chat:clear': { payload: paperChatDocumentRequestSchema, result: paperChatClearedSchema },
   'chat:ensure-index': { payload: paperChatStatusRequestSchema, result: paperChatStatusSchema },
   'chat:build-context': { payload: paperContextRequestSchema, result: paperContextResultSchema },

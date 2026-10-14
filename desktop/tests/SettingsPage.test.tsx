@@ -64,7 +64,7 @@ describe('SettingsPage credential editor', () => {
     expect(screen.getAllByLabelText('APIKey')).toHaveLength(3)
     expect(screen.queryByText('服务地址')).toBeNull()
     expect(screen.queryByText('高级设置')).toBeNull()
-    expect(screen.getAllByRole('button', { name: '测试连接' })).toHaveLength(3)
+    expect(screen.getAllByRole('button', { name: '测试连接' })).toHaveLength(4)
     expect(screen.queryByText('配置服务')).toBeNull()
     expect(screen.queryByText('千问 / Qwen')).toBeNull()
     expect(screen.getByText('Qwen')).toBeTruthy()

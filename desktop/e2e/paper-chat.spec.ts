@@ -44,10 +44,10 @@ test('reuses the translation API and switches chat models without a second setti
     await window.reload()
     await openPaperFromHome(window, documentId)
     // Chat is the third tab of the reader's text group, sized exactly like the Markdown reader.
-    const chatTab = window.locator('.reader-tab', { hasText: 'AI 问答' })
+    const chatTab = window.locator('.reader-tab', { hasText: 'Chat' })
     const model = window.locator('.reader-chat-model .ant-select-selection-item')
     await chatTab.click()
-    await expect(window.getByRole('region', { name: '论文 AI 问答' })).toBeVisible()
+    await expect(window.getByRole('region', { name: '论文 Chat' })).toBeVisible()
     await expect(model).toHaveText('qwen-plus')
     await expect(window.locator('.reader-chat-provider')).toHaveText('Qwen')
     await expect(window.getByRole('button', { name: '前往设置' })).toHaveCount(0)
@@ -56,8 +56,8 @@ test('reuses the translation API and switches chat models without a second setti
     await window.locator('.ant-select-item-option').filter({ hasText: /^qwen3\.8-flash$/u }).click()
     await expect(model).toHaveText('qwen3.8-flash')
     // Leaving and returning to the tab keeps the session's model choice.
-    await window.getByText('Markdown', { exact: true }).click()
-    await expect(window.getByRole('region', { name: '论文 AI 问答' })).toBeHidden()
+    await window.getByText('原文', { exact: true }).click()
+    await expect(window.getByRole('region', { name: '论文 Chat' })).toBeHidden()
     await chatTab.click()
     await expect(model).toHaveText('qwen3.8-flash')
     await window.getByLabel('向当前论文提问').fill('记住这个问题')
@@ -81,7 +81,7 @@ test('reuses the translation API and switches chat models without a second setti
     await expect(window.getByRole('navigation', { name: '主导航' })).toBeVisible()
     await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '设置' }).click()
     await expect(window.getByRole('region', { name: '服务连接' })).toBeVisible()
-    await expect(window.getByRole('button', { name: 'AI 问答', exact: true })).toHaveCount(0)
+    await expect(window.getByRole('button', { name: 'Chat', exact: true })).toHaveCount(0)
   } finally {
     await app?.close()
     await workspace.cleanup()

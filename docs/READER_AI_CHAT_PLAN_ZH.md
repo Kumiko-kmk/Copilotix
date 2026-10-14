@@ -24,8 +24,7 @@ updated: 2026-10-12
 - 遠端 API 問答支持預設模型：Qwen `qwen-plus`（日常）、`qwen3.8-flash`（快速）、`qwen3.8-max`（高階）；DeepSeek `deepseek-flash`、`deepseek-v4-pro`。不支持自訂名稱，IPC／Main 按服務商驗證預設清單；舊設定與 session 中的自訂型號回退到服務商預設值，既有 turn 保留歷史型號、回答與引用。翻譯專用 `qwen-mt-plus` 留在翻譯設定。
 - DeepSeek 官方接口：Flash 顯式關閉 thinking；Pro 啟用 thinking，預留 32768 output tokens。SSE 僅把 content 當作回答，reasoning_content 不混入回答或歷史。本功能不使用 tools，後續輪次無須回傳 reasoning_content。
 - 模型清單核對來源：[DeepSeek 模型](https://api-docs.deepseek.com/quick_start/pricing/)、[思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)、[Qwen 官方清單](https://www.alibabacloud.com/help/en/model-studio/models)。區域可用性與真實 Key 需人工驗收。
-- Key 保存在系統 Credential Vault；Renderer 不接觸 Key、base URL 或任意文件路徑。首次發送須展示接收服務商、模型與將發送的問題／近期對話／選區／論文片段；現有 consent version 2 向後兼容；舊授權只覆蓋當時翻譯服務商，新授權記錄 chatConsentProvider，切換接收方需重新同意。撤銷授權只停止後續發送，不刪服務商已收到的資料。
-- Main 在讀完上下文後再次檢查授權、啟用狀態與憑據；401／403 使憑據失效，429 遵守 Retry-After。日志只記 provider、model、requestId、耗時、错误碼、token 数，不記問題、回答、片段或 Key。
+- Main 在讀完上下文後再次檢查啟用狀態與憑據；401／403 使憑據失效，429 遵守 Retry-After。日志只記 provider、model、requestId、耗時、错误碼、token 数，不記問題、回答、片段或 Key。
 
 ## 3. 本地記錄、兼容與恢復
 
@@ -82,3 +81,7 @@ updated: 2026-10-12
 人工驗收使用隔離資料目錄：兩篇文獻分別提問；退出應用並重開；驗證問題、回答、引用、草稿和模型保留；停止回答／清空後重開；備份或遷移後再讀取；更新解析版本後點舊引用。真實 Qwen／DeepSeek 的效果、延遲、模型區域可用性與 Windows 視覺／安裝體驗仍由真人驗收，假 HTTP 與 CI 綠燈不能替代。
 
 Codex 例外：不使用 API Key，驗證本機登入並從目錄取得模型；不可用時提示手動重選，保留 session 原型號，不自動回退。兩條隊列、隔離和 migration 5 的兼容／恢復見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)。
+
+閱讀器頁籤顯示 Chat／原文／译文，底層 view ID 不變。回答元信息只顯示模型、時間及 Token，用時仍可作底層診斷但不顯示。SafeMarkdown 在 Markdown 解析前共用 normalizeMathDelimiters，將完整的 TeX 括號分隔符轉為 $／$$，避開代碼和 HTML；舊回答直接按新規則渲染，不重寫原文。
+
+每条问题右侧「⋯」提供折叠／展开回复及删除聊天；折叠只改变当前展示，保留问题，隐藏回复及其元信息。删除需使用现有 Ant Design Modal 再次确认，成功后从内存和该论文 chat/ 对应 turn JSON 删除，草稿及其他 turn 保留。新增受校验的 paper-chat:delete-turn IPC、chat:delete-turn Core RPC，以 documentId＋turnId＋createdAt 定位，校验记录归属并拒绝链接；删除生成中的目标需先等待取消落盘，防止晚到写入。createdAt 可选加入 ask 结果，使刚完成／停止的回复使用 Main 的真实文件标识，旧客户端兼容。无 SQLite migration。默认阅读器分栏 50/50，旧默认 100/2.05 升级为居中，自定义比例保留。此次按既有用户要求不运行测试。

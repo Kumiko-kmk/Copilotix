@@ -51,12 +51,17 @@ describe('paper chat Utility integration', () => {
       const settings = repository.getSettings(root)
       expect(settings).toMatchObject({ chatProvider: null, qwenChatModel: DEFAULT_SETTINGS.qwenChatModel, chatConsentVersion: null })
       repository.saveSettings({ ...settings, chatProvider: 'qwen', qwenChatModel: 'custom-chat', chatConsentVersion: 1 })
-      expect(repository.getSettings(root)).toMatchObject({ chatProvider: 'qwen', qwenChatModel: 'qwen-plus', chatConsentVersion: 1 })
+      expect(repository.getSettings(root)).toMatchObject({ chatProvider: 'qwen', qwenChatModel: 'qwen-plus', chatConsentVersion: null })
       const turn = { id: randomUUID(), createdAt: now, provider: 'qwen', model: 'qwen-plus', question: 'saved question', answer: 'saved answer', citations: {}, status: 'completed' }
       await operations.handlers['chat:save-turn']!({ payload: { documentId, turn } } as never, signal)
       await operations.handlers['chat:save-session']!({ payload: { documentId, session: { draft: 'next question', pinned: [], selectedModel: null } } } as never, signal)
       const reopened = createUtilityOperationHandlers({ database, repository })
       expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([turn])
+      expect(paperChatSessionSchema.parse(await reopened.handlers['chat:session']!({ payload: { documentId } } as never, signal)).draft).toBe('next question')
+      const kept = { ...turn, id: randomUUID(), question: 'kept question' }
+      await reopened.handlers['chat:save-turn']!({ payload: { documentId, turn: kept } } as never, signal)
+      await reopened.handlers['chat:delete-turn']!({ payload: { documentId, turnId: turn.id, createdAt: turn.createdAt } } as never, signal)
+      expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([kept])
       expect(paperChatSessionSchema.parse(await reopened.handlers['chat:session']!({ payload: { documentId } } as never, signal)).draft).toBe('next question')
       await reopened.handlers['chat:clear']!({ payload: { documentId } } as never, signal)
       expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([])

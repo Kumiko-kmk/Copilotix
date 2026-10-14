@@ -17,9 +17,6 @@ export function resolvePaperChatProvider(settings: Pick<AppSettings, 'translatio
   const provider = selected ?? settings.translationProvider
   return (provider === 'qwen' || provider === 'deepseek' || provider === 'codex') && settings.enabledTranslationProviders.includes(provider) ? provider : null
 }
-export function hasPaperChatConsent(settings: Pick<AppSettings, 'chatConsentVersion' | 'chatConsentProvider' | 'translationProvider' | 'enabledTranslationProviders'>, provider: PaperChatProvider): boolean {
-  return settings.chatConsentVersion === CHAT_CONSENT_VERSION && (settings.chatConsentProvider ?? resolvePaperChatProvider(settings)) === provider
-}
 export const PAPER_CHAT_MODELS: Record<PaperChatProvider, readonly string[]> = {
   qwen: qwenChatModelSchema.options,
   codex: [],
@@ -48,8 +45,8 @@ export const paperChatAskRequestSchema = z.object({
   model: supportedChatModelSchema.optional(),
   provider: paperChatProviderSchema.optional()
 }).strict().refine(value => value.provider === 'codex' || !value.model || [...PAPER_CHAT_MODELS.qwen, ...PAPER_CHAT_MODELS.deepseek].includes(value.model), 'Unsupported cloud model').refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES, 'Request exceeds byte budget')
-export const paperChatAskResultSchema = z.object({ requestId: ragUuidSchema }).strict()
-export const paperChatCancelRequestSchema = paperChatAskResultSchema
+export const paperChatAskResultSchema = z.object({ requestId: ragUuidSchema, createdAt: z.string().datetime().optional() }).strict()
+export const paperChatCancelRequestSchema = z.object({ requestId: ragUuidSchema }).strict()
 export const paperChatCancelResultSchema = z.object({ cancelled: z.boolean() }).strict()
 export const paperChatStatusRequestSchema = z.object({ documentId: ragUuidSchema }).strict()
 export const paperChatStatusSchema = z.object({

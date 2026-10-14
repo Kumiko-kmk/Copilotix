@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { chatUsageSchema } from './chatResultMetadata'
 import { citationSchema, ragUuidSchema, ragWireByteLength } from './ragSchemas'
 import { chatModelSchema, paperChatPinnedSchema, paperChatProviderSchema, resolvePaperChatModel, PAPER_CHAT_MAX_BYTES } from './paperChatSchemas'
 
@@ -6,6 +7,9 @@ import { chatModelSchema, paperChatPinnedSchema, paperChatProviderSchema, resolv
 export const paperChatTurnSchema = z.object({
   id: ragUuidSchema,
   createdAt: z.string().datetime(),
+  completedAt: z.string().datetime().optional(),
+  durationMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  usage: chatUsageSchema.nullable().optional(),
   provider: paperChatProviderSchema,
   model: chatModelSchema,
   question: z.string().min(1).max(2_000),
@@ -30,6 +34,9 @@ export const paperChatPageSchema = z.object({
 export const paperChatSaveTurnSchema = paperChatDocumentRequestSchema.extend({ turn: paperChatTurnSchema }).strict()
 export const paperChatSaveSessionSchema = paperChatDocumentRequestSchema.extend({ session: paperChatSessionSchema }).strict()
 export const paperChatSavedSchema = z.object({ saved: z.literal(true) }).strict()
+export const paperChatDeleteTurnSchema = paperChatDocumentRequestSchema.extend({ turnId: ragUuidSchema, createdAt: z.string().datetime() }).strict()
+export const paperChatDeletedSchema = z.object({ deleted: z.literal(true) }).strict()
+export type PaperChatDeleteTurnRequest = z.infer<typeof paperChatDeleteTurnSchema>
 export const paperChatClearedSchema = z.object({ cleared: z.literal(true) }).strict()
 export type StoredPaperChatTurn = z.infer<typeof paperChatTurnSchema>
 export type PaperChatSession = z.infer<typeof paperChatSessionSchema>

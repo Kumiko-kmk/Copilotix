@@ -346,3 +346,16 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 - 初始化 RPC 15 秒，生成空闲 120 秒、总计 10 分钟；排队取消立即返回，运行取消请求 turn/interrupt，5 秒后关闭进程。进程异常、非成功完成、空结果和工具尝试均不能当作成功；退出关闭所有进程。不会静默切换模型或其他供应商。诊断不记录提示正文、图片或令牌。
 - SQLite migration **5 / add-codex-provider** 仅扩展 documents、translation_blocks、translation_cache 的 provider 约束；迁移 1–4 不改，复制原数据并恢复索引。仅在事务外临时关闭外键，提交前检查外键，异常回滚并恢复外键开关；沿用迁移前快照。旧程序不可直接打开 schema 5，回退需用迁移前快照恢复，不删除用户原库。聊天／解读 JSON 增加 codex 枚举，既有内容不改写；token 统计兼容缺失的 Codex 计数。
 - 回归入口：codexConnection、codexRuntime、codexIntegration、credentialGate、v2Database 测试；真实调用仅显式 `COPILOTIX_CODEX_LIVE=1` 运行 e2e/codex.spec.ts，使用合成论文。2026-10-13 本机 111 个测试文件通过（759 通过、3 跳过），类型检查与 lint 通过；合成文本翻译、表格、证据问答、Brief schema／引用、图片解读和取消实测成功，Electron 设置→授权→真实问答→引用落盘流程通过；不替代真实论文人工质量审阅或远端 CI。使用步骤见 [服务配置](wiki/Service-Setup.md)。
+
+2026-10-13：使用程序即同意向已配置、已啟用的模型服務發送功能所需內容，問答／檔案卡／圖片解讀不再彈出單獨授權或提供撤銷入口。舊 chatConsent 欄位僅供 wire 相容，忽略舊值且保存設定時清除持久化記錄。Codex「測試連接」成功填入實際 exe 路徑，所選模型測試全部成功顯示「驗證成功」。存儲統計在啟動與文檔更新時預載，按文庫根目錄緩存 60 秒、合併並行掃描，存儲頁立即顯示已有結果；手動刷新強制更新。
+
+窗口控制固定在标题栏的独立持久区域，层级高于普通弹层，按钮显式 no-drag；e2e/window-controls.spec.ts 验证跨页面、最大化／还原及删除确认弹窗时三个按钮可见且命中正确元素。
+
+
+2026-10-14：Codex 连接状态经校验 IPC `codex:cached` 读取，Renderer 共享缓存避免设置页重挂载丢失；每次程序启动恢复上次状态后后台自动检测，不自动发送模型测试消息。Main 在 `userData/codex-runtime/connection-status.json` 原子保存最多 8 组程序路径／推理强度对应的状态、模型目录与已测模型；不存登录令牌，不修改 Codex 登录文件。版本／程序变化不继承旧验证，实际登录失效显示未登录；快照损坏或缺失重新检测，卸载清数据按既有 userData 验证清单覆盖此文件。
+问答 turn JSON 增加可选 completedAt、durationMs 和 usage（输入／输出／总 Token），completed stream 可选 metadata 携带实际模型及时间。旧记录无需迁移、照常读；旧客户端／旧记录缺字段时显示未提供，不将未知用量记为零。新结果元信息随原有原子 turn 保存。2026-10-14 此次按用户要求不运行测试、lint 或类型检查，仅构建打包并保留打包内置校验。
+
+
+普通 ChatGPT 聊天接入分析（2026-10-14，尚未实现）：可用 OpenAI Responses API 请求聊天模型（chat-latest 为 ChatGPT 当前 Instant 别名），也可按 Sign in with ChatGPT 的本地／开源应用授权流程请求账户目录中的可用模型；两者均不要求经过 Codex agent。订阅接入仍取决于实际资格与模型目录，不能直接使用 ChatGPT backend-api 或假设已有 Codex 登录代表获得所有聊天模型权限。
+来源：[chat-latest](https://developers.openai.com/api/docs/models/chat-latest)、[订阅推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)、[预览限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)。订阅路线当前不支持图片生成、Code Interpreter、文件搜索等托管工具；标准平台 API 可另接对应工具。API 不返回 ChatGPT 客户端的完整呈现树；模型接口切换与富内容 UI 是两项工作。
+当前 Chat 已支持 Markdown 文本、标题、列表、表格及 KaTeX 公式；图示四宫格可由结构化 JSON 与本地组件复现，来源胶囊需要返回的引用元信息与独立组件。当前回答中的图片和外链仅显示文本，未加载图片；图片需增加验证、资源下载／持久化与受控展示，生成图片还需独立工具。交互图表／地图／视频／音频／Canvas 等需对应资源和组件，不能靠文本回答自动保持 ChatGPT 原格式。本次仅修改页签、公式渲染和隐藏用时，保留既有 Codex 路由。

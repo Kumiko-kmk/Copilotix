@@ -6,7 +6,7 @@ import { paperInsightRequestSchema } from '@shared/paperInsight'
 import { libraryCategoriesRequestSchema } from '@shared/libraryCategories'
 import { LibraryCategoryService } from './libraryCategoryService'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
-import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
+import { paperChatDeleteTurnSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
 import { PaperChatStore } from './persistence/paperChatStore'
 import { PaperContextBuilder, PaperContextError } from './paperContextBuilder'
 import { assertLibraryIdle, manageLibrary } from './libraryMaintenance'
@@ -153,6 +153,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
     'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),
     'chat:save-session': (request) => { const { documentId, session } = paperChatSaveSessionSchema.parse(request.payload); return chatStore.saveSession(documentId, session) },
+    'chat:delete-turn': (request) => chatStore.deleteTurn(paperChatDeleteTurnSchema.parse(request.payload)),
     'chat:clear': (request) => chatStore.clear(paperChatDocumentRequestSchema.parse(request.payload).documentId),
     'chat:ensure-index': (request, signal) => {
       signal.throwIfAborted()

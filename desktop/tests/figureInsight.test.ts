@@ -86,9 +86,8 @@ describe('figure insight pipeline', () => {
     expect(vi.mocked(f.deps.save).mock.calls[0]![0]).toMatchObject({ ...f.request, content, sourceRevision: f.descriptor.sourceRevision })
   })
 
-  it.each(['consent', 'key', 'valid', 'enabled'] as const)('never reads or uploads an image without %s', async kind => {
+  it.each(['key', 'valid', 'enabled'] as const)('never reads or uploads an image without %s', async kind => {
     const f = fixture()
-    if (kind === 'consent') f.settings.chatConsentVersion = null
     if (kind === 'key') f.deps.key = async () => null
     if (kind === 'valid') f.settings.credentials.qwen.state = 'unknown'
     if (kind === 'enabled') f.settings.enabledTranslationProviders = []

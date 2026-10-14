@@ -99,7 +99,7 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
   const addToChat = React.useCallback((selection: ReaderChatSelection) => {
     void addSelection(selection).then((failure) => {
       if (failure) messageApi.warning({ content: failure, key: 'paper-chat-pin' })
-      else messageApi.success({ content: '已加入 AI 问答选区', key: 'paper-chat-pin', duration: 1.5 })
+      else messageApi.success({ content: '已加入 Chat 选区', key: 'paper-chat-pin', duration: 1.5 })
     })
   }, [addSelection, messageApi])
   // A citation scrolls the reading views to its block; if none is on screen, the workbench shows one.

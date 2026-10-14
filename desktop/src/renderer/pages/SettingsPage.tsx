@@ -1,4 +1,5 @@
 import React from 'react'
+import { cachedStorageInfo, loadStorageInfo } from '../storageInfoClient'
 import { DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Button, Checkbox, Input, Typography, message } from 'antd'
 import type {
@@ -59,7 +60,7 @@ export default function SettingsPage(props: {
   const [credentialErrors, setCredentialErrors] = React.useState<CredentialErrors>({})
   const [testing, setTesting] = React.useState<CredentialName | null>(null)
   const [saving, setSaving] = React.useState(false)
-  const [storageInfo, setStorageInfo] = React.useState<StorageInfo | null>(null)
+  const [storageInfo, setStorageInfo] = React.useState<StorageInfo | null>(() => cachedStorageInfo(props.settings.outputRoot))
   const [usageAnalytics, setUsageAnalytics] = React.useState<UsageAnalytics | null>(null)
   const [storageLoading, setStorageLoading] = React.useState(false)
   const [libraryAction, setLibraryAction] = React.useState<'backup' | 'restore' | 'migrate' | null>(null)
@@ -102,13 +103,13 @@ export default function SettingsPage(props: {
   const refreshStorageInfo = React.useCallback(async () => {
     setStorageLoading(true)
     try {
-      setStorageInfo(await window.copilotix.getStorageInfo())
+      setStorageInfo(await loadStorageInfo(props.settings.outputRoot, true))
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : String(error))
     } finally {
       setStorageLoading(false)
     }
-  }, [messageApi])
+  }, [messageApi, props.settings.outputRoot])
 
   const runLibraryAction = React.useCallback(async (action: 'backup' | 'restore' | 'migrate') => {
     if (libraryActionRef.current) return
@@ -140,8 +141,11 @@ export default function SettingsPage(props: {
   }, [messageApi])
 
   React.useEffect(() => {
-    if (section === 'storage') void refreshStorageInfo()
-  }, [props.settings.outputRoot, refreshStorageInfo, section])
+    let active = true
+    setStorageInfo(cachedStorageInfo(props.settings.outputRoot))
+    void loadStorageInfo(props.settings.outputRoot).then(value => { if (active) setStorageInfo(value) }).catch(() => undefined)
+    return () => { active = false }
+  }, [props.settings.outputRoot])
 
   React.useEffect(() => {
     if (section !== 'connections') return

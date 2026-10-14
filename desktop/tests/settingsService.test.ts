@@ -305,7 +305,7 @@ describe('paper chat settings authorization', () => {
     const repository = new SettingsRepository()
     const service = new SettingsService(repository, new MemoryVault({}), 'C:/papers')
     const selected = await service.save({ ...publicUpdate(), chatProvider: null, qwenChatModel: 'qwen3.8-flash', chatConsentVersion: 2 })
-    expect(selected.settings).toMatchObject({ chatProvider: null, chatConsentVersion: 2, qwenChatModel: 'qwen3.8-flash', qwenModel: DEFAULT_SETTINGS.qwenModel })
+    expect(selected.settings).toMatchObject({ chatProvider: null, chatConsentVersion: null, qwenChatModel: 'qwen3.8-flash', qwenModel: DEFAULT_SETTINGS.qwenModel })
     const changed = await service.save({ ...publicUpdate(), translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart'], chatConsentVersion: 2 })
     expect(changed.settings.translationProvider).toBe('deepseek')
     expect(changed.settings.chatConsentVersion).toBeNull()

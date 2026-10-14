@@ -1,4 +1,5 @@
 import React from 'react'
+import { useCodexStatus, refreshCodexStatus } from '../codexStatusClient'
 import { Button, Input, Select } from 'antd'
 import { DEFAULT_CODEX_SETTINGS, type CodexSettings, type CodexStatus } from '@shared/codex'
 import { ServiceCard, type ServiceState } from './ServiceCard'
@@ -11,7 +12,7 @@ const STATE: Record<CodexStatus['state'], { state: ServiceState; label: string }
 }
 
 export function CodexSettingsCard({ value = DEFAULT_CODEX_SETTINGS, onChange }: { value?: CodexSettings; onChange(value: CodexSettings): void }): React.JSX.Element {
-  const [status, setStatus] = React.useState<CodexStatus | null>(null)
+  const status = useCodexStatus(value)
   const [busy, setBusy] = React.useState<'inspect' | 'test' | null>(null)
   const [error, setError] = React.useState('')
   const mounted = React.useRef(true)
@@ -21,22 +22,24 @@ export function CodexSettingsCard({ value = DEFAULT_CODEX_SETTINGS, onChange }: 
     try {
       let result: CodexStatus | undefined
       for (const testModel of testModels.length ? testModels : [undefined]) {
-        result = await window.copilotix.codex.inspect({ settings: value, ...(testModel ? { testModel } : {}) })
+        result = await refreshCodexStatus(value, testModel)
         if (result.state !== 'ready') break
       }
       if (!mounted.current || !result) return
-      setStatus(result)
       if (result.state === 'ready') {
         const defaultModel = result.models.find(model => model.isDefault)?.id ?? result.models[0]?.id ?? ''
-        if (!value.translationModel || !value.chatModel) onChange({ ...value, translationModel: value.translationModel || defaultModel, chatModel: value.chatModel || defaultModel })
+        onChange({ ...value, executable: result.executable, translationModel: value.translationModel || defaultModel, chatModel: value.chatModel || defaultModel })
       }
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : '无法检测 Codex') }
     finally { if (mounted.current) setBusy(null) }
   }
+  React.useEffect(() => {
+    if (!status) void refreshCodexStatus(value).catch(() => undefined)
+  }, [status, value])
   const choose = async (): Promise<void> => {
     try {
       const executable = await window.copilotix.codex.selectExecutable()
-      if (executable && mounted.current) { onChange({ ...value, executable }); setStatus(null) }
+      if (executable && mounted.current) { onChange({ ...value, executable }) }
     } catch { setError('无法选择 Codex 程序') }
   }
   const options = status?.models.map(model => ({ value: model.id, label: `${model.name}${model.image ? ' · 识图' : ''}`, title: '' })) ?? []
@@ -44,7 +47,7 @@ export function CodexSettingsCard({ value = DEFAULT_CODEX_SETTINGS, onChange }: 
   const efforts = selected.length ? selected[0]!.efforts.filter(effort => selected.every(model => model.efforts.includes(effort))) : []
   const models = [...new Set([value.translationModel, value.chatModel])].filter(Boolean)
   const verified = models.length > 0 && models.every(model => status?.verifiedModels.includes(model))
-  const state = error ? { state: 'invalid' as const, label: '检测失败' } : status ? STATE[status.state] : { state: 'unknown' as const, label: '未检测' }
+  const state = error ? { state: 'invalid' as const, label: '检测失败' } : status?.state === 'ready' && verified ? { state: 'valid' as const, label: '验证成功' } : status ? STATE[status.state] : { state: 'unknown' as const, label: '未检测' }
   const message = error || (status ? `${status.version} ${status.message}${verified ? ' · 所选模型已测试' : ''}`.trim() : '')
   const disabled = busy !== null || !options.length
   return (
@@ -71,9 +74,8 @@ export function CodexSettingsCard({ value = DEFAULT_CODEX_SETTINGS, onChange }: 
           <Input id="codex-executable" readOnly value={value.executable} placeholder="自动检测本机安装" />
         </div>
         <div className="credential-actions">
-          {value.executable ? <Button disabled={busy !== null} onClick={() => { onChange({ ...value, executable: '' }); setStatus(null) }}>自动检测</Button> : null}
           <Button disabled={busy !== null} onClick={() => void choose()}>选择程序</Button>
-          <Button className="credential-validate" loading={busy === 'inspect'} disabled={busy !== null} onClick={() => void inspect()}>检测连接</Button>
+          <Button className="credential-validate" loading={busy === 'inspect'} disabled={busy !== null} onClick={() => void inspect()}>测试连接</Button>
         </div>
       </div>
     </ServiceCard>

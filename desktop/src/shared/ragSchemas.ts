@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { chatResultMetadataSchema } from './chatResultMetadata'
 
 /**
  * Wire contracts for the single-paper chat: answer stream, citations,
@@ -257,6 +258,7 @@ const streamCitationSchema = z.object({
 const streamCompletedSchema = z.object({
   ...streamCommon,
   type: z.literal('completed'),
+  metadata: chatResultMetadataSchema.optional(),
   answer: z.string().max(32_768).refine(noNul).refine(noUnsafeContentCharacters).optional(),
   citationIds: z.array(uuidSchema).max(RAG_MAX_RESULT_PAGE_ITEMS).optional()
 }).strict()

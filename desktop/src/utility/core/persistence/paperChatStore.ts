@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { ragWireByteLength } from '@shared/ragSchemas'
 import { PAPER_CHAT_MAX_BYTES } from '@shared/paperChatSchemas'
-import { emptyPaperChatSession, paperChatCursorSchema, paperChatSessionSchema, paperChatTurnSchema, type PaperChatPage, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
+import { emptyPaperChatSession, paperChatCursorSchema, paperChatSessionSchema, paperChatTurnSchema, type PaperChatDeleteTurnRequest, type PaperChatPage, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
 import { PathPolicy } from '@runtime/pathPolicy'
 
 const turnFileSchema = z.object({ version: z.literal(1), documentId: z.string(), turn: paperChatTurnSchema }).strict()
@@ -100,6 +100,19 @@ export class PaperChatStore {
     const session = paperChatSessionSchema.parse(raw)
     await this.write(documentId, 'session.json', { version: 1, documentId, session })
     return { saved: true }
+  }
+
+  async deleteTurn(request: PaperChatDeleteTurnRequest): Promise<{ deleted: true }> {
+    const root = await this.root(request.documentId)
+    const name = `${String(Date.parse(request.createdAt)).padStart(13, '0')}-${request.turnId}.json`
+    paperChatCursorSchema.parse(name)
+    const path = this.policy.resolveChild(root, name)
+    try {
+      const record = turnFileSchema.parse(await this.read(path))
+      if (record.documentId !== request.documentId || record.turn.id !== request.turnId || record.turn.createdAt !== request.createdAt) throw new Error('对话不属于当前论文')
+      await unlink(path)
+    } catch (error) { if (!missing(error)) throw error }
+    return { deleted: true }
   }
 
   async clear(documentId: string): Promise<{ cleared: true }> {

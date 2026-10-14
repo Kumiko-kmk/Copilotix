@@ -21,5 +21,6 @@ export type CodexStatus = z.infer<typeof codexStatusSchema>
 export const codexProbeSchema = z.object({ settings: codexSettingsSchema, testModel: z.string().max(128).optional() }).strict()
 export interface CodexApi {
   inspect(request: z.infer<typeof codexProbeSchema>): Promise<CodexStatus>
+  cached(settings: CodexSettings): Promise<CodexStatus | null>
   selectExecutable(): Promise<string | null>
 }

@@ -1,4 +1,7 @@
 import React from 'react'
+import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
+import { refreshCodexStatus } from './codexStatusClient'
+import { loadStorageInfo } from './storageInfoClient'
 import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
@@ -81,6 +84,21 @@ export default function App(): React.JSX.Element {
   })
   const settings = settingsQuery.data
   const documents = documentsQuery.data?.documents ?? []
+  const codexStartupChecked = React.useRef(false)
+  React.useEffect(() => {
+    if (!settings || codexStartupChecked.current) return
+    codexStartupChecked.current = true
+    void refreshCodexStatus(settings.codex ?? DEFAULT_CODEX_SETTINGS).catch(() => undefined)
+  }, [settings])
+
+  React.useEffect(() => {
+    if (!settings?.outputRoot) return
+    const preload = (): void => { void loadStorageInfo(settings.outputRoot).catch(() => undefined) }
+    preload()
+    const timer = setInterval(preload, 60_000)
+    return () => clearInterval(timer)
+  }, [settings?.outputRoot, documentsQuery.dataUpdatedAt])
+
 
   React.useEffect(() => {
     if (!settingsQuery.isSuccess || !documentsQuery.isSuccess || documents.length > 0) return

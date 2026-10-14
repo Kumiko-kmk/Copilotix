@@ -244,8 +244,9 @@ export interface CopilotixDesktopApi {
     load(request: PaperChatLoadRequest): Promise<PaperChatPage>
     session(request: { documentId: string }): Promise<PaperChatSession>
     saveSession(request: { documentId: string; session: PaperChatSession }): Promise<{ saved: true }>
+    deleteTurn(request: { documentId: string; turnId: string; createdAt: string }): Promise<{ deleted: true }>
     clear(request: { documentId: string }): Promise<{ cleared: true }>
-    ask(request: PaperChatAskRequest): Promise<{ requestId: string }>
+    ask(request: PaperChatAskRequest): Promise<{ requestId: string; createdAt?: string }>
     cancel(request: { requestId: string }): Promise<{ cancelled: boolean }>
     ensureIndex(request: { documentId: string }): Promise<PaperChatStatus>
     onEvent(listener: (event: RagStreamEvent) => void): () => void

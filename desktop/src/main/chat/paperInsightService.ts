@@ -4,7 +4,7 @@ import type { ModelGateway } from './modelGateway'
 import { assembleBrief, buildBriefMessages, buildBriefRepairMessage, clipPreviousAnswer, parseBriefResponse, PAPER_BRIEF_REQUEST, PAPER_BRIEF_MAX_REQUEST_BYTES, type PaperBrief } from '@shared/paperBrief'
 import type { BriefContextResult, BriefAnchor } from '@shared/paperBrief/contracts'
 import { paperInsightStateSchema, paperInsightRequestSchema, type PaperInsightState } from '@shared/paperInsight'
-import { hasPaperChatConsent, resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
+import { resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { AppSettings } from '@shared/types'
 import type { Job } from '@core/types'
 import { ChatProviderError } from './chatProvider'
@@ -47,7 +47,6 @@ export class PaperInsightService {
     const settings = await this.deps.settings()
     const provider = resolvePaperChatProvider(settings)
     if (!provider) return { reason: '请在设置中将已启用的 Qwen、DeepSeek 或 Codex 设为首选服务商。' } as const
-    if (!hasPaperChatConsent(settings, provider)) return { reason: '请先在阅读器 AI 问答中同意向服务商发送论文片段。' } as const
     const key = provider === 'codex' ? null : await this.deps.key(provider)
     if (provider !== 'codex' && !key) return { reason: '请先在服务连接中保存模型 API Key。' } as const
     if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') return { reason: '请先在服务连接中验证模型 API Key。' } as const
@@ -110,7 +109,7 @@ export class PaperInsightService {
       if (context.documentId !== documentId) throw new Error('scope mismatch')
       const messages = buildBriefMessages(context.context)
       for (let attempt = 0; attempt < 2; attempt++) {
-        // Recheck credentials, consent and configuration after queue/context work and before retries.
+        // Recheck credentials and configuration after queue/context work and before retries.
         auth = await this.authorization()
         signal.throwIfAborted()
         if (auth.reason !== undefined) { this.emit(documentId, { status: 'unavailable', reason: auth.reason }); return }
@@ -183,7 +182,7 @@ export class PaperInsightService {
   }
   async onJobChanged(job: Pick<Job, 'kind' | 'status' | 'documentId'>): Promise<void> {
     if (!['translate', 'parse'].includes(job.kind) || job.status !== 'succeeded' || !this.deps.canStart() || this.paused || this.destroyed) return
-    // Every completed translation queues its brief; consent and a verified key are still checked before sending.
+    // Every completed translation queues its brief; provider configuration and credentials are still checked before sending.
     if (job.kind === 'translate') await this.generate(job.documentId, true)
     else this.emit(job.documentId, await this.get(job.documentId))
   }

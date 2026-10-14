@@ -136,7 +136,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   return React.useMemo<ReaderViewSpecs>(() => {
     const specs: ReaderViewSpecs = {
       original: {
-        label: 'Markdown',
+        label: '原文',
         icon: <FileTextOutlined />,
         panelClassName: 'reader-tab-panel',
         render: ({ active }) => !props.originalBlocks.some(block => block.role === 'content' && block.markdown.trim()) ? <ReaderDocumentState view="original" status={props.taskStatus} error={props.taskError} onRetry={props.onRetry} /> : active ? <MarkdownPane
@@ -161,7 +161,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
         /> : null
       },
       translated: {
-        label: 'Markdown（中文）',
+        label: '译文',
         icon: <TranslationOutlined />,
         panelClassName: 'reader-tab-panel',
         render: ({ active, actionsHost }) => <>
@@ -211,7 +211,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     if (props.chat) {
       const chat = props.chat
       specs.chat = {
-        label: 'AI 问答',
+        label: 'Chat',
         icon: <MessageOutlined />,
         tab: <ChatTabLabel controller={chat.controller} />,
         // Mounts on first visit only: the panel asks the Utility to build the
@@ -276,7 +276,7 @@ function ChatTabLabel(props: { controller: PaperChatController }): React.JSX.Ele
   const pinned = props.controller.pinned.length
   return (
     <span className="reader-chat-tab">
-      AI 问答
+      Chat
       {props.controller.busy ? <span className="reader-chat-tab-busy" aria-label="正在生成" /> : null}
       {pinned > 0 ? <Badge count={pinned} size="small" color="var(--primary)" title="" /> : null}
     </span>

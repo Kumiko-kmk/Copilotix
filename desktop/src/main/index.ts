@@ -197,6 +197,7 @@ async function bootstrap(): Promise<void> {
     load: (request) => utilitySupervisor!.request('chat:load', request),
     session: (documentId) => utilitySupervisor!.request('chat:session', { documentId }),
     saveSession: (documentId, session) => utilitySupervisor!.request('chat:save-session', { documentId, session }),
+    deleteTurn: (request) => utilitySupervisor!.request('chat:delete-turn', request),
     clear: (documentId) => utilitySupervisor!.request('chat:clear', { documentId }),
     settings: () => settings.get(),
     key: (provider) => provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
@@ -455,6 +456,7 @@ function registerIpc(
       if (!libraryGate.restarting) { await jobScheduler.start(); paperInsight?.resume(); figureInsight?.resume() }
     }
   }, validationOptions)
+  registerValidatedHandler('codex:cached', codexProbeSchema.shape.settings, codexStatusSchema.nullable(), (_event, request) => codex!.cached(request), validationOptions)
   registerValidatedHandler('codex:inspect', codexProbeSchema, codexStatusSchema, (_event, request) => codex!.inspect(request.settings, request.testModel), validationOptions)
   registerValidatedHandler('codex:select-executable', noRequestSchema, outputDirectorySchema, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { title: '选择 codex.exe', properties: ['openFile'], filters: [{ name: 'Codex', extensions: ['exe'] }] })
@@ -464,11 +466,11 @@ function registerIpc(
   registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, async (_event, update) => {
     const before = await settings.get()
     const result = await settings.save(update)
-    if (before.enabledTranslationProviders.join(',') !== result.settings.enabledTranslationProviders.join(',') || before.translationProvider !== result.settings.translationProvider || before.chatConsentVersion !== result.settings.chatConsentVersion || before.chatConsentProvider !== result.settings.chatConsentProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
+    if (before.enabledTranslationProviders.join(',') !== result.settings.enabledTranslationProviders.join(',') || before.translationProvider !== result.settings.translationProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
     const next = result.settings
     if (before.enabledTranslationProviders.join(',') !== next.enabledTranslationProviders.join(',')
-      || before.translationProvider !== next.translationProvider || before.chatConsentVersion !== next.chatConsentVersion
-      || before.chatConsentProvider !== next.chatConsentProvider || before.qwenChatModel !== next.qwenChatModel
+      || before.translationProvider !== next.translationProvider
+      || before.qwenChatModel !== next.qwenChatModel
       || before.deepseekChatModel !== next.deepseekChatModel
       || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) { paperInsight?.cancelAll(); figureInsight?.cancelAll() }
     return result

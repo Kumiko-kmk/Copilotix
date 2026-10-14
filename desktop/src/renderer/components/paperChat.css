@@ -27,9 +27,6 @@
 /* Composer aligns with the markdown-body column above it. */
 .paper-chat-composer { display: grid; width: 100%; max-width: 900px; margin: 0 auto; padding: 8px 42px 16px; box-sizing: border-box; gap: 8px; }
 .paper-chat-error { padding: 6px 12px; border-left: 2px solid #cf5049; border-radius: 0; color: #b42318; background: #fdecea; font-size: 13px; }
-.paper-chat-consent { padding: 12px 16px; border: 0; border-radius: 4px; background: color-mix(in srgb, #fff 40%, transparent); font-size: 13px; line-height: 1.6; }
-.paper-chat-consent p { margin: 4px 0; color: var(--muted); }
-.paper-chat-consent-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .paper-chat-pins { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .paper-chat-pins::-webkit-scrollbar { display: none; }
 .paper-chat-pin { display: inline-flex; flex: 0 0 auto; align-items: center; max-width: 280px; height: 28px; gap: 6px; padding: 0 4px 0 10px; border: 0; border-left: 2px solid var(--primary); border-radius: 0; background: color-mix(in srgb, var(--primary) 7%, transparent); font-size: 12px; }
@@ -58,3 +55,10 @@
   .paper-chat-caret, .reader-chat-tab-busy { animation: none; }
   .paper-chat-citation, .paper-chat-suggestions button, .paper-chat-input { transition: none; }
 }
+
+.paper-chat-metadata { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+
+.paper-chat-question-row { display: flex; align-items: flex-start; gap: 12px; }
+.paper-chat-question-row .paper-chat-question { flex: 1; min-width: 0; }
+.paper-chat-question-row > .ant-dropdown-trigger { flex: none; margin-top: 4px; }
+.paper-chat-delete-question { color: var(--muted); overflow-wrap: anywhere; }

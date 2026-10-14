@@ -26,6 +26,7 @@ function setup(consented = true, configured = true) {
   const load = vi.fn(async (_request: { documentId: string; before?: string }): Promise<PaperChatPage> => ({ turns: [], next: null }))
   const session = vi.fn(async ({ documentId }: { documentId: string }) => sessions.get(documentId) ?? emptyPaperChatSession())
   const saveSession = vi.fn(async ({ documentId, session }: { documentId: string; session: PaperChatSession }) => { sessions.set(documentId, session); return { saved: true as const } })
+  const deleteTurn = vi.fn(async () => ({ deleted: true as const }))
   const clear = vi.fn(async () => ({ cleared: true as const }))
   const ask = vi.fn(async () => ({ requestId }))
   const cancel = vi.fn(async () => ({ cancelled: true }))
@@ -36,7 +37,7 @@ function setup(consented = true, configured = true) {
   Object.defineProperty(window, 'copilotix', { configurable: true, value: {
     getSettings: vi.fn(async () => settings),
     saveSettings: vi.fn(async (update) => { settings = { ...settings, ...update }; return { settings, fieldErrors: {} } }),
-    paperChat: { load, session, saveSession, clear, ask, cancel, ensureIndex, onEvent: (fn: typeof listener) => { listener = fn; return unsubscribe } }
+    paperChat: { load, session, saveSession, deleteTurn, clear, ask, cancel, ensureIndex, onEvent: (fn: typeof listener) => { listener = fn; return unsubscribe } }
   } })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } }); clients.push(client)
   function Harness(props: { documentId: string }) {
@@ -103,16 +104,11 @@ describe('ReaderChatPanel and local paper sessions', () => {
     f.emit({ requestId, sequence: 4, type: 'delta', delta: 'late' })
     expect(screen.getByText('已停止')).toBeTruthy(); expect(screen.queryByText('firstlate')).toBeNull()
   })
-  it('requires consent before any ask and sends only after the chosen provider is confirmed', async () => {
+  it('sends without a separate consent step or settings write', async () => {
     const f = setup(false); await f.input()
-    await screen.findByText('同意发送论文片段')
-    expect(f.ask).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: /取\s*消/u }))
-    expect(f.ask).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: /^发\s*送$/u }))
-    fireEvent.click(await screen.findByRole('button', { name: '同意并发送' }))
     await waitFor(() => expect(f.ask).toHaveBeenCalledTimes(1))
-    expect(window.copilotix.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ chatProvider: null, chatConsentVersion: CHAT_CONSENT_VERSION }))
+    expect(screen.queryByText('同意发送论文片段')).toBeNull()
+    expect(window.copilotix.saveSettings).not.toHaveBeenCalled()
   })
   it('offers model setup and clears pins/conversation when switching papers', async () => {
     const f = setup(true, false)
@@ -155,6 +151,13 @@ describe('ReaderChatPanel and local paper sessions', () => {
     expect(view.container.querySelector('script,img,a')).toBeNull()
     expect(view.container.querySelector('.katex')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'E99' })).toBeNull()
+    view.rerender(<SafeMarkdown markdown={String.raw`Inline \(q_i k_j^\top\).
+
+\[
+\operatorname{Attention}(Q,K,V)=\operatorname{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+\]`} citations={{}} />)
+    expect(view.container.querySelectorAll('.katex')).toHaveLength(2)
+    expect(view.container.querySelector('.katex-display')).toBeTruthy()
   })
   it('switches the model inside chat using the existing translation API without saving API settings', async () => {
     const f = setup()
@@ -166,20 +169,9 @@ describe('ReaderChatPanel and local paper sessions', () => {
     expect(window.copilotix.saveSettings).not.toHaveBeenCalled()
     expect(document.querySelector('.reader-chat-model')?.classList.contains('ant-select-disabled')).toBe(true)
   })
-  it('offers only preset models and revokes consent directly in chat', async () => {
-    const f = setup()
-    await chooseModel('qwen3.8-flash')
-    expect(screen.queryByText('自定义模型…')).toBeNull()
-    expect(screen.queryByLabelText('模型名称')).toBeNull()
-    fireEvent.change(screen.getByLabelText('向当前论文提问'), { target: { value: '问题' } })
-    await openMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: '撤销发送授权' }))
-    await waitFor(() => expect(window.copilotix.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ chatConsentVersion: null })))
-    await openMenu()
-    await waitFor(() => expect(screen.queryByRole('menuitem', { name: '撤销发送授权' })).toBeNull())
-    fireEvent.click(screen.getByRole('button', { name: /^发\s*送$/u }))
-    fireEvent.click(await screen.findByRole('button', { name: '同意并发送' }))
-    await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ model: 'qwen3.8-flash' })))
+  it('offers preset models without a revoke menu', async () => {
+    setup(); await chooseModel('qwen3.8-flash'); await openMenu()
+    expect(screen.queryByRole('menuitem', { name: '撤销发送授权' })).toBeNull()
   })
   it('keeps the model when reopening chat and resets it when switching papers', async () => {
     const f = setup()
@@ -224,8 +216,6 @@ describe('ReaderChatPanel and local paper sessions', () => {
     await waitFor(() => expect(shownModel()).toBe('deepseek-flash'))
     await chooseModel('deepseek-v4-pro')
     await f.input()
-    expect(f.ask).not.toHaveBeenCalled()
-    fireEvent.click(await screen.findByRole('button', { name: '同意并发送' }))
     await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-pro' })))
     expect(f.settings.translationProvider).toBe('qwen')
   })

@@ -1,10 +1,10 @@
-import { access, mkdir } from 'node:fs/promises'
+import { access, mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join, delimiter, isAbsolute } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { z } from 'zod'
 import type { MultimodalChatMessage } from '../shared/chatMessages'
-import { type CodexSettings, type CodexStatus, codexModelSchema } from '../shared/codex'
+import { type CodexSettings, type CodexStatus, codexModelSchema, codexStatusSchema } from '../shared/codex'
 import { CodexConnection } from './codexConnection'
 
 const exec = promisify(execFile)
@@ -56,18 +56,51 @@ export class CodexRuntime {
   private tails = { interactive: Promise.resolve(), background: Promise.resolve() }
   private connections = new Set<CodexConnection>()
   private verified = new Set<string>()
+  private snapshots = new Map<string, CodexStatus>()
+  private hydration?: Promise<void>
+  private writes = Promise.resolve()
   private destroyed = false
   constructor(private readonly cwd: string, private readonly settings: () => Promise<CodexSettings>) {}
 
+  private snapshotKey(settings: CodexSettings): string { return JSON.stringify([settings.executable, settings.effort]) }
+  async cached(settings: CodexSettings): Promise<CodexStatus | null> {
+    this.hydration ??= (async () => {
+      try {
+        const text = await readFile(join(this.cwd, 'connection-status.json'), 'utf8')
+        if (text.length > 1024 * 1024) return
+        const entries = z.array(z.tuple([z.string(), codexStatusSchema])).max(8).parse(JSON.parse(text))
+        for (const [key, value] of entries) this.snapshots.set(key, value)
+      } catch { /* Missing or invalid snapshots are re-detected without touching login. */ }
+    })()
+    await this.hydration
+    return this.snapshots.get(this.snapshotKey(settings)) ?? null
+  }
+  private async saveSnapshot(settings: CodexSettings, status: CodexStatus): Promise<void> {
+    this.snapshots.set(this.snapshotKey(settings), status)
+    if (status.executable) this.snapshots.set(this.snapshotKey({ ...settings, executable: status.executable }), status)
+    while (this.snapshots.size > 8) this.snapshots.delete(this.snapshots.keys().next().value!)
+    const data = JSON.stringify([...this.snapshots])
+    this.writes = this.writes.catch(() => undefined).then(async () => {
+      await mkdir(this.cwd, { recursive: true })
+      const path = join(this.cwd, 'connection-status.json')
+      await writeFile(path + '.pending', data, 'utf8')
+      await rename(path + '.pending', path)
+    })
+    await this.writes.catch(() => undefined)
+  }
   async inspect(settings: CodexSettings, testModel?: string): Promise<CodexStatus> {
+    const previous = await this.cached(settings)
     let ready: Ready | undefined
     try {
       ready = await this.open(settings)
       if (testModel && ready.status.state === 'ready') {
         await this.generateOn(ready, settings, { model: testModel, messages: [{ role: 'user', content: 'Reply exactly OK.' }], signal: AbortSignal.timeout(120_000), onDelta: () => undefined })
-        this.verified.add(`${ready.status.executable}:${testModel}`)
+        this.verified.add(`${ready.status.executable}:${settings.effort}:${testModel}`)
       }
-      return { ...ready.status, verifiedModels: ready.status.models.filter(model => this.verified.has(`${ready!.status.executable}:${model.id}`)).map(model => model.id) }
+      const status: CodexStatus = { ...ready.status, verifiedModels: ready.status.models.filter(model => this.verified.has(`${ready!.status.executable}:${settings.effort}:${model.id}`)).map(model => model.id) }
+      if (status.state === 'ready' && previous?.state === 'ready' && previous.executable === status.executable && previous.version === status.version) status.verifiedModels = [...new Set([...status.verifiedModels, ...previous.verifiedModels.filter(id => status.models.some(model => model.id === id))])]
+      await this.saveSnapshot(settings, status)
+      return status
     } catch (error) {
       return { state: 'unavailable', executable: settings.executable, version: '', message: error instanceof Error ? error.message : 'Codex 不可用', models: [], verifiedModels: [] }
     } finally { ready?.connection.close() }

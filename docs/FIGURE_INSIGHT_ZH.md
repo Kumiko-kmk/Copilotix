@@ -22,7 +22,7 @@
 
 ## 服務商與流程
 
-沿用已啟用、已驗證、有現有問答授權的首選 Qwen／DeepSeek 服務與憑據。Qwen 選 `qwen3.8-max` 時保留；其他現有 Qwen 選項用 `qwen3.8-flash`。DeepSeek 統一用 `deepseek-flash`（Pro 不支持圖片）。實際使用的模型保存在結果 provenance，不更改用戶的文字問答／翻譯模型設定。
+沿用已啟用、已驗證的首選 Qwen／DeepSeek 服務與憑據。Qwen 選 `qwen3.8-max` 時保留；其他現有 Qwen 選項用 `qwen3.8-flash`。DeepSeek 統一用 `deepseek-flash`（Pro 不支持圖片）。實際使用的模型保存在結果 provenance，不更改用戶的文字問答／翻譯模型設定。
 
 非思考模式、temperature 0.2、輸出最多 1400 tokens；共享 ChatProvider 的白名單 endpoint、串流、限流和用量記錄。視覺請求首包預算 120 秒，文字問答預設仍為 30 秒。最多 2 個活動 pipeline、100 個排隊圖片，單張最多 5 分鐘。每個 `(documentId, figureId)` 同時只有一個生成。取消、設定／憑據變更、刪文獻、文庫維護及退出時停止相關 pipeline；已開始的原子提交必須等待完成。
 
@@ -75,4 +75,4 @@ Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RP
 
 使用者要求停止額外驗證前，圖片解析／保存、ChatProvider、Core RPC 四組 **47 項**針對性測試通過。後續維護了 RPC 名稱一致性、圖片首包預算及 JPEG 傳輸身份的回歸用例，依使用者要求未再執行；未跑 smoke、E2E、應用重建或打包。最近一次 typecheck 尚有既有 `renderer/paperArchive/ArchiveDetail.tsx:120` 的 TS7030，不宣稱全倉型別檢查通過。
 
-Codex 可作為已啟用的首選服務：沿用版本 2 發送授權，使用服務連接中選定的 Codex 問答模型；不讀取 API Key。圖片還需模型支持 image，否則明確失敗。結果仍經既有 schema／grounding 校驗與原子保存。運行時與資料庫 provider 擴展見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)，設定步驟見 [服務配置](wiki/Service-Setup.md)。
+Codex 可作為已啟用的首選服務：使用服務連接中選定的 Codex 問答模型；不讀取 API Key。圖片還需模型支持 image，否則明確失敗。結果仍經既有 schema／grounding 校驗與原子保存。運行時與資料庫 provider 擴展見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)，設定步驟見 [服務配置](wiki/Service-Setup.md)。
