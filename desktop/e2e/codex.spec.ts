@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, openPaperFromHome, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
 
 test('Codex settings and grounded chat use the local app-server without API keys', async () => {
   test.skip(process.env.COPILOTIX_CODEX_LIVE !== '1', 'Explicit opt-in: sends only synthetic fixture text to the local Codex login')
@@ -48,7 +48,7 @@ test('Codex settings and grounded chat use the local app-server without API keys
     }, process.env.CODEX_TEST_MODEL)
     await page.locator('[data-edge-dock="top"]').hover()
     await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /新解析$/u }).click()
-    await openPaperFromHome(page, documentId)
+    await openPaperFromLibrary(page, documentId)
     await page.locator('.reader-tab', { hasText: 'Chat' }).click()
     const input = page.getByRole('textbox', { name: '向当前论文提问' })
     await expect(input).toBeEnabled({ timeout: 30_000 })

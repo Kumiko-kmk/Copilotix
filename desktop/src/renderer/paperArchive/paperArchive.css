@@ -1,16 +1,18 @@
 /* Paper archive (文库): layout and motion adapted from RhineLabUI (MIT, LBEILC), recoloured to Copilotix. */
 .paper-archive-page {
   --archive-bg: var(--surface);
-  --archive-floor: #dccdbb;
-  --archive-card: #fff7ed;
+  /* Floor, cards, edges and index inlays follow the colour theme (theme.ts); read by the 3D scene. */
+  --archive-floor: var(--theme-archive-floor);
+  --archive-card: var(--theme-archive-card);
   --archive-card-selected: #ffffff;
-  --archive-edge: #fff5e9;
+  --archive-edge: var(--theme-archive-edge);
+  --archive-tray: var(--theme-archive-tray);
   --archive-accent: var(--primary);
-  --archive-index-done: #e4d6c5;
+  --archive-index-done: var(--theme-archive-index);
   --archive-index-active: var(--primary);
   --archive-index-partial: #d39b35;
   --archive-index-failed: #cf5049;
-  --archive-index-empty: #e4d6c5;
+  --archive-index-empty: var(--theme-archive-index);
   --archive-gutter: clamp(28px, 4.4vw, 64px);
   /* The browse panel and the detail panel share one left edge. */
   --archive-detail-width: min(560px, 42vw);

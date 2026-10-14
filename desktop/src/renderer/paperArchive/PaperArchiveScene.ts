@@ -133,7 +133,8 @@ const PAGE_HEIGHT = 3.15
 const PAGE_MAX_WIDTH = 4.5
 const UP = new Vector3(0, 1, 0)
 // The array's dark inner diffuser and the light tray of the extracted card, blended with the camera.
-const ARRAY_TRAY = new Color('#806447')
+/** The calibrated diffuser colour; a colour theme may replace it (ArchivePalette.tray). */
+const ARRAY_TRAY = '#806447'
 const DETAIL_TRAY = new Color('#efe7da')
 const SHELL_SURFACES = ['Frosted_Polymer', 'Ivory_Edges', 'Index_Inlay', 'Titanium_Fasteners', 'Optical_Diffuser'] as const
 type ShellSurface = typeof SHELL_SURFACES[number]
@@ -144,6 +145,8 @@ export interface ArchivePalette {
   card: string
   cardSelected: string
   edge: string
+  /** Diffuser seen through the frosted cassettes. */
+  tray?: string
   accent: string
   index: Record<'done' | 'active' | 'partial' | 'failed' | 'empty', string>
 }
@@ -423,7 +426,7 @@ export class PaperArchiveScene {
       if (name === 'Frosted_Polymer') material = this.heroCoverMaterial()
       if (name === 'Index_Inlay') material = this.heroIndex = new MeshStandardMaterial({ roughness: 0.5, metalness: 0.05, envMapIntensity: 0.6 })
       // A light tray behind the page, so the cleared card reads as paper rather than the array's dark core.
-      if (name === 'Optical_Diffuser') material = this.heroTray = new MeshStandardMaterial({ color: ARRAY_TRAY, roughness: 0.7 })
+      if (name === 'Optical_Diffuser') material = this.heroTray = new MeshStandardMaterial({ color: this.arrayTray, roughness: 0.7 })
       if (material !== mesh.material) this.disposables.push(material)
       const part = new Mesh(mesh.geometry, material)
       part.castShadow = name === 'Optical_Diffuser'
@@ -717,7 +720,7 @@ export class PaperArchiveScene {
     }
     if (name === 'Ivory_Edges') return new MeshStandardMaterial({ roughness: 0.38, metalness: 0, envMapIntensity: 0.6 })
     if (name === 'Index_Inlay') return new MeshStandardMaterial({ roughness: 0.5, metalness: 0.05, envMapIntensity: 0.6 })
-    if (name === 'Optical_Diffuser') return new MeshStandardMaterial({ color: '#806447', roughness: 0.7 })
+    if (name === 'Optical_Diffuser') return new MeshStandardMaterial({ color: this.arrayTray, roughness: 0.7 })
     const material = source.clone()
     material.envMapIntensity = 0.6
     return material
@@ -734,11 +737,15 @@ export class PaperArchiveScene {
     ;(this.strip.material as MeshBasicMaterial).color.set(palette.accent)
     ;(this.heroUniforms.uScanColor.value as Color).set(palette.accent)
     this.edgeColor.set(palette.edge)
+    this.arrayTray.set(palette.tray ?? ARRAY_TRAY)
+    const diffuser = this.surfaces.get('Optical_Diffuser')
+    if (diffuser) (diffuser.material as MeshStandardMaterial).color.copy(this.arrayTray)
     this.applyPalette()
     this.wake()
   }
 
   private readonly edgeColor = new Color()
+  private readonly arrayTray = new Color(ARRAY_TRAY)
 
   private applyPalette(): void {
     const edges = this.surfaces.get('Ivory_Edges')
@@ -1358,7 +1365,7 @@ export class PaperArchiveScene {
         this.hero.quaternion.copy(this.heroRotation)
         const paper = selectedShelf ? selectedShelf.papers[wrap(selected.row, selectedShelf.papers.length)] ?? null : null
         this.heroIndex?.color.copy(this.palette.index.get(indexTone(paper))!)
-        this.heroTray?.color.copy(ARRAY_TRAY).lerp(DETAIL_TRAY, this.detail)
+        this.heroTray?.color.copy(this.arrayTray).lerp(DETAIL_TRAY, this.detail)
       }
     }
     this.updateCamera()

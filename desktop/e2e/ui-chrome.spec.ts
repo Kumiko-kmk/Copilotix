@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, openPaperFromHome, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
 import { MAX_PDF_PAGES } from '../src/shared/constants'
 
 const MINIMAP_TRANSLATED_MARKDOWN = [
@@ -71,7 +71,7 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
   }
 })
 
-test('keeps the new parse page static across supported sizes and themes', async () => {
+test('keeps the new parse page layout across supported sizes and themes', async () => {
   const workspace = await createE2EWorkspace()
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -91,7 +91,9 @@ test('keeps the new parse page static across supported sizes and themes', async 
     expect(compactViewport[0]).toBeLessThanOrEqual(1102)
     expect(compactViewport[1]).toBeGreaterThanOrEqual(700)
     expect(compactViewport[1]).toBeLessThanOrEqual(702)
-    await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
+    // The only canvas is the cipher backdrop; the hero itself stays DOM.
+    await expect(window.locator('.new-parse-page canvas')).toHaveCount(1)
+    await expect(window.locator('.new-parse-page canvas.home-cipher')).toHaveCount(1)
     await expect(window.locator('.titlebar-brand')).toHaveCount(0)
     await expect(window.getByRole('img', { name: 'COPILOTIX' })).toBeVisible()
     await expect(window.locator('.copilotix-wordmark span')).toHaveCount(10)
@@ -128,7 +130,9 @@ test('keeps the new parse page static across supported sizes and themes', async 
     expect(spaciousViewport[0]).toBeLessThanOrEqual(1442)
     expect(spaciousViewport[1]).toBeGreaterThanOrEqual(900)
     expect(spaciousViewport[1]).toBeLessThanOrEqual(902)
-    await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
+    // The only canvas is the cipher backdrop; the hero itself stays DOM.
+    await expect(window.locator('.new-parse-page canvas')).toHaveCount(1)
+    await expect(window.locator('.new-parse-page canvas.home-cipher')).toHaveCount(1)
     await expect(window.locator('.app-shell')).toHaveCSS('border-radius', '8px')
     await expect(window.locator('.main-surface')).toHaveCSS('border-radius', '0px')
     await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
@@ -317,8 +321,8 @@ test('provides an interactive minimap for original and translated Markdown', asy
   try {
     const window = await app.firstWindow()
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 700))
-    // Papers open from the home shelf (or the library); the task list was removed.
-    await openPaperFromHome(window, taskId)
+    // Papers open from the library search; the task list and home shelf were removed.
+    await openPaperFromLibrary(window, taskId)
 
     // Opening a paper loads its details through IPC before the Markdown pane exists.
     await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })

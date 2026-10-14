@@ -12,12 +12,13 @@ import type {
   TranslationProviderId
 } from '@shared/types'
 import type { StorageInfo, UsageAnalytics, UsageAnalyticsDay } from '@shared/ipcSchemas'
+import ThemeSettings from '../components/ThemeSettings'
 import { CodexSettingsCard } from '../components/CodexSettingsCard'
 import { ServiceCard } from '../components/ServiceCard'
 import PageBrand from '../components/PageBrand'
 import type { SettingsNavigationGuard } from '../settingsNavigation'
 
-type Section = 'connections' | 'models' | 'storage'
+type Section = 'connections' | 'models' | 'storage' | 'theme'
 
 interface DraftCredential {
   value: string
@@ -315,6 +316,7 @@ export default function SettingsPage(props: {
           <button className={section === 'connections' ? 'active' : ''} onClick={() => setSection('connections')}><small aria-hidden="true">01</small>服务连接</button>
           <button className={section === 'models' ? 'active' : ''} onClick={() => setSection('models')}><small aria-hidden="true">02</small>模型设置</button>
           <button className={section === 'storage' ? 'active' : ''} onClick={() => setSection('storage')}><small aria-hidden="true">03</small>文件存储</button>
+          <button className={section === 'theme' ? 'active' : ''} onClick={() => setSection('theme')}><small aria-hidden="true">04</small>主题外观</button>
         </nav>
         <div className="settings-content">
           <div className="settings-content-body">
@@ -464,6 +466,7 @@ export default function SettingsPage(props: {
               <Typography.Text className="storage-note" type="secondary">导出文库包含文档、标注和设置，不包含 API 密钥；导入或迁移会保留旧库并在完成后重启。</Typography.Text>
             </section>
           ) : null}
+          {section === 'theme' ? <ThemeSettings /> : null}
           </div>
           <div className="settings-actions">
             <Typography.Text type={hasUnsavedChanges ? 'warning' : 'secondary'}>{hasUnsavedChanges ? '有未保存的更改' : '所有更改均已保存'}</Typography.Text>

@@ -44,6 +44,7 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 - 不重複導覽標題、不用空白標題佔位、不加專屬外層 margin／padding／max-width；首張卡片的頂、左、右邊緣須與基準一致。
 - 卡片內距可自訂；以 `section`／`aria-label` 保留與導覽一致的區域名稱。測試驗證可按名稱查找、無重複標題及共用根類別。
 - 使用者已選擇設定離開確認：應用內離開設定頁時，有草稿須提供「保存并离开／放弃并离开／继续编辑」。保存失敗或憑據部分失敗留在原頁並保留失敗欄位；未保存 API Key 僅留記憶體。設定內頁籤切換保留草稿、不彈確認。
+- 設定「主題外觀」：`theme.ts` 六套紙墨主題寫入 :root 色 token（`--surface`／`--sheet`／`--ink`／`--primary`… 及文庫 3D 用 `--theme-archive-*`），antd、canvas 與 Three.js 均從 token 讀色；存於 localStorage `copilotix.theme.v1`、即時生效，不屬設定草稿與離開確認。新增顏色一律用 token，語義色（成功／警告／錯誤）、PDF 疊層與高亮色板除外。
 
 ## 4. 文檔庫維護契約
 
@@ -93,7 +94,7 @@ Codex 的進程隔離、兩條 FIFO、取消／超時、migration 5 恢復與測
 - Vitest 預設 ≤2 workers，Windows Playwright 單 worker；JUnit 放 `desktop/unit-test-results`。`desktop:test` 只跑核心 `.test.ts`；DOM／React 測試用 `.test.tsx`，由 `desktop:test:ui` 或 `desktop:test:full` 執行；發布腳本 `.test.mjs` 同樣只進完整回歸。新測試按功能加入現有套件，不為簡單 getter、動畫常數、CSS 或資料形狀再建文件。
 - Windows 原子 rename 對 EPERM／EACCES／EBUSY 最多約 6.3 秒有界重試；永久錯誤 exit 1，不用 copy／delete 替代。E2E 前須有 Setup、uninstaller、release-manifest、ZIP。
 - 僅「未打包＋NODE_ENV=test＋COPILOTIX_E2E_USER_DATA」用獨立 native vault service；夾具只清理自身六種 account，不碰真人憑據。問答 E2E 經真實設定 IPC 存假 Key，僅 mock provider HTTP。
-- 任務管理頁已移除；閱讀器一般經 `openPaperFromHome` 從首頁「繼續閱讀」（最近三篇）進入，等 reader-header（≤30 秒）及 Markdown ready 再互動，error 不算 ready；不加全局 retry／timeout 或降低斷言。文庫入口另測其返回路徑。
+- 任務管理頁與首頁「繼續閱讀」已移除；閱讀器一般經 `openPaperFromLibrary`（文庫搜尋 → 結果 `data-document-id` → 瀏覽面板「打开阅读」，無 WebGL 時結果直接開啟）進入，等 reader-header（≤30 秒）及 Markdown ready 再互動，error 不算 ready；不加全局 retry／timeout 或降低斷言。從文庫進入的 Reader 返回文庫。
 - 縮略圖截圖用直角 app-shell 與完整 CSS 像素裁切，channel delta ≤1、changedRatio ≤0.001；失敗保留 expected／actual PNG。
 
 ## 10. Markdown 公共格式與導出
@@ -111,6 +112,7 @@ Codex 的進程隔離、兩條 FIFO、取消／超時、migration 5 恢復與測
 
 - 當前開發入口為 `Copilotix-master-updated`／本地 `master`，包含文庫 UI 代碼與文檔。1.1.0 已發布；一次性未簽章例外已用完，後續發布仍受正式簽章門禁。
 - README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
+- 首頁背景為「解密字陣」`homeCipher.ts`：字元網格按字標實測字寬／行高對齊，避開前景塊；波浪只由開頁、點擊或 75–120 秒一次的自動波觸發，單向擴散不反彈，經 `homeWave.ts` 與字標逐字解碼同步；波後只浮現文庫論文的原文或譯文標題，不加編號（譯文標題閒時讀最近 10 篇，僅保留標題）。其餘六個背景方案原型（`gallery.html`）與舊等高線實作保存在 `docs/design/home-backdrops/`，不參與構建。
 
 ## 13. 文庫頁與 AI 解讀
 

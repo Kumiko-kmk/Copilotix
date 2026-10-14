@@ -275,7 +275,7 @@ export default function LibraryPage(props: {
               <p role="status">{matches.length ? `${matches.length} 篇论文${matches.length > SEARCH_LIMIT ? ` · 显示前 ${SEARCH_LIMIT} 篇，请细化关键词` : ''}` : '没有匹配的论文'}</p>
               <ul aria-label="搜索结果">
                 {matches.slice(0, SEARCH_LIMIT).map(({ paper: result, category }) => (
-                  <li key={result.id}><button type="button" onClick={() => chooseResult(result)}>
+                  <li key={result.id}><button type="button" data-document-id={result.id} onClick={() => chooseResult(result)}>
                     <span>{result.displayName}</span>
                     <small>{category} · {statusLabels[result.workflow.status]}{unsupported ? ' · 打开阅读' : ''}</small>
                   </button></li>
@@ -308,7 +308,7 @@ export default function LibraryPage(props: {
             onInspect={() => setInspecting(paper)} />
         </div>
       ) : paper ? (
-        <article ref={panelRef} className={`paper-archive-panel${returningId === paper.id ? ' returning' : ''}`} aria-live="polite">
+        <article ref={panelRef} className={`paper-archive-panel${returningId === paper.id ? ' returning' : ''}`} data-document-id={paper.id} aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
           <h2 key={paper.id} className="paper-archive-title"><span>{displayTitle}</span></h2>
           <BrowseTranslatedTitle paper={paper} />
@@ -487,6 +487,7 @@ function readPalette(element: HTMLElement): ArchivePalette {
     cardSelected: token('--archive-card-selected', '#ffffff'),
     edge: token('--archive-edge', '#fff5e9'),
     accent: token('--archive-accent', '#5b58d6'),
+    tray: token('--archive-tray', '#806447'),
     index: {
       done: token('--archive-index-done', '#e4d6c5'),
       active: token('--archive-index-active', '#5b58d6'),

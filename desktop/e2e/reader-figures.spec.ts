@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, openPaperFromHome, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
 
 test('renders every row of a compound figure and reveals its hidden PDF from a maximized reader', async () => {
   const workspace = await createE2EWorkspace()
@@ -34,7 +34,7 @@ test('renders every row of a compound figure and reveals its hidden PDF from a m
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await openPaperFromHome(window, documentId)
+    await openPaperFromLibrary(window, documentId)
     await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
     await window.keyboard.press('Control+2')
     let pane = window.locator('.reader-tab-panel.active').filter({ has: window.locator('.markdown-pane') }).first()

@@ -11,6 +11,29 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('SettingsPage colour themes', () => {
+  it('applies a theme at once, remembers it on this device and leaves the saved settings untouched', () => {
+    Object.defineProperty(window, 'copilotix', {
+      configurable: true,
+      value: { getUsageAnalytics: vi.fn(async () => ({ days: [] })) } as unknown as CopilotixDesktopApi
+    })
+    window.localStorage.removeItem('copilotix.theme.v1')
+    render(<SettingsPage settings={configuredSettings()} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /主题外观/u }))
+    expect(document.querySelector('.settings-content-body > .settings-section.theme-settings')).toBeTruthy()
+    const themes = within(screen.getByRole('radiogroup', { name: '主题色' })).getAllByRole('radio')
+    expect(themes.length).toBeGreaterThanOrEqual(6)
+    fireEvent.click(screen.getByRole('radio', { name: /朱砂/u }))
+    expect(document.documentElement.style.getPropertyValue('--primary')).toBe('#b8432f')
+    expect(document.documentElement.style.getPropertyValue('--theme-archive-tray')).toBe('#86553e')
+    expect(window.localStorage.getItem('copilotix.theme.v1')).toBe('cinnabar')
+    expect(screen.getByRole('radio', { name: /朱砂/u })).toHaveProperty('checked', true)
+    expect(screen.getByText('所有更改均已保存')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: /档案纸/u }))
+    expect(document.documentElement.style.getPropertyValue('--primary')).toBe('#5b58d6')
+  })
+})
+
 describe('SettingsPage credential editor', () => {
   it('renders activity and provider token history in two chart panels', async () => {
     const days = Array.from({ length: 84 }, (_, index) => ({

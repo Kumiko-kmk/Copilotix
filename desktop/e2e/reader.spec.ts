@@ -1,7 +1,7 @@
 import { chromium, expect, test, type Locator, type Page } from '@playwright/test'
 import { execFileSync, spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, openPaperFromHome, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
 import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
 import type { CopilotixDesktopApi } from '../src/shared/types'
 
@@ -595,16 +595,14 @@ test('shows a recoverable error when the local PDF is missing', async () => {
   }
 })
 
-test('shows the parsed English title on the home shelf and in the Reader header', async () => {
+test('shows the parsed English title in library search and in the Reader header', async () => {
   const workspace = await createE2EWorkspace()
-  await seedReaderTask(workspace, { englishTitle: 'Attention Is All You Need' })
+  const documentId = await seedReaderTask(workspace, { englishTitle: 'Attention Is All You Need' })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    const paper = window.locator('.shelf-card', { hasText: 'Attention Is All You Need' })
-    await expect(paper).toBeVisible()
-    await paper.click()
-    await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need.pdf')
+    await openPaperFromLibrary(window, documentId)
+    await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need')
   } finally {
     await app.close()
     await workspace.cleanup()
@@ -683,7 +681,7 @@ test('renders and safely links an optional real Copilotix task', async () => {
 })
 
 async function openPaper(window: Page, taskId: string): Promise<void> {
-  await openPaperFromHome(window, taskId)
+  await openPaperFromLibrary(window, taskId)
   await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
   // Image/font readiness has a production 30 s deadline. Wait for the actual
   // ready/error state, failing promptly on errors rather than operating during loading.

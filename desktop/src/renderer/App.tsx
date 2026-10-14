@@ -143,7 +143,6 @@ export default function App(): React.JSX.Element {
   }, [queryClient, requestViewChange])
 
   // The reader returns to where it was opened from; the home page otherwise.
-  const openDocument = React.useCallback((documentId: string) => requestViewChange({ name: 'reader', documentId }), [requestViewChange])
   const openFromLibrary = React.useCallback((documentId: string) => requestViewChange({ name: 'reader', documentId, returnTo: 'library' }), [requestViewChange])
   const openFromTutorial = React.useCallback((documentId: string) => requestViewChange({ name: 'reader', documentId, returnTo: 'tutorial' }), [requestViewChange])
   const onSettingsSaved = React.useCallback((next: AppSettings) => {
@@ -169,9 +168,7 @@ export default function App(): React.JSX.Element {
           <NewParsePage
             settings={settings}
             documents={documents}
-            onOpenDocument={openDocument}
-            onOpenLibrary={() => requestViewChange({ name: 'library' })}
-            // New papers appear at the head of "继续阅读" with their progress.
+            // New papers join the library, and the home backdrop's titles, as soon as they are listed.
             onCreated={() => void queryClient.invalidateQueries({ queryKey: ['documents'] })}
             onOpenSettings={() => requestViewChange({ name: 'settings' })}
             onOpenTutorial={() => requestViewChange({ name: 'tutorial' })}

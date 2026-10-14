@@ -162,7 +162,7 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
     <section className="reader-page">
       {contextHolder}
       <header className="reader-header">
-        <div className="reader-header-heading"><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></div>
+        <div className="reader-header-heading"><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName.replace(/\.pdf\s*$/iu, '')}</Typography.Text></div>
         <Space className="reader-header-actions">
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
           <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />

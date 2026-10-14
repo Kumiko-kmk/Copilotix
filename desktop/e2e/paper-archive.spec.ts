@@ -137,7 +137,7 @@ for (const disableWebGL of [false, true]) {
         await archive.getByRole('button', { name: '打开阅读' }).click()
       }
       await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
-      await expect(window.locator('.reader-title')).toHaveText('Archive Alpha.pdf')
+      await expect(window.locator('.reader-title')).toHaveText('Archive Alpha')
       const markdown = window.locator('.reader-tab-panel.active .markdown-scroll')
       await expect(markdown).toHaveAttribute('data-render-state', /^(ready|error)$/, { timeout: 31_000 })
       await expect(markdown).toHaveAttribute('data-render-state', 'ready')

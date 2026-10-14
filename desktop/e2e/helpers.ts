@@ -2,7 +2,7 @@ import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'n
 import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { _electron as electron, type Page } from '@playwright/test'
+import { _electron as electron, expect, type Page } from '@playwright/test'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/core/blockMapping'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/shared/translationPlanProtocol'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
@@ -429,15 +429,22 @@ function createTwoPagePdf(): Buffer {
 }
 
 /**
- * Opens a paper the way users reach it now that the task list is gone: from the home page's
- * "继续阅读" shelf, which holds the three most recently updated papers. Seed at most three
- * papers (or update the wanted one last) before calling this.
+ * Opens a paper the way a user finds it now that the home page has no shelf: the library search,
+ * then 「打开阅读」 on its browse panel. Without WebGL the search result opens the Reader directly.
  */
-export async function openPaperFromHome(window: Page, documentId: string): Promise<void> {
-  const card = window.locator(`.shelf-card[data-document-id="${documentId}"]`)
-  if (!(await window.locator('.new-parse-page').isVisible())) {
+export async function openPaperFromLibrary(window: Page, documentId: string): Promise<void> {
+  const archive = window.getByRole('region', { name: '文库', exact: true })
+  if (!(await archive.isVisible())) {
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '新解析' }).click()
+    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
   }
-  await card.click()
+  const name = await window.evaluate(async (id) => {
+    const api = (globalThis as unknown as { copilotix: { listDocuments(): Promise<Array<{ id: string; displayName: string }>> } }).copilotix
+    return (await api.listDocuments()).find((document) => document.id === id)?.displayName ?? ''
+  }, documentId)
+  await archive.getByRole('searchbox', { name: '搜索文库' }).fill(name.replace(/\.pdf\s*$/iu, ''))
+  await archive.locator(`#paper-archive-results button[data-document-id="${documentId}"]`).click()
+  const panel = archive.locator(`.paper-archive-panel[data-document-id="${documentId}"]`)
+  await expect(panel.or(window.locator('.reader-header'))).toBeVisible({ timeout: 20_000 })
+  if (await panel.isVisible()) await panel.getByRole('button', { name: /打开阅读/u }).click()
 }

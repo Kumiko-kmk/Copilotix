@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, seedReaderTask, openPaperFromHome } from './helpers'
+import { createE2EWorkspace, launchElectron, seedReaderTask, openPaperFromLibrary } from './helpers'
 async function controls(page: Page) {
   const group = page.getByRole('group', { name: '窗口控制' })
   await expect(group).toBeVisible()
@@ -24,7 +24,7 @@ test('window controls stay visible and clickable across pages, maximize and moda
       await page.mouse.move(200, 200)
       await controls(page)
     }
-    await openPaperFromHome(page, id)
+    await openPaperFromLibrary(page, id)
     await expect(page.locator('.reader-header')).toBeVisible()
     await controls(page)
     await page.getByRole('button', { name: '最大化窗口', exact: true }).click()

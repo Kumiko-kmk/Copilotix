@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { copyFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, openPaperFromHome, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
 
 async function navigate(page: Page, name: string) {
   await page.locator('[data-edge-dock="top"]').hover()
@@ -16,7 +16,7 @@ test('long paper titles keep every reader action inside the minimum window', asy
   try {
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 700))
     const page = await app.firstWindow()
-    await openPaperFromHome(page, documentId)
+    await openPaperFromLibrary(page, documentId)
     await expect(page.locator('.reader-header')).toBeVisible()
     const metrics = await page.locator('.reader-header').evaluate(header => ({
       viewport: innerWidth, scrollWidth: header.scrollWidth, width: header.clientWidth,
@@ -61,7 +61,7 @@ test('failed papers show a readable error and WebGL fallback still opens the rea
   const documentId = await seedReaderTask(workspace, { missingPdf: true, sourceMarkdown: '' })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
-    const page = await app.firstWindow(); await openPaperFromHome(page, documentId)
+    const page = await app.firstWindow(); await openPaperFromLibrary(page, documentId)
     await expect(page.getByRole('alert')).toContainText('原文未生成，文档处理失败')
     await expect(page.getByRole('button', { name: '重试文档处理', exact: true })).toBeVisible()
     await navigate(page, '新解析')
