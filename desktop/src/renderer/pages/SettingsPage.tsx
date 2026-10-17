@@ -13,6 +13,7 @@ import type {
 } from '@shared/types'
 import type { StorageInfo, UsageAnalytics, UsageAnalyticsDay } from '@shared/ipcSchemas'
 import ThemeSettings from '../components/ThemeSettings'
+import { previewAppearance, saveAppearance, storedAppearance, type Appearance } from '../theme'
 import { CodexSettingsCard } from '../components/CodexSettingsCard'
 import { ServiceCard } from '../components/ServiceCard'
 import PageBrand from '../components/PageBrand'
@@ -194,7 +195,38 @@ export default function SettingsPage(props: {
     }
   }, [credentials, messageApi])
 
+  // Appearance previews at once and is saved or reverted with the rest of the page.
+  const [appearance, setAppearance] = React.useState<Appearance>(storedAppearance)
+  const [savedAppearance, setSavedAppearance] = React.useState<Appearance>(storedAppearance)
+  const appearanceChanged = appearance.themeId !== savedAppearance.themeId || appearance.readerFontSize !== savedAppearance.readerFontSize
+  const changeAppearance = React.useCallback((next: Appearance) => {
+    setAppearance(next)
+    previewAppearance(next)
+  }, [])
+  // Leaving without saving (or closing the window) never keeps a previewed appearance.
+  React.useEffect(() => () => previewAppearance(storedAppearance()), [])
+
+  const settingsChanged = React.useMemo(() => {
+    const { credentials: _draftCredentials, ...draftSettings } = draft
+    const { credentials: _savedCredentials, ...savedSettings } = props.settings
+    const publicSettingsChanged = JSON.stringify(draftSettings) !== JSON.stringify(savedSettings)
+    const credentialsChanged = (['parser', 'qwen', 'deepseek'] as const).some((name) => {
+      const entry = credentials[name]
+      return entry.clear || Boolean(entry.value.trim())
+    })
+    return publicSettingsChanged || credentialsChanged
+  }, [credentials, draft, props.settings])
+
   const save = React.useCallback(async (): Promise<boolean> => {
+    if (appearanceChanged) {
+      // Local and infallible, so it is kept even if the settings below fail to save.
+      saveAppearance(appearance)
+      setSavedAppearance(appearance)
+      if (!settingsChanged) {
+        messageApi.success('设置已保存')
+        return true
+      }
+    }
     setSaving(true)
     try {
       const credentialMutations: Partial<Record<CredentialName, CredentialMutation>> = {}
@@ -235,7 +267,7 @@ export default function SettingsPage(props: {
     } finally {
       setSaving(false)
     }
-  }, [credentials, draft, messageApi, props.onSaved, refreshStorageInfo, section])
+  }, [appearance, appearanceChanged, credentials, draft, messageApi, props.onSaved, refreshStorageInfo, section, settingsChanged])
 
   const moveProvider = React.useCallback((source: TranslationProviderId, target: TranslationProviderId) => {
     setDraft((current) => {
@@ -284,22 +316,15 @@ export default function SettingsPage(props: {
     }))
   }, [draft.translationProviderOrder])
 
-  const hasUnsavedChanges = React.useMemo(() => {
-    const { credentials: _draftCredentials, ...draftSettings } = draft
-    const { credentials: _savedCredentials, ...savedSettings } = props.settings
-    const publicSettingsChanged = JSON.stringify(draftSettings) !== JSON.stringify(savedSettings)
-    const credentialsChanged = (['parser', 'qwen', 'deepseek'] as const).some((name) => {
-      const entry = credentials[name]
-      return entry.clear || Boolean(entry.value.trim())
-    })
-    return publicSettingsChanged || credentialsChanged
-  }, [credentials, draft, props.settings])
+  const hasUnsavedChanges = settingsChanged || appearanceChanged
 
   const discard = React.useCallback(() => {
     setDraft(props.settings)
     setCredentials(initialCredentials(props.settings))
     setCredentialErrors({})
-  }, [props.settings])
+    setAppearance(savedAppearance)
+    previewAppearance(savedAppearance)
+  }, [props.settings, savedAppearance])
 
   const onNavigationGuardChange = props.onNavigationGuardChange
   React.useLayoutEffect(() => {
@@ -466,7 +491,7 @@ export default function SettingsPage(props: {
               <Typography.Text className="storage-note" type="secondary">导出文库包含文档、标注和设置，不包含 API 密钥；导入或迁移会保留旧库并在完成后重启。</Typography.Text>
             </section>
           ) : null}
-          {section === 'theme' ? <ThemeSettings /> : null}
+          {section === 'theme' ? <ThemeSettings value={appearance} onChange={changeAppearance} /> : null}
           </div>
           <div className="settings-actions">
             <Typography.Text type={hasUnsavedChanges ? 'warning' : 'secondary'}>{hasUnsavedChanges ? '有未保存的更改' : '所有更改均已保存'}</Typography.Text>

@@ -119,19 +119,61 @@ export function applyTheme(theme: ThemeDefinition, root: HTMLElement = document.
 
 export function selectTheme(id: string): ThemeDefinition {
   const theme = findTheme(id)
-  try {
-    window.localStorage.setItem(STORAGE_KEY, theme.id)
-  } catch {
-    // The choice still applies for this session.
-  }
+  writeStored(STORAGE_KEY, theme.id)
   applyTheme(theme)
   return theme
 }
 
+/**
+ * Appearance: the colour theme and the reader's text size. Settings previews a choice at once,
+ * and saves or reverts it with the page's own 保存全部更改 / 放弃更改.
+ */
+export interface Appearance {
+  themeId: string
+  readerFontSize: number
+}
+
+const FONT_KEY = 'copilotix.reader.font-size.v1'
+export const READER_FONT_SIZES = { min: 13, max: 22, step: 1, default: 16 } as const
+
+function writeStored(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // The choice still applies for this session.
+  }
+}
+
+function clampFontSize(value: number): number {
+  if (!Number.isFinite(value)) return READER_FONT_SIZES.default
+  return Math.min(READER_FONT_SIZES.max, Math.max(READER_FONT_SIZES.min, Math.round(value)))
+}
+
+export function storedAppearance(): Appearance {
+  let size: string | null = null
+  try {
+    size = window.localStorage.getItem(FONT_KEY)
+  } catch {
+    size = null
+  }
+  return { themeId: findTheme(storedThemeId()).id, readerFontSize: size === null ? READER_FONT_SIZES.default : clampFontSize(Number(size)) }
+}
+
+/** Applies an appearance without remembering it. */
+export function previewAppearance(appearance: Appearance, root: HTMLElement = document.documentElement): void {
+  if (current.id !== appearance.themeId || root.dataset.colorTheme !== appearance.themeId) applyTheme(findTheme(appearance.themeId), root)
+  root.style.setProperty('--reader-font-size', `${clampFontSize(appearance.readerFontSize)}px`)
+}
+
+export function saveAppearance(appearance: Appearance): void {
+  writeStored(STORAGE_KEY, findTheme(appearance.themeId).id)
+  writeStored(FONT_KEY, String(clampFontSize(appearance.readerFontSize)))
+  previewAppearance(appearance)
+}
+
 export function restoreTheme(): ThemeDefinition {
-  const theme = findTheme(storedThemeId())
-  applyTheme(theme)
-  return theme
+  previewAppearance(storedAppearance())
+  return current
 }
 
 export function onThemeChange(listener: (theme: ThemeDefinition) => void): () => void {

@@ -409,6 +409,19 @@ button, input, select { font: inherit; }
 .theme-card-heading em { color: var(--primary); font-size: 11px; font-style: normal; font-weight: 650; letter-spacing: .1em; white-space: nowrap; }
 .theme-swatches { display: flex; gap: 3px; }
 .theme-swatches i { flex: 1; height: 10px; max-width: 18px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent); }
+/* Reader text size, below the themes. */
+.reader-font-setting { align-items: start; }
+.reader-font-control { display: grid; min-width: 0; gap: 12px; padding: 14px 18px 16px; border-radius: 4px; background: var(--lift); }
+.reader-font-stepper { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.reader-font-stepper > button { height: 30px; min-width: 38px; padding: 0 8px; border: 1px solid var(--rule-strong); border-radius: 2px; color: var(--ink); background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; letter-spacing: .04em; transition: color .15s ease, border-color .15s ease; }
+.reader-font-stepper > button:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.reader-font-stepper > button:disabled { opacity: .35; cursor: default; }
+.reader-font-stepper > button:focus-visible, .reader-font-stepper input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.reader-font-stepper input { flex: 1; min-width: 80px; max-width: 360px; accent-color: var(--primary); cursor: pointer; }
+.reader-font-stepper output { min-width: 54px; color: var(--ink); font-size: 22px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.reader-font-stepper output small { margin-left: 3px; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
+.reader-font-stepper .reader-font-reset { border-color: transparent; color: var(--muted); font-weight: 600; }
+.reader-font-sample { margin: 0; overflow: hidden; color: var(--text); line-height: 1.78; text-align: justify; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .settings-actions { position: relative; z-index: 2; display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 20px; padding: 10px 0 0; border-top: 1px solid var(--rule); background: var(--surface); }
 .settings-actions > .ant-typography { font-size: 12px; letter-spacing: .08em; }
 .settings-action-buttons { display: flex; gap: 12px; }
@@ -559,7 +572,8 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-render-status .ant-alert { width: min(560px, 90%); }
 .markdown-render-loading .markdown-body, .markdown-render-preparing .markdown-body, .markdown-render-error .markdown-body { visibility: hidden; pointer-events: none; }
 .markdown-pane[data-render-state="loading"] .markdown-minimap, .markdown-pane[data-render-state="preparing"] .markdown-minimap, .markdown-pane[data-render-state="error"] .markdown-minimap { visibility: hidden; pointer-events: none; }
-.markdown-body { max-width: 900px; margin: 0 auto; padding: 15px 42px 60px; color: var(--text); font-size: 16px; line-height: 1.78; }
+/* The reader's text size comes from Settings (theme.ts, --reader-font-size); everything below scales with it. */
+.markdown-body { max-width: 900px; margin: 0 auto; padding: 15px 42px 60px; color: var(--text); font-size: var(--reader-font-size, 16px); line-height: 1.78; }
 .markdown-block { position: relative; margin: 0 -12px; padding: 1px 12px; border: 1px solid transparent; border-radius: 2px; content-visibility: auto; contain-intrinsic-block-size: auto 48px; transition: background .15s ease; }
 .markdown-block:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
 .markdown-block.active { background: color-mix(in srgb, var(--primary-soft) 62%, transparent); box-shadow: inset 2px 0 0 var(--primary); }
@@ -578,7 +592,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .reader-annotation-toolbar.below .reader-highlight-palette { top: calc(100% + 8px); bottom: auto; }
 .reader-highlight-palette button { width: 20px; height: 20px; padding: 0; border: 2px solid var(--sheet); border-radius: 0; background: var(--highlight-swatch); box-shadow: 0 0 0 1px color-mix(in srgb, var(--highlight-swatch) 65%, #777); cursor: pointer; }
 .reader-highlight-palette button.active { box-shadow: 0 0 0 2px var(--text); }
-.markdown-supplemental { margin-block: 4px; color: #969ca8; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.markdown-supplemental { margin-block: 4px; color: #969ca8; font-size: .8125em; line-height: 1.55; white-space: pre-wrap; }
 .markdown-supplemental p { margin: 0; }
 .markdown-supplemental a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .markdown-supplemental-page-header { margin-bottom: 7px; }
@@ -586,9 +600,9 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .reader-page-divider { display: flex; align-items: center; gap: 14px; margin: 9px -12px 11px; color: var(--muted); font-size: 11px; letter-spacing: .14em; line-height: 1; white-space: nowrap; }
 .reader-page-divider::before, .reader-page-divider::after { height: 1px; background: var(--rule); content: ""; flex: 1; }
 .markdown-body :is(h1, h2, h3, h4) { color: var(--ink); font-weight: 720; letter-spacing: .01em; }
-.markdown-body h1 { margin: 4px 0 11px; font-size: 30px; font-weight: 750; line-height: 1.25; }
-.markdown-body h2 { margin: 15px 0 .415em; font-size: 23px; }
-.markdown-body h3 { margin: 12px 0 .5em; font-size: 19px; }
+.markdown-body h1 { margin: 4px 0 11px; font-size: 1.875em; font-weight: 750; line-height: 1.25; }
+.markdown-body h2 { margin: 15px 0 .415em; font-size: 1.4375em; }
+.markdown-body h3 { margin: 12px 0 .5em; font-size: 1.1875em; }
 .markdown-body h4 { margin-block: .665em; }
 .markdown-body h5 { margin-block: .835em; }
 .markdown-body h6 { margin-block: 1.165em; }
@@ -599,7 +613,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-body blockquote, .markdown-body pre { margin-block: .5em; }
 .markdown-body hr { margin-block: .25em; }
 .markdown-body .markdown-block > p { margin-block: 3px; text-indent: 2em; }
-.markdown-body .markdown-block.reader-references { font-size: 13px; line-height: 1.4; }
+.markdown-body .markdown-block.reader-references { font-size: .8125em; line-height: 1.4; }
 .markdown-body .markdown-block.reader-references > p,
 .markdown-body .markdown-block.reader-references > ul,
 .markdown-body .markdown-block.reader-references > ol { margin-block: 2px; }
@@ -618,7 +632,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-body sub { bottom: -.2em; }
 .markdown-body .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding-block: 2px; }
 .markdown-table-scroll { width: 100%; margin-block: 5px; overflow-x: auto; overflow-y: hidden; }
-.markdown-body table { display: table; width: max-content; min-width: 100%; margin: 0; border-collapse: collapse; table-layout: auto; font-size: 13px; line-height: 1.35; }
+.markdown-body table { display: table; width: max-content; min-width: 100%; margin: 0; border-collapse: collapse; table-layout: auto; font-size: .8125em; line-height: 1.35; }
 .markdown-body th, .markdown-body td { max-width: 320px; padding: 3px 6px; border: 1px solid var(--rule); vertical-align: middle; overflow-wrap: break-word; word-break: normal; }
 .markdown-body code { padding: .15em .35em; border-radius: 2px; background: var(--muted-surface); }
 .markdown-body pre { padding: 14px; overflow: auto; border-radius: 4px; background: var(--muted-surface); }
