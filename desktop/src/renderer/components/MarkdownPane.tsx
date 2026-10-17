@@ -3,7 +3,6 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Button, Spin } from 'antd'
 import { HighlightOutlined, MessageOutlined, UnderlineOutlined } from '@ant-design/icons'
-import 'katex/dist/katex.min.css'
 import type { ReaderBlock } from '@shared/readerDocument'
 import {
   applyReaderAnnotationOperation,
@@ -28,7 +27,9 @@ import {
 } from '../readerAnnotations'
 import MarkdownMinimap from './MarkdownMinimap'
 import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnapshot'
-import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
+import ReaderFigureMosaic from './ReaderFigureMosaic'
+import { figureMosaic, type FigureMosaic } from '../readerFigureMosaic'
+import { figureAssetName, markdownAssetSources, type ReaderFigureGroup } from '@shared/readerFigureGroups'
 import { recordReaderDuration } from '../readerPerformance'
 import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
 import { readerReferenceSections } from '../readerReferenceSections'
@@ -156,25 +157,43 @@ export default function MarkdownPane(props: {
   )
   const allBlocksMounted = mountedCount >= props.blocks.length
   const figureGroupByBlockIndex = React.useMemo(() => {
-    const result = new Map<number, ReaderFigureGroup>()
+    const result = new Map<number, ReaderFigureGroup[]>()
     for (const group of props.figureGroups ?? []) {
-      for (const index of group.memberBlockIndexes) result.set(index, group)
+      for (const index of group.memberBlockIndexes) result.set(index, [...(result.get(index) ?? []), group])
     }
     return result
   }, [props.figureGroups])
   const figureRevision = contentRevision + '|' + props.pdfUrl
   const [figureStates, setFigureStates] = React.useState<{ revision: string; states: Record<string, FigureRenderState> }>({ revision: figureRevision, states: {} })
+  const readyFigureKey = figureStates.revision === figureRevision
+    ? Object.keys(figureStates.states).filter(id => figureStates.states[id] === 'ready').sort().join('\0') : ''
+  const readyFigureIds = React.useMemo(() => new Set(readyFigureKey ? readyFigureKey.split('\0') : []), [readyFigureKey])
+  const failedFigureKey = figureStates.revision === figureRevision
+    ? Object.keys(figureStates.states).filter(id => figureStates.states[id] === 'failed').sort().join('\0') : ''
+  // A figure without a PDF crop (unconfirmed, or its crop failed) keeps side-by-side panels
+  // where the PDF puts them instead of one image per line (readerFigureMosaic.ts).
+  const figureMosaics = React.useMemo(() => {
+    const failed = new Set(failedFigureKey ? failedFigureKey.split('\0') : [])
+    const groups = props.figureGroups ?? []
+    const result = new Map<string, FigureMosaic>()
+    for (const group of groups) {
+      if (group.status === 'complete' && !failed.has(group.id)) continue
+      // A panel claimed by two figures is shown once, in its own paragraph.
+      const names = new Set(group.assetSources.map(figureAssetName))
+      if (groups.some(other => other !== group && other.assetSources.some(asset => names.has(figureAssetName(asset))))) continue
+      const mosaic = figureMosaic(group, group.memberBlockIndexes.flatMap(index => markdownAssetSources(props.blocks[index]?.markdown ?? '')))
+      if (mosaic) result.set(group.id, mosaic)
+    }
+    return result
+  }, [props.figureGroups, props.blocks, failedFigureKey])
   const minimapVisualRevision = React.useMemo(() => JSON.stringify([
-    figureRevision,
-    figureStates.revision === figureRevision
-      ? Object.keys(figureStates.states).filter(id => figureStates.states[id] === 'ready').sort()
-      : []
-  ]), [figureRevision, figureStates])
-  const figuresSettled = !props.pdfUrl || Array.from(figureGroupByBlockIndex.entries()).every(([index, group]) =>
+    figureRevision, [...readyFigureIds], [...figureMosaics.keys()]
+  ]), [figureRevision, readyFigureIds, figureMosaics])
+  const figuresSettled = !props.pdfUrl || Array.from(figureGroupByBlockIndex.entries()).every(([index, groups]) => groups.every(group =>
     group.status !== 'complete' || group.ownerBlockIndex !== index || props.blocks[index]?.role !== 'content' ||
     (figureStates.revision === figureRevision &&
       (figureStates.states[group.id] === 'ready' || figureStates.states[group.id] === 'failed'))
-  )
+  ))
   const markMinimapPrepared = React.useCallback(() => {
     setRenderState(previous => previous.status === 'preparing' ? { status: 'ready' } : previous)
   }, [])
@@ -585,19 +604,20 @@ export default function MarkdownPane(props: {
         >
           {props.blocks.slice(0, mountedCount).map((block, index) => {
             const blockId = block.mappingIds[0] ?? `markdown-${index}`
-            const figureGroup = figureGroupByBlockIndex.get(index)
+            const figureGroups = figureGroupByBlockIndex.get(index)
             return (
               <MarkdownBlockView
                 key={`${blockId}-${index}`}
                 block={block}
                 referenceSection={referenceSections.has(index)}
-                active={props.selection !== null && (figureGroup
-                  ? figureGroup.ownerBlockIndex === index && figureGroup.mappingIds.includes(props.selection.mappingId)
+                active={props.selection !== null && (figureGroups
+                  ? figureGroups.some(group => group.ownerBlockIndex === index && group.mappingIds.includes(props.selection!.mappingId))
                   : block.mappingIds.includes(props.selection.mappingId))}
                 assetBaseUrl={props.assetBaseUrl}
                 pdfUrl={props.pdfUrl}
-                figureGroup={figureGroup}
-                figureReady={figureStates.revision === figureRevision && figureStates.states[figureGroup?.id ?? ''] === 'ready'}
+                figureGroups={figureGroups}
+                readyFigureIds={figureGroups ? readyFigureIds : NO_READY_FIGURES}
+                figureMosaics={figureGroups ? figureMosaics : NO_MOSAICS}
                 onFigureStateChange={setFigureState}
                 onOpenFigurePdf={props.onOpenFigurePdf}
                 blockIndex={index}
@@ -666,14 +686,17 @@ function stringArraysEqual(left: string[], right: string[]): boolean {
   return left === right || (left.length === right.length && left.every((value, index) => value === right[index]))
 }
 
+const NO_READY_FIGURES: ReadonlySet<string> = new Set()
+const NO_MOSAICS: ReadonlyMap<string, FigureMosaic> = new Map()
 const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   block: ReaderBlock
   referenceSection: boolean
   active: boolean
   assetBaseUrl: string
   pdfUrl?: string
-  figureGroup?: ReaderFigureGroup
-  figureReady: boolean
+  figureGroups?: ReaderFigureGroup[]
+  readyFigureIds: ReadonlySet<string>
+  figureMosaics: ReadonlyMap<string, FigureMosaic>
   onFigureStateChange(id: string, state: FigureRenderState): void
   onOpenFigurePdf?(selection: BlockSelection): void
   blockIndex: number
@@ -706,10 +729,9 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
     )
   }
 
-  const figureOwner = props.figureGroup?.ownerBlockIndex === props.blockIndex
-  const navigationMappingIds = props.figureGroup?.status === 'complete' && props.figureReady
-    ? [...(figureOwner ? props.figureGroup.mappingIds : []), ...props.block.mappingIds.filter(id => !props.figureGroup!.mappingIds.includes(id))]
-    : props.block.mappingIds
+  const readyGroups = props.figureGroups?.filter(group => group.status === 'complete' && props.readyFigureIds.has(group.id)) ?? []
+  const navigationMappingIds = [...new Set([...readyGroups.filter(group => group.ownerBlockIndex === props.blockIndex).flatMap(group => group.mappingIds),
+    ...props.block.mappingIds.filter(id => !readyGroups.some(group => group.mappingIds.includes(id)))])]
 
   return (
     <div
@@ -724,15 +746,16 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
         if (mappingId) props.onSelect({ mappingId, origin: 'markdown' })
       }}
     >
-      {props.figureGroup && props.pdfUrl ? (
+      {props.figureGroups && props.pdfUrl ? (
         <FigureBlockPresentation
           block={props.block}
           blockIndex={props.blockIndex}
-          group={props.figureGroup}
+          groups={props.figureGroups}
           pdfUrl={props.pdfUrl}
           assetBaseUrl={props.assetBaseUrl}
           onRendered={props.onFigureRendered}
-          ready={props.figureReady}
+          readyFigureIds={props.readyFigureIds}
+          mosaics={props.figureMosaics}
           onStateChange={props.onFigureStateChange}
           onOpenPdf={props.onOpenFigurePdf}
         />
@@ -746,49 +769,64 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
 function FigureBlockPresentation(props: {
   block: ReaderBlock
   blockIndex: number
-  group: ReaderFigureGroup
+  groups: ReaderFigureGroup[]
   pdfUrl: string
   assetBaseUrl: string
   onRendered(): void
-  ready: boolean
+  readyFigureIds: ReadonlySet<string>
+  mosaics: ReadonlyMap<string, FigureMosaic>
   onStateChange(id: string, state: FigureRenderState): void
   onOpenPdf?(selection: BlockSelection): void
 }): React.JSX.Element {
-  const isOwner = props.blockIndex === props.group.ownerBlockIndex
-  const isCaption = props.blockIndex === props.group.captionBlockIndex
-  const complete = props.group.status === 'complete'
-  const presentation = React.useMemo(() => ({
-    assets: props.group.assetSources,
-    hiddenTexts: props.group.supportingTextsByBlock?.[props.blockIndex] ?? props.group.members.filter(member => member.kind === 'supporting').map(member => member.sourceText),
-    ready: complete && props.ready
-  }), [props.group, props.blockIndex, complete, props.ready])
-  const mappingId = props.group.captionMappingId || props.group.mappingIds[0]
+  const owners = props.groups.filter(group => group.ownerBlockIndex === props.blockIndex)
+  const isCaption = props.groups.some(group => props.blockIndex === group.captionBlockIndex)
+  const presentation = React.useMemo(() => {
+    const ready = props.groups.filter(group => group.status === 'complete' && props.readyFigureIds.has(group.id))
+    return {
+    // A shared paragraph may contain one caption and another figure's image.
+    // Only successful crops can hide their own source assets and graphical text.
+    assets: props.groups.flatMap(group => group.assetSources),
+    // Panels drawn in a mosaic are hidden in every paragraph that holds them.
+    hiddenAssets: [...ready.flatMap(group => group.assetSources),
+      ...props.groups.flatMap(group => props.mosaics.get(group.id)?.tiles.map(tile => tile.sourceAsset) ?? [])],
+    hiddenTexts: ready.flatMap(group =>
+      group.supportingTextsByBlock?.[props.blockIndex] ?? group.members.filter(member => member.kind === 'supporting').map(member => member.sourceText)),
+    ready: true
+    }
+  }, [props.groups, props.blockIndex, props.readyFigureIds, props.mosaics])
   const source = <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} figurePresentation={presentation} />
   return (
     <>
-      {isOwner && complete ? (
+      {owners.filter(group => group.status === 'complete').map(group => (
         <ReaderFigureSnapshot
-          key={props.pdfUrl + '|' + props.group.id}
+          key={props.pdfUrl + '|' + group.id}
           pdfUrl={props.pdfUrl}
-          group={props.group}
+          group={group}
           preRender
           onRendered={props.onRendered}
-          onStateChange={state => props.onStateChange(props.group.id, state)}
+          onStateChange={state => props.onStateChange(group.id, state)}
         />
-      ) : null}
+      ))}
+      {owners.map(group => {
+        const mosaic = props.mosaics.get(group.id)
+        return mosaic ? <ReaderFigureMosaic key={'mosaic|' + group.id} mosaic={mosaic} assetBaseUrl={props.assetBaseUrl} /> : null
+      })}
       {isCaption ? <div className="reader-figure-caption">{source}</div> : source}
-      {isOwner && mappingId && props.onOpenPdf ? (
-        <button type="button" className="reader-figure-action" data-reader-annotation-ignore="true"
+      {props.onOpenPdf ? owners.map(group => {
+        const mappingId = group.captionMappingId || group.mappingIds[0]
+        return mappingId ? (
+        <button key={group.id} type="button" className="reader-figure-action" data-reader-annotation-ignore="true"
           onClick={event => {
             event.stopPropagation()
             // The selected mapping retains its stored identity. PDF reveals use
             // that mapping, not a synthetic figure ID.
-            props.onOpenPdf?.({ mappingId, blockPosition: props.group.captionBlockPosition ||
-              props.group.members.find(member => member.mappingId === mappingId)?.blockPosition, origin: 'markdown' })
-          }} aria-label={'查看 PDF 第 ' + (props.group.pageIndex + 1) + ' 页整图'}>
+            props.onOpenPdf?.({ mappingId, blockPosition: group.captionBlockPosition ||
+              group.members.find(member => member.mappingId === mappingId)?.blockPosition, origin: 'markdown' })
+          }} aria-label={'查看 PDF 第 ' + (group.pageIndex + 1) + ' 页整图'}>
           查看 PDF
         </button>
-      ) : null}
+        ) : null
+      }) : null}
     </>
   )
 }

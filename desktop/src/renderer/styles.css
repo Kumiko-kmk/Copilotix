@@ -740,3 +740,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 
 .token-line.codex { stroke: #60a88c; }
 .token-legend i.codex { background: #60a88c; }
+
+/* Figures without a PDF crop keep side-by-side panels at their PDF positions (ReaderFigureMosaic.tsx). */
+.reader-figure-mosaic { position: relative; max-width: 100%; margin: 8px auto; }
+.reader-figure-mosaic img { position: absolute; display: block; max-width: none; margin: 0; object-fit: contain; }

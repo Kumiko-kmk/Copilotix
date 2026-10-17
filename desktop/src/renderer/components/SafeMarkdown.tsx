@@ -10,7 +10,7 @@ import type { PluggableList } from 'unified'
 import 'katex/dist/katex.min.css'
 import rehypeTableMath from '../rehypeTableMath'
 import type { Citation } from '@shared/ragSchemas'
-import { figureAssetName, isFigureLabel } from '@shared/readerFigureGroups'
+import { figureAssetName } from '@shared/readerFigureGroups'
 
 const markdownSanitizeSchema = {
   ...defaultSchema,
@@ -33,7 +33,7 @@ const SafeMarkdown = React.memo(function SafeMarkdown(props: {
   /** Display numbers for verified evidence ids; defaults to the id itself. */
   citationLabels?: Record<string, number>
   onCitation?(citation: Citation): void
-  figurePresentation?: { assets: string[]; hiddenTexts: string[]; ready: boolean }
+  figurePresentation?: { assets: string[]; hiddenAssets?: string[]; hiddenTexts: string[]; ready: boolean }
   /** Compact text fields cannot contain block-level HTML or load embedded images. */
   inline?: boolean
   remarkPlugins?: PluggableList
@@ -44,7 +44,8 @@ const SafeMarkdown = React.memo(function SafeMarkdown(props: {
     img: ({ src, alt, width, height }) => {
       const figureAsset = Boolean(src && props.figurePresentation?.assets.some(asset => figureAssetName(asset) === figureAssetName(src)))
       if (props.citations || props.inline) return <span>{alt}</span>
-      if (figureAsset && props.figurePresentation?.ready) return null
+      if (figureAsset && props.figurePresentation?.ready && (!props.figurePresentation.hiddenAssets ||
+        props.figurePresentation.hiddenAssets.some(asset => figureAssetName(asset) === figureAssetName(src!)))) return null
       return (
       <img
         src={resolveAsset(src, props.assetBaseUrl ?? '')}
@@ -115,12 +116,12 @@ type MarkdownNode = { type: string; tagName?: string; value?: string; properties
 
 /** Keep source text in the DOM so annotation offsets survive the presentation
  * switch. Only whole matching labels/legend nodes are visually hidden. */
-function hideFigureText(presentation?: { assets: string[]; hiddenTexts: string[]; ready: boolean }) {
+function hideFigureText(presentation?: { assets: string[]; hiddenAssets?: string[]; hiddenTexts: string[]; ready: boolean }) {
   const normalized = new Set((presentation?.hiddenTexts ?? []).map(text => text.replace(/\s+/gu, '').trim()).filter(Boolean))
   const normalize = (value: string): string => value.replace(/\s+/gu, '').trim()
   const ownedImage = (node: MarkdownNode): boolean => node.tagName === 'img' && typeof node.properties?.src === 'string' &&
-    Boolean(presentation?.assets.some(asset => figureAssetName(asset) === figureAssetName(node.properties!.src as string)))
-  const hiddenText = (value: string): boolean => normalized.has(normalize(value)) || (normalized.size > 0 && isFigureLabel(value))
+    Boolean((presentation?.hiddenAssets ?? presentation?.assets)?.some(asset => figureAssetName(asset) === figureAssetName(node.properties!.src as string)))
+  const hiddenText = (value: string): boolean => normalized.has(normalize(value))
   const onlyFigure = (node: MarkdownNode): boolean => node.type === 'text' ? !node.value?.trim() || hiddenText(node.value) :
     ownedImage(node) || node.tagName === 'br' || Boolean(node.children?.length && node.children.every(onlyFigure))
   return (tree: MarkdownNode): void => {

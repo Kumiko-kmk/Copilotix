@@ -22,6 +22,7 @@ export interface ReaderFigureGeometry {
   mappingIds: string[]
   assetSources: string[]
   captionMappingId: string
+  captionLabel?: string
   captionBlockPosition?: string
   fallbackLegendText: string
   status: FigureStatus
@@ -48,8 +49,13 @@ const ASSETS = new Set(['image', 'chart', 'image_body', 'chart_body'])
 const CAPTIONS = new Set(['image_caption', 'chart_caption'])
 const FOOTNOTES = new Set(['image_footnote', 'chart_footnote'])
 const HEADERS = /^(?:header|footer|page_header|page_footer|page_number|page_num|page_count)$/u
-const FIGURE_PREFIX = /^\s*(?:(?:supplementary|extended\s+data)\s+)?(?:fig(?:ure)?\.?|[附補补]?圖|[附补]?图)\s*(?:[A-Z]\.?\s*)?\d+[A-Z]?(?:\b|(?=[：:．.、\s]))/iu
+const FIGURE_PREFIX = /^\s*(?:(?:supplementary|extended\s+data)\s+)?(?:fig(?:ure)?\.?|[附補补]?圖|[附补]?图)\s*((?:[A-Z]\.?\s*)?\d+[A-Z]?)(?:\b|(?=[：:．.、\s]))/iu
+function captionLabel(markdown: string): string | undefined {
+  return FIGURE_PREFIX.exec(captionFromMarkdown(markdown))?.[1]?.replace(/[.\s]/gu, '').toUpperCase()
+}
 const LABEL = /^\s*(?:[（(]\s*[a-zA-Z一二三四五六七八九十]+\s*[)）]|[A-Z])\s*[.。]?\s*$/u
+/** A sub-panel caption such as "(a) ground truth"; parsers type it as image, chart, table caption or text. */
+const PANEL_CAPTION = /^\s*[（(]\s*[a-z]{1,2}\d?\s*[)）]\s*\S.{0,90}$/iu
 
 export function figureAssetName(value: string): string {
   try { value = decodeURIComponent(value) } catch { /* Retain malformed paths for comparison. */ }
@@ -62,7 +68,8 @@ function isCaption(entry: Entry): boolean {
   if (CAPTIONS.has(type(entry))) return true
   // A body sentence such as "Figure 2 shows..." is not a figure caption.
   return type(entry) === 'text' && (entry.parents.some(parent => parent.captionTexts.includes(entry.mapping.sourceText.trim())) ||
-    /^[^:：]*\d+[A-Z]?\s*[.:：．、]/iu.test(entry.mapping.sourceText))
+    // Nature-style captions separate the number with a bar: "Figure 3 | From image to text".
+    /^[^:：]*\d+[A-Z]?\s*[.:：．、|｜]/iu.test(entry.mapping.sourceText))
 }
 function isAsset(entry: Entry): boolean { return ASSETS.has(type(entry)) }
 function overlap(a: FigureBox, b: FigureBox): boolean {
@@ -75,6 +82,19 @@ function union(boxes: readonly FigureBox[]): FigureBox {
 function padded(box: FigureBox, size: [number, number], x = 4, y = x): FigureBox {
   return [Math.max(0, box[0] - x), Math.max(0, box[1] - y), Math.min(size[0], box[2] + x), Math.min(size[1], box[3] + y)]
 }
+/** Keep every source pixel; only trim optional padding where neighbouring content is close. */
+function paddedWithinWhitespace(box: FigureBox, size: [number, number], neighbours: readonly Entry[]): FigureBox {
+  const requested = padded(box, size)
+  const crop: FigureBox = [...requested]
+  for (const { bbox: other } of neighbours) {
+    if (!overlap(requested, other) || overlap(box, other)) continue
+    if (other[2] <= box[0]) crop[0] = Math.max(crop[0], (other[2] + box[0]) / 2)
+    if (other[0] >= box[2]) crop[2] = Math.min(crop[2], (other[0] + box[2]) / 2)
+    if (other[3] <= box[1]) crop[1] = Math.max(crop[1], (other[3] + box[1]) / 2)
+    if (other[1] >= box[3]) crop[3] = Math.min(crop[3], (other[1] + box[3]) / 2)
+  }
+  return crop
+}
 function gaps(a: FigureBox, b: FigureBox): [number, number] {
   return [Math.max(0, a[0] - b[2], b[0] - a[2]), Math.max(0, a[1] - b[3], b[1] - a[3])]
 }
@@ -85,9 +105,68 @@ function distance(a: Entry, b: Entry): number {
 function relatedParent(a: Entry, b: Entry): boolean {
   return a.parents.some(p => b.parents.includes(p))
 }
+/** Page-normalised geometry plus panel scale: tolerate sparse rows without bridging prose. */
+function adjacent(a: Entry, b: Entry): boolean {
+  if (relatedParent(a, b)) return true
+  const [x, y] = gaps(a.bbox, b.bbox)
+  const width = Math.min(a.bbox[2] - a.bbox[0], b.bbox[2] - b.bbox[0])
+  const height = Math.min(a.bbox[3] - a.bbox[1], b.bbox[3] - b.bbox[1])
+  const horizontal = Math.min(a.bbox[2], b.bbox[2]) - Math.max(a.bbox[0], b.bbox[0])
+  const vertical = Math.min(a.bbox[3], b.bbox[3]) - Math.max(a.bbox[1], b.bbox[1])
+  const baseX = Math.max(12, a.pageSize[0] * 0.04), baseY = Math.max(12, a.pageSize[1] * 0.04)
+  return (x <= baseX && y <= baseY) ||
+    (horizontal >= width * 0.5 && y <= Math.max(baseY, height * 0.6)) ||
+    (vertical >= height * 0.5 && x <= Math.max(baseX, width * 0.6))
+}
+function alignment(asset: Entry, caption: Entry): number {
+  const a = asset.bbox, c = caption.bbox
+  const x = Math.max(0, Math.min(a[2], c[2]) - Math.max(a[0], c[0])) / (a[2] - a[0])
+  const y = Math.max(0, Math.min(a[3], c[3]) - Math.max(a[1], c[1])) / (a[3] - a[1])
+  return Math.max(x, y)
+}
+function captionSide(asset: Entry, caption: Entry): string {
+  const a = asset.bbox, c = caption.bbox
+  return a[3] <= c[1] ? 'above' : a[1] >= c[3] ? 'below' : a[2] <= c[0] ? 'left' : a[0] >= c[2] ? 'right' : 'overlap'
+}
+interface Proposal {
+  caption?: Entry
+  captionBoxes?: Entry[]
+  members: Entry[]
+  status: FigureStatus
+  reason: string
+}
+/** Multi-source shortest paths give each panel an owner before any rectangular crop is made. */
+function assignOwners(nodes: Entry[], adjacency: Map<Entry, Entry[]>, seeds: Map<Entry, number>[]): number[][] {
+  const costs = seeds.map(seed => {
+    const cost = new Map(seed), pending = new Set(nodes)
+    while (pending.size) {
+      let next: Entry | undefined, best = Infinity
+      for (const node of pending) if ((cost.get(node) ?? Infinity) < best) { best = cost.get(node)!; next = node }
+      if (!next) break
+      pending.delete(next)
+      for (const neighbour of adjacency.get(next) ?? []) {
+        // Centre travel stays positive even when two parser boxes touch or overlap.
+        const travel = Math.hypot((next.bbox[0] + next.bbox[2] - neighbour.bbox[0] - neighbour.bbox[2]) / (2 * next.pageSize[0]),
+          (next.bbox[1] + next.bbox[3] - neighbour.bbox[1] - neighbour.bbox[3]) / (2 * next.pageSize[1]))
+        const candidate = best + Math.max(0.001, travel)
+        if (candidate < (cost.get(neighbour) ?? Infinity)) cost.set(neighbour, candidate)
+      }
+    }
+    return cost
+  })
+  return nodes.map(node => {
+    const best = Math.min(...costs.map(cost => cost.get(node) ?? Infinity))
+    // Close ties deliberately keep all claims, so the existing ambiguity guard preserves sources.
+    return Number.isFinite(best) ? costs.flatMap((cost, index) => (cost.get(node) ?? Infinity) <= best + 0.01 ? [index] : []) : []
+  })
+}
 function isSupporting(entry: Entry, assets: readonly Entry[]): boolean {
   if (isCaption(entry) || isAsset(entry) || HEADERS.test(type(entry))) return false
   if (CAPTIONS.has(type(entry)) || FOOTNOTES.has(type(entry)) || isFigureLabel(entry.mapping.sourceText)) return true
+  // A panel caption sits right under or beside its panel, whatever type the parser gave it.
+  if (PANEL_CAPTION.test(entry.mapping.sourceText) && !/\n/u.test(entry.mapping.sourceText) &&
+    entry.bbox[2] - entry.bbox[0] <= entry.pageSize[0] * 0.5 &&
+    assets.some(asset => { const [x, y] = gaps(entry.bbox, asset.bbox); return x <= Math.max(8, entry.pageSize[0] * 0.02) && y <= Math.max(10, entry.pageSize[1] * 0.02) })) return true
   if (type(entry) !== 'text' || !entry.mapping.sourceText.trim()) return false
   // Width alone cannot distinguish a legend from a short body paragraph.
   // Without structural ownership, require recognisable graphical notation.
@@ -173,15 +252,13 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
     const adjacency = new Map(nodes.map(e => [e, [] as Entry[]]))
     for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
       const a = nodes[i]!, b = nodes[j]!
-      const [x, y] = gaps(a.bbox, b.bbox)
-      if ((relatedParent(a, b) || (x <= Math.max(12, a.pageSize[0] * 0.04) && y <= Math.max(12, a.pageSize[1] * 0.04))) &&
-        !blocked(a, b, barriers)) {
+      if (adjacent(a, b) && !blocked(a, b, barriers)) {
         adjacency.get(a)!.push(b)
         adjacency.get(b)!.push(a)
       }
     }
-    const grow = (seed: Entry, anchors: readonly Entry[] = []): Entry[] => {
-      const visited = new Set([seed, ...anchors])
+    const grow = (seed: Entry): Entry[] => {
+      const visited = new Set([seed])
       for (const node of visited) for (const neighbor of adjacency.get(node) ?? []) visited.add(neighbor)
       // Include enclosed disconnected panels before replacing any source image.
       let changed = true
@@ -197,7 +274,9 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
       }
       return [...visited]
     }
-    const proposals: Array<{ caption?: Entry; captionBoxes?: Entry[]; members: Entry[]; status: FigureStatus; reason: string }> = []
+    const proposals: Proposal[] = []
+    const seeds: Map<Entry, number>[] = []
+    const linkedPanels: Entry[][] = []
     const captionIds = new Set<string>()
     for (const anchor of captions) {
       const captionId = anchor.mapping.id || anchor.key
@@ -208,10 +287,18 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
         Math.min(...assets.map(asset => distance(asset, a))) - Math.min(...assets.map(asset => distance(asset, b))))[0]!
       const foreignBarriers = barriers.filter(entry => !captionBoxes.includes(entry))
       const eligible = assets.filter(asset => captionBoxes.some(part => !blocked(asset, part, foreignBarriers)))
-      const linked = eligible.filter(asset => captionBoxes.some(part => relatedParent(asset, part)))
-      const nearest = [...(linked.length ? linked : eligible)].sort((a, b) => distance(a, caption) - distance(b, caption))[0]
+      // Remember every structural panel, including those behind a barrier. Losing one
+      // must invalidate the whole figure rather than silently cropping its nearest row.
+      const structural = assets.filter(asset => captionBoxes.some(part => relatedParent(asset, part)))
+      const reachableLinked = structural.filter(asset => eligible.includes(asset))
+      const nearest = [...(reachableLinked.length ? reachableLinked : eligible)].sort((a, b) => distance(a, caption) - distance(b, caption))[0]
+      // Parser parents are noisy: a caption can be attached to the next figure.
+      // A blocked parent on the opposite side cannot invalidate a clear geometric owner.
+      const linked = nearest ? structural.filter(asset => captionSide(asset, caption) === captionSide(nearest, caption)) : structural
       if (!nearest || (!linked.length && distance(nearest, caption) > 0.12)) {
         proposals.push({ caption, captionBoxes, members: [], status: 'unsupported', reason: '没有可靠的图体与图说关联' })
+        seeds.push(new Map())
+        linkedPanels.push(linked)
         continue
       }
       // A full-width caption can directly own multiple panels even when their
@@ -225,13 +312,24 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
           ((y <= Math.max(12, part.pageSize[1] * 0.04) && width >= (asset.bbox[2] - asset.bbox[0]) * 0.7) ||
           (x <= Math.max(12, part.pageSize[0] * 0.04) && height >= (asset.bbox[3] - asset.bbox[1]) * 0.7))
       }))
-      const members = grow(nearest, [...linked, ...captionAnchors])
+      const candidates = [...new Set([...reachableLinked.filter(asset => linked.includes(asset)), ...captionAnchors, nearest])]
+      seeds.push(new Map(candidates.map(asset => [asset, linked.includes(asset) ? 0 :
+        Math.min(...captionBoxes.map(part => distance(asset, part) + 0.1 * (1 - alignment(asset, part))))])))
+      linkedPanels.push(linked)
+      proposals.push({ caption, captionBoxes, members: [], status: 'complete', reason: '' })
+    }
+    const owners = assignOwners(nodes, adjacency, seeds)
+    for (const [index, proposal] of proposals.entries()) {
+      if (proposal.status === 'unsupported') continue
+      const members = nodes.filter((_, nodeIndex) => owners[nodeIndex]!.includes(index))
+      if (!members.some(isAsset)) { proposal.status = 'unsupported'; proposal.reason = '图体优先归属于其他图说'; continue }
+      const foreignBarriers = barriers.filter(entry => !proposal.captionBoxes!.includes(entry))
       const region = union(members.map(e => e.bbox))
       const hasForeign = foreignBarriers.some(b => overlap(region, b.bbox))
       const unknown = members.some(e => isAsset(e) && !e.mapping.sourceAsset)
-      const captionInside = captionBoxes.some(entry => overlap(region, entry.bbox))
-      const missingLinked = linked.some(asset => !members.includes(asset))
-      proposals.push({ caption, captionBoxes, members, status: hasForeign || unknown || captionInside || missingLinked ? 'ambiguous' : 'complete',
+      const captionInside = proposal.captionBoxes!.some(entry => overlap(region, entry.bbox))
+      const missingLinked = linkedPanels[index]!.some(asset => !members.includes(asset))
+      Object.assign(proposal, { members, status: hasForeign || unknown || captionInside || missingLinked ? 'ambiguous' : 'complete',
         reason: hasForeign ? '图区内包含其他图说、正文或表格' : unknown ? '图区内存在未知图片' : captionInside ? '无法将图说与图体分离' : missingLinked ? '结构化图体被正文或表格分隔' : '图说与完整空间图区唯一对应' })
     }
     const used = new Set(proposals.flatMap(p => p.members))
@@ -267,7 +365,8 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
           bodyBox[2] = captionBox[2]
         }
       }
-      const cropBox = padded(bodyBox, size)
+      const cropBox = paddedWithinWhitespace(bodyBox, size, entries.filter(entry =>
+        barriers.includes(entry) || HEADERS.test(type(entry)) || (isAsset(entry) && !proposal.members.includes(entry))))
       if (proposal.status === 'complete' && barriers.some(b => overlap(cropBox, b.bbox))) {
         proposal.status = 'ambiguous'
         proposal.reason = '裁图边缘与图说、正文或表格重叠'
@@ -298,6 +397,7 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
         mappingIds: [...new Set([...sorted.map(e => e.mapping.id), ...(proposal.captionBoxes ?? []).map(e => e.mapping.id)].filter(Boolean))],
         assetSources: [...new Set(visual.map(e => e.mapping.sourceAsset).filter((a): a is string => Boolean(a)))],
         captionMappingId: proposal.caption?.mapping.id ?? '',
+        captionLabel: proposal.caption ? captionLabel(proposal.caption.mapping.sourceText) : undefined,
         captionBlockPosition: proposal.caption?.blockPosition,
         fallbackLegendText: sorted.filter(e => !isAsset(e) && !isFigureLabel(e.mapping.sourceText)).map(e => e.mapping.sourceText.trim()).filter(Boolean).join(' '),
         members: sorted.map(e => ({ mappingId: e.mapping.id || undefined, blockPosition: e.blockPosition, bbox: e.bbox, sourceAsset: e.mapping.sourceAsset,
@@ -314,15 +414,25 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
 }
 
 export function projectReaderFigureGroups(geometries: readonly ReaderFigureGeometry[], blocks: readonly ReaderBlock[], referenceBlocks?: readonly ReaderBlock[]): ReaderFigureGroup[] {
+  const blockAssets = blocks.map(block => markdownAssetSources(block.markdown).map(figureAssetName))
+  const labels = blocks.map(block => captionLabel(block.markdown))
   const groups = geometries.flatMap(geometry => {
     const names = new Set(geometry.assetSources.map(figureAssetName))
     const indexes = blocks.flatMap((block, index) => block.role === 'content' &&
-      (block.mappingIds.some(id => geometry.mappingIds.includes(id)) ||
-        markdownAssetSources(block.markdown).some(asset => names.has(figureAssetName(asset)))) ? [index] : [])
+      (blockAssets[index]!.some(asset => names.has(asset)) ||
+        (geometry.captionLabel && labels[index] === geometry.captionLabel && block.mappingIds.includes(geometry.captionMappingId)) ||
+        (!blockAssets[index]!.length && !labels[index] && block.mappingIds.some(id => geometry.mappingIds.includes(id)))) ? [index] : [])
     if (!indexes.length) return []
-    const captionIndex = indexes.find(index => blocks[index]!.mappingIds.includes(geometry.captionMappingId)) ?? -1
+    const captionIndex = indexes.find(index => geometry.captionLabel && labels[index] === geometry.captionLabel &&
+      blocks[index]!.mappingIds.includes(geometry.captionMappingId)) ??
+      indexes.find(index => blocks[index]!.mappingIds.includes(geometry.captionMappingId)) ?? -1
     const caption = captionIndex < 0 ? '' : captionFromMarkdown(blocks[captionIndex]!.markdown)
-    const group: ReaderFigureGroup = { ...geometry, ownerBlockIndex: Math.min(...indexes), captionBlockIndex: captionIndex,
+    // A parser can join Figure N's caption and Figure N+1's first image into one
+    // Markdown paragraph. Put N+1's snapshot after that foreign caption, while
+    // keeping the original paragraph, mapping IDs and annotation offsets intact.
+    const owner = indexes.find(index => blockAssets[index]!.some(asset => names.has(asset)) &&
+      (!labels[index] || labels[index] === geometry.captionLabel)) ?? (captionIndex >= 0 ? captionIndex : indexes[0]!)
+    const group: ReaderFigureGroup = { ...geometry, ownerBlockIndex: owner, captionBlockIndex: captionIndex,
       memberBlockIndexes: indexes, captionMarkdown: caption, supportingTextsByBlock: {} }
     const resolvedTexts = new Set<string>()
     for (const index of indexes) {
@@ -352,7 +462,10 @@ export function projectReaderFigureGroups(geometries: readonly ReaderFigureGeome
     }
     return [group]
   })
-  for (const group of groups) if (groups.some(other => other !== group && group.memberBlockIndexes.some(i => other.memberBlockIndexes.includes(i)))) {
+  for (const group of groups) if (groups.some(other => other !== group && group.memberBlockIndexes.some(i =>
+    other.memberBlockIndexes.includes(i) && !(blockAssets[i]!.length && labels[i] &&
+      (labels[i] === group.captionLabel || labels[i] === other.captionLabel) &&
+      [group, other].some(owner => blockAssets[i]!.every(asset => owner.assetSources.some(source => figureAssetName(source) === asset))))))) {
     group.status = 'ambiguous'
     group.reason = '同一阅读区块包含多个图区，保留完整来源'
   }

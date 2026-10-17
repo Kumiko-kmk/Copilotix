@@ -5,6 +5,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { acquirePdfDocument } from '../src/renderer/pdfDocumentCache'
 import ReaderFigureSnapshot, { FIGURE_CACHE_BYTES, figureRegionCacheStats } from '../src/renderer/components/ReaderFigureSnapshot'
 import type { ReaderFigureGroup } from '../src/shared/readerFigureGroups'
+import { ensureFigureArtifacts } from '../src/renderer/useFigureArtifacts'
 
 vi.mock('../src/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
 const group: ReaderFigureGroup = {
@@ -30,6 +31,38 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('figure rendering lifecycle', () => {
+  it('materializes a newly imported paper without mounting the reader and reuses validated crops', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['png'], { type: 'image/png' })))
+    const persist = vi.fn(async (request: { figureId: string; pngBase64?: string }) => ({
+      imagePath: request.figureId === 'cached' || request.pngBase64 ? 'images/figures/ready.png' : null,
+      sourceRevision: 'a'.repeat(64)
+    }))
+    vi.stubGlobal('copilotix', { cacheDocumentFigure: persist })
+    const result = await ensureFigureArtifacts('document', 'new-import.pdf', [group, { ...group, id: 'cached' }], new AbortController().signal)
+    expect(result).toEqual({ available: 2, failed: 0 })
+    expect(renderPdf).toHaveBeenCalledTimes(1)
+    expect(persist).toHaveBeenCalledWith(expect.objectContaining({ figureId: group.id, sourceRevision: 'a'.repeat(64), pngBase64: expect.any(String) }))
+    expect(persist.mock.calls.filter(([request]) => request.figureId === 'cached')).toHaveLength(1)
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('cancels archive materialization without persisting a late crop', async () => {
+    let reject!: (error: Error) => void
+    const cancel = vi.fn(() => reject(new Error('cancelled')))
+    renderPdf.mockImplementationOnce(() => ({ promise: new Promise<void>((_resolve, fail) => { reject = fail }), cancel }))
+    const persist = vi.fn(async () => ({ imagePath: null, sourceRevision: 'a'.repeat(64) }))
+    vi.stubGlobal('copilotix', { cacheDocumentFigure: persist })
+    const controller = new AbortController()
+    const pending = ensureFigureArtifacts('document', 'cancel-archive.pdf', [group], controller.signal)
+    const rejected = expect(pending).rejects.toThrow()
+    await waitFor(() => expect(renderPdf).toHaveBeenCalledOnce())
+    controller.abort()
+    await rejected
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(persist).toHaveBeenCalledOnce()
+    expect(release).toHaveBeenCalled()
+  })
+
   it('pre-renders an offscreen figure without waiting for an intersection notification', async () => {
     const observe = vi.fn()
     vi.stubGlobal('IntersectionObserver', class {

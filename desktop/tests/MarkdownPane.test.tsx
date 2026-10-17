@@ -12,12 +12,13 @@ import { collectAnnotationBlockTexts } from '../src/renderer/readerAnnotations'
 
 const figureMock = vi.hoisted(() => ({
   initial: 'ready' as string,
-  notify: undefined as ((state: string) => void) | undefined
+  notify: undefined as ((state: string) => void) | undefined,
+  callbacks: new Map<string, (state: string) => void>()
 }))
 
 vi.mock('../src/renderer/components/ReaderFigureSnapshot', () => ({
-  default: (props: { onStateChange(state: string): void }) => {
-    React.useEffect(() => { figureMock.notify = props.onStateChange; props.onStateChange(figureMock.initial) }, [])
+  default: (props: { group: ReaderFigureGroup; onStateChange(state: string): void }) => {
+    React.useEffect(() => { figureMock.notify = props.onStateChange; figureMock.callbacks.set(props.group.id, props.onStateChange); props.onStateChange(figureMock.initial) }, [])
     return <div className="reader-figure-snapshot" data-reader-annotation-ignore="true" data-rendered="true">original PDF figure</div>
   }
 }))
@@ -34,6 +35,7 @@ class ResizeObserverMock {
 beforeEach(() => {
   figureMock.initial = 'ready'
   figureMock.notify = undefined
+  figureMock.callbacks.clear()
   naturalWidth = 320
   decodeImage = vi.fn().mockResolvedValue(undefined)
   scrollIntoView = vi.fn()
@@ -354,6 +356,37 @@ describe('MarkdownPane', () => {
     expect(view.getByText('完整第二段。')).toBeTruthy()
     expect(view.container.querySelector('[data-annotation-block-key="content:0"]')?.getAttribute('data-block-ids')).toBe('a caption prose other')
     expect(collectAnnotationBlockTexts(view.container.querySelector('article')!)).toEqual(before)
+  })
+
+  it('preserves shared captions, failed sources and annotation text while two figures finish independently', async () => {
+    figureMock.initial = 'pending'
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', { configurable: true, get: () => true })
+    const blocks = [{ ...block('a', '![](a.jpg)'), annotationKey: 'one' },
+      { ...block('c1', 'Figure 1: First.\n![](b.jpg)'), annotationKey: 'shared' },
+      { ...block('c2', '![](c.jpg)\nFigure 2: Second.'), annotationKey: 'two' }]
+    const make = (id: string, assets: string[], owner: number, caption: number, indexes: number[]): ReaderFigureGroup => ({
+      id, assetSources: assets, ownerBlockIndex: owner, captionBlockIndex: caption, memberBlockIndexes: indexes,
+      pageIndex: 0, pageSize: [612, 792], cropBox: [50, 50, 450, 150], mappingIds: id === 'first' ? ['a','c1'] : ['b','c','c2'],
+      captionMappingId: id === 'first' ? 'c1' : 'c2', captionMarkdown: '', fallbackLegendText: '', status: 'complete', reason: 'fixture', members: []
+    })
+    const view = render(<MarkdownPane active blocks={blocks} figureGroups={[make('first',['a.jpg'],0,1,[0,1]),make('second',['b.jpg','c.jpg'],2,2,[1,2])]}
+      pdfUrl="copilotix-asset://task/original.pdf" assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]}
+      highlightColor="yellow" onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null} onSelect={() => undefined} />)
+    const article = view.container.querySelector('article')!
+    const before = collectAnnotationBlockTexts(article)
+    expect(article.querySelectorAll('img')).toHaveLength(3)
+    expect(article.querySelectorAll('p.reader-figure-hidden-source')).toHaveLength(0)
+    act(() => figureMock.callbacks.get('first')?.('ready'))
+    expect(article.querySelectorAll('img')).toHaveLength(2)
+    act(() => figureMock.callbacks.get('second')?.('failed'))
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    expect(article.textContent).toContain('Figure 1: First.')
+    expect(article.textContent).toContain('Figure 2: Second.')
+    expect(article.querySelectorAll('img')).toHaveLength(2)
+    act(() => figureMock.callbacks.get('second')?.('ready'))
+    expect(article.querySelectorAll('img')).toHaveLength(0)
+    expect(article.querySelectorAll('.reader-figure-snapshot')).toHaveLength(2)
+    expect(collectAnnotationBlockTexts(article)).toEqual(before)
   })
 
   it('uses instant PDF navigation without feeding the synthetic scroll back into selection', async () => {
