@@ -9,6 +9,7 @@
 - 不要寫無意義的文檔。維護文檔主要供其他 agent 接手，使用者不會逐份閱讀；只保留當前契約、必要決策、限制、未完成需求與證據入口。不要每次改動都新建總結／審計／交付報告，不記對話、操作流水或重複貼測試輸出；優先更新既有入口，同一事實只留一處，過時內容直接清理。使用者要求的指南與法定許可資料按其用途保留。
 - 使用者不喜歡滑鼠懸停時出現文字提示／浮層，包括原生 `title`、Tooltip、Popover 預覽與以全文補充截斷文字的彈窗。全應用不再添加這類說明；圖示仍保留 `aria-label`，必要資訊在頁面內或明確點擊後顯示。清單與實作邊界見 [介面偏好](docs/UI_PREFERENCES_ZH.md)。
 - 共享 schema、migration、IPC、Core RPC、JobRepository、Artifact/PathPolicy 或發布腳本的修改，須記錄兼容策略、測試證據與恢復語義。
+- 每次功能修改，只有使用者明確要求打包、EXE、安裝包或發布產物時才執行打包；未要求打包時，提供對應改動的實際介面截圖供使用者確認。截圖不代表完整測試驗收，不以示意圖或舊版本截圖代替。截圖與預覽須避開其他修改進程，優先使用隔離資料目錄／預覽，不重建或覆蓋其他進程正在使用的共享 out、不終止其他進程；無法隔離時如實說明。使用者明確要求不截圖時遵從，不追溯補拍先前改動。
 - 預設不跑本地 lint、typecheck、單元／覆蓋率及 E2E。使用者要求驗證時，先跑受影響用例或 `desktop:test:changed`，需要核心回歸再跑 `desktop:test`；不要每個功能都重跑完整 UI、覆蓋率、打包和安裝驗收。2026-10-14 使用者已授權精簡測試：同類小用例合併，重複外觀／源碼字串檢查和過時流程可刪除；資料安全、持久化、IPC 來源與取消恢復等行為回歸保留。未明確授權不得 push、上傳產物或觸發遠端發布。
 
 ## 1. 本地 Windows 構建與交付
@@ -20,7 +21,7 @@
 ```powershell
 pnpm install                       # 新 worktree 或依賴／lockfile 改變時
 pnpm desktop:build:bundles          # 源碼改動後重建 Main、Preload、Renderer、Utility
-pnpm desktop:release:from-built     # 使用新 out 打包；不可與 desktop:release 並行
+pnpm desktop:release:from-built     # 僅明確要求打包時執行；使用新 out，不與 desktop:release 並行
 ```
 
 僅源碼與 `desktop/out/` 均未變更時，才可省略 build。打包內建的 ASAR、資源、fuses、體積、雜湊與 packaged smoke 校驗不可移除；成功後原子更新發布目錄，失敗保留 `.release-next-*` 供排查。
@@ -43,8 +44,8 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 - 以「服務連結」內容區為尺寸基準：頁籤根節點是 `.settings-content-body` 的直接子元素，使用 `.settings-section` 並填滿可用寬高。
 - 不重複導覽標題、不用空白標題佔位、不加專屬外層 margin／padding／max-width；首張卡片的頂、左、右邊緣須與基準一致。
 - 卡片內距可自訂；以 `section`／`aria-label` 保留與導覽一致的區域名稱。測試驗證可按名稱查找、無重複標題及共用根類別。
-- 使用者已選擇設定離開確認：應用內離開設定頁時，有草稿須提供「保存并离开／放弃并离开／继续编辑」。保存失敗或憑據部分失敗留在原頁並保留失敗欄位；未保存 API Key 僅留記憶體。設定內頁籤切換保留草稿、不彈確認。
 - 設定「主題外觀」：`theme.ts` 共六套（三淺三深，主題卡不加文字說明）寫入 :root 色 token（`--surface`／`--sheet`／`--ink`／`--on-ink`／`--primary`… 及文庫 3D 用 `--theme-archive-*`）；深色主題另切 antd darkAlgorithm、`color-scheme`、`--lift`、黑色 `--shadow-ink` 與 `--shell-edge`，PDF 頁面保持白紙。antd、canvas 與 Three.js 均從 token 讀色；主題與閱讀字號（13–22px，`--reader-font-size`，Markdown 正文、標題、表格按 em 縮放）點選即預覽，但屬設定草稿：經「保存全部更改」寫入 localStorage `copilotix.theme.v1`／`copilotix.reader.font-size.v1`，「放弃更改」或未保存離開即還原，並參與離開確認；只改外觀時不調用 settings IPC。新增顏色一律用 token，語義色（成功／警告／錯誤）、PDF 疊層與高亮色板除外。
+- 使用者已選擇設定離開確認：應用內離開設定頁時，有草稿須提供「保存并离开／放弃并离开／继续编辑」。保存失敗或憑據部分失敗留在原頁並保留失敗欄位；未保存 API Key 僅留記憶體。設定內頁籤切換保留草稿、不彈確認。
 
 ## 4. 文檔庫維護契約
 
@@ -64,8 +65,8 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 - schema 5：distribution 為 compact-setup，`runtime.embeddedIn` 標記內嵌；外層 `runtimeArtifactDirectory` 指向開發副本，`artifactDirectory` 指向 ZIP 目錄。ZIP 內 bundle-manifest 不含外部產物路徑或自身哈希；外層 release-manifest 在 ZIP 完成後加入 `transport.sha256`，不進 ZIP。成功只清理上一成功版本已驗證的產物路徑，失敗暫存保留。
 - 強制目前使用者安裝，允許選位置。安裝／卸載發現應用運行時提示退出，不強制結束背景隊列。
 - 卸載預設保留資料、憑據與獨立文庫；只有明確勾選清除、Main 第二次原生確認後，獨立 Utility 才按唯讀清單驗證並安全清理。覆蓋升級／靜默卸載不得清資料；新增憑據或儲存結構須同步卸載清單與路徑驗證。
-- Setup、主程式、內嵌卸載器均受正式簽章門禁。必要驗收入口：`pnpm desktop:test:installer:wizard`、`pnpm desktop:test:installer`；腳本拒絕覆蓋既有安裝。
 - 安裝精靈視覺：`scripts/generate-installer-assets.ps1` 生成字陣風格的 sidebar（164×314）與內頁 header（150×57）BMP；完成頁有專案主頁連結。頁面順序、控件 ID 與歡迎／選項／完成頁文案不變（wizard 測試依賴）。
+- Setup、主程式、內嵌卸載器均受正式簽章門禁。必要驗收入口：`pnpm desktop:test:installer:wizard`、`pnpm desktop:test:installer`；腳本拒絕覆蓋既有安裝。
 
 ## 7. 閱讀器、併發與問答契約
 
@@ -74,7 +75,7 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 - JobScheduler 的 `job-changed(job)`／`job-notification(job)` 用 `job.documentId` 定位文檔；Main 高頻事件經 `createCoalescedRefresh` 合併刷新。Reader 給 MarkdownPane 的 blocks／annotations 用 `useMemo` 保持引用穩定。
 - PDF 貼合完整 clientWidth，無外圍 padding／邊框／陰影、原生捲動條、頁間或末頁 gap；浮動捲動條支援拖曳／鍵盤且不佔位。透明欄分隔器覆蓋右欄。寬度／縮放／延遲尺寸改變時，layout effect 按頁號與頁內比例恢復，停用 overflow anchoring 並取消舊 frame；人工翻頁與引用定位正常更新頁碼。
 - 問答共享入口：`docs/READER_AI_CHAT_PLAN_ZH.md`。文獻目錄 `chat/` 原子保存歷史、草稿、選區與模型，歷史分頁；問答文件本身無獨立 migration；Codex provider 使用資料庫 migration 5，不合併 demo schema 5–7。清空、刪文獻、文庫維護及退出前，須等待相關問答取消與落盤，避免晚到寫入。
-- 問答沿用「服務連接」憑據，默認翻譯服務商，可獨立選已啟用 Qwen／DeepSeek 的共享預設模型或 Codex 動態目錄模型，不改翻譯模型；IPC／Main 校驗 provider、Key、valid、consent；Codex 改驗本機登入／模型能力，不讀 API Key。舊 request 可省略 provider；舊 chatProvider 不參與路由，自訂模型回退預設而不損壞歷史，Key 不進聊天文件。首次打開問答才掛載／建索引；添加選區不切頁籤，恢復引用重新核對 revision。
+- 問答沿用「服務連接」憑據，默認翻譯服務商，可獨立選已啟用 Qwen／DeepSeek 的共享預設模型或 Codex 動態目錄模型，不改翻譯模型；IPC／Main 校驗 provider、Key、valid；Codex 改驗本機登入／模型能力，不讀 API Key。舊 request 可省略 provider；舊 chatProvider 不參與路由，自訂模型回退預設而不損壞歷史，Key 不進聊天文件。首次打開問答才掛載／建索引；添加選區不切頁籤，恢復引用重新核對 revision。
 - 只提供 PDF、原文、中文、問答四視圖，JSON 僅保留底層產物與 ZIP。`readerLayout.ts` 為 split／group 純函式樹，每視圖僅出現一次、最後一個不可關閉；localStorage `copilotix.reader.layout.v1` 校驗修復後載入，缺省「PDF｜原文·中文·問答」，首次沿用舊 sessionStorage 欄寬。
 - 工作台分組最小 240×140；拆分、移動、關閉／重開、拖曳（5px 起拖、Esc 取消；邊緣四分之一拆分，中間合併）不得破壞唯一視圖。拖曳預覽走獨立 DragContext；分隔器拖動僅本地更新、放開提交。最大化純 CSS、其他分組保持掛載、不持久化；split pane 不设 position，分隔線用 ::after。
 - Markdown 僅選中時掛載並恢復 `initialScrollTop`；PDF／問答首次顯示後保持掛載。工具列 portal 到所在分組；PdfPane 的 `toolbarHost`、`initialViewState`／`onViewStateChange` 保持移動／重開錨點。複製／另存作用於聚焦分組。
@@ -82,7 +83,7 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 - 快捷鍵：Ctrl+1–4 顯示四視圖，Ctrl+反斜線右拆，Ctrl+Alt+←/→ 移組，Ctrl+W 關閉，Ctrl+Shift+T 重開，Ctrl+Shift+M／雙擊最大化，Esc 還原。
 - `readerScrollSync.ts` 以 mappingId＋塊內比例對齊視口 35% 閱讀線；僅人工捲動領先，120ms 程式回聲不回報，每幀最多一次。參與者為分組選中且在 layout.synced 的視圖（預設原文＋中文、PDF 關閉、問答不參與）；PDF 用 `pdfSyncPosition`。引用無可見閱讀視圖時，`ensureReadingView` 在問答旁拆開／重開原文或中文／PDF，先還原最大化，不能取代問答。共用少量 mappingId 的合成夾具有歧義，同步／選段聯動須用真實解析資料驗收。
 
-Codex 的進程隔離、兩條 FIFO、取消／超時、migration 5 恢復與測試入口統一見 [架構文檔](docs/ARCHITECTURE_ZH.md#codex-provider本机-app-server)，使用步驟見 [服務配置](docs/wiki/Service-Setup.md)。
+Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消／超時、migration 5 恢復與測試入口統一見 [架構文檔](docs/ARCHITECTURE_ZH.md#codex-provider本机-app-server)，使用步驟見 [服務配置](docs/wiki/Service-Setup.md)。
 
 ## 8. 遠端 CI 與驗證邊界
 
@@ -113,8 +114,8 @@ Codex 的進程隔離、兩條 FIFO、取消／超時、migration 5 恢復與測
 ## 12. 當前狀態與入口
 
 - 當前開發入口為 `Copilotix-master-updated`／本地 `master`，包含文庫 UI 代碼與文檔。1.1.0 已發布；一次性未簽章例外已用完，後續發布仍受正式簽章門禁。
-- README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
 - 首頁背景為「解密字陣」`homeCipher.ts`：字元網格按字標實測字寬／行高對齊，避開前景塊；波浪只由開頁、點擊或 75–120 秒一次的自動波觸發，單向擴散不反彈，經 `homeWave.ts` 與字標逐字解碼同步；波後只浮現文庫論文的原文或譯文標題，不加編號（譯文標題閒時讀最近 10 篇，僅保留標題）；新波出發時上一波的標題 0.45 秒內淡出。待機字陣較密並持續閃爍、增減及零星紫色火花，避免被當成靜態背景。其餘六個背景方案原型（`gallery.html`）與舊等高線實作保存在 `docs/design/home-backdrops/`，不參與構建。
+- README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
 
 ## 13. 文庫頁與 AI 解讀
 
@@ -124,9 +125,9 @@ Codex 的進程隔離、兩條 FIFO、取消／超時、migration 5 恢復與測
 - `LibraryPage` 懶載入 Three.js；從文庫進 Reader 用 `returnTo: 'library'` 返回並恢復論文，從教程進入返回教程，其他入口返回首頁。重試與刪除論文在閱讀器頂欄（`DocumentLifecycleActions`）。RhineLabUI 來源與 MIT 許可見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`；GLB 僅五個外殼網格，沿用 inline／parseAsync 和原 CSP。
 - 每分類一列，列／行循環並記住論文 ID；右下角列數等於分類數，分類名十二字固定寬度居中，箭頭位置固定。分類算法、分頁與緩存只在 [內容分類](docs/LIBRARY_CATEGORIES_ZH.md) 維護。
 - 瀏覽標題移除末尾 `.pdf`，固定兩行高度、單行垂直居中、超出省略；譯文標題固定一行，沒有譯文留空。停留選中論文 180ms 後讀取，與詳情共用 query cache；不另調模型。
-- 選中頁元信息只含單行關鍵詞（空格分隔，按寬度縮至 11px，仍超出省略）及下方總結（v2 `tldr`／v1 `summary`）；不顯示類型、日期、生成狀態。詳情標題下同樣顯示譯文標題，不重複類型／學科／總結；證據基礎與檢驗方式暫保留，替代資訊待使用者決定。
-- 詳情摘要只顯示譯文，缺失明示，首行縮排兩字；ABSTRACT 不參與遮擋，正文仍沿用解密動畫。詳情延伸至頁面底部，「打开阅读」靠下，隱藏捲動條並保留滾輪／鍵盤捲動。生成操作在閱讀器「AI 问答」頁籤工具列的「档案卡」點擊選單。HTTP(S) 連結保留目標、下劃線且可換行。無 v2 時保留結構／舊解讀頁；v2 分頁與生成欄位以 [Paper Brief](docs/PAPER_BRIEF_ZH.md) 為準。
-- 生成授權、取消、併發、存儲與兼容只在 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md) 維護。翻譯完成後自動生成已恆為開啟、不提供開關；「預設同意」仍未實作，自動生成照舊需問答同意與有效憑據，接手時須同步設定、Main／IPC 授權與流程，不能把已移除 unavailable 底部狀態列當成已改授權。既有 15 篇真實生成結果已保存，批次證據在 `../investigation/paper-brief-bulk-20261010/SUMMARY.md`，不代表人工品質驗收。
+- 選中頁元信息只含單行關鍵詞（空格分隔，按寬度縮至 11px，仍超出省略）及下方總結（v2 `tldr`／v1 `summary`）；不顯示類型、日期、生成狀態。詳情標題下同樣顯示譯文標題，不重複類型／學科／總結；證據基礎與檢驗方式僅在舊 v2 保留，新四部分檔案不顯示。
+- 詳情 v2 依「摘要／背景／結論／討論」顯示；新摘要由全文生成，舊檔仍回退譯文，缺失明示，首行縮排兩字；ABSTRACT 不參與遮擋，正文仍沿用解密動畫。詳情延伸至頁面底部，「打开阅读」靠下，隱藏捲動條並保留滾輪／鍵盤捲動。生成操作在閱讀器「AI 问答」頁籤工具列的「档案卡」點擊選單。HTTP(S) 連結保留目標、下劃線且可換行。無 v2 時保留結構／舊解讀頁；v2 分頁與生成欄位以 [Paper Brief](docs/PAPER_BRIEF_ZH.md) 為準。
+- 生成授權、取消、併發、存儲與兼容只在 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md) 維護。解析完成後與翻譯並行生成，翻譯完成事件補足恢復；自動生成已恆為開啟、不提供開關；使用程序即同意發送所需內容，不再獨立確認；發送前仍核對啟用服務、模型與憑據。既有 15 篇真實生成結果已保存，批次證據在 `../investigation/paper-brief-bulk-20261010/SUMMARY.md`，不代表人工品質驗收。
 - 發布時間戳由 `runtime-file-times.mjs` 只更新 staging runtime，避免 Electron 資源顯示 1980 年；不修改依賴、內容、簽章或用戶文庫。
 
 ### 互動與渲染

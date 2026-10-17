@@ -19,9 +19,9 @@ describe("readerLayout", () => {
   }
 
   describe('reader layout model', () => {
-    it('defaults to the classic PDF | Markdown·中文·问答 reader', () => {
+    it('defaults to the balanced PDF | 原文·中文·问答 reader', () => {
       expect(shape(defaultReaderLayout())).toEqual({
-        root: { row: [{ views: ['pdf'], active: 'pdf' }, { views: ['original', 'translated', 'chat'], active: 'original' }], sizes: [49, 51] },
+        root: { row: [{ views: ['pdf'], active: 'pdf' }, { views: ['original', 'translated', 'chat'], active: 'original' }], sizes: [50, 50] },
         hidden: []
       })
     })
@@ -41,7 +41,7 @@ describe("readerLayout", () => {
             { views: ['original', 'translated'], active: 'original' },
             { views: ['chat'], active: 'chat' }
           ],
-          sizes: [49, 26, 26]
+          sizes: [50, 25, 25]
         },
         hidden: []
       })
@@ -55,7 +55,7 @@ describe("readerLayout", () => {
             { views: ['pdf'], active: 'pdf' },
             { column: [{ views: ['original', 'chat'], active: 'original' }, { views: ['translated'], active: 'translated' }], sizes: [50, 50] }
           ],
-          sizes: [49, 51]
+          sizes: [50, 50]
         },
         hidden: []
       })

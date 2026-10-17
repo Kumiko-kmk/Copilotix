@@ -1,7 +1,7 @@
 import { CodexRuntime } from '@runtime/codexRuntime'
 import { ModelGateway } from './chat/modelGateway'
 import { codexProbeSchema, codexStatusSchema, DEFAULT_CODEX_SETTINGS } from '@shared/codex'
-import { PaperInsightService } from './chat/paperInsightService'
+import { PaperInsightService, loadFullBriefContext } from './chat/paperInsightService'
 import { FigureInsightService } from './chat/figureInsightService'
 import { registerFigureInsightHandlers } from './chat/figureInsightIpc'
 import { figureInsightChangedSchema } from '@shared/figureInsight'
@@ -210,7 +210,7 @@ async function bootstrap(): Promise<void> {
     settings: () => settings.get(),
     key: (provider) => provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
     get: (documentId) => utilitySupervisor!.request('insight:get', { documentId }),
-    context: (documentId, signal) => utilitySupervisor!.request('insight:brief-context', { documentId }, { signal, timeoutMs: 10_000 }),
+    context: (documentId, signal) => loadFullBriefContext(documentId, signal, () => utilitySupervisor!.request('insight:brief-source', { documentId }, { signal, timeoutMs: 10_000 })),
     save: (documentId, brief, anchors) => utilitySupervisor!.request('insight:save-brief', { documentId, brief, anchors }),
     stream: (input) => modelGateway.stream(input),
     recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),

@@ -1,4 +1,4 @@
-import { briefContent } from '../tests/fixtures/paperBrief'
+import { briefGeneration } from '../tests/fixtures/paperBrief'
 import { expect, test } from '@playwright/test'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
@@ -53,7 +53,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
         }
         return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { headers: { 'Content-Type': 'application/json' } })
       }
-    }, briefContent)
+    }, briefGeneration)
     const saved = await window.evaluate(async () => {
       const { credentials: _credentials, ...settings } = await window.copilotix.getSettings()
       return window.copilotix.saveSettings({ ...settings, credentialMutations: { qwen: { action: 'set', value: 'copilotix-e2e-insight-fake-key' } } })
@@ -64,7 +64,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     await archive.getByRole('button', { name: '打开阅读' }).click()
     const reader = window.locator('.reader-header')
     await expect(reader.getByRole('button', { name: '档案卡', exact: true })).toHaveCount(0)
-    await window.getByRole('tab', { name: 'AI 问答', exact: true }).click()
+    await window.getByRole('tab', { name: 'Chat', exact: true }).click()
     const cardActions = window.locator('.reader-chat-toolbar').getByRole('button', { name: '档案卡', exact: true })
     await cardActions.click()
     await window.getByRole('menuitem', { name: '生成 AI 档案卡' }).click()
@@ -74,13 +74,11 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     await window.keyboard.press('Escape')
     await reader.getByRole('button', { name: '返回', exact: true }).click()
     archive = await openDetail()
-    await expect(archive.getByRole('tab', { name: /概览/u })).toBeVisible({ timeout: 15_000 })
+    await expect(archive.getByRole('tab', { name: /背景/u })).toBeVisible({ timeout: 15_000 })
     await expect(archive.getByRole('tab', { name: /摘要/u })).toHaveAttribute('aria-selected', 'true')
-    await expect(archive.getByRole('tabpanel')).toContainText('研究论文阅读效率。')
-    await archive.getByRole('tab', { name: /概览/u }).click()
-    await expect(archive.getByText(briefContent.context.question, { exact: true })).toBeVisible({ timeout: 15_000 })
-    await expect(archive.getByText(briefContent.approach.summary, { exact: true })).toBeVisible()
-    await expect(archive.getByText(briefContent.approach.keyIdeas[0]!, { exact: true })).toBeVisible()
+    await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.abstract)
+    await archive.getByRole('tab', { name: /背景/u }).click()
+    await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.background)
     const requests = await app.evaluate(() => Reflect.get(globalThis, '__insightRequests')) as unknown[]
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests)).toContain('Original paper content')
@@ -88,20 +86,20 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     expect(JSON.stringify(requests)).not.toContain(workspace.root)
     expect(JSON.stringify(requests)).not.toContain('copilotix-e2e-insight-fake-key')
     const durable = await readFile(join(workspace.root, 'documents-v2', documentId, 'insight', 'brief.v2.json'), 'utf8')
-    expect(durable).toContain(briefContent.approach.keyIdeas[0]!); expect(durable).not.toContain('fake-key')
-    await expect(archive.getByText('证据基础', { exact: true })).toBeVisible()
+    expect(durable).toContain(briefGeneration.analysis.conclusions[0]!.title); expect(durable).not.toContain('fake-key')
+    await expect(archive.getByText('证据基础', { exact: true })).toHaveCount(0)
     await expect(archive.getByText('页数', { exact: true })).toHaveCount(0)
-    await archive.getByRole('tab', { name: /发现/u }).click()
-    await expect(archive.getByText('需核对', { exact: true })).toBeVisible()
+    await archive.getByRole('tab', { name: /结论/u }).click()
+    await expect(archive.getByText('证据需核对', { exact: true })).toBeVisible()
     const firstFinding = archive.locator('.paper-archive-finding').first()
     await expect(firstFinding.locator('.paper-archive-anchor summary')).toContainText('E1')
     await firstFinding.locator('.paper-archive-anchor summary').click()
     await expect(firstFinding.locator('.paper-archive-anchor p')).toContainText('Original paper content')
     await window.screenshot({ path: testInfo.outputPath('archive-insight.png') })
     await window.reload(); archive = await openDetail()
-    await expect(archive.getByRole('tabpanel')).toContainText('研究论文阅读效率。')
-    await archive.getByRole('tab', { name: /概览/u }).click()
-    await expect(archive.getByText(briefContent.approach.keyIdeas[0]!, { exact: true })).toBeVisible()
+    await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.abstract)
+    await archive.getByRole('tab', { name: /背景/u }).click()
+    await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.background)
     expect(await app.evaluate(() => (Reflect.get(globalThis, '__insightRequests') as unknown[]).length)).toBe(1)
     await window.locator('[data-edge-dock="top"]').hover()
     await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '设置' }).click()

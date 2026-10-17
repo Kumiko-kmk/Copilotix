@@ -48,3 +48,19 @@ export const briefContent: PaperBriefContent = {
   keywords: ['论文阅读', '结构化摘要', '信息提取', '可追溯性'],
   coverage: { basis: 'partial', missing: ['完整评测结果'] }
 }
+
+/** Provider response for the four-section contract; legacy fixture above remains unchanged. */
+export const briefGeneration = {
+  metadata: { title: null, authors: null, year: null, venue: null, doi: null },
+  paperType: briefContent.paperType, field: briefContent.field, tldr: briefContent.tldr,
+  keywords: briefContent.keywords, coverage: briefContent.coverage,
+  analysis: {
+    abstract: briefContent.context.background.repeat(3).slice(0, 250),
+    background: briefContent.context.background.repeat(4).slice(0, 360),
+    conclusions: briefContent.findings.map(item => ({ title: item.claim,
+      text: (item.evidence + briefContent.context.background.repeat(2)).slice(0, 150), anchors: item.anchors })),
+    discussion: { contribution: briefContent.context.background.repeat(2).slice(0, 180),
+      progress: briefContent.context.gap.repeat(4).slice(0, 180),
+      limitations: briefContent.context.question.repeat(4).slice(0, 180) }
+  }
+}

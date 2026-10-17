@@ -110,6 +110,16 @@ function pointer(canvas: HTMLCanvasElement, type: string, x: number, y = 100): v
 }
 
 describe('paper archive detail transitions', () => {
+  it('guards extraction at the scene entry point until the selected paper is ready', async () => {
+    const canOpenDetail = vi.fn(() => false)
+    const onDetailPhase = vi.fn()
+    await createArchive({ canOpenDetail, onDetailPhase })
+    expect(archive.openDetail()).toBe(false)
+    expect(archive.detailOpen).toBe(false)
+    expect(onDetailPhase).not.toHaveBeenCalled()
+    canOpenDetail.mockReturnValue(true)
+    expect(archive.openDetail()).toBe(true)
+  })
   it('retains the old selection while closing, then applies only the latest search target', async () => {
     const onSelect = vi.fn()
     const onDetailPhase = vi.fn()

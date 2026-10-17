@@ -57,6 +57,18 @@ async function flush(ms = 50): Promise<void> {
 }
 
 describe('useLineRedaction', () => {
+  it('covers the entire formula once, ignoring both visual glyph text and accessible MathML', () => {
+    function FormulaPanel(): React.JSX.Element {
+      const root = React.useRef<HTMLElement>(null)
+      const layer = React.useRef<HTMLDivElement>(null)
+      useLineRedaction(root, layer, { covered: true, reveal: false, content: null })
+      return <article ref={root}><div ref={layer} /><p className="paper-archive-reveal"><span className="katex"><span className="katex-mathml">accessible</span><span className="katex-html">fraction</span></span></p></article>
+    }
+    const view = render(<FormulaPanel />)
+    const bars = view.container.querySelectorAll<HTMLElement>('.paper-archive-redaction')
+    expect(bars).toHaveLength(1)
+    expect(bars[0]!.style.height).toBe('102px')
+  })
   it('keeps the text unpainted while covered and paints it beneath the bars when they start to slide', async () => {
     const view = render(<Panel reveal={false} />)
     const article = view.container.querySelector('article')!

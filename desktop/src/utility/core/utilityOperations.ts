@@ -148,7 +148,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'compute:library-categories': (request, signal) => categories.page(libraryCategoriesRequestSchema.parse(request.payload).after ?? 0, signal),
     'insight:get': (request) => insightStore().get(paperInsightRequestSchema.parse(request.payload).documentId),
     'insight:save-brief': (request) => { const { documentId, brief, anchors } = paperBriefSaveSchema.parse(request.payload); return insightStore().saveBrief(documentId, brief, anchors) },
-    'insight:brief-context': (request, signal) => insightStore().briefContext(paperInsightRequestSchema.parse(request.payload).documentId, signal),
+    'insight:brief-source': (request) => insightStore().briefSource(paperInsightRequestSchema.parse(request.payload).documentId),
     'chat:load': (request) => { const { documentId, before } = paperChatLoadRequestSchema.parse(request.payload); return chatStore.load(documentId, before) },
     'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
     'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),
@@ -206,16 +206,20 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const repository = requireRepository()
       const payload = request.payload as { outputRoot: string }
       const settings = appSettingsSchema.parse(repository.getSettings(payload.outputRoot))
-      state.outputRoot = settings.outputRoot
-      state.translationPlanManager = undefined
+      if (state.outputRoot !== settings.outputRoot) {
+        state.outputRoot = settings.outputRoot
+        state.translationPlanManager = undefined
+      }
       return settings
     },
     'settings:save': (request) => {
       const repository = requireRepository()
       const settings = appSettingsSchema.parse((request.payload as { settings: unknown }).settings)
       repository.saveSettings(settings)
-      state.outputRoot = settings.outputRoot
-      state.translationPlanManager = undefined
+      if (state.outputRoot !== settings.outputRoot) {
+        state.outputRoot = settings.outputRoot
+        state.translationPlanManager = undefined
+      }
       return settings
     },
     'settings:migration-get': (request) => {

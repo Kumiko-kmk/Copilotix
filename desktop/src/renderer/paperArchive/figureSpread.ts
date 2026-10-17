@@ -223,5 +223,6 @@ export function composeSpread(page: HTMLCanvasElement, sheet: HTMLCanvasElement)
   fold.addColorStop(1, 'rgba(60, 48, 32, 0)')
   context.fillStyle = fold
   context.fillRect(page.width - 28, 0, 56, canvas.height)
+  canvas.dataset.archiveCover = 'spread'
   return canvas
 }

@@ -13,7 +13,8 @@ const CACHE_LIMIT = 6
 const cache = new Map<string, Promise<DetailPage>>()
 
 /** Render (or reuse) page 1 of a paper. Failed renders are not cached so a retry can succeed. */
-export function loadDetailPage(key: string, create: () => Promise<DetailPage>): Promise<DetailPage> {
+export function loadDetailPage(key: string, create: () => Promise<DetailPage>, signal?: AbortSignal): Promise<DetailPage> {
+  if (signal?.aborted) return Promise.reject(signal.reason)
   const cached = cache.get(key)
   if (cached) {
     cache.delete(key)
@@ -22,7 +23,10 @@ export function loadDetailPage(key: string, create: () => Promise<DetailPage>): 
   }
   const promise = create()
   cache.set(key, promise)
-  promise.catch(() => cache.delete(key))
+  const evict = (): void => { if (cache.get(key) === promise) cache.delete(key) }
+  signal?.addEventListener('abort', evict, { once: true })
+  const cleanup = (): void => signal?.removeEventListener('abort', evict)
+  void promise.then(cleanup, () => { evict(); cleanup() })
   while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!)
   return promise
 }

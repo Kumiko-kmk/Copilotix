@@ -222,6 +222,13 @@ describe('utility markdown translation plan manager', () => {
       expect((await manager.listWork(fixture.task.id, fixture.jobId)).items[0]).toMatchObject({ status: 'pending' })
       expect(await readJson(absolutePath(fixture.outputDir, `.translation/${fixture.jobId}/plan.json`)))
         .toMatchObject({ attempt: 1, units: [expect.objectContaining({ unitId: descriptor.unitId, status: 'pending' })] })
+      const restartedRetry = new MarkdownTranslationPlanManager(fixture.repository)
+      await expect(restartedRetry.open(fixture.task.id, fixture.jobId)).resolves.toMatchObject({ failed: 0 })
+      expect((await restartedRetry.listWork(fixture.task.id, fixture.jobId)).items[0]).toMatchObject({ status: 'pending' })
+      // A failure produced by the new attempt must still survive another restart.
+      await restartedRetry.fail(fixture.task.id, fixture.jobId, descriptor.unitId, 'new provider failure')
+      const failedRetry = new MarkdownTranslationPlanManager(fixture.repository)
+      await expect(failedRetry.open(fixture.task.id, fixture.jobId)).resolves.toMatchObject({ failed: 1 })
     } finally {
       closeFixture(fixture)
     }

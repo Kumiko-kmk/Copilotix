@@ -385,7 +385,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThan(80)
     await capture(window, 'reader-minimap-1100x700-original.png')
 
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     const translatedPanel = window.locator('.reader-tab-panel.active')
     const translatedMinimap = translatedPanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
     await expect(translatedPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
@@ -397,7 +397,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await capture(window, 'reader-minimap-1440x900-translated.png')
 
     await expect(window.getByText('JSON', { exact: true })).toHaveCount(0)
-    await window.getByText('AI 问答', { exact: true }).click()
+    await window.getByText('Chat', { exact: true }).click()
     await expect(window.locator('.reader-tab-panel.active .markdown-minimap')).toHaveCount(0)
     await expect(window.locator('.reader-tab-panel.active .paper-chat')).toBeVisible()
   } finally {

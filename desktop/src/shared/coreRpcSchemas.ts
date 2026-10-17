@@ -1,4 +1,4 @@
-import { briefContextResultSchema, paperBriefSaveSchema } from '@shared/paperBrief/contracts'
+import { briefSourceSchema, paperBriefSaveSchema } from '@shared/paperBrief/contracts'
 import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightDescriptorSchema, figureInsightSaveSchema } from './figureInsight'
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightSavedSchema } from './paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from './libraryCategories'
@@ -141,7 +141,7 @@ const coreOperationNames = [
   'jobs:enqueue', 'jobs:get', 'jobs:list', 'jobs:claim-batch', 'jobs:heartbeat', 'jobs:update-progress',
   'jobs:complete', 'jobs:fail-or-retry', 'jobs:cancel', 'jobs:manual-retry', 'jobs:recover-expired', 'jobs:list-events',
   'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:record-revision',
-  'insight:get', 'insight:save-brief', 'insight:brief-context',
+  'insight:get', 'insight:save-brief', 'insight:brief-source',
   'figureInsight:get', 'figureInsight:save', 'compute:figure-insight-descriptor',
   'chat:ensure-index', 'chat:build-context',
   'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear', 'chat:delete-turn',
@@ -406,7 +406,7 @@ export const coreOperationRegistry = {
   'figureInsight:save': { payload: figureInsightSaveSchema, result: z.object({ saved: z.literal(true) }).strict() },
   'insight:get': { payload: paperInsightRequestSchema, result: paperInsightStateSchema },
   'insight:save-brief': { payload: paperBriefSaveSchema, result: paperInsightSavedSchema },
-  'insight:brief-context': { payload: paperInsightRequestSchema, result: briefContextResultSchema },
+  'insight:brief-source': { payload: paperInsightRequestSchema, result: briefSourceSchema },
   'compute:library-categories': { payload: libraryCategoriesRequestSchema, result: libraryCategoriesPageSchema },
   'chat:load': { payload: paperChatLoadRequestSchema, result: paperChatPageSchema },
   'chat:save-turn': { payload: paperChatSaveTurnSchema, result: paperChatSavedSchema },

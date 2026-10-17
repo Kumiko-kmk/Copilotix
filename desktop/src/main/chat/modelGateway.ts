@@ -1,9 +1,11 @@
 import type { PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ChatProvider } from './chatProvider'
 import type { CodexRuntime } from '@runtime/codexRuntime'
+import type { CodexSettings } from '@shared/codex'
 export type ModelInput = Omit<Parameters<ChatProvider['stream']>[0], 'provider' | 'key' | 'baseUrl'> & {
   provider: PaperChatProvider; key?: string | null; baseUrl?: string; outputSchema?: unknown
   lane?: 'interactive' | 'background'
+  effort?: NonNullable<CodexSettings['effort']>
 }
 export class ModelGateway {
   constructor(private readonly cloud: ChatProvider, private readonly codex: CodexRuntime) {}

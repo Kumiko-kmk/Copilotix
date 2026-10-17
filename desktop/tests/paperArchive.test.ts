@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { type DocumentSummary } from '../src/shared/ipcSchemas'
 import { ArchiveMomentum, damp, settlingWave, SHOULDER_PEAK } from '../src/renderer/paperArchive/archiveMotion'
 import { ALL_PAPERS, buildArchiveColumns, cellForPaper, groupPapersByCategory, laneStep, nearestOccurrence, paperAt, paperIndexAt, wrap, type ArchivePaper } from '../src/renderer/paperArchive/archiveShelves'
-import { cleanInline, extractPaperProfile } from '../src/renderer/paperArchive/paperProfile'
+import { cleanInline, extractPaperProfile } from '../src/shared/paperProfile'
 import { layoutSpreadFigures, parseFigureManifest, rankSpreadFigures, type SpreadCandidate } from '../src/renderer/paperArchive/figureSpread'
 
 describe("paperArchive", () => {
@@ -162,6 +162,15 @@ describe("paperProfile", () => {
   ].join('\n\n')
 
   describe('paper profile', () => {
+    it('preserves maths and code in archive abstracts and headings while plain projection stays compatible', () => {
+      const source = '# 模型 $x_i$\n\n## 摘要\n\n求解 $a < b$，使用 \\(\\alpha_i\\) 与 `x_i`。\n\n## 1 估计 $N_{eff}$'
+      const profile = extractPaperProfile(source, source, true)
+      expect(profile.translatedTitle).toBe('模型 $x_i$')
+      expect(profile.translatedAbstract).toBe('求解 $a < b$，使用 $\\alpha_i$ 与 `x_i`。')
+      expect(profile.sections).toEqual(['1 估计 $N_{eff}$'])
+      expect(cleanInline('变量 $x_i$ 与 `x_i`')).toBe('变量 x_i 与 x_i')
+      expect(extractPaperProfile(source, source).sections).toEqual(['1 估计 N_{eff}'])
+    })
     it('decodes Markdown escapes without stripping literal underscores or mathematical text', () => {
       expect(cleanInline('在 x\\_i 与 y\\_j 上编码函数，参考\\[5\\]，**加粗**与`a_b`。')).toBe('在 x_i 与 y_j 上编码函数，参考[5]，加粗与a_b。')
       expect(cleanInline('公式 $x_i + y_j$ 与 $a < b$。')).toBe('公式 x_i + y_j 与 a < b。')
@@ -195,6 +204,34 @@ describe("paperProfile", () => {
       expect(profile.authors).toBe('A. Author')
       expect(profile.translatedTitle).toBeNull()
       expect(profile.sections).toEqual(['I. Introduction'])
+    })
+
+    it('finds journal bylines and unlabelled abstracts without taking dates or prose as authors', () => {
+      const abstract = 'The finite element method solves partial differential equations. '.repeat(5).trim()
+      const paper = ['Article', '# NOEM: reusable neural operators', 'Received: 6 July 2025', 'Accepted: 27 February 2026',
+        'Published online: 28 April 2026', 'Check for updates',
+        'Weihang Ouyang<sup>1,2</sup>, Yeonjong Shin<sup>3</sup>, Si-Wei Liu<sup>1</sup> & Lu Lu<sup>2,4</sup>', abstract,
+        'Efficient numerical simulation methods are crucial. '.repeat(5), '# Results'].join('\n\n')
+      expect(extractPaperProfile(paper)).toMatchObject({
+        authors: 'Weihang Ouyang, Yeonjong Shin, Si-Wei Liu & Lu Lu', abstract
+      })
+      expect(extractPaperProfile(paper.replace(/Weihang Ouyang.*?\n\n/u, '')).authors).toBeNull()
+      expect(extractPaperProfile(paper.replace(/Weihang Ouyang.*?\n\n/u, '')).abstract).toBeNull()
+    })
+
+    it('keeps long multilingual bylines and stops front matter at Contents instead of requiring Abstract', () => {
+      const names = Array.from({ length: 45 }, (_, i) => `John Jumper<sup>${i + 1}</sup>`).join(', ')
+      const abstract = 'Proteins are essential to life and their structures explain their functions. '.repeat(5).trim()
+      const profile = extractPaperProfile(`# AlphaFold\n\n${names}\n\n${abstract}`)
+      expect(profile.authors).toBe(Array.from({ length: 45 }, () => 'John Jumper').join(', '))
+      expect(profile.abstract).toBe(abstract)
+      const book = '# Geometric Deep Learning\n\nMichael M. Bronstein, Joan Bruna, Taco Cohen, Petar Veličković\n\nMay 4, 2021\n\n## Contents\n\nPreface ... 1\n\n## Preface\n\n' + abstract
+      expect(extractPaperProfile(book)).toMatchObject({ authors: 'Michael M. Bronstein, Joan Bruna, Taco Cohen, Petar Veličković', abstract: null })
+      for (const heading of ['Related Work', 'Problem Formulation']) {
+        expect(extractPaperProfile(`# Paper\n\nA. Author\n\n## ${heading}\n\n${abstract}`)).toMatchObject({authors: 'A. Author', abstract: null})
+      }
+      expect(extractPaperProfile('# Paper\n\nReceived: 6 July 2025\n\n' + 'Neural operators approximate PDE solution families with learned representations across multiple spatial scales. '.repeat(5)).authors).toBeNull()
+      expect(extractPaperProfile('# 中文论文\n\n张三，李四\n\n## 摘要\n\n本文研究具体问题。').authors).toBe('张三，李四')
     })
 
     it('returns empty facts for an empty document', () => {

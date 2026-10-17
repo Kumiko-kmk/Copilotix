@@ -6,8 +6,11 @@ import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight
 import type { LibraryCategories } from '@shared/libraryCategories'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../paperArchive/PaperArchiveScene'
 import ArchiveAnatomy from '../paperArchive/ArchiveAnatomy'
+import ArchiveText from '../paperArchive/ArchiveText'
 import ArchiveDetail, { type ArchiveMorph } from '../paperArchive/ArchiveDetail'
-import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from '../paperArchive/paperProfile'
+import ArchiveProgressRing from '../paperArchive/ArchiveProgressRing'
+import { useArchivePreparation } from '../paperArchive/useArchivePreparation'
+import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from '@shared/paperProfile'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
 import { statusLabels } from '../documentStatus'
 import '../paperArchive/paperArchive.css'
@@ -37,6 +40,9 @@ export default function LibraryPage(props: {
   const onOpenRef = React.useRef(props.onOpen)
   onOpenRef.current = props.onOpen
   const [selection, setSelection] = React.useState<Selection>({ cell: { lane: 0, row: 0 }, paper: null })
+  const preparation = useArchivePreparation(selection.paper, props.insights)
+  const accessRef = React.useRef({ id: selection.paper?.id, ready: preparation.ready })
+  accessRef.current = { id: selection.paper?.id, ready: preparation.ready }
   const [unsupported, setUnsupported] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [searchOpen, setSearchOpen] = React.useState(false)
@@ -100,6 +106,7 @@ export default function LibraryPage(props: {
           setSelection({ cell, paper })
         },
         onActivate: (paper) => onOpenRef.current(paper.id),
+        canOpenDetail: (paper) => accessRef.current.id === paper.id && accessRef.current.ready,
         onError: () => setUnsupported(true),
         onDetailFrame: (frame) => {
           const page = pageRef.current
@@ -202,7 +209,7 @@ export default function LibraryPage(props: {
         event.preventDefault()
         if (event.repeat) return
         if (scene.detailReady) scene.activate()
-        else scene.openDetail()
+        else if (accessRef.current.ready) scene.openDetail()
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -310,14 +317,14 @@ export default function LibraryPage(props: {
       ) : paper ? (
         <article ref={panelRef} className={`paper-archive-panel${returningId === paper.id ? ' returning' : ''}`} data-document-id={paper.id} aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
-          <h2 key={paper.id} className="paper-archive-title"><span>{displayTitle}</span></h2>
+          <h2 key={paper.id} className="paper-archive-title"><span><ArchiveText text={displayTitle} /></span></h2>
           <BrowseTranslatedTitle paper={paper} />
-          <div className="paper-archive-rule"><i /></div>
+          <div className="paper-archive-rule"><i /><ArchiveProgressRing key={paper.id} documentId={paper.id} progress={preparation.progress} ready={preparation.ready} /></div>
           <dl className="paper-archive-meta">
             <BrowsePaperNotes key={paper.id} paper={paper} source={props.insights} />
           </dl>
           <div className="paper-archive-actions">
-            <button type="button" className="paper-archive-action" onClick={() => sceneRef.current?.openDetail()}>
+            <button type="button" className="paper-archive-action" disabled={!preparation.ready} onClick={() => { if (preparation.ready) sceneRef.current?.openDetail() }}>
               <span>查看档案</span><ExpandOutlined aria-hidden="true" />
             </button>
             <button type="button" className="paper-archive-action" onClick={() => props.onOpen(paper.id)}>
@@ -456,8 +463,8 @@ function BrowseTranslatedTitle({ paper }: { paper: ArchivePaper }): React.JSX.El
     enabled: settledId === paper.id,
     staleTime: 30_000
   })
-  const translatedTitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown), [details.data?.translatedMarkdown])
-  return <p className="paper-archive-translated-title">{translatedTitle || '\u00a0'}</p>
+  const translatedTitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown, true), [details.data?.translatedMarkdown])
+  return <p className="paper-archive-translated-title"><ArchiveText text={translatedTitle || '\u00a0'} /></p>
 }
 
 /** A fixed-width ruler; long shelves map onto it proportionally. */
@@ -486,8 +493,8 @@ function readPalette(element: HTMLElement): ArchivePalette {
     card: token('--archive-card', '#fff7ed'),
     cardSelected: token('--archive-card-selected', '#ffffff'),
     edge: token('--archive-edge', '#fff5e9'),
-    accent: token('--archive-accent', '#5b58d6'),
     tray: token('--archive-tray', '#806447'),
+    accent: token('--archive-accent', '#5b58d6'),
     index: {
       done: token('--archive-index-done', '#e4d6c5'),
       active: token('--archive-index-active', '#5b58d6'),

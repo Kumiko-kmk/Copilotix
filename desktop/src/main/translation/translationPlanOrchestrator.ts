@@ -82,7 +82,10 @@ export class TranslationPlanOrchestrator {
     await this.report(opened)
 
     let cursor = 0
-    for (;;) {
+    const queue = new PQueue({ concurrency: 64 })
+    const inFlight = new Set<Promise<void>>()
+    let failure: { error: unknown } | null = null
+    try { for (;;) {
       throwIfAborted(signal)
       const page = translationPlanListResultSchema.parse(
         await compute.listTranslationWork(task.id, jobId, cursor, MAX_TRANSLATION_PLAN_PAGE, signal)
@@ -90,12 +93,20 @@ export class TranslationPlanOrchestrator {
       throwIfAborted(signal)
       this.rememberFailed(page.items)
       await this.report(page.counts)
-      const pending = page.items.filter((item) => item.status === 'pending')
-      if (pending.length > 0) await this.processPage(pending, compute)
+      for (const descriptor of page.items) {
+        if (descriptor.status !== 'pending') continue
+        while (inFlight.size >= 64) await Promise.race(inFlight)
+        throwIfAborted(signal)
+        const task: Promise<void> = queue.add(() => this.processUnit(descriptor, compute))
+          .then(() => undefined, error => { failure ??= { error } })
+          .finally(() => { inFlight.delete(task) })
+        inFlight.add(task)
+      }
       if (page.nextCursor === null) break
       if (page.nextCursor <= cursor) throw new Error('翻译计划分页 cursor 未前进')
       cursor = page.nextCursor
-    }
+    } } finally { await Promise.all(inFlight); await queue.onIdle() }
+    if (failure) throw (failure as { error: unknown }).error
 
     throwIfAborted(signal)
 
@@ -106,18 +117,6 @@ export class TranslationPlanOrchestrator {
     this.rememberFailedIds(finalized.failedBlockIdsSample)
     await this.report(finalized)
     return finalized
-  }
-
-  private async processPage(
-    descriptors: readonly TranslationPlanWorkDescriptor[],
-    compute: PlanComputePort
-  ): Promise<void> {
-    const queue = new PQueue({ concurrency: 3 })
-    const tasks = descriptors.map((descriptor) => queue.add(() => this.processUnit(descriptor, compute)))
-    const settled = await Promise.allSettled(tasks)
-    await queue.onIdle()
-    const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected')
-    if (rejected) throw rejected.reason
   }
 
   private async processUnit(
@@ -304,6 +303,9 @@ async function translateRequest(
 ): Promise<TranslationPlanResponse> {
   throwIfAborted(signal)
   if (request.protocol === 'copilotix-translation-plain-v1') {
+    if (provider.translatePlain && request.segments.length > 1) {
+      return plainTranslationResponseSchema.parse(await withRetry(() => provider.translatePlain!(request, signal), signal))
+    }
     const translations: Array<{ id: string; text: string }> = []
     for (const segment of request.segments) {
       throwIfAborted(signal)

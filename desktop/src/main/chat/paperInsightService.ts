@@ -1,5 +1,9 @@
 import { z } from 'zod'
-import { paperBriefContentSchema } from '@shared/paperBrief/schema'
+import { lstat, open } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { buildFullBriefContext, PaperBriefInputError } from '@shared/paperBrief/context'
+import { briefSourceSchema, briefContextResultSchema, type BriefSource } from '@shared/paperBrief/contracts'
+import { paperBriefModelOutputSchema } from '@shared/paperBrief/schema'
 import type { ModelGateway } from './modelGateway'
 import { assembleBrief, buildBriefMessages, buildBriefRepairMessage, clipPreviousAnswer, parseBriefResponse, PAPER_BRIEF_REQUEST, PAPER_BRIEF_MAX_REQUEST_BYTES, type PaperBrief } from '@shared/paperBrief'
 import type { BriefContextResult, BriefAnchor } from '@shared/paperBrief/contracts'
@@ -9,6 +13,33 @@ import type { AppSettings } from '@shared/types'
 import type { Job } from '@core/types'
 import { ChatProviderError } from './chatProvider'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
+
+export async function loadFullBriefContext(documentId: string, signal: AbortSignal,
+  source: () => Promise<BriefSource>): Promise<BriefContextResult> {
+  signal.throwIfAborted()
+  const descriptor = briefSourceSchema.parse(await source())
+  if (descriptor.documentId !== documentId) throw new PaperBriefInputError('论文来源不匹配')
+  for (const artifact of descriptor.sources) {
+    signal.throwIfAborted()
+    const info = await lstat(artifact.path)
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 16 * 1024 * 1024) throw new PaperBriefInputError('论文全文来源无效或超过 16 MiB；未截断内容')
+    const handle = await open(artifact.path, 'r')
+    let data: Buffer
+    try {
+      if ((await handle.stat()).size > 16 * 1024 * 1024) throw new PaperBriefInputError('论文全文超过 16 MiB；未截断内容')
+      data = await handle.readFile({ signal })
+    } finally { await handle.close() }
+    if (createHash('sha256').update(data).digest('hex') !== artifact.hash) throw new PaperBriefInputError('论文内容正在更新，请重试')
+    const markdown = data.toString('utf8')
+    if (!markdown.trim()) continue
+    signal.throwIfAborted()
+    const after = briefSourceSchema.parse(await source())
+    if (after.documentId !== documentId || after.sourceRevision !== descriptor.sourceRevision || JSON.stringify(after.sources) !== JSON.stringify(descriptor.sources)) throw new PaperBriefInputError('论文内容正在更新，请重试')
+    return briefContextResultSchema.parse({ documentId, sourceRevision: descriptor.sourceRevision,
+      context: buildFullBriefContext(artifact.language === 'original' ? markdown : '', artifact.language === 'translated' ? markdown : '') })
+  }
+  throw new PaperBriefInputError('论文正文为空')
+}
 
 export interface PaperInsightDependencies {
   settings(): Promise<AppSettings>
@@ -96,7 +127,7 @@ export class PaperInsightService {
     const { documentId, controller } = run
     const signal = controller.signal
     // The detailed brief streams up to ~6000 output tokens; allow for slow provider periods.
-    const timer = setTimeout(() => controller.abort(new Error('timeout')), 300_000)
+    const timer = setTimeout(() => controller.abort(new Error('timeout')), 600_000)
     try {
       signal.throwIfAborted()
       const stored = await this.deps.get(documentId)
@@ -117,7 +148,7 @@ export class PaperInsightService {
         const usage = await this.deps.stream({
           provider: auth.provider, model: auth.model, key: auth.key,
           baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
-          signal, messages, ...(auth.provider === 'codex' ? { outputSchema: z.toJSONSchema(paperBriefContentSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
+          signal, messages, ...(auth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
           onDelta: (delta) => {
             signal.throwIfAborted()
             if (answer.length + delta.length > 32_768) throw new Error('output budget exceeded')
@@ -126,7 +157,7 @@ export class PaperInsightService {
         })
         if (usage) await this.deps.recordUsage(auth.provider, usage).catch(() => undefined)
         signal.throwIfAborted()
-        const parsed = parseBriefResponse(answer, { lengths: attempt === 0 })
+        const parsed = parseBriefResponse(answer, { lengths: attempt === 0, requireAnalysis: true })
         if (!parsed.ok) {
           if (attempt === 0) {
             messages.push({ role: 'assistant', content: clipPreviousAnswer(answer) }, buildBriefRepairMessage(parsed.problems))
@@ -137,7 +168,8 @@ export class PaperInsightService {
         const brief = assembleBrief(parsed.content, context.context, {
           provider: auth.provider, model: auth.model, sourceRevision: context.sourceRevision
         })
-        const cited = new Set(brief.findings.flatMap((finding) => finding.anchors))
+        const cited = new Set([...brief.findings.flatMap((finding) => finding.anchors),
+          ...Object.values(brief.metadata ?? {}).flatMap(fact => fact?.anchors ?? [])])
         const anchors = context.context.excerpts.filter((excerpt) => cited.has(excerpt.id)).map(({ id, section, text }) => ({ id, section, text }))
         signal.throwIfAborted()
         // Await atomic write even when cancellation arrives during commit, then report actual disk state.
@@ -151,8 +183,11 @@ export class PaperInsightService {
         this.emit(documentId, stored.status === 'ready' ? stored : { status: 'failed', error: '生成已取消或超时，可重新生成。' })
       } else {
         // Never persist or forward provider bodies, prompts, paths or API keys in errors.
-        this.emit(documentId, { status: 'failed', error: error instanceof ChatProviderError && error.code === 'EMBEDDING_RATE_LIMITED'
-          ? '服务商限流，请稍后重试。' : '生成或保存 AI 解读失败，请检查模型服务与论文内容后重试。' })
+        this.emit(documentId, { status: 'failed', error: error instanceof PaperBriefInputError ? error.message
+          : error instanceof Error && 'code' in error && error.code === 'RAG_LIMIT_EXCEEDED'
+            ? '论文全文超过所选模型或请求容量；未截断内容，请选择更大上下文的模型。'
+            : error instanceof ChatProviderError && error.code === 'EMBEDDING_RATE_LIMITED'
+              ? '服务商限流，请稍后重试。' : '生成或保存 AI 解读失败，请检查模型服务与论文内容后重试。' })
       }
     } finally { clearTimeout(timer) }
   }
@@ -182,8 +217,9 @@ export class PaperInsightService {
   }
   async onJobChanged(job: Pick<Job, 'kind' | 'status' | 'documentId'>): Promise<void> {
     if (!['translate', 'parse'].includes(job.kind) || job.status !== 'succeeded' || !this.deps.canStart() || this.paused || this.destroyed) return
-    // Every completed translation queues its brief; provider configuration and credentials are still checked before sending.
-    if (job.kind === 'translate') await this.generate(job.documentId, true)
+    // Full original text is ready after parsing: analysis overlaps translation.
+    // The translation event also recovers older imports and failed generation.
+    if (job.kind === 'parse' || job.kind === 'translate') await this.generate(job.documentId, true)
     else this.emit(job.documentId, await this.get(job.documentId))
   }
 }

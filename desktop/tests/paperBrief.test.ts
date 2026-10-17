@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { briefGeneration } from './fixtures/paperBrief'
+import { buildFullBriefContext } from '../src/shared/paperBrief/context'
+import { briefContextResultSchema } from '../src/shared/paperBrief/contracts'
+import { groundPaperMetadata, localPaperMetadata } from '../src/shared/paperBrief/metadata'
 import {
   BRIEF_BUDGETS,
   assembleBrief,
@@ -65,6 +69,18 @@ function sampleContent(anchor: string): PaperBriefContent {
 }
 
 describe('paper brief context', () => {
+  it('sends the entire original paper including late sections, math, tables and references', () => {
+    const source = `${PAPER}\n\n${'正文和公式 $x_i$。\n\n'.repeat(8000)}\n\n## References\n\n[999] End of complete source.`
+    const context = buildFullBriefContext(source, '不能选用译文')
+    const validated = briefContextResultSchema.parse({ documentId: '00000000-0000-4000-8000-000000000001', sourceRevision: 'test', context }).context
+    expect(validated.excerpts.map(excerpt => excerpt.text).join('')).toBe(source)
+    expect(validated.coverage.truncated).toBe(false)
+    expect(validated.coverage.sourceBytes).toBe(byteLength(source))
+    const sent = buildBriefMessages(validated)[1]!.content
+    expect(sent).toContain('[999] End of complete source.')
+    expect(sent).toContain('Attention(Q,K,V)')
+    expect(sent).toContain('<table>')
+  })
   it('normalises MinerU markdown without swallowing text around a bare less-than sign', () => {
     const text = normalizeMarkdown('a < b and <b>bold</b> c > d \\[12] [link](http://x) ![i](y.png)\n\n<table><tr><td>A</td><td>1</td></tr></table>')
     expect(text).toContain('a < b and bold c > d')
@@ -120,6 +136,41 @@ describe('paper brief context', () => {
 })
 
 describe('paper brief prompt', () => {
+  it('asks only for missing bibliographic information in the existing full-paper request', () => {
+    const known = buildFullBriefContext('# Example Paper\n\nAlice Smith, Bob Jones\n\nPublished online: 12 May 2024\n\nhttps://doi.org/10.1234/example\n\n## Abstract\n\nThe paper content.', '')
+    expect(localPaperMetadata(known)).toMatchObject({ authors: 'Alice Smith, Bob Jones', year: '2024', doi: '10.1234/example' })
+    const sent = buildBriefMessages(known)[1]!.content
+    expect(sent).toContain('"missingMetadata":["venue"]')
+    const unknown = buildFullBriefContext('# Example Paper\n\n## Authors\n\nalice smith; bob jones\n\n## Abstract\n\nText.', '')
+    expect(localPaperMetadata(unknown).authors).toBeNull()
+    expect(buildBriefMessages(unknown)[1]!.content).toContain('"authors"')
+    const metadata = { title: null, authors: { value: 'alice smith; bob jones', evidence: 'alice smith; bob jones', anchors: ['E1'] }, year: null, venue: null, doi: null }
+    expect(groundPaperMetadata(metadata, unknown).authors?.value).toBe('alice smith; bob jones')
+    expect(groundPaperMetadata(metadata, known).authors).toBeNull() // never override a local byline
+    expect(groundPaperMetadata({ ...metadata, authors: { ...metadata.authors, value: 'Invented Person' } }, unknown).authors).toBeNull()
+    expect(groundPaperMetadata({ ...metadata, authors: { ...metadata.authors, anchors: ['E99'] } }, unknown).authors).toBeNull()
+    const references = buildFullBriefContext('# Example Paper\n\n## Abstract\n\nText.\n\n## References\n\nalice smith; bob jones', '')
+    expect(groundPaperMetadata(metadata, references).authors).toBeNull()
+  })
+
+  it('stores grounded metadata with the analysis and drops unsupported facts without losing the archive', () => {
+    const context = buildFullBriefContext('# Example Paper\n\n## Authors\n\nalice smith; bob jones\n\n## Abstract\n\nText.', '')
+    const generation = { ...briefGeneration, metadata: { title: null, authors: { value: 'alice smith; bob jones', evidence: 'alice smith; bob jones', anchors: ['E1'] },
+      year: { value: '2025', evidence: '2025', anchors: ['E1'] }, venue: null, doi: null } }
+    const parsed = parseBriefResponse(JSON.stringify(generation), { requireAnalysis: true })
+    if (!parsed.ok) throw Error(parsed.problems.join(';'))
+    const stored = assembleBrief(parsed.content, context, { provider: 'codex', model: 'test', sourceRevision: 'same-source' })
+    expect(stored.metadata?.authors?.value).toBe('alice smith; bob jones')
+    expect(stored.metadata?.year).toBeNull()
+    expect(stored.analysis).toEqual(generation.analysis)
+  })
+  it('requests correctly escaped TeX and distinguishes mathematical variables from code', () => {
+    const system = buildBriefMessages(buildBriefContext(PAPER, ''))[0]!.content
+    expect(system).toContain('$d_{\\mathrm{model}}=512$')
+    expect(system).toContain('$\\sqrt{d_k}$')
+    expect(system).toContain('代码标识符才用反引号')
+    expect(system).toContain('JSON 中的 LaTeX 反斜杠必须正确转义')
+  })
   it('fences the digest as data and stays under the request cap', () => {
     const messages = buildBriefMessages(buildBriefContext(PAPER, ''))
     expect(messages.map((message) => message.role)).toEqual(['system', 'user'])
@@ -131,6 +182,29 @@ describe('paper brief prompt', () => {
 })
 
 describe('paper brief lengths', () => {
+  it('reports extra fields and all discussion length failures together without accepting unknown fields', () => {
+    const value = structuredClone(briefGeneration)
+    value.analysis.discussion = { ...value.analysis.discussion, contribution: '论'.repeat(252), progress: '研'.repeat(278), limitations: '限'.repeat(240) }
+    const raw = JSON.stringify({ ...value, analysis: { ...value.analysis, discussion: { ...value.analysis.discussion, progress_note: '' } } })
+    const parsed = parseBriefResponse(raw, { requireAnalysis: true })
+    expect(parsed.ok).toBe(false)
+    if (parsed.ok) throw Error('Unexpected acceptance')
+    expect(parsed.problems.join('\n')).toMatch(/progress_note/u)
+    for (const field of ['contribution', 'progress', 'limitations', 'total']) expect(parsed.problems.some(problem => problem.startsWith(`analysis.discussion.${field}：`))).toBe(true)
+    const stillUnknown = JSON.stringify({ ...briefGeneration, extra: '' })
+    expect(parseBriefResponse(stillUnknown, { requireAnalysis: true }).ok).toBe(false)
+  })
+  it('validates all four section budgets and grounds core work while still reading old v2 content', () => {
+    const parsed = parseBriefResponse(JSON.stringify(briefGeneration), { requireAnalysis: true })
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) throw new Error(parsed.problems.join('; '))
+    const brief = assembleBrief(parsed.content, buildFullBriefContext(PAPER, ''), { provider: 'codex', model: 'gpt-6.1-sol', sourceRevision: 'test' })
+    expect(brief.analysis?.conclusions.map(item => item.anchors)).toEqual(brief.findings.map(item => item.anchors))
+    const invalid = structuredClone(briefGeneration)
+    invalid.analysis.discussion.progress = '短'
+    expect(parseBriefResponse(JSON.stringify(invalid), { requireAnalysis: true }).ok).toBe(false)
+    expect(parseBriefResponse(JSON.stringify(sampleContent('E1'))).ok).toBe(true)
+  })
   it('counts Han characters as one and other characters as half', () => {
     expect(displayLength('注意力 Transformer')).toBe(9)
     expect(displayLength('  ')).toBe(0)
@@ -157,8 +231,9 @@ describe('paper brief lengths', () => {
 
   it('states every range in the prompt', () => {
     const system = buildBriefMessages(buildBriefContext(PAPER, ''))[0]!.content
-    expect(system).toContain('"tldr": "一句话：研究对象、做法与最主要的结果，40–70字"')
-    expect(system).toContain('findings 3–6')
+    expect(system).toContain('"tldr": "一句话总结，40–70字"')
+    expect(system).toContain('正文合计400–650字')
+    expect(system).toContain('正文合计450–650字')
     expect(system).not.toContain('${')
   })
 })

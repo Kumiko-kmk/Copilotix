@@ -297,6 +297,8 @@ describe('utility persistence lifecycle', () => {
         "SELECT id FROM jobs WHERE document_id=? AND kind='translate'"
       ).get(taskId) as { id: string }
       const originalManager = state.translationPlanManager
+      await persistence.handlers['settings:get']!({ payload: { outputRoot } } as never, signal)
+      expect(state.translationPlanManager).toBe(originalManager)
       await persistence.handlers['compute:translation-plan-open']!({ payload: { taskId, jobId: job.id } } as never, signal)
       expect(state.translationPlanManager).toBe(originalManager)
 

@@ -59,9 +59,17 @@ unsubscribe()
 
 Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RPC：`figureInsight:get / save` 及 `compute:figure-insight-descriptor`。流程入口：`main/chat/figureInsightService.ts`、`utility/core/persistence/figureInsightStore.ts`；IPC 註冊與生命週期在 `main/index.ts`。
 
+## 閱讀器整圖邊界
+
+`readerFigureGroups.ts` 先按圖說與解析器結構建立候選，再以多源最短路分配子圖歸屬；邊權使用頁面歸一化中心距離，跨行／欄的連接容差同時參考頁面及子圖尺寸。相鄰獨立圖可按各自對齊的圖說分開，接近同分的歸屬保留歧義；跨欄圖說的續文共用歸屬。解析器父節點只是證據：不得越過正文、表格或其他圖說，也不得因部分子圖受阻就只接受最近一列；父節點錯連到圖說另一側、且被阻隔時，以清楚的幾何歸屬為準。沒有論文名稱、圖號或固定行列數特例。
+
+圖體外包範圍完整保留，四周最多 4 pt 留白按相鄰內容的空隙中線收縮；真正侵入圖體、未知／損壞坐標、多重歸屬或跨頁映射仍保留來源圖，不用局部成功隱藏缺失。映射 ID、標註和來源文件不變；裁圖範圍／成員改變透過既有 geometry key 淘汰舊快取、按需生成。17 篇實際文庫幾何比對的完整圖組由 101 組增至 111 組，原有已支持圖片無丟失、無重複歸屬或越界裁切；此為幾何與資料驗證，不代表所有組圖均已人工辨識。證據在工作區 `../investigation/robust-figures-20261016/corpus.json`；回歸入口 `readerFigureGroups.test.ts` 包含多列、疏間距、三種縮放、輸入逆序、側／頂圖說、獨立鄰圖、錯誤父節點與正文穿插。
+
+閱讀投影以實際圖片來源優先於解析器錯掛的錨點。上一圖說與下一圖首張圖片被解析成同一 Markdown 段落時，可共享來源段落而分別展示兩個完整圖；下一圖優先置於沒有外來圖說的成員段落，保留原有圖說順序。僅相應裁圖成功才隱藏它自己的來源圖片／已核對的圖內文字，另一圖待處理或失敗時保留其來源；不重寫 Markdown、mapping ID、annotation key 或文字偏移。共享無法確證時仍回退。`captionLabel` 是同版本 Main／Renderer 內部幾何提示，不改持久化 figure manifest；投影與顯示回歸在 `readerFigureGroups.test.ts`／`MarkdownPane.test.tsx`，包含單圖失敗與標註文字不變。
+
 ## 文庫封面
 
-`paperArchive/figureSpread.ts`：抽出檔案時，卡片顯示跨頁——左為論文首頁，右為同尺寸圖頁。Renderer 經 `copilotix-asset://<id>/figures.json` 讀清單（只接受 `images/figures/*.png`），逐圖 `figureInsight.get` 取 `displayWeight`；有分者按分數排前、0 分不展示，無分者按頁序（附錄靠後）、裁圖面積和長寬比兜底；首頁上的圖與極端長條不選。排版為等寬行（每行 1–3 張、行內等高撐滿），在前 1–6 張的所有分行中選版面利用率最高、最小短邊 ≥ 版心寬 24%、大小不過分懸殊者；圖多不扣分，同等利用率下展示更多高分圖。只解碼選中圖片，任一失敗或無可用圖則保留單頁封面。封面不觸發生成。
+`paperArchive/figureSpread.ts`：抽出檔案時，卡片顯示跨頁——左為論文首頁，右為同尺寸圖頁。Renderer 經 `copilotix-asset://<id>/figures.json` 讀清單（只接受 `images/figures/*.png`），逐圖 `figureInsight.get` 取 `displayWeight`；有分者按分數排前、0 分不展示，無分者按頁序（附錄靠後）、裁圖面積和長寬比兜底；首頁上的圖與極端長條不選。排版為等寬行（每行 1–3 張、行內等高撐滿），在前 1–6 張的所有分行中選版面利用率最高、最小短邊 ≥ 版心寬 24%、大小不過分懸殊者；圖多不扣分，同等利用率下展示更多高分圖。只解碼選中圖片，任一失敗或無可用圖則保留單頁封面。封面只補齊本地整圖，不觸發 AI 解讀。選中新導入論文後，在進入詳情前即與閱讀器共用 `ensureFigureArtifacts`：由解析映射與 layout 識別可靠整圖、從 PDF 裁取並經既有 revision 校驗與原子保存生成 `figures.json`／PNG，再選圖排版；不再依賴使用者先進入閱讀器。所需可靠整圖、排版封面與檔案內容就緒前不開放詳情；抽出後使用已準備的跨頁。切篇／關閉取消未完成裁圖，暫時失敗不快取為永久單頁封面，重新打開可重試。
 
 ## 驗證邊界
 

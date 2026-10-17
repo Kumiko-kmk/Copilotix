@@ -1,0 +1,70 @@
+import React from 'react'
+import { useQuery } from '@tanstack/react-query'
+import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
+import { buildReaderFigureGeometries, type ReaderFigureGeometry } from '@shared/readerFigureGroups'
+import type { ArchivePaper } from './archiveShelves'
+
+/** Readiness includes the saved analysis and complete figure files, not just translation. */
+export function useArchivePreparation(paper: ArchivePaper | null, source?: PaperInsightSource): { ready: boolean; progress: number } {
+  const id = paper?.id
+  const status = paper?.workflow.status
+  const insightKey = `${id ?? ''}:${status ?? ''}`
+  const [insight, setInsight] = React.useState<{ key: string; state: PaperInsightState } | null>(null)
+  React.useEffect(() => {
+    if (!id || !source) return
+    let current = true, updated = false
+    const accept = (state: PaperInsightState): void => { if (current) setInsight({ key: insightKey, state }) }
+    const stop = source.subscribe((documentId, state) => { if (documentId === id) { updated = true; accept(state) } })
+    source.get(id).then(state => { if (!updated) accept(state) }, () => accept({ status: 'failed', error: '无法读取档案' }))
+    return () => { current = false; stop() }
+  }, [id, source, insightKey])
+
+  const details = useQuery({ queryKey: ['document', id], queryFn: () => window.copilotix.getDocument(id!),
+    enabled: Boolean(id && ['translating', 'partial', 'completed'].includes(status ?? '')), staleTime: 30_000 })
+  const data = details.data
+  const geometryJson = React.useMemo(() => data?.markdown.trim()
+    ? JSON.stringify(buildReaderFigureGeometries(data.mappings, data.layoutJson)) : null, [data?.markdown, data?.mappings, data?.layoutJson])
+  const pdfUrl = data?.pdfUrl
+  const figureKey = `${id ?? ''}:${pdfUrl ?? ''}:${geometryJson ?? ''}`
+  const [figures, setFigures] = React.useState<{ key: string; done: boolean; ratio: number } | null>(null)
+  React.useEffect(() => {
+    if (!id || !pdfUrl || geometryJson === null) return
+    const controller = new AbortController()
+    setFigures({ key: figureKey, done: false, ratio: 0 })
+    if (/\.(?:md|markdown)$/iu.test(paper?.originalName ?? '')) {
+      setFigures({ key: figureKey, done: true, ratio: 1 })
+      return () => controller.abort()
+    }
+    const geometries = JSON.parse(geometryJson) as ReaderFigureGeometry[]
+    void import('../useFigureArtifacts').then(({ ensureFigureArtifacts }) => ensureFigureArtifacts(id, pdfUrl, geometries, controller.signal,
+      (available, failed, total) => { if (!controller.signal.aborted) setFigures({ key: figureKey, done: false, ratio: total ? (available + failed) / total : 1 }) }))
+      .then(result => { if (!controller.signal.aborted) setFigures({ key: figureKey, done: result.failed === 0, ratio: result.failed ? 0.99 : 1 }) })
+      .catch(() => { /* Incomplete work never unlocks the archive or produces a success check. */ })
+    return () => controller.abort()
+  }, [id, pdfUrl, geometryJson, figureKey, paper?.originalName])
+
+  const state = insight?.key === insightKey ? insight.state : null
+  const analysisReady = !source || (state?.status === 'ready' && !state.stale)
+  const imagesReady = figures?.key === figureKey && figures.done
+  const workflowReady = status === 'completed'
+  const coverKey = data && id ? `${id}:${data.summary.updatedAt}:spread` : null
+  const [preparedCover, setPreparedCover] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    if (!id || !data || !coverKey || !workflowReady || !analysisReady || !imagesReady || data.summary.workflow.status !== 'completed') return
+    const controller = new AbortController()
+    if (/\.(?:md|markdown)$/iu.test(paper?.originalName ?? '')) {
+      setPreparedCover(coverKey)
+      return () => controller.abort()
+    }
+    void Promise.all([import('./detailPage'), import('./ArchiveDetail')])
+      .then(([{ loadDetailPage, renderPdfFirstPage }, { renderSpread }]) => loadDetailPage(coverKey,
+        () => renderSpread(id, data, renderPdfFirstPage, controller.signal, () => undefined), controller.signal))
+      .then(() => { if (!controller.signal.aborted) setPreparedCover(coverKey) })
+      .catch(() => { /* No completed state until the composed cover is usable. */ })
+    return () => controller.abort()
+  }, [id, data, coverKey, workflowReady, analysisReady, imagesReady, paper?.originalName])
+  const ready = Boolean(id && workflowReady && analysisReady && imagesReady && preparedCover === coverKey)
+  const progress = ready ? 100 : !workflowReady ? Math.min(94, Math.max(0, (paper?.workflow.progress ?? 0) * 0.94))
+    : !analysisReady ? 96 : 98 + Math.min(1, figures?.key === figureKey ? figures.ratio : 0)
+  return { ready, progress }
+}

@@ -159,6 +159,8 @@ export interface PaperArchiveSceneOptions {
   onSelect(cell: ArchiveCell, paper: ArchivePaper | null): void
   /** The extracted paper was clicked: open it in the reader. */
   onActivate(paper: ArchivePaper): void
+  /** All routes into detail (including card pointer input) share this guard. */
+  canOpenDetail?(paper: ArchivePaper): boolean
   /** The model could not be prepared; the page shows a fallback. */
   onError?(error: unknown): void
   /** Extraction state of the selected paper, for the detail panel. */
@@ -556,6 +558,7 @@ export class PaperArchiveScene {
     const mesh = this.page
     if (!mesh) return
     this.pageCanvas = page
+    this.renderer.domElement.dataset.archiveCover = page ? page.dataset.archiveCover ?? 'first-page' : 'none'
     const material = mesh.material as MeshBasicMaterial
     const front = this.pageFront!
     const frontMaterial = front.material as MeshBasicMaterial
@@ -626,7 +629,8 @@ export class PaperArchiveScene {
 
   /** Extract the selected paper: lift it clear, turn the camera to it and decrypt its cover. */
   openDetail(): boolean {
-    if (!this.loaded || this.targetDetail || !paperAt(this.shelves, this.selected)) return false
+    const paper = paperAt(this.shelves, this.selected)
+    if (!this.loaded || this.targetDetail || !paper || this.options.canOpenDetail?.(paper) === false) return false
     this.stopMomentum()
     this.hoverCell = null
     this.pendingSelection = null

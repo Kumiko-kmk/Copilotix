@@ -208,7 +208,10 @@ export class MarkdownTranslationPlanManager {
 
     const savedBlocks = this.repository.listTranslationBlocks(taskId, jobId)
     const attemptChanged = planMatches && existingMetadata !== null && existingMetadata.attempt !== binding.attempt
-    await this.restorePersistedBlocks(candidate, savedBlocks, attemptChanged)
+    // A retry can restart after its pending plan is saved but before any
+    // provider result replaces the previous attempt's failed DB records.
+    const pendingUnits = new Set(planMatches ? candidate.units.filter((unit) => unit.status === 'pending').map((unit) => unit.descriptor.unitId) : [])
+    await this.restorePersistedBlocks(candidate, savedBlocks, attemptChanged, pendingUnits)
     await this.persistAutoCompleted(candidate, savedBlocks)
     await this.writeMetadata(candidate)
     this.plans.set(key, candidate)
@@ -630,7 +633,7 @@ export class MarkdownTranslationPlanManager {
     }
   }
 
-  private async restorePersistedBlocks(state: PlanState, records: TranslationBlockRecord[], attemptChanged = false): Promise<void> {
+  private async restorePersistedBlocks(state: PlanState, records: TranslationBlockRecord[], attemptChanged = false, pendingUnits: ReadonlySet<string> = new Set()): Promise<void> {
     const byBlockId = new Map(records.filter((record) => record.jobId === undefined || record.jobId === state.jobId).map((record) => [record.blockId, record]))
     for (const unit of state.units) {
       // References, protected content and tables without text are local results.
@@ -656,7 +659,7 @@ export class MarkdownTranslationPlanManager {
         unit.provider = members[0]!.record!.provider
         unit.model = members[0]!.record!.model
         unit.error = null
-      } else if (failed && !attemptChanged) {
+      } else if (failed && !attemptChanged && !pendingUnits.has(unit.descriptor.unitId)) {
         const output = new Map(members.map(({ blockId, index }) => [blockId, unit.sourceMarkdowns[index] ?? '']))
         await this.writeUnitResults(state, unit, output)
         unit.status = 'failed'

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { DocumentDetails } from '@shared/ipcSchemas'
 import { ArchiveViewer, viewerParts, type ViewerSection, type ViewerState } from './archiveViewer'
 import { drawSectionSheet } from './anatomySheets'
-import { archiveTitle, extractPaperProfile } from './paperProfile'
+import { archiveTitle, extractPaperProfile } from '@shared/paperProfile'
 
 /** Sections beyond this are folded into the last sheet so the layers stay readable. */
 const MAX_SECTIONS = 8

@@ -10,6 +10,12 @@ import type { PaperBriefContent } from './schema'
 
 type Range = readonly [min: number, max: number]
 
+export const ARCHIVE_LENGTHS = {
+  abstract: [200, 300], background: [300, 450],
+  conclusions: [400, 650], conclusion: [100, 160],
+  discussion: [450, 650], discussionPart: [120, 230]
+} as const satisfies Record<string, Range>
+
 export const BRIEF_LENGTHS = {
   tldr: [40, 70], // detail subtitle, two lines
   discipline: [2, 12],
@@ -83,6 +89,26 @@ export function checkBriefLengths(content: PaperBriefContent): string[] {
   const count = (path: string, items: readonly unknown[], [min, max]: Range, soft = false): void => {
     if (!soft && items.length < min) problems.push(`${path}：${items.length} 项，至少 ${min} 项`)
     if (items.length > max) problems.push(`${path}：${items.length} 项，至多 ${max} 项`)
+  }
+  if (content.analysis) {
+    const analysis = content.analysis
+    // Four-part layout uses strict ranges for new output; legacy storage stays readable.
+    const exact = (path: string, value: string, [min, max]: Range): void => {
+      const length = displayLength(value)
+      if (!MISSING.test(value.trim()) && (length < min || length > max)) {
+        const target = Math.round((min + max) / 2)
+        problems.push(`${path}：${length} 字，请调整为 ${min}–${max} 字；本轮目标 ${target} 字，需${length > max ? '删减' : '依据原文补充'}约 ${Math.abs(length - target)} 字`)
+      }
+    }
+    exact('analysis.abstract', analysis.abstract, ARCHIVE_LENGTHS.abstract)
+    exact('analysis.background', analysis.background, ARCHIVE_LENGTHS.background)
+    count('analysis.conclusions', analysis.conclusions, [3, 5])
+    analysis.conclusions.forEach((item, index) => exact(`analysis.conclusions.${index}.text`, item.text, ARCHIVE_LENGTHS.conclusion))
+    exact('analysis.conclusions.total', analysis.conclusions.map(item => item.text).join(''), ARCHIVE_LENGTHS.conclusions)
+    for (const [name, value] of Object.entries(analysis.discussion)) exact(`analysis.discussion.${name}`, value, ARCHIVE_LENGTHS.discussionPart)
+    exact('analysis.discussion.total', Object.values(analysis.discussion).join(''), ARCHIVE_LENGTHS.discussion)
+    field('tldr', content.tldr, BRIEF_LENGTHS.tldr)
+    return problems
   }
   const L = BRIEF_LENGTHS
   const C = BRIEF_COUNTS

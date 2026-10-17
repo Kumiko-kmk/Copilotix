@@ -42,9 +42,44 @@ export interface BriefContext {
 }
 
 /** Input budgets in UTF-8 bytes (≈ an upper bound on tokens for mixed CJK/Latin text). */
-// `detailed` is what the archive sends (2026-10-10): about 19 000 Chinese characters, roughly a
-// third to a half of a typical translated paper once references and appendices are dropped.
+// Legacy digest budgets for classification and compact context consumers.
+// Archive generation uses buildFullBriefContext, without these selection limits.
 export const BRIEF_BUDGETS = { compact: 12 * 1024, standard: 24 * 1024, extended: 40 * 1024, detailed: 56 * 1024 } as const
+export class PaperBriefInputError extends Error {}
+
+/** Full-paper archive input. No scoring, normalization, dropped sections or token clipping. */
+export function buildFullBriefContext(original: string, translated: string): BriefContext {
+  const useOriginal = Boolean(original.trim())
+  const markdown = useOriginal ? original : translated
+  if (!markdown.trim()) throw new PaperBriefInputError('论文正文为空')
+  if (byteLength(markdown) > 16 * 1024 * 1024) throw new PaperBriefInputError('论文全文超过 16 MiB，请分篇处理；未发送或截断内容')
+  const outline = [...markdown.matchAll(/^#{1,6}\s+(.+)$/gmu)].map(match => match[1]!.trim())
+  const title = outline[0] ?? null
+  const excerpts: BriefExcerpt[] = []
+  let section = title ?? '正文'
+  let role: SectionRole = 'front'
+  for (let offset = 0; offset < markdown.length;) {
+    let end = Math.min(offset + 4000, markdown.length)
+    if (end < markdown.length) {
+      const boundary = markdown.lastIndexOf('\n\n', end)
+      if (boundary > offset + 1000) end = boundary + 2
+      // Keep UTF-16 surrogate pairs intact.
+      if (/[\uD800-\uDBFF]/u.test(markdown[end - 1]!)) end--
+    }
+    const text = markdown.slice(offset, end)
+    const heading = [...text.matchAll(/^#{1,6}\s+(.+)$/gmu)].at(-1)?.[1]?.trim()
+    const startSection = /^#{1,6}\s+([^\n]+)/u.exec(text)?.[1]?.trim() ?? section
+    const endSection = heading ?? section
+    role = ROLE_LEXICON.find(([, pattern]) => pattern.test(startSection))?.[0] ?? role
+    excerpts.push({ id: `E${excerpts.length + 1}`, section: startSection === endSection ? startSection : `${startSection} → ${endSection}`, role, text })
+    section = endSection
+    offset = end
+  }
+  if (excerpts.length > 9999) throw new PaperBriefInputError('论文全文段落超过定位上限；未截断内容')
+  return { title, language: useOriginal ? 'original' : 'translated', outline: outline.slice(1), excerpts,
+    coverage: { roles: [...new Set(excerpts.map(excerpt => excerpt.role))], missingRoles: [],
+      sourceBytes: byteLength(markdown), sentBytes: byteLength(JSON.stringify(excerpts)), truncated: false } }
+}
 
 const encoder = new TextEncoder()
 export const byteLength = (text: string): number => encoder.encode(text).length

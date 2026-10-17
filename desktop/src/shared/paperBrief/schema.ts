@@ -11,6 +11,7 @@
  * Design notes: docs/PAPER_BRIEF_ZH.md.
  */
 import { z } from 'zod'
+import { ARCHIVE_LENGTHS } from './lengths'
 
 export const PAPER_BRIEF_SCHEMA_VERSION = 2
 
@@ -27,7 +28,37 @@ export const CONTRIBUTION_KIND_LABELS: Record<typeof CONTRIBUTION_KINDS[number],
 
 const NO_CONTROL = (value: string): boolean => ![...value].some((char) => char.charCodeAt(0) < 32 && !'\t\n\r'.includes(char))
 const text = (max: number) => z.string().trim().min(1).max(max).refine(NO_CONTROL, '不能包含控制字符')
-const anchors = z.array(z.string().regex(/^E\d{1,3}$/u)).max(4)
+const anchors = z.array(z.string().regex(/^E\d{1,4}$/u)).max(4)
+const metadataFact = z.object({ value: text(8192), evidence: text(8192), anchors: anchors.min(1) }).strict().nullable()
+export const paperMetadataSchema = z.object({ title: metadataFact, authors: metadataFact, year: metadataFact, venue: metadataFact, doi: metadataFact }).strict()
+export type PaperMetadata = z.infer<typeof paperMetadataSchema>
+
+/** Four reading sections. Optional only for saved v2 records made before this contract. */
+export const archiveAnalysisSchema = z.object({
+  abstract: text(900),
+  background: text(1400),
+  conclusions: z.array(z.object({ title: text(160), text: text(700), anchors }).strict()).min(1).max(5),
+  discussion: z.object({ contribution: text(800), progress: text(800), limitations: text(800) }).strict()
+}).strict()
+export type ArchiveAnalysis = z.infer<typeof archiveAnalysisSchema>
+
+/** Only these fields are generated; legacy fields are projected locally for compatibility. */
+export const paperBriefGenerationSchema = z.object({
+  metadata: paperMetadataSchema,
+  paperType: z.enum(PAPER_TYPES),
+  field: z.object({ discipline: text(40), area: text(60) }).strict(),
+  tldr: text(120), keywords: z.array(text(40)).min(1).max(8),
+  analysis: archiveAnalysisSchema.extend({ abstract: text(ARCHIVE_LENGTHS.abstract[1]) }),
+  coverage: z.object({ basis: z.enum(['full', 'partial']), missing: z.array(text(80)).max(5) }).strict()
+}).strict()
+
+/** Native decoding targets a comfortable middle length; acceptance still uses display counts. */
+const modelConclusion = archiveAnalysisSchema.shape.conclusions.element.extend({ text: z.union([
+  text(700).min(Math.round((ARCHIVE_LENGTHS.conclusion[0] + ARCHIVE_LENGTHS.conclusion[1]) / 2)), z.literal('原文未说明')
+]) })
+export const paperBriefModelOutputSchema = paperBriefGenerationSchema.extend({
+  analysis: paperBriefGenerationSchema.shape.analysis.extend({ conclusions: z.array(modelConclusion).min(3).max(5) })
+})
 
 /**
  * What the model writes. These are the storage limits in characters; they only ever grow, so
@@ -35,6 +66,9 @@ const anchors = z.array(z.string().regex(/^E\d{1,3}$/u)).max(4)
  * lengths.ts.
  */
 export const paperBriefContentSchema = z.object({
+  // Optional for saved v2 briefs predating bibliographic recovery; no migration required.
+  metadata: paperMetadataSchema.optional(),
+  analysis: archiveAnalysisSchema.optional(),
   paperType: z.enum(PAPER_TYPES),
   field: z.object({ discipline: text(40), area: text(60) }).strict(),
   tldr: text(120),
@@ -47,7 +81,7 @@ export const paperBriefContentSchema = z.object({
   }).strict(),
   findings: z.array(z.object({
     claim: text(160),
-    evidence: text(240),
+    evidence: text(700),
     strength: z.enum(FINDING_STRENGTHS),
     scope: z.string().trim().max(160).refine(NO_CONTROL),
     anchors

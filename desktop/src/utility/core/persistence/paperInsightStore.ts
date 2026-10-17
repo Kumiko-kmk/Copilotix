@@ -5,13 +5,20 @@ import { join } from 'node:path'
 import { paperInsightRecordSchema, PAPER_INSIGHT_MAX_BYTES, type PaperInsightState } from '@shared/paperInsight'
 import type { V2TaskRepositoryCompat } from './v2TaskRepositoryCompat'
 import { PathPolicy } from '@runtime/pathPolicy'
-import { buildBriefContext, BRIEF_BUDGETS } from '@shared/paperBrief/context'
+import { buildBriefContext, buildFullBriefContext, BRIEF_BUDGETS } from '@shared/paperBrief/context'
 import { PAPER_BRIEF_PROMPT_VERSION } from '@shared/paperBrief/prompt'
-import { paperBriefRecordSchema, paperBriefSaveSchema, briefContextResultSchema, PAPER_BRIEF_MAX_BYTES, type BriefContextResult, type BriefAnchor } from '@shared/paperBrief/contracts'
+import { paperBriefRecordSchema, paperBriefSaveSchema, briefContextResultSchema, briefSourceSchema, PAPER_BRIEF_MAX_BYTES, type BriefContextResult, type BriefAnchor, type BriefSource } from '@shared/paperBrief/contracts'
 import type { PaperBrief } from '@shared/paperBrief/schema'
 
 type Repository = Pick<V2TaskRepositoryCompat, 'getTask' | 'getLatestArtifactReference'>
 const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException)?.code === 'ENOENT'
+function sameBriefSource(saved: string, current: string, language: PaperBrief['provenance']['language']): boolean {
+  if (saved === current) return true
+  // An analysis of original text does not become stale when its translation is published.
+  if (language !== 'original') return false
+  const original = saved.split('|').find(part => part.startsWith('p:'))
+  return Boolean(original && original !== 'p:none' && original === current.split('|').find(part => part.startsWith('p:')))
+}
 
 /** Utility data lane serializes read/write/delete; library maintenance waits for this lane. */
 export class PaperInsightStore {
@@ -60,7 +67,7 @@ export class PaperInsightStore {
         this.policy.resolveChild(root, 'brief.v2.json')
         if (record.documentId !== documentId) throw new Error('档案卡不属于当前论文')
         return { status: 'ready', brief: record.brief, anchors: record.anchors,
-          stale: record.brief.provenance.sourceRevision !== snapshot.sourceRevision,
+          stale: !sameBriefSource(record.brief.provenance.sourceRevision, snapshot.sourceRevision, record.brief.provenance.language),
           promptOutdated: record.brief.provenance.promptVersion !== PAPER_BRIEF_PROMPT_VERSION }
       } catch (error) { if (!missing(error)) throw error }
       const path = join(root, 'insight.v1.json')
@@ -83,10 +90,23 @@ export class PaperInsightStore {
     signal.throwIfAborted()
     const translated = original.trim() ? '' : await readArtifact(snapshot.translated)
     signal.throwIfAborted()
-    const context = buildBriefContext(original, translated, BRIEF_BUDGETS.detailed)
+    const context = buildFullBriefContext(original, translated)
     const after = await this.snapshot(documentId)
     if (after.sourceRevision !== snapshot.sourceRevision) throw new Error('论文内容正在更新，请重试')
     return briefContextResultSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, context })
+  }
+
+  async briefSource(documentId: string): Promise<BriefSource> {
+    const snapshot = await this.snapshot(documentId)
+    const sources: BriefSource['sources'] = []
+    for (const [artifact, language] of [[snapshot.original, 'original'], [snapshot.translated, 'translated']] as const) {
+      if (!artifact) continue
+      const path = this.policy.resolveChild(snapshot.root, artifact.relativePath)
+      const info = await lstat(path)
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('论文全文来源无效或超过 16 MiB；未截断内容')
+      sources.push({ path, hash: artifact.contentHash, language })
+    }
+    return briefSourceSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, sources })
   }
 
   /**

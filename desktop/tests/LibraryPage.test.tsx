@@ -14,6 +14,7 @@ const scene = vi.hoisted(() => ({
 }))
 // Exercise the real detail markup and keyboard handlers without document/PDF I/O.
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: true }) }))
+vi.mock('../src/renderer/paperArchive/useArchivePreparation', () => ({ useArchivePreparation: (paper: DocumentSummary | null) => ({ ready: paper?.workflow.status === 'completed', progress: paper?.workflow.progress ?? 0 }) }))
 vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
   PaperArchiveScene: class {
     private shelves: ArchiveShelf[] = []
@@ -77,6 +78,17 @@ function paper(name: string, originalName = `${name}.pdf`): DocumentSummary {
 }
 
 describe('LibraryPage', () => {
+  it('blocks the archive button and Enter while background processing is incomplete', () => {
+    const pending = paper('Pending')
+    pending.workflow = { ...pending.workflow, status: 'translating', progress: 80 }
+    render(<LibraryPage documents={[pending]} onOpen={vi.fn()} onCreate={vi.fn()} />)
+    const button = screen.getByRole('button', { name: '查看档案' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    fireEvent.click(button)
+    fireEvent.keyDown(region(), { key: 'Enter' })
+    expect(scene.openDetail).not.toHaveBeenCalled()
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('80')
+  })
   it('searches titles and filenames without steering the archive while typing, then focuses the result', () => {
     const alpha = paper('中文论文', 'Alpha Research.pdf')
     const onOpen = vi.fn()

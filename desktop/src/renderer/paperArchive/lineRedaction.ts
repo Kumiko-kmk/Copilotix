@@ -121,32 +121,37 @@ function drawCovers(article: HTMLElement, host: HTMLElement): void {
     // Clamped titles and the scrolling tab panel hide some lines; only visible ones are covered.
     const bounds = target.getBoundingClientRect()
     const own: Line[] = []
+    const addRect = (rect: DOMRect): void => {
+      if (!rect.width || !rect.height) return
+      const top = Math.max(rect.top, bounds.top)
+      const bottom = Math.min(rect.bottom, bounds.bottom)
+      if (bottom <= top) return
+      const x = Math.max(rect.left, bounds.left) - origin.left
+      const y = top - origin.top
+      const right = Math.min(rect.right, bounds.right) - origin.left
+      if (right <= x) return
+      const lineBottom = bottom - origin.top
+      const line = own.find((entry) => Math.abs(entry.y - y) < 6)
+      if (line) {
+        line.x = Math.min(line.x, x)
+        line.y = Math.min(line.y, y)
+        line.right = Math.max(line.right, right)
+        line.bottom = Math.max(line.bottom, lineBottom)
+      } else own.push({ x, y, right, bottom: lineBottom })
+    }
+    // KaTeX contains both visual glyphs and accessible MathML. Cover the visual
+    // formula as one box so fractions/roots are covered without duplicate bars.
+    for (const formula of target.querySelectorAll<HTMLElement>('.katex')) {
+      if (!formula.parentElement?.closest('.katex, [data-archive-unredacted]')) addRect(formula.getBoundingClientRect())
+    }
     const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT)
     let node: Node | null
     while ((node = walker.nextNode())) {
-      if (!node.textContent?.trim() || node.parentElement?.closest('[data-archive-unredacted]')) continue
+      if (!node.textContent?.trim() || node.parentElement?.closest('.katex, [data-archive-unredacted]')) continue
       const range = document.createRange()
       range.selectNodeContents(node)
       if (typeof range.getClientRects !== 'function') return
-      for (const rect of range.getClientRects()) {
-        if (!rect.width || !rect.height) continue
-        const top = Math.max(rect.top, bounds.top)
-        const bottom = Math.min(rect.bottom, bounds.bottom)
-        // Even a fraction of the last line is visible and must receive a cover.
-        if (bottom <= top) continue
-        const x = Math.max(rect.left, bounds.left) - origin.left
-        const y = top - origin.top
-        const right = Math.min(rect.right, bounds.right) - origin.left
-        if (right <= x) continue
-        const lineBottom = bottom - origin.top
-        const line = own.find((entry) => Math.abs(entry.y - y) < 6)
-        if (line) {
-          line.x = Math.min(line.x, x)
-          line.y = Math.min(line.y, y)
-          line.right = Math.max(line.right, right)
-          line.bottom = Math.max(line.bottom, lineBottom)
-        } else own.push({ x, y, right, bottom: lineBottom })
-      }
+      for (const rect of range.getClientRects()) addRect(rect)
     }
     lines.push(...own)
   }

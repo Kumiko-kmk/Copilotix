@@ -138,7 +138,7 @@ describe('ReaderWorkbench', () => {
     await waitFor(() => expect(view.container.querySelectorAll('.reader-group')).toHaveLength(2))
     // Scoped to the workbench: antd menu dividers also use role="separator".
     expect(view.container.querySelectorAll('.reader-split-handle')).toHaveLength(1)
-    expect(view.container.querySelector('.reader-split-handle')?.getAttribute('aria-label')).toBe('调整 Markdown 与 译文 阅读器宽度')
+    expect(view.container.querySelector('.reader-split-handle')?.getAttribute('aria-label')).toBe('调整 原文 与 译文 阅读器宽度')
     await waitFor(() => expect(view.container.querySelectorAll('.reader-tab-panel.active .markdown-scroll')).toHaveLength(2))
     expect(onLayout).toHaveBeenLastCalledWith(expect.objectContaining({ hidden: ['pdf'] }))
   })

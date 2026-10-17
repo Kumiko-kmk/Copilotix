@@ -105,7 +105,7 @@ test('renders compact scrollable tables and independent real formula minimaps', 
         configurable: true
       })
     })
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     await assertCompactMarkdownLayout(activeTextPanel)
     await expect(activeTextPanel.locator('article')).not.toHaveText(/Academic cell/u)
     expect(await window.evaluate(() =>
@@ -346,7 +346,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await window.locator('[data-block-position="1-2"]').click()
     await expect.poll(() => isCentered(markdownImageBlock, '.markdown-scroll')).toBe(true)
 
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(originalBlockCount)
     await expect(window.locator('[data-reader-tab-panel="original"] .markdown-scroll')).toHaveCount(0)
@@ -437,7 +437,7 @@ test('persists original and translated Markdown annotations with color and under
       (CSS as typeof CSS & { highlights?: { get(name: string): { size: number } | undefined } }).highlights?.get('copilotix-highlight-blue')?.size ?? 0
     )).toBeGreaterThan(0)
 
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     const translatedBlock = activeTextPanel.locator('.markdown-block', { hasText: '第二段落包含' })
@@ -454,7 +454,7 @@ test('persists original and translated Markdown annotations with color and under
       ['translated', 'underline', '第二段落']
     ])
 
-    await window.getByText('Markdown', { exact: true }).click()
+    await window.getByText('原文', { exact: true }).click()
     activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await selectText(activeTextPanel.locator('.markdown-block', { hasText: 'Second paragraph with' }), 0, 6)
@@ -513,7 +513,7 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
     await expect(window.locator('.pdf-block.discarded.active')).toHaveCount(0)
     await expect(activeTextPanel.locator('.markdown-block.active')).toHaveCount(0)
 
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(activeTextPanel.locator('[data-reader-role="page-header"]')).toHaveText([
       'Fixture journal header',
@@ -657,7 +657,7 @@ test('renders and safely links an optional real Copilotix task', async () => {
         images.every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)
       )).toBe(true)
     }
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready', { timeout: 30_000 })
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(1110)
     await expect(activeTextPanel.locator('.markdown-block[data-block-ids=""]')).toHaveCount(1)

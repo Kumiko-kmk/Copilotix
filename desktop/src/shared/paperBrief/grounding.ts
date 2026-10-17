@@ -6,19 +6,48 @@
  *   and check that every number quoted as evidence actually occurs in the cited excerpts.
  *   Findings that fail are kept but flagged, so the UI can mark them "需核对".
  */
-import { paperBriefContentSchema, paperBriefSchema, PAPER_BRIEF_SCHEMA_VERSION, type FindingCheck, type PaperBrief, type PaperBriefContent } from './schema'
+import { paperBriefContentSchema, paperBriefGenerationSchema, paperBriefSchema, PAPER_BRIEF_SCHEMA_VERSION, type FindingCheck, type PaperBrief, type PaperBriefContent } from './schema'
 import type { BriefContext } from './context'
 import { byteLength } from './context'
 import { PAPER_BRIEF_PROMPT_VERSION } from './prompt'
 import { checkBriefLengths } from './lengths'
+import type { ZodIssue } from 'zod'
+import { groundPaperMetadata } from './metadata'
 
 export type ParsedBrief = { ok: true; content: PaperBriefContent } | { ok: false; problems: string[] }
 
+function generatedContent({ analysis, ...metadata }: ReturnType<typeof paperBriefGenerationSchema.parse>): PaperBriefContent {
+  return { ...metadata, analysis,
+    // Retain v2 consumers without asking the model for duplicate, hidden fields.
+    context: { background: '原文未说明', gap: '原文未说明', question: '原文未说明' },
+    approach: { summary: '原文未说明', keyIdeas: analysis.conclusions.map(item => item.title), basis: '原文未说明', evaluation: '原文未说明' },
+    findings: analysis.conclusions.map(item => ({ claim: item.title, evidence: item.text, strength: 'unclear', scope: '', anchors: item.anchors })),
+    contributions: analysis.conclusions.map(item => ({ kind: 'other', text: item.title })),
+    limitations: [], assumptions: [], openQuestions: [], terms: [],
+    reading: { audience: '原文未说明', prerequisites: [], focus: [] }
+  }
+}
+
+/** Diagnostic copy only: extra fields must still fail, but must not hide length errors. */
+function knownFieldsForRepair(value: unknown, issues: ZodIssue[]): unknown {
+  const copy = structuredClone(value)
+  for (const issue of issues) {
+    if (issue.code !== 'unrecognized_keys') continue
+    let parent: unknown = copy
+    for (const key of issue.path) {
+      if (!parent || typeof parent !== 'object' || !Object.hasOwn(parent, key)) { parent = null; break }
+      parent = (parent as Record<PropertyKey, unknown>)[key]
+    }
+    if (parent && typeof parent === 'object') for (const key of issue.keys) delete (parent as Record<string, unknown>)[key]
+  }
+  return copy
+}
+
 /**
  * `lengths: true` also checks the word-count ranges of BRIEF_LENGTHS. The service asks for it on
- * the first answer only: a repair round fixes lengths, but a brief is never thrown away for them.
+ * the first legacy answer only. Fresh four-part responses always enforce their display budgets.
  */
-export function parseBriefResponse(raw: string, options: { lengths?: boolean } = {}): ParsedBrief {
+export function parseBriefResponse(raw: string, options: { lengths?: boolean; requireAnalysis?: boolean } = {}): ParsedBrief {
   const start = raw.indexOf('{')
   const end = raw.lastIndexOf('}')
   if (start < 0 || end <= start) return { ok: false, problems: ['输出中没有 JSON 对象'] }
@@ -27,6 +56,20 @@ export function parseBriefResponse(raw: string, options: { lengths?: boolean } =
     value = JSON.parse(raw.slice(start, end + 1))
   } catch {
     return { ok: false, problems: ['JSON 语法错误（检查引号、逗号与括号）'] }
+  }
+  const fresh = paperBriefGenerationSchema.safeParse(value)
+  if (fresh.success) {
+    const content = generatedContent(fresh.data)
+    const problems = checkBriefLengths(content)
+    return problems.length ? { ok: false, problems: problems.slice(0, 12) } : { ok: true, content }
+  }
+  if (options.requireAnalysis) {
+    const problems = fresh.error.issues.map(issue => `${issue.path.join('.') || '根对象'}：${issue.message}`)
+    if (fresh.error.issues.some(issue => issue.code === 'unrecognized_keys')) {
+      const known = paperBriefGenerationSchema.safeParse(knownFieldsForRepair(value, fresh.error.issues))
+      if (known.success) problems.push(...checkBriefLengths(generatedContent(known.data)))
+    }
+    return { ok: false, problems: problems.slice(0, 12) }
   }
   const result = paperBriefContentSchema.safeParse(value)
   if (result.success) {
@@ -83,7 +126,9 @@ export function groundBrief(content: PaperBriefContent, context: BriefContext): 
     checks,
     content: {
       ...content,
+      ...(content.metadata ? { metadata: groundPaperMetadata(content.metadata, context) } : {}),
       findings,
+      ...(content.analysis ? { analysis: { ...content.analysis, conclusions: findings.map(finding => ({ title: finding.claim, text: finding.evidence, anchors: finding.anchors })) } } : {}),
       approach: { ...content.approach, keyIdeas: dedupe(content.approach.keyIdeas, (idea) => idea) },
       contributions: dedupe(content.contributions, (item) => item.text),
       limitations: dedupe(content.limitations, (item) => item.text),

@@ -224,6 +224,8 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 Scheduler 从 Utility-owned JobRepository claim 作业，以 lease owner/expiry 防止重复 worker；运行中由 owner heartbeat 延长 lease，进度和 checkpoint 以 owner 条件更新。作业退出、Utility 重启或 lease 过期时恢复为 queued（未超过 retry 上限）或 failed；网络/超时/5xx 等可恢复错误使用退避，协议/输入错误不盲目重试。手动 retry 只允许 partial/failed/cancelled 等受限终态。
 
+翻译手动重试保留已完成结果，把失败单元改为 pending。重新载入已保存的 pending 计划时，旧尝试残留的失败块不能将其覆盖回 failed；本次新失败仍须持久化并在重启后保留。恢复回归见 `markdownTranslationPlan.test.ts`。
+
 ### 7.2 Parse
 
 1. 用户选取或拖入 PDF，Main 校验扩展名和官方 `200MB` 上限；生产导入通过 Utility 一次流式读取、hash 和复制到 `original.pdf`，避免将完整文件经 IPC 搬运。
@@ -341,7 +343,8 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 
 - Main 的 `runtime/codexRuntime.ts` 通过 `codex.exe app-server --listen stdio://` 建立 JSON-RPC；`modelGateway.ts` 统一远端与 Codex 流式调用，翻译适配器保留现有表格 ID 校验。翻译、问答、Paper Brief 和图片解读共享此运行时；不提供 embeddings 或 PDF 解析替代。
 - `shared/codex.ts` 定义可兼容旧设置的可选配置与状态。Preload 只开放经 Main 校验的检查／模型测试与原生选执行文件 IPC；无令牌接口。模型、视觉输入和推理强度来自当前模型目录，模型缺失显式失败。旧四服务顺序可读取，默认追加但不启用 Codex；翻译回退顺序在 Codex 处截止。
-- 交互与后台各一条 FIFO，每次请求启动独立进程及 ephemeral thread；最终回答流、token usage、结构化 schema 经原业务校验后落盘。只接受已验证的 CLI 0.159.x。子进程不经 shell，工作目录在 userData 的 codex-runtime，不使用项目目录。
+- 交互保留独立 FIFO，后台共用等待队列，由空闲槽位领取下一请求，最多 8 个独立进程槽位，每槽同时一个请求。槽内复用经过隔离配置校验的进程，每次请求创建新 ephemeral thread；闲置 30 秒、出错或退出关闭进程。避免每段重复 account/read／model/list；不复用论文会话。最终回答、token usage、结构化 schema 经业务校验后落盘。CLI 限定 0.159.x，子进程不经 shell，工作目录在 userData 的 codex-runtime。
+- 翻译按 32 条元数据分页预取，同时准备最多 64 个单元，Codex／Qwen／DeepSeek 请求上限 8。Codex 仅合并同一作业 signal 的短片段：每批最多 16 组／64 片段／约 8K 字符，单个超长组独立发送而不截断；短传输 ID 在本地还原后逐单元校验、保存。表格保留行列结构，使用同样的短 ID 映射与完整性检查。翻译 low、档案 medium；thread/start 与 turn/start 均使用任务实际档位，问答沿用全局设置。读取相同输出根目录的设置不重建翻译计划。
 - 会话级覆盖关闭 shell、MCP、应用、插件、浏览器、联网搜索、记忆和子代理，设置只读沙箱、无持久历史、忽略项目文档；启动时读回隔离配置。工具请求一律拒绝并终止任务。覆盖不写入用户配置。用户文档、图片与历史均作为不可信内容；图片只接收应用已验证的 PNG/JPEG 数据。
 - 初始化 RPC 15 秒，生成空闲 120 秒、总计 10 分钟；排队取消立即返回，运行取消请求 turn/interrupt，5 秒后关闭进程。进程异常、非成功完成、空结果和工具尝试均不能当作成功；退出关闭所有进程。不会静默切换模型或其他供应商。诊断不记录提示正文、图片或令牌。
 - SQLite migration **5 / add-codex-provider** 仅扩展 documents、translation_blocks、translation_cache 的 provider 约束；迁移 1–4 不改，复制原数据并恢复索引。仅在事务外临时关闭外键，提交前检查外键，异常回滚并恢复外键开关；沿用迁移前快照。旧程序不可直接打开 schema 5，回退需用迁移前快照恢复，不删除用户原库。聊天／解读 JSON 增加 codex 枚举，既有内容不改写；token 统计兼容缺失的 Codex 计数。

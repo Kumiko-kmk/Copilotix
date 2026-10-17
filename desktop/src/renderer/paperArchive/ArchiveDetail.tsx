@@ -6,11 +6,12 @@ import type { PaperInsight, PaperInsightSource } from '@shared/paperInsight'
 import { usePaperInsight } from '../usePaperInsight'
 import type { ArchivePaper } from './archiveShelves'
 import type { DetailPhase } from './PaperArchiveScene'
-import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from './paperProfile'
+import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from '@shared/paperProfile'
 import BriefContent, { type BriefTab } from './BriefContent'
 import { useLineRedaction } from './lineRedaction'
 import { composeSpread, drawFigureSheet, loadSpreadCandidates, loadSpreadImages } from './figureSpread'
 import type { DetailPage } from './detailPage'
+import ArchiveText from './ArchiveText'
 
 type Tab = 'abstract' | 'structure' | 'insight' | BriefTab
 
@@ -42,7 +43,7 @@ export default function ArchiveDetail(props: {
     queryFn: () => window.copilotix.getDocument(paper.id)
   })
   const profile = React.useMemo(
-    () => details.data ? extractPaperProfile(details.data.markdown, details.data.translatedMarkdown) : null,
+    () => details.data ? extractPaperProfile(details.data.markdown, details.data.translatedMarkdown, true) : null,
     [details.data]
   )
   const [tab, setTab] = React.useState<Tab>('abstract')
@@ -51,6 +52,7 @@ export default function ArchiveDetail(props: {
   const ready = insight.ready
   const briefState = ready && 'brief' in ready ? ready : null
   const brief = briefState?.brief
+  const metadata = briefState && !briefState.stale ? brief?.metadata : undefined
   const articleRef = React.useRef<HTMLElement>(null)
   const redactionRef = React.useRef<HTMLDivElement>(null)
   const redactedContent = React.useMemo(() => ({}), [details.data, ready, tab])
@@ -95,27 +97,30 @@ export default function ArchiveDetail(props: {
   React.useEffect(() => {
     if (!data || !profile) return
     let cancelled = false
+    const controller = new AbortController()
     const pdf = !/\.(?:md|markdown)$/iu.test(paper.originalName.trim())
     const key = `${paper.id}:${data.summary.updatedAt}`
     // pdf.js is loaded only when a paper is extracted.
     import('./detailPage')
       .then(({ drawTextPage, loadDetailPage, renderPdfFirstPage }) => loadDetailPage(`${key}:spread`, () => pdf
-        ? renderSpread(paper.id, data.pdfUrl, data.assetBaseUrl, renderPdfFirstPage)
-        : Promise.resolve(drawTextPage(profile.title ?? paper.displayName, profile.translatedAbstract ?? profile.abstract))))
+        ? renderSpread(paper.id, data, renderPdfFirstPage, controller.signal, page => {
+          if (!cancelled) onPage(page.canvas)
+        })
+        : Promise.resolve(drawTextPage(profile.title ?? paper.displayName, profile.translatedAbstract ?? profile.abstract)), controller.signal))
       .then((page) => {
         if (cancelled) return
         onPage(page.figures ? composeSpread(page.canvas, page.figures.sheet) : page.canvas)
       })
       .catch(() => { /* The card stays frosted without a page; the fields still load. */ })
-    return () => { cancelled = true }
+    return () => { cancelled = true; controller.abort() }
   }, [data, profile, paper.id, paper.originalName, paper.displayName, onPage])
 
-  const title = archiveTitle(paper.displayName)
-  const subtitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown), [details.data?.translatedMarkdown])
-  const abstract = profile?.translatedAbstract
+  const title = archiveTitle(metadata?.title?.value ?? paper.displayName)
+  const subtitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown, true), [details.data?.translatedMarkdown])
+  const abstract = brief?.analysis?.abstract ?? profile?.translatedAbstract
   // The count beside a tab says how much is behind it before switching.
   const tabs: Array<[Tab, string, number?]> = brief
-    ? [['abstract', '摘要'], ['overview', '概览'], ['findings', '发现', brief.findings.length], ['limits', '局限与前提', brief.limitations.length + brief.assumptions.length]]
+    ? [['abstract', '摘要'], ['overview', '背景'], ['findings', '结论', brief.findings.length], ['limits', '讨论']]
     : [['abstract', '摘要'], ['structure', '结构', profile?.sections.length || undefined], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
   const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
   const tabsRef = React.useRef<HTMLDivElement>(null)
@@ -144,14 +149,17 @@ export default function ArchiveDetail(props: {
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.category}</span>
           {/* Not redacted: the titles were already readable in the browse panel and glide up from it. */}
-          <h2>{title}</h2>
-          <p className="paper-archive-translated-title">{subtitle || '\u00a0'}</p>
+          <h2><ArchiveText text={title} /></h2>
+          <p className="paper-archive-translated-title"><ArchiveText text={subtitle || '\u00a0'} /></p>
         </header>
         <div className="paper-archive-rule"><i /></div>
         {details.isError ? <p className="paper-archive-detail-error" role="alert">论文内容读取失败，可以直接打开阅读。</p> : null}
         <dl className="paper-archive-fields">
-          <Field index={2} wide label="作者 / 单位" value={profile?.authors ?? (profile ? '未识别' : null)} />
-          {brief ? <>
+          <Field index={2} wide label="作者 / 单位" value={profile?.authors ?? metadata?.authors?.value ?? (profile ? '未识别' : null)} />
+          {metadata?.venue ? <Field index={3} half label="期刊 / 会议" value={metadata.venue.value} /> : null}
+          {metadata?.year ? <Field index={4} half label="发表年份" value={metadata.year.value} /> : null}
+          {metadata?.doi ? <Field index={5} wide label="DOI" value={metadata.doi.value} /> : null}
+          {brief && !brief.analysis ? <>
             <Field index={3} half label="证据基础" value={brief.approach.basis} />
             <Field index={4} half label="检验方式" value={brief.approach.evaluation} />
           </> : null}
@@ -183,11 +191,11 @@ export default function ArchiveDetail(props: {
               <div className="paper-archive-tabpanel-head">
                 <span className="paper-archive-eyebrow" data-archive-unredacted>ABSTRACT</span>
               </div>
-              <p className="paper-archive-abstract paper-archive-translated-abstract">{abstract ?? (profile ? '暂无译文摘要。' : '正在读取…')}</p>
+              <p className="paper-archive-abstract paper-archive-translated-abstract"><ArchiveText text={abstract ?? (profile ? '暂无译文摘要。' : '正在读取…')} /></p>
             </>
           ) : briefState ? <BriefContent brief={briefState.brief} anchors={briefState.anchors} tab={activeTab as BriefTab} /> : activeTab === 'structure' ? (
             profile?.sections.length
-              ? <ol className="paper-archive-outline">{profile.sections.map((section) => <li key={section}>{section}</li>)}</ol>
+              ? <ol className="paper-archive-outline">{profile.sections.map((section) => <li key={section}><ArchiveText text={section} /></li>)}</ol>
               : <p className="paper-archive-abstract">{profile ? '未识别到章节标题。' : '正在读取…'}</p>
           ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} /> : <p className="paper-archive-abstract">在阅读器中生成档案卡后，可在这里查看研究问题、证据、发现与局限。</p>}
         </section>
@@ -211,14 +219,30 @@ export default function ArchiveDetail(props: {
  * the right. The figure list loads while the page renders; without usable figures the card keeps
  * the plain first page.
  */
-async function renderSpread(documentId: string, pdfUrl: string, assetBaseUrl: string, renderPage: (url: string) => Promise<DetailPage>): Promise<DetailPage> {
-  const candidates = loadSpreadCandidates(documentId, assetBaseUrl).catch(() => [])
-  const page = await renderPage(pdfUrl)
-  const ranked = await candidates
-  if (!ranked.length) return page
+export async function renderSpread(documentId: string, data: DocumentDetails, renderPage: (url: string) => Promise<DetailPage>,
+  signal: AbortSignal, onFirstPage: (page: DetailPage) => void): Promise<DetailPage> {
+  const page = await renderPage(data.pdfUrl)
+  signal.throwIfAborted()
+  onFirstPage(page)
+  const [{ buildReaderFigureGeometries }, { ensureFigureArtifacts }] = await Promise.all([
+    import('@shared/readerFigureGroups'), import('../useFigureArtifacts')
+  ])
+  signal.throwIfAborted()
+  const geometries = buildReaderFigureGeometries(data.mappings, data.layoutJson)
+  const crops = await ensureFigureArtifacts(documentId, data.pdfUrl, geometries, signal)
+  signal.throwIfAborted()
+  const ranked = await loadSpreadCandidates(documentId, data.assetBaseUrl)
+  signal.throwIfAborted()
+  if (!ranked.length) {
+    // Do not permanently cache a transient crop failure as a first-page-only cover.
+    if (crops.failed) throw new Error('封面整图尚未生成，可重新打开重试')
+    return page
+  }
   const { width, height } = page.canvas
-  const figures = await loadSpreadImages(ranked, assetBaseUrl, { width, height }).catch(() => [])
-  return figures.length ? { ...page, figures: { sheet: drawFigureSheet(width, height, figures) } } : page
+  const figures = await loadSpreadImages(ranked, data.assetBaseUrl, { width, height })
+  if (signal.aborted) { figures.forEach(figure => figure.image.close()); signal.throwIfAborted() }
+  if (!figures.length) throw new Error('封面图片暂时无法读取，可重新打开重试')
+  return { ...page, figures: { sheet: drawFigureSheet(width, height, figures) } }
 }
 
 export interface ArchiveMorph {
@@ -254,7 +278,7 @@ function Field(props: { index: number; label: string; value: string | null; wide
   return (
     <div className={props.wide ? 'wide' : props.half ? 'half' : undefined}>
       <dt>{props.label}</dt>
-      <dd className="paper-archive-reveal" style={{ '--i': props.index } as React.CSSProperties}>{props.value ?? ' '}</dd>
+      <dd className="paper-archive-reveal" style={{ '--i': props.index } as React.CSSProperties}><ArchiveText text={props.value ?? ' '} /></dd>
     </div>
   )
 }
@@ -262,14 +286,14 @@ function Field(props: { index: number; label: string; value: string | null; wide
 function InsightView(props: { insight: PaperInsight; stale: boolean }): React.JSX.Element {
   const { insight } = props
   const list = (label: string, items: string[]): React.ReactNode => items.length ? (
-    <div><dt>{label}</dt><dd><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></dd></div>
+    <div><dt>{label}</dt><dd><ul>{items.map((item) => <li key={item}><ArchiveText text={item} /></li>)}</ul></dd></div>
   ) : null
   return (
     <div className="paper-archive-insight">
-      <p className="paper-archive-abstract">{insight.summary}</p>
+      <p className="paper-archive-abstract"><ArchiveText text={insight.summary} /></p>
       <dl>
-        <div><dt>研究问题</dt><dd>{insight.researchQuestion}</dd></div>
-        <div><dt>方法</dt><dd>{insight.method}</dd></div>
+        <div><dt>研究问题</dt><dd><ArchiveText text={insight.researchQuestion} /></dd></div>
+        <div><dt>方法</dt><dd><ArchiveText text={insight.method} /></dd></div>
         {list('贡献', insight.contributions)}
         {list('主要发现', insight.findings)}
         {list('局限', insight.limitations)}

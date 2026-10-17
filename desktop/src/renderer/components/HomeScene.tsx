@@ -54,7 +54,7 @@ export function HomeBackdrop(props: { documents?: readonly DocumentSummary[] }):
     if (!read || !wanted.length) return
     let cancelled = false
     const timer = window.setTimeout(() => void (async () => {
-      const { archiveTranslatedTitle } = await import('../paperArchive/paperProfile')
+      const { archiveTranslatedTitle } = await import('@shared/paperProfile')
       for (const document of wanted) {
         if (cancelled) return
         try {

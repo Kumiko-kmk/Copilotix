@@ -129,8 +129,21 @@
   transition: color .18s ease, border-color .18s ease;
 }
 .paper-archive-action .anticon { font-size: 16px; transition: transform .28s var(--ease-spring); }
-.paper-archive-action:hover { color: var(--archive-accent); border-bottom-color: color-mix(in srgb, var(--archive-accent) 45%, transparent); }
-.paper-archive-action:hover .anticon { transform: translateX(5px); }
+.paper-archive-action:hover:not(:disabled) { color: var(--archive-accent); border-bottom-color: color-mix(in srgb, var(--archive-accent) 45%, transparent); }
+.paper-archive-action:hover:not(:disabled) .anticon { transform: translateX(5px); }
+.paper-archive-action:disabled { opacity: .32; cursor: default; }
+.paper-archive-progress { position: absolute; right: 0; top: 50%; width: 28px; height: 28px; display: grid; place-items: center; transform: translateY(-50%); border-radius: 50%; background: var(--archive-bg); pointer-events: none; }
+.paper-archive-progress svg { width: 24px; height: 24px; overflow: visible; }
+.paper-archive-progress circle { fill: none; stroke-width: 1.8; transform: rotate(-90deg); transform-origin: 12px 12px; }
+.paper-archive-progress .track { stroke: color-mix(in srgb, var(--archive-accent) 22%, var(--archive-bg)); }
+.paper-archive-progress .arc { stroke: var(--archive-accent); stroke-linecap: round; stroke-dasharray: 62.832; transition: stroke-dashoffset .25s linear; }
+.paper-archive-progress .check { fill: none; stroke: #25976d; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.paper-archive-progress.success { animation: archive-progress-fade .3s 1s forwards; }
+.paper-archive-progress.success circle { opacity: 0; }
+.paper-archive-progress.success .check { opacity: 1; stroke-dasharray: 20; animation: archive-progress-check .3s ease both; }
+@keyframes archive-progress-check { from { stroke-dashoffset: 20; } to { stroke-dashoffset: 0; } }
+@keyframes archive-progress-fade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .paper-archive-progress .arc { transition: none; } .paper-archive-progress.success .check { animation: none; } }
 .paper-archive-action:focus-visible, .paper-archive-footer button:focus-visible { outline: 2px solid var(--archive-accent); outline-offset: 3px; border-radius: 6px; }
 
 .paper-archive-empty h2 { margin: 12px 0 8px; color: var(--ink); font-size: 24px; }
@@ -322,7 +335,8 @@
 .paper-archive-brief-content { color: var(--text); font-size: 13px; line-height: 1.7; user-select: text; }
 .paper-archive-brief-content h3 { margin: 16px 0 6px; font-size: 13px; color: var(--ink); }
 .paper-archive-brief-content h3:first-child { margin-top: 0; }
-.paper-archive-brief-content p { margin: 6px 0; }
+.paper-archive-brief-content p { margin: 6px 0; text-indent: 2em; }
+.paper-archive-brief-content .paper-archive-brief-note { text-indent: 0; }
 .paper-archive-brief-content ul, .paper-archive-brief-content ol { margin: 6px 0; padding-left: 20px; }
 .paper-archive-brief-content dd { margin: 0 0 8px; }
 .paper-archive-brief-note { color: var(--muted); font-size: 11px; line-height: 1.6; }
@@ -332,6 +346,13 @@
 .paper-archive-anchor { margin: 8px 0; padding: 6px 8px; background: var(--muted-surface); border-radius: 3px; }
 .paper-archive-anchor summary { cursor: pointer; font-size: 11px; }
 .paper-archive-anchor p { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Compact archive text shares the reader's math engine, retaining archive typography. */
+.paper-archive-text { overflow-wrap: anywhere; }
+.paper-archive-text .katex { font-size: 1.05em; text-indent: 0; }
+.paper-archive-text .katex-display { max-width: 100%; margin: .5em 0; padding: 3px 0; overflow-x: auto; overflow-y: hidden; text-align: left; }
+.paper-archive-text .katex-display > .katex { text-align: left; }
+.paper-archive-fields dd:has(.katex) { display: block; -webkit-line-clamp: unset; }
 
 /* ───────── 360° viewer (ArchiveAnatomy.tsx, after RhineLabUI's model viewer) ───────── */
 .paper-archive-viewer { position: absolute; inset: 0; z-index: 10; background: var(--archive-bg); animation: paper-archive-fade .32s cubic-bezier(.22, 1, .36, 1) both; }
