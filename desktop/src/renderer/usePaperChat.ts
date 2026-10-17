@@ -1,10 +1,13 @@
 import React from 'react'
 import { canTransitionRagStreamEvent, type Citation, type RagStreamEventType, type RagStreamEvent } from '@shared/ragSchemas'
-import { paperChatPinnedSchema, supportedChatModelSchema, type PaperChatProvider } from '@shared/paperChatSchemas'
+import { paperChatPinnedSchema, supportedChatModelSchema, type PaperChatPinned, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ReaderChatSelection } from '@shared/types'
-import { emptyPaperChatSession, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
+import { emptyPaperChatSession, paperChatTurnSelections, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
 
-export interface PaperChatTurn extends Partial<Pick<StoredPaperChatTurn, 'id' | 'model' | 'provider' | 'createdAt' | 'completedAt' | 'durationMs' | 'usage'>> { question: string; answer: string; citations: Record<string, Citation>; status: 'pending' | 'completed' | 'failed' | 'cancelled' }
+export interface PaperChatTurn extends Partial<Pick<StoredPaperChatTurn, 'id' | 'model' | 'provider' | 'createdAt' | 'completedAt' | 'durationMs' | 'usage' | 'selections'>> {
+  /** The selections sent with this question, kept in memory so a retry asks about them again. */
+  pinned?: PaperChatPinned[]
+  question: string; answer: string; citations: Record<string, Citation>; status: 'pending' | 'completed' | 'failed' | 'cancelled' }
 
 export function usePaperChat(documentId: string) {
   const [sessionState, setSessionState] = React.useState({ documentId, session: emptyPaperChatSession(), ready: false })
@@ -133,24 +136,27 @@ export function usePaperChat(documentId: string) {
     } catch { return fail('选区无法加入问答，请缩小范围后重试') }
   }, [documentId])
 
-  const ask = React.useCallback(async (question: string, model?: string, provider?: PaperChatProvider) => {
+  /** Sends the composer's selections unless `pins` is given (a retry); they move into the turn. */
+  const ask = React.useCallback(async (question: string, model?: string, provider?: PaperChatProvider, pins?: readonly PaperChatPinned[]) => {
     const generation = documentEpoch.current
     await hydration.current
     if (documentEpoch.current !== generation) return
     if (!sessionRef.current.ready || sessionRef.current.documentId !== documentId) return
     if (active.current.pending || !question.trim()) return
+    const sent = [...(pins ?? pinned)]
+    if (!pins && sent.length) updateSession({ pinned: [] })
     const state = active.current
     const epoch = ++state.epoch
     state.pending = true; state.requestId = null; state.buffered = []; state.sequence = -1; state.type = null
     setBusy(true); setError('')
     const localCreatedAt = new Date().toISOString()
-    setTurns((items) => [...items, { question, model, provider, createdAt: localCreatedAt, answer: '', citations: {}, status: 'pending' }])
+    setTurns((items) => [...items, { question, model, provider, createdAt: localCreatedAt, ...(sent.length ? { pinned: sent, selections: paperChatTurnSelections(sent) } : {}), answer: '', citations: {}, status: 'pending' }])
     const history = turns.filter((t) => t.status === 'completed').slice(-6).flatMap((t) => [
       { role: 'user' as const, content: t.question.slice(0, 2_000) },
       { role: 'assistant' as const, content: t.answer.slice(0, 2_000) }
     ])
     try {
-      const { requestId, createdAt } = await window.copilotix.paperChat.ask({ documentId, question, pinned, history, ...(model ? { model: supportedChatModelSchema.parse(model) } : {}), ...(provider ? { provider } : {}) })
+      const { requestId, createdAt } = await window.copilotix.paperChat.ask({ documentId, question, pinned: sent, history, ...(model ? { model: supportedChatModelSchema.parse(model) } : {}), ...(provider ? { provider } : {}) })
       if (documentEpoch.current === generation) setTurns(items => items.map(turn => turn.createdAt === localCreatedAt && turn.question === question ? { ...turn, id: requestId, createdAt: createdAt ?? localCreatedAt } : turn))
       if (epoch !== state.epoch) { void window.copilotix.paperChat.cancel({ requestId }).catch(() => undefined); return }
       if (state.pending) {
@@ -164,7 +170,7 @@ export function usePaperChat(documentId: string) {
       setError(e instanceof Error ? e.message : '问答失败，请重试')
       setTurns((items) => items.map((t, i) => i === items.length - 1 ? { ...t, status: 'failed' } : t))
     }
-  }, [documentId, pinned, turns])
+  }, [documentId, pinned, turns, updateSession])
 
   const deleteTurn = React.useCallback(async (turn: PaperChatTurn): Promise<void> => {
     if (active.current.pending || loadingOlder) throw new Error('请等待当前操作完成后再删除')

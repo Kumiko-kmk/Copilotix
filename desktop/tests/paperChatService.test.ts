@@ -52,6 +52,16 @@ describe('PaperChatService', () => {
     expect(messages.at(-1)!.content.match(/<\/evidence>/gu)).toHaveLength(1)
     expect(messages.at(-1)!.content).toContain('\\u003c/evidence\\u003e')
     expect(messages.at(-1)!.content).toContain('private translation')
+    expect(messages.at(-1)!.content).not.toContain('userSelections')
+  })
+  it('tells the model which passages were selected and stores them with the turn', async () => {
+    const f = setup()
+    const pinned = [{ view: 'translated' as const, text: '选中的译文段落', contentRevisionId: 'revision-current', fragments: [{ startOffset: 0, endOffset: 7, quote: '选中的译文段落', mappingIds: ['m1'], pageIndex: 2 }] }]
+    const messages = buildPaperChatMessages({ ...request, pinned }, context)
+    expect(messages[0]!.content).toContain('userSelections are the passages the user selected')
+    expect(JSON.parse(messages.at(-1)!.content.split('\n')[1]!).userSelections).toEqual([{ view: 'translation', text: '选中的译文段落' }])
+    await f.service.ask({ ...request, pinned }, f.send); await f.terminal()
+    expect(f.deps.saveTurn.mock.calls.at(-1)?.[1]).toMatchObject({ status: 'completed', selections: [{ view: 'translated', text: '选中的译文段落', pageIndex: 2 }] })
   })
   it.each([
     ['provider', 'CHAT_PROVIDER_REQUIRED'], ['key', 'CHAT_CREDENTIALS_REQUIRED'], ['unverified', 'CHAT_CREDENTIAL_UNVERIFIED'], ['invalid', 'CHAT_CREDENTIAL_UNVERIFIED']

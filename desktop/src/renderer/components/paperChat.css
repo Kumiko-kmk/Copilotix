@@ -29,6 +29,8 @@
 .paper-chat-error { padding: 6px 12px; border-left: 2px solid #cf5049; border-radius: 0; color: #b42318; background: #fdecea; font-size: 13px; }
 .paper-chat-pins { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .paper-chat-pins::-webkit-scrollbar { display: none; }
+.paper-chat-turn-selections { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.paper-chat-turn-selections .paper-chat-pin { padding-right: 10px; }
 .paper-chat-pin { display: inline-flex; flex: 0 0 auto; align-items: center; max-width: 280px; height: 28px; gap: 6px; padding: 0 4px 0 10px; border: 0; border-left: 2px solid var(--primary); border-radius: 0; background: color-mix(in srgb, var(--primary) 7%, transparent); font-size: 12px; }
 .paper-chat-pin-source { color: var(--primary); font-weight: 600; white-space: nowrap; }
 .paper-chat-pin-text { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }

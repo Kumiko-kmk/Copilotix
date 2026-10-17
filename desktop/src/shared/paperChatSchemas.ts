@@ -85,6 +85,7 @@ export const paperContextResultSchema = z.object({
   }
 })
 export type PaperChatAskRequest = z.infer<typeof paperChatAskRequestSchema>
+export type PaperChatPinned = z.infer<typeof paperChatPinnedSchema>
 export type PaperContextRequest = z.infer<typeof paperContextRequestSchema>
 export type PaperContext = z.infer<typeof paperContextResultSchema>
 export type PaperEvidence = z.infer<typeof paperEvidenceSchema>

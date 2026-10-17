@@ -3,6 +3,27 @@ import { chatUsageSchema } from './chatResultMetadata'
 import { citationSchema, ragUuidSchema, ragWireByteLength } from './ragSchemas'
 import { chatModelSchema, paperChatPinnedSchema, paperChatProviderSchema, resolvePaperChatModel, PAPER_CHAT_MAX_BYTES } from './paperChatSchemas'
 
+/** What the question was asked about, kept with the turn for display (text is shortened). */
+export const PAPER_CHAT_SELECTION_PREVIEW = 600
+export const paperChatTurnSelectionSchema = z.object({
+  view: paperChatPinnedSchema.shape.view,
+  text: z.string().min(1).max(PAPER_CHAT_SELECTION_PREVIEW),
+  pageIndex: z.number().int().min(0).optional()
+}).strict()
+export type PaperChatTurnSelection = z.infer<typeof paperChatTurnSelectionSchema>
+export function paperChatTurnSelections(pinned: readonly z.infer<typeof paperChatPinnedSchema>[]): PaperChatTurnSelection[] {
+  return pinned.map((pin) => {
+    const pageIndex = pin.fragments[0]?.pageIndex
+    let text = pin.text
+    if (text.length > PAPER_CHAT_SELECTION_PREVIEW) {
+      text = text.slice(0, PAPER_CHAT_SELECTION_PREVIEW - 1)
+      if (/[\uD800-\uDBFF]$/u.test(text)) text = text.slice(0, -1)
+      text += '…'
+    }
+    return { view: pin.view, text, ...(typeof pageIndex === 'number' ? { pageIndex } : {}) }
+  })
+}
+
 // File format lives beside each paper; no database migration or credentials.
 export const paperChatTurnSchema = z.object({
   id: ragUuidSchema,
@@ -13,6 +34,8 @@ export const paperChatTurnSchema = z.object({
   provider: paperChatProviderSchema,
   model: chatModelSchema,
   question: z.string().min(1).max(2_000),
+  // Added with turn selections; files without it stay valid.
+  selections: z.array(paperChatTurnSelectionSchema).max(8).optional(),
   answer: z.string().max(32_768),
   citations: z.record(z.string().regex(/^E[1-9]\d{0,3}$/u), citationSchema).refine((items) => Object.keys(items).length <= 50),
   status: z.enum(['pending', 'completed', 'failed', 'cancelled'])

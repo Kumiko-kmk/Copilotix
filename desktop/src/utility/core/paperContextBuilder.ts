@@ -79,6 +79,9 @@ export class PaperContextBuilder {
       if (pin.contentRevisionId !== revision.contentRevisionId) throw new PaperContextError('SELECTION_STALE', '选区来源已更新，请重新选择')
       for (const fragment of pin.fragments) {
         const candidates = [...new Set(fragment.mappingIds.flatMap((id) => mappingIndex.get(id) ?? []))].sort((a, b) => a - b)
+        // A translation block without a source mapping (legacy or unaligned translation) cannot
+        // pin source chunks; its text still reaches the model as a user selection.
+        if (pin.view === 'translated' && !candidates.length) continue
         if (!fragment.mappingIds.length || fragment.mappingIds.some((id) => !mappingIndex.has(id))) throw new PaperContextError('SELECTION_STALE', '选区无法对应当前论文')
         let matching = candidates
         if (pin.view === 'original') {

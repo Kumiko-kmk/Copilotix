@@ -4,6 +4,7 @@ import type {
   ReaderAnnotation,
   ReaderChatSelectionFragment
 } from '@shared/types'
+import type { ReaderNote, ReaderNoteAnchor } from '@shared/readerNotes'
 
 export interface ReaderTextSelection {
   text: string
@@ -11,7 +12,7 @@ export interface ReaderTextSelection {
   rect: { top: number; right: number; bottom: number; left: number; width: number; height: number }
 }
 
-export type HighlightBucket = `copilotix-highlight-${HighlightColor}` | 'copilotix-underline'
+export type HighlightBucket = `copilotix-highlight-${HighlightColor}` | 'copilotix-underline' | 'copilotix-note'
 export type HighlightRanges = Map<HighlightBucket, Range[]>
 
 const highlightOwners = new Map<string, HighlightRanges>()
@@ -90,6 +91,44 @@ export function buildReaderHighlightRanges(article: HTMLElement, annotations: Re
   return result
 }
 
+/** Anchors for a new note: each fragment with up to 32 characters of context on either side. */
+export function readerNoteAnchors(article: HTMLElement, selection: ReaderTextSelection): ReaderNoteAnchor[] {
+  const texts = collectAnnotationBlockTexts(article)
+  return selection.fragments.map((fragment) => {
+    const text = texts.get(fragment.blockKey) ?? ''
+    return {
+      blockKey: fragment.blockKey,
+      startOffset: fragment.startOffset,
+      endOffset: fragment.endOffset,
+      quote: fragment.quote,
+      prefix: text.slice(Math.max(0, fragment.startOffset - 32), fragment.startOffset),
+      suffix: text.slice(fragment.endOffset, fragment.endOffset + 32)
+    }
+  })
+}
+
+/** The live ranges of each note whose text can still be found, in reading order. */
+export function buildReaderNoteRanges(article: HTMLElement, notes: readonly ReaderNote[]): Map<string, Range[]> {
+  const blocks = new Map(
+    Array.from(article.querySelectorAll<HTMLElement>('[data-annotation-block-key]'))
+      .map((block) => [block.dataset.annotationBlockKey!, block])
+  )
+  const result = new Map<string, Range[]>()
+  for (const note of notes) {
+    const ranges: Range[] = []
+    for (const anchor of note.anchors) {
+      const block = blocks.get(anchor.blockKey)
+      if (!block) continue
+      // Same context matching as highlights; the note fields stand in for an annotation's.
+      const resolved = resolveReaderAnnotation(textContent(block), { ...anchor, id: note.id, taskId: '', view: note.view, kind: 'underline', color: null, createdAt: note.createdAt, updatedAt: note.updatedAt })
+      const range = resolved ? rangeFromOffsets(block, resolved.startOffset, resolved.endOffset) : null
+      if (range) ranges.push(range)
+    }
+    if (ranges.length) result.set(note.id, ranges)
+  }
+  return result
+}
+
 export function registerReaderHighlightRanges(owner: string, ranges: HighlightRanges): () => void {
   highlightOwners.set(owner, ranges)
   rebuildHighlightRegistry()
@@ -125,7 +164,8 @@ function rebuildHighlightRegistry(): void {
     'copilotix-highlight-blue',
     'copilotix-highlight-pink',
     'copilotix-highlight-purple',
-    'copilotix-underline'
+    'copilotix-underline',
+    'copilotix-note'
   ]
   for (const name of names) {
     const ranges = buckets.get(name) ?? []

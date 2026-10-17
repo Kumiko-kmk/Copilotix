@@ -1,7 +1,8 @@
 import React from 'react'
-import { usePaperChat, type PaperChatTurn } from '../usePaperChat'
+import { usePaperChat } from '../usePaperChat'
+import { useReaderNotes } from '../useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Space, Spin, Typography, message } from 'antd'
 import { buildOriginalReaderBlocks, buildTranslatedReaderBlocks } from '@shared/readerDocument'
 import type {
@@ -32,6 +33,7 @@ import {
 export default function ReaderPage(props: { documentId: string; insights?: PaperInsightSource; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
   const queryClient = useQueryClient()
   const chat = usePaperChat(props.documentId)
+  const readerNotes = useReaderNotes(props.documentId)
   const [layout, setLayout] = React.useState<ReaderLayout>(loadReaderLayout)
   const [focusedGroupId, setFocusedGroupId] = React.useState<string | null>(null)
   const [revealReadingNonce, setRevealReadingNonce] = React.useState(0)
@@ -165,7 +167,6 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
         <div className="reader-header-heading"><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName.replace(/\.pdf\s*$/iu, '')}</Typography.Text></div>
         <Space className="reader-header-actions">
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
-          <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />
           <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
           </Dropdown>
@@ -198,6 +199,9 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
           onSelect: selectBlock,
           onOpenFigurePdf: openFigurePdf,
           onAddToChat: addToChat,
+          notes: readerNotes.notes,
+          onSaveNote: readerNotes.saveNote,
+          onDeleteNote: readerNotes.deleteNote,
           chat: chatOptions
         }}
       />
@@ -306,29 +310,6 @@ function toDocumentAnnotation(annotation: ReaderAnnotation, snapshot: ReaderAnno
     createdAt: annotation.createdAt,
     updatedAt: annotation.updatedAt
   }
-}
-
-async function copyCurrent(
-  document: DocumentDetails,
-  view: ReaderViewId,
-  turns: readonly PaperChatTurn[],
-  messageApi: ReturnType<typeof message.useMessage>[0]
-): Promise<void> {
-  const value = view === 'original' ? document.markdown
-    : view === 'translated' ? document.translatedMarkdown
-      : view === 'chat' ? chatTranscript(turns)
-        : ''
-  if (!value) return
-  await navigator.clipboard.writeText(value)
-  messageApi.success('已复制')
-}
-
-/** Questions as quotes, answers verbatim; evidence markers are kept as written. */
-export function chatTranscript(turns: readonly PaperChatTurn[]): string {
-  return turns
-    .filter((turn) => turn.answer.trim())
-    .map((turn) => `> ${turn.question.replace(/\n/gu, '\n> ')}\n\n${turn.answer.trim()}`)
-    .join('\n\n---\n\n')
 }
 
 async function saveDocument(

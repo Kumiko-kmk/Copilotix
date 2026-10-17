@@ -11,6 +11,7 @@ import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@sh
 import { ChatProvider } from './chat/chatProvider'
 import { PaperChatService } from './chat/paperChatService'
 import { registerPaperChatHandlers } from './chat/paperChatIpc'
+import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema } from '@shared/readerNotes'
 import { sanitizeTitleStem } from '@shared/titleNaming'
 import { TUTORIAL_PAPER_BYTES, TUTORIAL_PAPER_SHA256, TUTORIAL_PAPER_SOURCE_URL, MINERU_API_TOKEN_URL } from '@shared/tutorialSample'
 import { verifiedTutorialPaperPath } from './tutorialSample'
@@ -574,6 +575,13 @@ function registerIpc(
     else await tasks.exportMarkdown(task.id, request.kind, result.filePath)
     return { saved: true }
   }, validationOptions)
+  const requireNotesUtility = (): UtilitySupervisor => {
+    if (!utilitySupervisor || !repository) throw new Error('数据库尚未初始化')
+    return utilitySupervisor
+  }
+  registerValidatedHandler('reader-notes:list', readerNotesRequestSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:list', request), validationOptions)
+  registerValidatedHandler('reader-notes:upsert', readerNoteUpsertSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:upsert', request), validationOptions)
+  registerValidatedHandler('reader-notes:delete', readerNoteDeleteSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:delete', request), validationOptions)
   registerValidatedHandler('reader-annotations:list', listReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, async (_event, request) => {
     if (!repository) throw new Error('数据库尚未初始化')
     return repository.listDocumentAnnotations(request)

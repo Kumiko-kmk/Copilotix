@@ -4,6 +4,7 @@ import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightCanc
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
 import { paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
+import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema } from '@shared/readerNotes'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
@@ -94,6 +95,11 @@ const api: CopilotixDesktopApi = {
       ipcRenderer.on('paperInsight:changed', handler)
       return () => ipcRenderer.removeListener('paperInsight:changed', handler)
     }
+  },
+  readerNotes: {
+    list: (request) => invokeValidated('reader-notes:list', readerNotesRequestSchema, readerNotesSchema, request),
+    upsert: (request) => invokeValidated('reader-notes:upsert', readerNoteUpsertSchema, readerNotesSchema, request),
+    delete: (request) => invokeValidated('reader-notes:delete', readerNoteDeleteSchema, readerNotesSchema, request)
   },
   paperChat: {
     load: (request) => invokeValidated('paper-chat:load', paperChatLoadRequestSchema, paperChatPageSchema, request),

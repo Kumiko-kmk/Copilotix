@@ -1,4 +1,5 @@
 import React from 'react'
+import type { ReaderNote } from '@shared/readerNotes'
 import { createPortal } from 'react-dom'
 import { Badge, Button, Tag } from 'antd'
 import { FilePdfOutlined, FileTextOutlined, MessageOutlined, TranslationOutlined } from '@ant-design/icons'
@@ -72,6 +73,9 @@ export interface ReaderViewsInput {
   annotations: ReaderAnnotation[]
   onReplaceAnnotations(view: ReaderAnnotationView, annotations: ReaderAnnotation[]): Promise<void>
   onAddToChat?(selection: ReaderChatSelection): void
+  notes?: readonly ReaderNote[]
+  onSaveNote?(note: ReaderNote): Promise<void>
+  onDeleteNote?(noteId: string): Promise<void>
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
   onOpenFigurePdf?(selection: BlockSelection): void
@@ -104,6 +108,8 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     () => props.annotations.filter((annotation) => annotation.view === 'translated'),
     [props.annotations]
   )
+  const originalNotes = React.useMemo(() => (props.notes ?? []).filter((note) => note.view === 'original'), [props.notes])
+  const translatedNotes = React.useMemo(() => (props.notes ?? []).filter((note) => note.view === 'translated'), [props.notes])
   const figureGeometries = React.useMemo(() => buildReaderFigureGeometries(mappings, props.layoutJson), [mappings, props.layoutJson])
   useFigureArtifacts(props.taskId, props.pdfUrl, figureGeometries)
   const originalFigureGroups = React.useMemo(
@@ -153,6 +159,9 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           onHighlightColorChange={setHighlightColor}
           onReplaceAnnotations={replaceOriginalAnnotations}
           onAddToChat={props.onAddToChat}
+          notes={originalNotes}
+          onSaveNote={props.onSaveNote}
+          onDeleteNote={props.onDeleteNote}
           selection={props.selection}
           onSelect={props.onSelect}
           initialScrollTop={scrollPositionsRef.current.original}
@@ -180,6 +189,9 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
             onHighlightColorChange={setHighlightColor}
             onReplaceAnnotations={replaceTranslatedAnnotations}
             onAddToChat={props.onAddToChat}
+            notes={translatedNotes}
+            onSaveNote={props.onSaveNote}
+            onDeleteNote={props.onDeleteNote}
             selection={props.selection}
             onSelect={props.onSelect}
             initialScrollTop={scrollPositionsRef.current.translated}
@@ -237,7 +249,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     return specs
   }, [
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
-    props.onAddToChat, props.onSelect, props.onOpenFigurePdf, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
+    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.onOpenFigurePdf, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
     props.taskStatus, props.taskError, props.onRetry, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
     rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups

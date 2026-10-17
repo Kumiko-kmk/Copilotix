@@ -110,8 +110,8 @@ export default function ReaderChatPanel(props: {
     if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120) scroller.scrollTop = scroller.scrollHeight
   }, [chat.turns.length, lastAnswer])
 
-  // The question moves into the conversation immediately; a failed turn keeps
-  // it and offers retry, so the draft can be cleared up front.
+  // The question and its selections move into the conversation immediately; a
+  // failed turn keeps them and offers retry, so the composer can be cleared up front.
   const submit = React.useCallback(async (): Promise<void> => {
     chat.setDraft('')
     await chat.ask(question, routing.model.trim(), routing.provider ?? undefined)
@@ -180,7 +180,7 @@ export default function ReaderChatPanel(props: {
                 deleteDisabled={chat.busy || chat.loadingOlder}
                 onDelete={() => chat.deleteTurn(turn)}
                 retryable={!chat.busy && index === chat.turns.length - 1}
-                onRetry={() => void chat.ask(turn.question, routing.model.trim(), routing.provider ?? undefined)}
+                onRetry={() => void chat.ask(turn.question, routing.model.trim(), routing.provider ?? undefined, turn.pinned ?? [])}
                 onCitation={cite}
               />
             ))}
@@ -192,11 +192,9 @@ export default function ReaderChatPanel(props: {
         {chat.pinned.length > 0 ? (
           <div className="paper-chat-pins" aria-label="固定选区">
             {chat.pinned.map((pin, index) => {
-              const page = pin.fragments[0]?.pageIndex
               return (
                 <span className="paper-chat-pin" key={index}>
-                  <span className="paper-chat-pin-source">{pin.view === 'original' ? '原文' : '译文'}{page !== undefined && page !== null ? ` · 第 ${page + 1} 页` : ''}</span>
-                  <span className="paper-chat-pin-text">{pin.text.slice(0, 40)}{pin.text.length > 40 ? '…' : ''}</span>
+                  <SelectionLabel view={pin.view} text={pin.text} pageIndex={pin.fragments[0]?.pageIndex} />
                   <button type="button" aria-label={`移除选区 ${index + 1}`} disabled={chat.busy} onClick={() => chat.removePin(index)}><CloseOutlined /></button>
                 </span>
               )
@@ -294,6 +292,13 @@ function ChatTurn(props: {
   const labels = React.useMemo(() => citationLabels(turn.answer, citations), [citations, turn.answer])
   return (
     <article className="paper-chat-turn">
+      {turn.selections?.length ? (
+        <div className="paper-chat-turn-selections" aria-label="提问附带的选区">
+          {turn.selections.map((selection, index) => (
+            <span className="paper-chat-pin" key={index}><SelectionLabel {...selection} /></span>
+          ))}
+        </div>
+      ) : null}
       <div className="paper-chat-question-row">
         <h4 className="paper-chat-question">{turn.question}</h4>
         <Dropdown trigger={['click']} menu={{ items: [
@@ -331,6 +336,14 @@ function ChatTurn(props: {
       </Modal>
     </article>
   )
+}
+
+function SelectionLabel(props: { view: 'original' | 'translated'; text: string; pageIndex?: number | null }): React.JSX.Element {
+  const page = props.pageIndex
+  return <>
+    <span className="paper-chat-pin-source">{props.view === 'original' ? '原文' : '译文'}{page !== undefined && page !== null ? ` · 第 ${page + 1} 页` : ''}</span>
+    <span className="paper-chat-pin-text">{props.text.slice(0, 40)}{props.text.length > 40 ? '…' : ''}</span>
+  </>
 }
 
 /** Number verified evidence markers 1…n in the order they first appear. */

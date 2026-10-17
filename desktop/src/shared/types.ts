@@ -1,5 +1,6 @@
 import type { PaperChatAskRequest, PaperChatStatus } from './paperChatSchemas'
 import type { PaperChatLoadRequest, PaperChatPage, PaperChatSession } from './paperChatStorageSchemas'
+import type { ReaderNote, ReaderNotes } from './readerNotes'
 import type { RagStreamEvent } from './ragSchemas'
 import type { LibraryRequest, LibraryResult } from './librarySchemas'
 import type {
@@ -239,6 +240,11 @@ export interface CopilotixDesktopApi {
     generate(request: { documentId: string }): Promise<void>
     cancel(request: { documentId: string }): Promise<{ cancelled: boolean }>
     onChanged(listener: (event: { documentId: string; state: import('./paperInsight').PaperInsightState }) => void): () => void
+  }
+  readerNotes: {
+    list(request: { documentId: string }): Promise<ReaderNotes>
+    upsert(request: { documentId: string; note: ReaderNote }): Promise<ReaderNotes>
+    delete(request: { documentId: string; noteId: string }): Promise<ReaderNotes>
   }
   paperChat: {
     load(request: PaperChatLoadRequest): Promise<PaperChatPage>

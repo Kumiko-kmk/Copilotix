@@ -33,6 +33,8 @@ import { figureAssetName, markdownAssetSources, type ReaderFigureGroup } from '@
 import { recordReaderDuration } from '../readerPerformance'
 import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
 import { readerReferenceSections } from '../readerReferenceSections'
+import { QuillIcon, useReaderNoteLayer } from './ReaderNotes'
+import type { ReaderNote } from '@shared/readerNotes'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 /**
@@ -70,6 +72,10 @@ export default function MarkdownPane(props: {
   onHighlightColorChange(color: HighlightColor): void
   onReplaceAnnotations(annotations: ReaderAnnotation[]): Promise<void>
   onAddToChat?(selection: ReaderChatSelection): void
+  /** Sticky notes of this view; without `onSaveNote` the note tool is hidden. */
+  notes?: readonly ReaderNote[]
+  onSaveNote?(note: ReaderNote): Promise<void>
+  onDeleteNote?(noteId: string): Promise<void>
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
   onRenderReady?(): void
@@ -383,6 +389,19 @@ export default function MarkdownPane(props: {
     return registerReaderHighlightRanges(annotationOwner, ranges)
   }, [annotationOwner, props.annotations, props.blocks, resourcesReady, figuresSettled, renderAttempt, figureStates])
 
+  const noteContentKey = React.useMemo(() => ({}), [props.blocks, renderAttempt, figureStates, layoutRevision])
+  const noteLayer = useReaderNoteLayer({
+    active: props.active,
+    ready: resourcesReady && figuresSettled,
+    view: props.view,
+    notes: props.notes ?? NO_NOTES,
+    containerRef,
+    articleRef,
+    contentKey: noteContentKey,
+    onSave: props.onSaveNote,
+    onDelete: props.onDeleteNote
+  })
+
   React.useEffect(() => {
     if (!props.active || !ready) {
       closeTextSelection(true)
@@ -546,6 +565,13 @@ export default function MarkdownPane(props: {
     closeTextSelection(true)
   }, [closeTextSelection, props, textSelection])
 
+  const { startNote } = noteLayer
+  const writeNote = React.useCallback(() => {
+    if (!textSelection) return
+    startNote(textSelection)
+    closeTextSelection(true)
+  }, [closeTextSelection, startNote, textSelection])
+
   React.useEffect(() => () => {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
     if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current)
@@ -646,9 +672,11 @@ export default function MarkdownPane(props: {
             onHighlight={() => applyTextAnnotation('highlight')}
             onUnderline={() => applyTextAnnotation('underline')}
             onAddToChat={addToChat}
+            onNote={noteLayer.enabled ? writeNote : undefined}
           />,
           document.body
         ) : null}
+        {noteLayer.layer}
       </div>
       <MarkdownMinimap
         active={props.active}
@@ -687,6 +715,7 @@ function stringArraysEqual(left: string[], right: string[]): boolean {
 }
 
 const NO_READY_FIGURES: ReadonlySet<string> = new Set()
+const NO_NOTES: readonly ReaderNote[] = []
 const NO_MOSAICS: ReadonlyMap<string, FigureMosaic> = new Map()
 const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   block: ReaderBlock
@@ -851,6 +880,7 @@ function ReaderAnnotationToolbar(props: {
   onHighlight(): void
   onUnderline(): void
   onAddToChat(): void
+  onNote?(): void
 }): React.JSX.Element {
   const above = props.selection.rect.top >= 92
   const center = props.selection.rect.left + props.selection.rect.width / 2
@@ -900,6 +930,11 @@ function ReaderAnnotationToolbar(props: {
       <button type="button" aria-label="添加下划线" onClick={props.onUnderline}>
         <UnderlineOutlined />
       </button>
+      {props.onNote ? (
+        <button type="button" aria-label="写笔记" onClick={props.onNote}>
+          <QuillIcon />
+        </button>
+      ) : null}
       <button type="button" aria-label="添加到对话" onClick={props.onAddToChat}>
         <MessageOutlined />
       </button>

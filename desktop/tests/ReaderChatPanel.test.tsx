@@ -86,6 +86,9 @@ describe('ReaderChatPanel and local paper sessions', () => {
     fireEvent.click(screen.getByRole('button', { name: '添加选区' })); await screen.findByText('source text')
     await f.input(); await waitFor(() => expect(f.ask).toHaveBeenCalled())
     expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ documentId: doc, pinned: [expect.objectContaining({ contentRevisionId: 'revision1', text: 'source text' })] }))
+    // The selection leaves the composer with the question and is shown on the sent turn.
+    expect(screen.queryByRole('group', { name: '固定选区' }) ?? document.querySelector('[aria-label="固定选区"]')).toBeNull()
+    expect(document.querySelector('[aria-label="提问附带的选区"]')?.textContent).toContain('source text')
     f.complete()
     fireEvent.click(screen.getByRole('button', { name: '引用 1' }))
     await waitFor(() => expect(f.onSelect).toHaveBeenCalledWith({ mappingId: 'm1', origin: 'citation' }))

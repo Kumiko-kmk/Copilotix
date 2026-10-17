@@ -9,6 +9,7 @@ import type { BlockSelection } from '@shared/types'
 import type { ReaderFigureGroup } from '../src/shared/readerFigureGroups'
 import MarkdownPane, { MARKDOWN_BLOCKS_PER_FRAME, MARKDOWN_INITIAL_BLOCKS } from '../src/renderer/components/MarkdownPane'
 import { collectAnnotationBlockTexts } from '../src/renderer/readerAnnotations'
+import type { ReaderNote } from '@shared/readerNotes'
 
 const figureMock = vi.hoisted(() => ({
   initial: 'ready' as string,
@@ -500,7 +501,7 @@ describe('MarkdownPane', () => {
     document.dispatchEvent(new Event('selectionchange'))
 
     const toolbar = await view.findByRole('toolbar', { name: '文本标注' })
-    expect(toolbar.querySelectorAll(':scope > button')).toHaveLength(3)
+    expect(toolbar.querySelectorAll(':scope > button')).toHaveLength(3) // no note tool without onSaveNote
     fireEvent.contextMenu(view.getByRole('button', { name: '荧光笔高亮' }))
     expect(view.getAllByRole('option')).toHaveLength(5)
     fireEvent.click(view.getByRole('option', { name: '选择蓝色' }))
@@ -524,6 +525,62 @@ describe('MarkdownPane', () => {
       view: 'original',
       text: 'Alpha'
     }))
+  })
+
+  it('writes a sticky note on a selection, then reopens, edits and deletes it from its quill', async () => {
+    Object.defineProperty(Range.prototype, 'getClientRects', {
+      configurable: true,
+      value: () => [{ top: 120, right: 220, bottom: 144, left: 100, width: 120, height: 24 }]
+    })
+    const saved: ReaderNote[] = []
+    const deleted: string[] = []
+    function Harness(): React.JSX.Element {
+      const [notes, setNotes] = React.useState<ReaderNote[]>([])
+      return (
+        <MarkdownPane
+          active
+          blocks={[{ ...block('first', 'Alpha beta'), annotationKey: 'content:0' }]}
+          assetBaseUrl="copilotix-asset://task/"
+          taskId="task"
+          view="translated"
+          annotations={[]}
+          highlightColor="yellow"
+          onHighlightColorChange={() => undefined}
+          onReplaceAnnotations={async () => undefined}
+          notes={notes}
+          onSaveNote={async (note) => { saved.push(note); setNotes(items => [...items.filter(item => item.id !== note.id), note]) }}
+          onDeleteNote={async (id) => { deleted.push(id); setNotes(items => items.filter(item => item.id !== id)) }}
+          selection={null}
+          onSelect={() => undefined}
+        />
+      )
+    }
+    const view = render(<Harness />)
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    selectBetween(view.getByText('Alpha beta').firstChild!, 6, view.getByText('Alpha beta').firstChild!, 10)
+    document.dispatchEvent(new Event('selectionchange'))
+    fireEvent.click(await view.findByRole('button', { name: '写笔记' }))
+
+    const card = await view.findByRole('dialog', { name: '新建笔记' })
+    expect(card.textContent).toContain('beta')
+    fireEvent.change(view.getByRole('textbox', { name: '笔记内容' }), { target: { value: '  第一条笔记  ' } })
+    fireEvent.click(view.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull())
+    expect(saved[0]).toMatchObject({ view: 'translated', body: '第一条笔记', anchors: [{ blockKey: 'content:0', startOffset: 6, endOffset: 10, quote: 'beta', prefix: 'Alpha ', suffix: '' }] })
+
+    fireEvent.click(await view.findByRole('button', { name: '查看笔记' }))
+    const input = await view.findByRole('textbox', { name: '笔记内容' })
+    expect((input as HTMLTextAreaElement).value).toBe('第一条笔记')
+    fireEvent.change(input, { target: { value: '改过的笔记' } })
+    fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
+    await waitFor(() => expect(saved).toHaveLength(2))
+    expect(saved[1]).toMatchObject({ id: saved[0]!.id, body: '改过的笔记', createdAt: saved[0]!.createdAt })
+
+    fireEvent.click(await view.findByRole('button', { name: '查看笔记' }))
+    fireEvent.click(await view.findByRole('button', { name: '删除' }))
+    fireEvent.click(view.getByRole('button', { name: '确认删除' }))
+    await waitFor(() => expect(deleted).toEqual([saved[0]!.id]))
+    await waitFor(() => expect(view.queryByRole('button', { name: '查看笔记' })).toBeNull())
   })
 })
 

@@ -58,7 +58,7 @@ updated: 2026-10-12
 - 系統提示將 evidence、選區、歷史標為不可信資料；JSON escape < 和 >，不讓文本關閉 evidence delimiter。僅允許當前 evidence pack 中簽發的 E1… 引用；未知引用移除，最多 50 個。
 - 每篇同時一個請求，替代請求取消前一個；最多 8 篇在途。服務商各有獨立 FIFO，不排在翻譯後面。首字節約 30 秒、stream idle 約 60 秒；回答 32768 字元上限，IPC delta 有界且按 50 ms 合併。
 - 事件遵守 accepted → retrieving → evidence-ready → delta/citation → completed/failed/cancelled，帶 requestId、sequence。Renderer 校驗合法轉移、忽略重複／晚到事件、緩衝 ask 返回前的事件、停止後抑制晚到完成。
-- 閱讀器只顯示原文 Markdown、中文 Markdown、AI 問答三個頁籤；不再展示 JSON 頁籤，底層 layout JSON 和 ZIP 資料仍保留。問答首次開啟才掛載面板及觸發 ensure-index；只打開論文不得建索引。「添加到對話」加入選區，不自動切換頁籤，保留最多 8 個固定選區。
+- 閱讀器只顯示原文 Markdown、中文 Markdown、AI 問答三個頁籤；不再展示 JSON 頁籤，底層 layout JSON 和 ZIP 資料仍保留。問答首次開啟才掛載面板及觸發 ensure-index；只打開論文不得建索引。「添加到對話」加入選區，不自動切換頁籤，最多 8 個。發送時選區隨問題移入該輪：輸入欄清空選區，turn JSON 以可選 `selections`（視圖、≤600 字預覽、頁碼）保存並顯示在問題上方；重試沿用該輪選區（僅記憶體中的完整 fragments，重開後重試不再附帶）。模型收到 `userSelections`（原文／譯文全文），系統提示說明「這段」等指代即該選區。舊 turn 無 `selections` 仍可讀；含此欄位的文件被更早版本讀取時會因 strict schema 拒絕整頁，降級不受支持。
 - Enter 發送，Shift+Enter 換行，IME 不誤發；輸入框／模型選擇留在面板底部。停止後保留部分回答；失敗／取消可重試。引用按首次出現順序編號，點擊核對版本後定位來源，不添加懸停提示。
 - SafeMarkdown 禁止回答中的外部圖片／可執行鏈接／script 網路副作用；只顯示經驗證引用和 KaTeX 公式。長回答僅在用戶接近底部時自動跟隨，尊重 reduced-motion。
 

@@ -8,6 +8,8 @@ import { LibraryCategoryService } from './libraryCategoryService'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
 import { paperChatDeleteTurnSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
 import { PaperChatStore } from './persistence/paperChatStore'
+import { ReaderNoteStore } from './persistence/readerNoteStore'
+import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema } from '@shared/readerNotes'
 import { PaperContextBuilder, PaperContextError } from './paperContextBuilder'
 import { assertLibraryIdle, manageLibrary } from './libraryMaintenance'
 import { libraryCoreRequestSchema } from '@shared/librarySchemas'
@@ -137,6 +139,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     return state.translationPlanManager
   }
   const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
+  const noteStore = new ReaderNoteStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const insightStore = () => new PaperInsightStore(requireRepository())
   const figureInsightStore = () => new FigureInsightStore(requireRepository())
   const categories = new LibraryCategoryService(insightStore, requireRepository)
@@ -155,6 +158,9 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'chat:save-session': (request) => { const { documentId, session } = paperChatSaveSessionSchema.parse(request.payload); return chatStore.saveSession(documentId, session) },
     'chat:delete-turn': (request) => chatStore.deleteTurn(paperChatDeleteTurnSchema.parse(request.payload)),
     'chat:clear': (request) => chatStore.clear(paperChatDocumentRequestSchema.parse(request.payload).documentId),
+    'notes:list': (request) => noteStore.list(readerNotesRequestSchema.parse(request.payload).documentId),
+    'notes:upsert': (request) => { const { documentId, note } = readerNoteUpsertSchema.parse(request.payload); return noteStore.upsert(documentId, note) },
+    'notes:delete': (request) => { const { documentId, noteId } = readerNoteDeleteSchema.parse(request.payload); return noteStore.delete(documentId, noteId) },
     'chat:ensure-index': (request, signal) => {
       signal.throwIfAborted()
       const { documentId } = paperChatStatusRequestSchema.parse(request.payload)
