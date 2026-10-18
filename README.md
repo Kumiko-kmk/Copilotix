@@ -32,6 +32,8 @@ Copilotix 是面向论文阅读的 Windows 桌面应用。导入 PDF，经 Miner
 
 从 1.2.0 起，Release 只提供安装包和源代码下载，校验信息保留在构建流程内部。安装、覆盖升级及资料保留见 [Windows 安装指南](docs/WINDOWS_INSTALLATION_ZH.md)。
 
+> ⚠️ 1.2.0 经维护者授权，以未签章形式发布；Windows 可能显示发布者未知或安全提示。此授权仅适用于本版本，请从上方 Release 链接下载。
+
 <a id="api-keys"></a>
 
 ## 🔑 服务与模型

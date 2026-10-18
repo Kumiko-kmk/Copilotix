@@ -24,7 +24,7 @@ permissions:
 env:
   # Maintainer-authorized exceptions require an exact tag and repository variable.
   # Every other public tag still requires trusted signing.
-  COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE: ${{ (github.ref == 'refs/tags/desktop-v1.0.0' && vars.COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE == 'desktop-v1.0.0') || (github.ref == 'refs/tags/desktop-v1.1.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.1.0') }}
+  COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE: ${{ (github.ref == 'refs/tags/desktop-v1.0.0' && vars.COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE == 'desktop-v1.0.0') || (github.ref == 'refs/tags/desktop-v1.1.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.1.0') || (github.ref == 'refs/tags/desktop-v1.2.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.2.0') }}
 
 jobs:
   build:
