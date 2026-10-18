@@ -71,7 +71,7 @@ describe('archive mathematics', () => {
     expect(container.querySelector('strong')?.textContent).toBe('强调')
   })
 
-  it('renders every dynamic brief field and preserves badges, excerpt disclosure and data', () => {
+  it('renders legacy brief fields and preserves excerpt disclosure and saved data without conclusion badges', () => {
     const brief = structuredClone(briefContent) as PaperBrief
     brief.context = { background: '$b_1$', gap: '$b_2$', question: '$b_3$' }
     brief.approach.summary = '$b_4$'
@@ -89,7 +89,7 @@ describe('archive mathematics', () => {
     view.rerender(<BriefContent brief={brief} anchors={anchors} tab="findings" />)
     expect(view.container.querySelectorAll('.katex')).toHaveLength(7)
     expect(view.container.querySelector('details summary')).not.toBeNull()
-    expect(view.container.querySelector('.paper-archive-badge')?.textContent).toBe('证据有限')
+    expect(view.container.querySelector('.paper-archive-badge')).toBeNull()
     view.rerender(<BriefContent brief={brief} anchors={anchors} tab="limits" />)
     expect(view.container.querySelectorAll('.katex')).toHaveLength(4)
     expect(view.container.textContent).toContain('作者自述')
