@@ -1,5 +1,6 @@
-import { CONTRIBUTION_KIND_LABELS, FINDING_STRENGTH_LABELS, type PaperBrief } from '@shared/paperBrief/schema'
+import { CONTRIBUTION_KIND_LABELS, type PaperBrief } from '@shared/paperBrief/schema'
 import type { BriefAnchor } from '@shared/paperBrief/contracts'
+import { backgroundPoints } from '@shared/paperBrief/background'
 import ArchiveText from './ArchiveText'
 
 export type BriefTab = 'overview' | 'findings' | 'limits'
@@ -7,20 +8,27 @@ export type BriefTab = 'overview' | 'findings' | 'limits'
 export default function BriefContent(props: { brief: PaperBrief; anchors: BriefAnchor[]; tab: BriefTab }): React.JSX.Element {
   const { brief, anchors, tab } = props
   const analysis = brief.analysis
-  if (analysis) return <div className="paper-archive-brief-content">
-    {tab === 'overview' ? <p><ArchiveText text={analysis.background} /></p> : tab === 'findings' ? <ol>
-      {analysis.conclusions.map((item, index) => <li key={item.title} className="paper-archive-finding">
-        <h3><ArchiveText text={item.title} /></h3>
-        <p><ArchiveText text={item.text} /></p>
-        {!brief.checks[index]?.grounded || !brief.checks[index]?.numbersVerified ? <small className="paper-archive-brief-note">证据需核对</small> : null}
-        <Sources ids={item.anchors} anchors={anchors} />
-      </li>)}
-    </ol> : <>
-      <h3>领域贡献</h3><p><ArchiveText text={analysis.discussion.contribution} /></p>
-      <h3>研究进展</h3><p><ArchiveText text={analysis.discussion.progress} /></p>
-      <h3>局限与展望</h3><p><ArchiveText text={analysis.discussion.limitations} /></p>
-    </>}
-  </div>
+  if (analysis) {
+    const points: Array<{ title: string; text: string; anchors?: string[] }> = tab === 'overview' ? backgroundPoints(analysis.background)
+      : tab === 'findings' ? analysis.conclusions
+        : [
+          { title: '领域贡献', text: analysis.discussion.contribution },
+          { title: '研究进展', text: analysis.discussion.progress },
+          { title: '局限与展望', text: analysis.discussion.limitations }
+        ]
+    return <div className="paper-archive-brief-content paper-archive-reading">
+      <ol className="paper-archive-reading-points">
+        {points.map((item, index) => <li key={`${tab}-${index}`}>
+          <span className="paper-archive-point-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+          <div>
+            <h3 data-annotation-block-key={`archive:${tab}:${index}:title`}><ArchiveText text={item.title || ['领域现状', '已有方法与不足', '研究切入点'][index] || '研究背景'} /></h3>
+            <p data-annotation-block-key={`archive:${tab}:${index}:body`}><ArchiveText text={item.text} /></p>
+            {item.anchors ? <Sources ids={item.anchors} anchors={anchors} /> : null}
+          </div>
+        </li>)}
+      </ol>
+    </div>
+  }
   return <div className="paper-archive-brief-content">
     {tab === 'overview' ? <>
       <h3>背景</h3><p><ArchiveText text={brief.context.background} /></p>
@@ -28,13 +36,9 @@ export default function BriefContent(props: { brief: PaperBrief; anchors: BriefA
       <h3>研究问题</h3><p><ArchiveText text={brief.context.question} /></p>
     </> : tab === 'findings' ? <>
       <h3>核心方法</h3><p><ArchiveText text={brief.approach.summary} /></p><Items items={brief.approach.keyIdeas} />
-      <p className="paper-archive-brief-note">结论强度由 AI 判断；摘录和数字匹配不等于结论已获验证。</p>
-      {brief.findings.map((finding, index) => {
-        const check = brief.checks[index]
+      {brief.findings.map((finding) => {
         return <section key={finding.claim} className="paper-archive-finding">
           <h3><ArchiveText text={finding.claim} /></h3>
-          <span className="paper-archive-badge">{FINDING_STRENGTH_LABELS[finding.strength]}</span>
-          {!check?.grounded || !check.numbersVerified ? <span className="paper-archive-badge needs-review">需核对</span> : null}
           <p><ArchiveText text={finding.evidence} /></p>{finding.scope ? <p>适用范围：<ArchiveText text={finding.scope} /></p> : null}
           {finding.anchors.map((id) => {
             const anchor = anchors.find((item) => item.id === id)

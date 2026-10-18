@@ -30,7 +30,7 @@ import {
   type ReaderViewId
 } from '../readerLayout'
 
-export default function ReaderPage(props: { documentId: string; insights?: PaperInsightSource; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
+export default function ReaderPage(props: { documentId: string; enterFromLibrary?: boolean; insights?: PaperInsightSource; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
   const queryClient = useQueryClient()
   const chat = usePaperChat(props.documentId)
   const readerNotes = useReaderNotes(props.documentId)
@@ -161,7 +161,7 @@ export default function ReaderPage(props: { documentId: string; insights?: Paper
 
   const translatedReady = Boolean(document.translatedMarkdown)
   return (
-    <section className="reader-page">
+    <section className={`reader-page${props.enterFromLibrary ? ' reader-from-library' : ''}`}>
       {contextHolder}
       <header className="reader-header">
         <div className="reader-header-heading"><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName.replace(/\.pdf\s*$/iu, '')}</Typography.Text></div>

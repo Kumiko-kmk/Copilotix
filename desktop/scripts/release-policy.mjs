@@ -56,7 +56,8 @@ export function assertReleaseAssetNames(assetNames, releaseName) {
   if (!Array.isArray(assetNames) || typeof releaseName !== 'string' || !releaseName) {
     throw new TypeError('Release asset names and release name are required')
   }
-  const expected = [setupNameForRelease(releaseName), `${releaseName}.zip`, 'SHA256SUMS.txt', 'release-manifest.json'].sort()
+  // GitHub provides source ZIP/tarball links from the tag; only Setup is uploaded.
+  const expected = [setupNameForRelease(releaseName)]
   const actual = assetNames.map((name) => String(name)).sort()
   if (
     actual.length !== expected.length ||

@@ -57,7 +57,7 @@ const modelConclusion = archiveAnalysisSchema.shape.conclusions.element.extend({
   text(700).min(Math.round((ARCHIVE_LENGTHS.conclusion[0] + ARCHIVE_LENGTHS.conclusion[1]) / 2)), z.literal('原文未说明')
 ]) })
 export const paperBriefModelOutputSchema = paperBriefGenerationSchema.extend({
-  analysis: paperBriefGenerationSchema.shape.analysis.extend({ conclusions: z.array(modelConclusion).min(3).max(5) })
+  analysis: paperBriefGenerationSchema.shape.analysis.extend({ conclusions: z.array(modelConclusion).length(3) })
 })
 
 /**

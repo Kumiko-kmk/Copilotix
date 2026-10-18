@@ -9,9 +9,12 @@ import LibraryPage from '../src/renderer/pages/LibraryPage'
 const scene = vi.hoisted(() => ({
   focusPaper: vi.fn(), navigate: vi.fn(), activate: vi.fn(), dispose: vi.fn(),
   openDetail: vi.fn(), closeDetail: vi.fn(),
+  enterReader: vi.fn(async (_signal: AbortSignal) => undefined), cancelReaderEntry: vi.fn(),
   phase: 'closed' as DetailPhase, onPhase: undefined as PaperArchiveSceneOptions['onDetailPhase'],
   fail: false
 }))
+const loader = vi.hoisted(() => ({ loadReaderPage: vi.fn(async () => ({ default: () => null })) }))
+vi.mock('../src/renderer/readerPageLoader', () => loader)
 // Exercise the real detail markup and keyboard handlers without document/PDF I/O.
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: true }) }))
 vi.mock('../src/renderer/paperArchive/useArchivePreparation', () => ({ useArchivePreparation: (paper: DocumentSummary | null) => ({ ready: paper?.workflow.status === 'completed', progress: paper?.workflow.progress ?? 0 }) }))
@@ -35,6 +38,8 @@ vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
       this.options.onSelect(this.cell, paperAt(this.shelves, this.cell))
     }
     activate = scene.activate
+    enterReader = scene.enterReader
+    cancelReaderEntry = scene.cancelReaderEntry
     get detailOpen(): boolean { return scene.phase !== 'closed' }
     get detailReady(): boolean { return scene.phase === 'open' }
     openDetail(): void {
@@ -51,6 +56,8 @@ vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe = vi.fn(); disconnect = vi.fn() })
   vi.clearAllMocks()
+  loader.loadReaderPage.mockReset().mockResolvedValue({ default: () => null })
+  scene.enterReader.mockReset().mockResolvedValue(undefined)
   scene.fail = false
   scene.phase = 'closed'
   localStorage.clear()
@@ -137,7 +144,7 @@ describe('LibraryPage', () => {
     expect(screen.getByRole('button', { name: '去新解析' })).toBeTruthy()
   })
 
-  it('opens a search result directly when WebGL fails', () => {
+  it('opens a search result after loading the reader when WebGL fails', async () => {
     scene.fail = true
     const alpha = paper('Alpha')
     const onOpen = vi.fn()
@@ -147,7 +154,7 @@ describe('LibraryPage', () => {
     const search = screen.getByRole('searchbox', { name: '搜索文库' })
     fireEvent.change(search, { target: { value: 'Alpha' } })
     fireEvent.keyDown(search, { key: 'Enter' })
-    expect(onOpen).toHaveBeenCalledWith(alpha.id)
+    await vi.waitFor(() => expect(onOpen).toHaveBeenCalledWith(alpha.id))
   })
 
   it('shows one column for 37 uncategorised papers and loops the HUD with ArrowRight', () => {
@@ -177,14 +184,48 @@ describe('LibraryPage', () => {
     act(() => changePhase('decrypting'))
     fireEvent.keyDown(region(), { key: 'Enter' })
     expect(scene.activate).not.toHaveBeenCalled()
-    // The explicit shortcut remains available during extraction.
+    // No detail entry opens a half-extracted file.
     fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
-    expect(onOpen).toHaveBeenCalledOnce()
+    expect(onOpen).not.toHaveBeenCalled()
     act(() => changePhase('open'))
     fireEvent.keyDown(region(), { key: 'Enter', repeat: true })
     expect(scene.activate).not.toHaveBeenCalled()
     fireEvent.keyDown(region(), { key: 'Enter' })
     expect(scene.activate).toHaveBeenCalledOnce()
+  })
+
+  it('cancels a pending open with Escape, ignores late loading and permits one retry', async () => {
+    let loaded!: (module: { default: () => null }) => void
+    loader.loadReaderPage.mockReturnValue(new Promise(resolve => { loaded = resolve }))
+    const onOpen = vi.fn()
+    render(<LibraryPage documents={[paper('Alpha')]} onOpen={onOpen} onCreate={vi.fn()} />)
+    act(() => changePhase('open'))
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
+    expect(screen.getByRole('button', { name: '正在打开…' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    await act(async () => { loaded({ default: () => null }) })
+    expect(onOpen).not.toHaveBeenCalled()
+    expect(region().hasAttribute('data-reader-entry')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
+    fireEvent.keyDown(region(), { key: 'Enter', repeat: true })
+    await vi.waitFor(() => expect(onOpen).toHaveBeenCalledOnce())
+    expect(scene.enterReader).toHaveBeenCalledOnce()
+  })
+
+  it('leaves the archive usable after loading fails and prevents late navigation after unmount', async () => {
+    const onOpen = vi.fn()
+    const view = render(<LibraryPage documents={[paper('Alpha')]} onOpen={onOpen} onCreate={vi.fn()} />)
+    act(() => changePhase('open'))
+    loader.loadReaderPage.mockRejectedValueOnce(new Error('Offline'))
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('阅读器加载失败')
+    expect(onOpen).not.toHaveBeenCalled()
+    let loaded!: (module: { default: () => null }) => void
+    loader.loadReaderPage.mockReturnValueOnce(new Promise(resolve => { loaded = resolve }))
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
+    view.unmount()
+    await act(async () => { loaded({ default: () => null }) })
+    expect(onOpen).not.toHaveBeenCalled()
   })
 
   it('scopes arrows to tabs, document scrolling or archive navigation', () => {

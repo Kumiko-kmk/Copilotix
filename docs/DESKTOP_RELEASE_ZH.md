@@ -9,7 +9,7 @@ pnpm desktop:build:bundles
 pnpm desktop:release:from-built
 ```
 
-默认为 `COPILOTIX_RELEASE_MODE=development`。`pnpm desktop:release` 会先完整 build 再执行同一流程。公开下载主入口是单个 `Copilotix-<version>-win-x64.zip`，解压后先运行 Setup；完整布局如下：
+默认为 `COPILOTIX_RELEASE_MODE=development`。`pnpm desktop:release` 会先完整 build 再执行同一流程。从 1.2.0 起，公开 Release 只上传 `setup.exe`，源代码由 GitHub 按 tag 自动提供 ZIP／tar.gz；不上传运行包 ZIP、SHA 或 manifest。以下本地／CI 布局与内部完整性校验继续保留：
 
 ```text
 release/
@@ -48,7 +48,7 @@ manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`�
 
 ## GitHub 正式发布
 
-各版本的简体中文发布说明保存为 `docs/releases/<版本>.zh-CN.md`，首行为 Release 标题。发布 job 从对应文件创建草稿，不追加英文自动生成摘要；内容应包括版本更新、下载与安装、服务配置、升级、数据保留、文件校验及实际验证范围。说明和版本号必须与发布 tag 对应，缺少说明时停止发布。
+各版本的简体中文发布说明保存为 `docs/releases/<版本>.zh-CN.md`，首行为 Release 标题。发布 job 从对应文件创建草稿，不追加英文自动生成摘要；内容沿用现有简体中文与分节风格，说明版本更新、下载与安装、服务配置、升级及数据保留。说明和版本号必须与发布 tag 对应，缺少说明时停止发布。
 
 首次 `desktop-v1.0.0` 的未签章例外要求仓库 Actions variable `COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE` 精确等于 `desktop-v1.0.0`。2026-10-07，维护者另行明确授权 **仅本次 `desktop-v1.1.0` 未签章发布**；此例外要求 `COPILOTIX_UNSIGNED_RELEASE_TAG` 精确等于 `desktop-v1.1.0`，工作流也严格限制相同 tag，其他 tag 或变量值不能启用例外。Release 说明醒目标注未签章。完整构建、安装／卸载、下载删除、资产数量和远端哈希校验照常执行。对应发布完成后移除变量，后续版本继续要求受信任签章，不以自签证书代替。
 
@@ -63,7 +63,7 @@ manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`�
 
 正式 tag 构建若缺少证书，CI 会在打包前失败；electron-builder 也启用 `forceCodeSigning`。构建后使用 Windows Authenticode 检查主程序、Setup 和独立卸载入口，要求签名状态为 `Valid`，并再次检查待发布 ZIP 内的 EXE。验证出的签名主体分别写入 release manifest 的 runtime、installer 和 uninstaller。此配置不代为采购证书。
 
-Electron fuses 在 electron-builder `afterPack` 阶段写入并读回校验，该阶段发生在代码签名之前。Setup 由已验证的运行目录封装，不能替代 ASAR、原生依赖、许可或 packaged smoke 检查。正式发布 job 仅有 `contents: write`，build job 仅有 `contents: read`。发布 job 创建 draft，将 Windows x64 Setup、ZIP、`SHA256SUMS.txt` 和 `release-manifest.json` 全部上传，核对远端 draft 正好含有这四项资产，并下载逐个比对 SHA-256、再次验证 Setup 签名后才将 draft 发布。任何构建、签名、上传或资产检查失败都会保留 draft 或阻止发布。
+Electron fuses 在 electron-builder `afterPack` 阶段写入并读回校验，该阶段发生在代码签名之前。Setup 由已验证的运行目录封装，不能替代 ASAR、原生依赖、许可或 packaged smoke 检查。正式发布 job 仅有 `contents: write`，build job 仅有 `contents: read`。发布 job 创建 draft，只上传 Windows x64 `setup.exe`；核对远端 draft 仅含这一项上传资产，再下载与内部 manifest 比对 SHA-256，并按签章政策验证 Setup 后才发布。GitHub 的源代码 ZIP／tar.gz 不计入上传资产。任何构建、签名、上传或资产检查失败都会保留 draft 或阻止发布。
 
 ## 安装生命周期验收
 

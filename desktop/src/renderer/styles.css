@@ -427,6 +427,9 @@ button, input, select { font: inherit; }
 .settings-action-buttons { display: flex; gap: 12px; }
 .settings-action-buttons .ant-btn { min-width: 132px; letter-spacing: .08em; }
 .reader-page { display: grid; grid-template-rows: 36px minmax(0, 1fr); height: 100%; }
+.reader-from-library { animation: reader-from-library 180ms ease-out both; }
+@keyframes reader-from-library { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .reader-from-library { animation: none; } }
 .reader-header { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px 0 8px; }
 /* Quiet chrome: icons stay muted until pointed at, and delete only turns red on hover. */
 .reader-header .ant-btn.ant-btn-text:not(:disabled), .reader-group-actions .ant-btn.ant-btn-text:not(:disabled) { color: var(--muted); }

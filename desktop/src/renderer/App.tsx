@@ -2,6 +2,7 @@ import React from 'react'
 import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
 import { refreshCodexStatus } from './codexStatusClient'
 import { loadStorageInfo } from './storageInfoClient'
+import { loadReaderPage, loadedReaderPage } from './readerPageLoader'
 import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
@@ -21,7 +22,7 @@ import {
 import { loadLibraryCategories } from './paperArchive/libraryCategoriesClient'
 import type { SettingsNavigationGuard } from './settingsNavigation'
 
-const ReaderPage = React.lazy(() => import('./pages/ReaderPage'))
+const ReaderPage = React.lazy(loadReaderPage)
 // Three.js is only loaded once the archive is opened.
 const LibraryPage = React.lazy(() => import('./pages/LibraryPage'))
 
@@ -148,6 +149,7 @@ export default function App(): React.JSX.Element {
   const onSettingsSaved = React.useCallback((next: AppSettings) => {
     queryClient.setQueryData(['settings'], next)
   }, [queryClient])
+  const ActiveReaderPage = view.name === 'reader' && view.returnTo === 'library' ? loadedReaderPage() ?? ReaderPage : ReaderPage
 
   return (
     <div className="app-shell">
@@ -195,7 +197,7 @@ export default function App(): React.JSX.Element {
         {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange} /> : null}
         {view.name === 'reader' ? (
           <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>
-            <ReaderPage documentId={view.documentId} insights={insights} onBack={() => requestViewChange({ name: view.returnTo ?? 'new' })} onOpenSettings={() => requestViewChange({ name: 'settings' })} />
+            <ActiveReaderPage documentId={view.documentId} enterFromLibrary={view.returnTo === 'library'} insights={insights} onBack={() => requestViewChange({ name: view.returnTo ?? 'new' })} onOpenSettings={() => requestViewChange({ name: 'settings' })} />
           </React.Suspense>
         ) : null}
         {!settings && view.name !== 'reader' && view.name !== 'library' ? <div className="page-loading">正在加载…</div> : null}

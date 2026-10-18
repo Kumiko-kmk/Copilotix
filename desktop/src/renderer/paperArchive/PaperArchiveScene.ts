@@ -169,8 +169,6 @@ export interface PaperArchiveSceneOptions {
   onDetailFrame?(frame: DetailFrame): void
   /** The glass has started to clear: the panel's text redaction follows it. */
   onDecryptReveal?(): void
-  /** The fully extracted file was clicked: take it apart in the 360° viewer (archiveViewer.ts). */
-  onInspect?(paper: ArchivePaper): void
 }
 
 export interface DetailFrame {
@@ -289,6 +287,9 @@ export class PaperArchiveScene {
   }
   private readonly heroPosition = new Vector3()
   private readonly heroRotation = new Quaternion()
+  private readerEntryProgress = 0
+  private readerEntry: { started: number; finish(): void; cancel(): void } | null = null
+  private readonly readerEntryDirection = new Vector3()
   private page: Mesh | null = null
   private pageFront: Mesh | null = null
   private pageTexture: CanvasTexture | null = null
@@ -627,6 +628,39 @@ export class PaperArchiveScene {
     return this.phase === 'open'
   }
 
+  /** A short, additive push of the existing hero, driven by the scene's single frame loop. */
+  enterReader(signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted()
+    if (this.disposed) return Promise.reject(new DOMException('Scene disposed', 'AbortError'))
+    if (this.reduced || !this.detailReady || !this.hero) return Promise.resolve()
+    this.cancelReaderEntry()
+    return new Promise((resolve, reject) => {
+      const cleanup = (): void => signal.removeEventListener('abort', cancel)
+      const cancel = (): void => {
+        cleanup()
+        this.readerEntry = null
+        this.readerEntryProgress = 0
+        this.wake()
+        reject(new DOMException('Reader entry cancelled', 'AbortError'))
+      }
+      this.readerEntry = { started: performance.now(), cancel, finish: () => {
+        cleanup()
+        this.readerEntry = null
+        resolve()
+      } }
+      signal.addEventListener('abort', cancel, { once: true })
+      this.wake()
+    })
+  }
+
+  cancelReaderEntry(): void {
+    this.readerEntry?.cancel()
+    if (this.readerEntryProgress !== 0) {
+      this.readerEntryProgress = 0
+      this.wake()
+    }
+  }
+
   /** Extract the selected paper: lift it clear, turn the camera to it and decrypt its cover. */
   openDetail(): boolean {
     const paper = paperAt(this.shelves, this.selected)
@@ -644,6 +678,7 @@ export class PaperArchiveScene {
 
   closeDetail(): void {
     if (!this.targetDetail) return
+    this.cancelReaderEntry()
     this.targetDetail = false
     this.lastInteraction = performance.now()
     this.closing = {
@@ -810,16 +845,10 @@ export class PaperArchiveScene {
     if (paper) this.options.onActivate(paper)
   }
 
-  private inspect(): void {
-    const paper = paperAt(this.shelves, this.selected)
-    if (!paper) return
-    if (this.options.onInspect) this.options.onInspect(paper)
-    else this.options.onActivate(paper)
-  }
-
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.cancelReaderEntry()
     cancelAnimationFrame(this.frame)
     window.clearTimeout(this.idleTimer)
     this.events.abort()
@@ -1151,6 +1180,12 @@ export class PaperArchiveScene {
   private update(dt: number): boolean {
     const reduced = this.reduced
     let moving = false
+    if (this.readerEntry) {
+      const progress = reduced ? 1 : Math.min(1, (performance.now() - this.readerEntry.started) / 280)
+      this.readerEntryProgress = 1 - (1 - progress) ** 3
+      if (progress === 1) this.readerEntry.finish()
+      else moving = true
+    }
     this.flushHover()
 
     if (this.momentum) {
@@ -1367,6 +1402,11 @@ export class PaperArchiveScene {
       if (heroActive) {
         this.hero.position.copy(this.heroPosition)
         this.hero.quaternion.copy(this.heroRotation)
+        this.hero.scale.setScalar(1 + this.readerEntryProgress * 0.04)
+        if (this.readerEntryProgress) {
+          this.readerEntryDirection.copy(this.camera.position).sub(this.heroPosition).normalize()
+          this.hero.position.addScaledVector(this.readerEntryDirection, this.readerEntryProgress * 0.35)
+        }
         const paper = selectedShelf ? selectedShelf.papers[wrap(selected.row, selectedShelf.papers.length)] ?? null : null
         this.heroIndex?.color.copy(this.palette.index.get(indexTone(paper))!)
         this.heroTray?.color.copy(this.arrayTray).lerp(DETAIL_TRAY, this.detail)
@@ -1559,11 +1599,10 @@ export class PaperArchiveScene {
       if (cancelled || drag.moved || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 8) return
       const cell = this.pickCell(event.clientX, event.clientY)
       if (this.detailOpen) {
-        // Clicking the extracted paper takes it apart in the viewer (or opens it when there is
-        // none); clicking anywhere else puts it back.
+        // A deliberate click on the fully revealed paper opens the reader; elsewhere puts it back.
         if (cell && sameCell(cell, this.selected)) {
           if (this.phase === 'closing') this.openDetail()
-          else if (this.detailReady) this.inspect()
+          else if (this.detailReady) this.activate()
         }
         else this.closeDetail()
         return

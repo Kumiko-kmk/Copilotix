@@ -232,8 +232,8 @@ describe('paper brief lengths', () => {
   it('states every range in the prompt', () => {
     const system = buildBriefMessages(buildBriefContext(PAPER, ''))[0]!.content
     expect(system).toContain('"tldr": "一句话总结，40–70字"')
-    expect(system).toContain('正文合计400–650字')
-    expect(system).toContain('正文合计450–650字')
+    expect(system).toContain('正文合计300–420字')
+    expect(system).toContain('每点正文100–140字')
     expect(system).not.toContain('${')
   })
 })

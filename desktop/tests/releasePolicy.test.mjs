@@ -35,12 +35,10 @@ describe("releasePolicy", () => {
 
     it('only permits a complete, unique release asset set before publishing', () => {
       expect(assertReleaseAssetNames([
-        'setup.exe',
-        'Copilotix-1.0.0-win-x64.zip',
-        'SHA256SUMS.txt',
-        'release-manifest.json'
+        'setup.exe'
       ], 'Copilotix-1.0.0-win-x64')).toBe(true)
       expect(() => assertReleaseAssetNames(['SHA256SUMS.txt', 'release-manifest.json'], 'Copilotix-1.0.0-win-x64')).toThrow(/Unexpected release assets/)
+      expect(() => assertReleaseAssetNames([], 'Copilotix-1.0.0-win-x64')).toThrow(/Unexpected release assets/)
       expect(() => assertReleaseAssetNames([
         'setup.exe',
         'Copilotix-1.0.0-win-x64.zip',

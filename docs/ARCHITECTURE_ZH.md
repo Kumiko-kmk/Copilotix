@@ -81,7 +81,7 @@ main ──▶ runtime ──▶ core ◀── runtime ◀── utility
 | Renderer：外壳与页面 | `App.tsx`、`pages/`、`components/{WindowControls,PageBrand,CopilotixWordmark,EdgeDock,HomeScene,HomeWidgets}.tsx`、`documentCache.ts` | 视图路由与文档列表缓存 |
 | Renderer：阅读工作台 | `components/{ReaderWorkbench,ReaderViews,PdfPane,MarkdownPane,MarkdownMinimap,SafeMarkdown,ReaderFigureSnapshot,DocumentLifecycleActions}.tsx`、`reader*.ts`、`pdf*.ts`、`annotationMutations.ts`、`rehypeTableMath.ts`、`useFigureArtifacts.ts` | 四视图工作台、PDF／Markdown 渲染、同步、标注 |
 | Renderer：问答与解读 | `components/ReaderChatPanel.tsx`、`PaperInsightActions.tsx`、`usePaperChat.ts`、`usePaperInsight.ts` | 只经 `window.copilotix` 调用 |
-| Renderer：文库 | `pages/LibraryPage.tsx`、`paperArchive/` | Three.js 档案场景、详情与拆解视图（懒加载） |
+| Renderer：文库 | `pages/LibraryPage.tsx`、`paperArchive/` | Three.js 档案场景、详情与可取消的阅读器进入过渡（懒加载） |
 | 测试与发布 | `tests/`、`e2e/`（含 `launchPolicy.ts`）、`scripts/` | 不属于运行时 bundle |
 
 四个构建 bundle 分别来自 `main`、`preload`、`renderer`、`utility`，输出到 `desktop/out/`；测试和输出目录不属于源码契约。

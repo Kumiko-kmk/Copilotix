@@ -288,7 +288,10 @@
 .paper-archive-tabpanel { min-height: 64px; margin-top: 14px; overflow: auto; scrollbar-width: none; overscroll-behavior: contain; animation: paper-archive-fade .15s ease both; }
 .paper-archive-tabpanel::-webkit-scrollbar { display: none; }
 .paper-archive-tabpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.paper-archive-abstract { margin: 0; color: var(--text); font-size: 14px; line-height: 1.85; text-align: justify; user-select: text; }
+.paper-archive-abstract { margin: 0; color: var(--text); font-size: 16px; line-height: 1.85; text-align: justify; user-select: text; }
+.paper-archive-tabpanel { position: relative; }
+.paper-archive-reading-body { padding-right: 32px; }
+.paper-archive-reading-error { margin: 8px 0; color: var(--archive-index-failed); font-size: 13px; }
 .paper-archive-translated-abstract { text-indent: 2em; overflow-wrap: anywhere; }
 .paper-archive-outline { margin: 0; padding-left: 0; list-style: none; counter-reset: section; }
 .paper-archive-outline li { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px dashed color-mix(in srgb, var(--ink) 14%, transparent); color: var(--text); font-size: 13.5px; counter-increment: section; }
@@ -332,8 +335,8 @@
 }
 
 /* Brief content shares the existing scroll panel and reveal; no additional motion. */
-.paper-archive-brief-content { color: var(--text); font-size: 13px; line-height: 1.7; user-select: text; }
-.paper-archive-brief-content h3 { margin: 16px 0 6px; font-size: 13px; color: var(--ink); }
+.paper-archive-brief-content { color: var(--text); font-size: 16px; line-height: 1.85; user-select: text; }
+.paper-archive-brief-content h3 { margin: 20px 0 8px; font-size: 17px; line-height: 1.5; color: var(--ink); }
 .paper-archive-brief-content h3:first-child { margin-top: 0; }
 .paper-archive-brief-content p { margin: 6px 0; text-indent: 2em; }
 .paper-archive-brief-content .paper-archive-brief-note { text-indent: 0; }
@@ -347,6 +350,22 @@
 .paper-archive-anchor summary { cursor: pointer; font-size: 11px; }
 .paper-archive-anchor p { white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* Equal reading scale and compact spacing across the three sections;
+   longer saved briefs keep their font size and scroll within the existing panel. */
+.paper-archive-reading { display: flex; min-height: 100%; flex-direction: column; }
+.paper-archive-reading .paper-archive-reading-points {
+  display: flex; flex: 1; flex-direction: column; justify-content: flex-start;
+  gap: 18px; margin: 0; padding: 0 0 4px; list-style: none;
+}
+.paper-archive-reading-points > li { display: grid; flex: none; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; }
+.paper-archive-point-index { padding-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.8; font-variant-numeric: tabular-nums; }
+.paper-archive-reading-points h3 { margin: 0 0 8px; font-weight: 650; }
+.paper-archive-reading-points p { margin: 0; text-indent: 2em; }
+.paper-archive-reading-points .paper-archive-anchor { margin: 8px 0 0; padding: 0; background: transparent; border-radius: 0; }
+.paper-archive-reading-points .paper-archive-anchor summary { color: var(--muted); font-size: 12px; }
+.paper-archive-reading-points .paper-archive-anchor section { padding-top: 10px; }
+.paper-archive-reading-points .paper-archive-anchor h4 { margin: 0 0 6px; font-size: 14px; }
+
 /* Compact archive text shares the reader's math engine, retaining archive typography. */
 .paper-archive-text { overflow-wrap: anywhere; }
 .paper-archive-text .katex { font-size: 1.05em; text-indent: 0; }
@@ -354,68 +373,13 @@
 .paper-archive-text .katex-display > .katex { text-align: left; }
 .paper-archive-fields dd:has(.katex) { display: block; -webkit-line-clamp: unset; }
 
-/* ───────── 360° viewer (ArchiveAnatomy.tsx, after RhineLabUI's model viewer) ───────── */
-.paper-archive-viewer { position: absolute; inset: 0; z-index: 10; background: var(--archive-bg); animation: paper-archive-fade .32s cubic-bezier(.22, 1, .36, 1) both; }
-.paper-archive-viewer-stage { position: absolute; inset: 0; }
-.paper-archive-viewer-canvas { display: block; width: 100%; height: 100%; outline: 0; cursor: grab; touch-action: none; }
-.paper-archive-viewer-canvas:active { cursor: grabbing; }
-.paper-archive-viewer > :not(.paper-archive-viewer-stage) { position: absolute; }
-.paper-archive-viewer :is(.paper-archive-viewer-head, .paper-archive-viewer-foot, .paper-archive-viewer-parts) { animation: paper-archive-viewer-rise .3s cubic-bezier(.22, 1, .36, 1) .06s backwards; }
-@keyframes paper-archive-viewer-rise { from { opacity: 0; transform: translateY(10px); } }
-.paper-archive-viewer .paper-archive-eyebrow i { margin: 0 10px; font-style: normal; opacity: .6; }
-.paper-archive-viewer-head { top: calc(var(--page-top) + 18px); right: var(--archive-gutter); left: var(--archive-gutter); display: flex; align-items: flex-start; gap: 48px; pointer-events: none; }
-.paper-archive-viewer-head > * { pointer-events: auto; }
-.paper-archive-viewer-back {
-  display: inline-flex; height: 36px; margin-top: -6px; padding: 0 4px; align-items: center; gap: 12px;
-  border: 0; background: transparent; color: var(--ink); font-size: 12px; font-weight: 650; letter-spacing: .12em; cursor: pointer;
-}
-.paper-archive-viewer-back kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 3px; color: var(--muted); font: 10px/1.4 inherit; }
-.paper-archive-viewer-back:hover { color: var(--archive-accent); }
-.paper-archive-viewer-head h2 {
-  max-width: 44vw; margin: 6px 0 4px; overflow: hidden; color: var(--ink); font-size: clamp(22px, 2vw, 30px); font-weight: 750;
-  line-height: 1.2; text-align: left; text-overflow: ellipsis; white-space: nowrap; user-select: text;
-}
-.paper-archive-viewer-head p { margin: 0; color: var(--muted); font-size: 12px; letter-spacing: .08em; }
-.paper-archive-viewer-index { margin: -12px 0 0 auto; color: var(--ink); font-size: clamp(46px, 4.4vw, 66px); font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
-.paper-archive-viewer-index sup { margin-left: 2px; font-size: .38em; vertical-align: top; }
-.paper-archive-viewer-parts { top: calc(var(--page-top) + 132px); right: var(--archive-gutter); bottom: 110px; display: flex; width: min(260px, 22vw); flex-direction: column; overflow: hidden; }
-.paper-archive-viewer-parts ol { min-height: 0; margin: 10px 0 0; padding: 0; overflow: auto; list-style: none; scrollbar-width: none; }
-.paper-archive-viewer-parts li + li { border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent); }
-.paper-archive-viewer-parts button {
-  position: relative; display: grid; width: 100%; padding: 8px 0 8px 2px; grid-template-columns: 28px minmax(0, 1fr); align-items: baseline; gap: 10px;
-  border: 0; background: transparent; color: var(--muted); text-align: left; cursor: pointer;
-}
-.paper-archive-viewer-parts button:disabled { cursor: default; }
-.paper-archive-viewer-parts small { font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.paper-archive-viewer-parts strong { display: block; overflow: hidden; color: var(--ink); font-size: 13.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.paper-archive-viewer-parts em { display: block; color: var(--muted); font-size: 9.5px; font-style: normal; letter-spacing: .14em; }
-.paper-archive-viewer-parts button::before { position: absolute; top: 50%; left: -12px; width: 2px; height: 0; background: var(--archive-accent); content: ""; transform: translateY(-50%); transition: height .22s var(--ease-out); }
-.paper-archive-viewer-parts button:not(:disabled):hover strong, .paper-archive-viewer-parts button[aria-pressed="true"] :is(strong, small) { color: var(--archive-accent); }
-.paper-archive-viewer-parts button[aria-pressed="true"]::before { height: 24px; }
-.paper-archive-viewer-parts button:focus-visible { outline: 2px solid var(--archive-accent); outline-offset: 2px; }
-.paper-archive-viewer-note { flex: none; margin: 14px 0 0; color: var(--text); font-size: 12.5px; line-height: 1.7; text-align: justify; animation: paper-archive-fade .2s ease both; }
-.paper-archive-viewer-foot { right: var(--archive-gutter); bottom: 34px; left: var(--archive-gutter); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; }
-.paper-archive-viewer-hints { margin: 0; color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .12em; }
-.paper-archive-viewer-hints i { margin: 0 12px; font-style: normal; opacity: .55; }
-.paper-archive-viewer-actions { display: flex; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); }
-.paper-archive-viewer-actions button {
-  display: inline-flex; min-width: 152px; height: 42px; padding: 0 18px; align-items: center; justify-content: center; gap: 12px;
-  border: 0; background: transparent; color: var(--ink); font-size: 13px; font-weight: 650; letter-spacing: .1em; cursor: pointer;
-  transition: background-color .2s ease, color .2s ease;
-}
-.paper-archive-viewer-actions button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
-.paper-archive-viewer-actions button:not([aria-pressed="true"]):not(:disabled):hover { color: var(--archive-accent); }
-.paper-archive-viewer-actions button:disabled { cursor: default; opacity: .5; }
-.paper-archive-viewer-reset {
-  display: inline-flex; height: 36px; padding: 0 2px; align-items: center; justify-self: end; gap: 14px;
-  border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--ink); font-size: 13px; font-weight: 650; letter-spacing: .08em; cursor: pointer;
-  transition: color .18s ease, border-color .18s ease;
-}
-.paper-archive-viewer-reset .anticon { transition: transform .28s var(--ease-spring); }
-.paper-archive-viewer-reset:hover { color: var(--archive-accent); border-bottom-color: color-mix(in srgb, var(--archive-accent) 45%, transparent); }
-.paper-archive-viewer-reset:hover .anticon { transform: translateX(5px); }
-.paper-archive-viewer-state { right: 0; bottom: 12px; left: 0; margin: 0; color: var(--muted); font-size: 10.5px; letter-spacing: .14em; text-align: center; }
-.paper-archive-viewer :is(.paper-archive-viewer-actions button, .paper-archive-viewer-reset, .paper-archive-viewer-back):focus-visible { outline: 2px solid var(--archive-accent); outline-offset: 3px; }
+/* Reader entry uses the existing archive scene; cancellation restores this layer. */
+.paper-archive-detail-layer { transition: opacity 280ms ease-out; }
+.paper-archive-page[data-reader-entry="leaving"] .paper-archive-detail-layer { opacity: 0; pointer-events: none; }
+.paper-archive-page[data-reader-entry] .paper-archive-detail-layer > * { pointer-events: none; }
+.paper-archive-page[data-reader-entry] .paper-archive-stage { pointer-events: none; }
+.paper-archive-primary:disabled { cursor: default; opacity: .65; }
+.paper-archive-reader-error { position: absolute; z-index: 4; right: var(--archive-gutter); bottom: 82px; max-width: var(--archive-detail-width); margin: 0; padding: 6px 0; background: var(--archive-bg); color: var(--archive-index-failed); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) {
-  .paper-archive-viewer, .paper-archive-viewer :is(.paper-archive-viewer-head, .paper-archive-viewer-foot, .paper-archive-viewer-parts), .paper-archive-viewer-note { animation: none; }
+  .paper-archive-detail-layer { transition: none; }
 }

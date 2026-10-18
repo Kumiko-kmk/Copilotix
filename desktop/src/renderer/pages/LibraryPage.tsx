@@ -5,7 +5,8 @@ import type { DocumentSummary } from '@shared/ipcSchemas'
 import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
 import type { LibraryCategories } from '@shared/libraryCategories'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from '../paperArchive/PaperArchiveScene'
-import ArchiveAnatomy from '../paperArchive/ArchiveAnatomy'
+import { useArchiveReaderEntry } from '../paperArchive/useArchiveReaderEntry'
+import { loadReaderPage } from '../readerPageLoader'
 import ArchiveText from '../paperArchive/ArchiveText'
 import ArchiveDetail, { type ArchiveMorph } from '../paperArchive/ArchiveDetail'
 import ArchiveProgressRing from '../paperArchive/ArchiveProgressRing'
@@ -38,8 +39,10 @@ export default function LibraryPage(props: {
   const morphFromRef = React.useRef<ArchiveMorph | null>(null)
   const sceneRef = React.useRef<PaperArchiveScene | null>(null)
   const onOpenRef = React.useRef(props.onOpen)
-  onOpenRef.current = props.onOpen
   const [selection, setSelection] = React.useState<Selection>({ cell: { lane: 0, row: 0 }, paper: null })
+  const documentIds = React.useMemo(() => props.documents.map(document => document.id), [props.documents])
+  const readerEntry = useArchiveReaderEntry(sceneRef, selection.paper?.id, documentIds, props.onOpen)
+  onOpenRef.current = readerEntry.open
   const preparation = useArchivePreparation(selection.paper, props.insights)
   const accessRef = React.useRef({ id: selection.paper?.id, ready: preparation.ready })
   accessRef.current = { id: selection.paper?.id, ready: preparation.ready }
@@ -66,14 +69,13 @@ export default function LibraryPage(props: {
    * timer turned the suspended animations back on and replayed them half a second later.
    */
   const [returningId, setReturningId] = React.useState<string | null>(null)
-  /** The extracted file open in the 360° viewer (ArchiveAnatomy.tsx, after RhineLabUI's model viewer). */
-  const [inspecting, setInspecting] = React.useState<ArchivePaper | null>(null)
-  const inspectingRef = React.useRef(false)
-  React.useEffect(() => { inspectingRef.current = inspecting !== null }, [inspecting])
-  const closeInspector = React.useCallback(() => {
-    setInspecting(null)
-    pageRef.current?.focus({ preventScroll: true })
-  }, [])
+  React.useEffect(() => {
+    if (phase === 'open') void loadReaderPage().catch(() => { /* A deliberate open can retry. */ })
+    else if (phase === 'closing' || phase === 'closed') readerEntry.cancel()
+  }, [phase, readerEntry.cancel])
+  React.useLayoutEffect(() => {
+    if (readerEntry.phase) pageRef.current?.focus({ preventScroll: true })
+  }, [readerEntry.phase])
   const fileNumbers = React.useMemo(() => new Map(shelves.flatMap((shelf) => shelf.papers).map((paper, index) => [paper.id, index + 1])), [shelves])
   const showPage = React.useCallback((page: HTMLCanvasElement | null) => sceneRef.current?.setDetailPage(page), [])
   const [stats, setStats] = React.useState<ReturnType<PaperArchiveScene['getStats']> | null>(null)
@@ -116,11 +118,9 @@ export default function LibraryPage(props: {
           page.style.setProperty('--archive-detail-height', `${frame.bottom - frame.top}px`)
         },
         onDecryptReveal: () => setDecryptReveal(true),
-        onInspect: (paper) => setInspecting(paper),
         onDetailPhase: (next) => {
           if (next === 'opening' || next === 'closed') setDecryptReveal(false)
           if (next === 'closed') setReturningId(lastPaperId)
-          if (next === 'closing' || next === 'closed') setInspecting(null)
           // Still mounted here: React re-renders after this callback.
           if (next === 'opening' || next === 'open') {
             const panel = panelRef.current?.getBoundingClientRect()
@@ -172,9 +172,15 @@ export default function LibraryPage(props: {
         return
       }
       if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented || event.isComposing) return
-      // The 360° viewer handles its own keys while it is open.
-      if (inspectingRef.current) return
       const target = event.target instanceof HTMLElement ? event.target : null
+      if (readerEntry.phase) {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          readerEntry.cancel()
+          pageRef.current?.focus({ preventScroll: true })
+        } else if (target && pageRef.current?.contains(target)) event.preventDefault()
+        return
+      }
       if (!target || !pageRef.current?.contains(target)) return
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
       if (document.querySelector('.ant-modal-wrap')) return
@@ -214,7 +220,7 @@ export default function LibraryPage(props: {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [searchOpen])
+  }, [searchOpen, readerEntry.phase, readerEntry.cancel])
 
   const navigate = React.useCallback((axis: 'lane' | 'row', direction: number) => sceneRef.current?.navigate(axis, direction), [])
   const shelf = shelfAt(shelves, selection.cell.lane)
@@ -227,7 +233,7 @@ export default function LibraryPage(props: {
     lastPaperId = result.id
     setSearchOpen(false)
     setQuery('')
-    if (unsupported) props.onOpen(result.id)
+    if (unsupported) readerEntry.open(result.id)
     else {
       sceneRef.current?.focusPaper(result.id)
       pageRef.current?.focus({ preventScroll: true })
@@ -235,10 +241,11 @@ export default function LibraryPage(props: {
   }
 
   return (
-    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}`} aria-label="文库" data-detail-phase={phase}>
+    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}`} aria-label="文库" aria-busy={readerEntry.phase !== null} data-detail-phase={phase} data-reader-entry={readerEntry.phase ?? undefined}>
       <div ref={hostRef} className="paper-archive-stage" onPointerDown={() => pageRef.current?.focus({ preventScroll: true })} />
       <div className="paper-archive-veil" aria-hidden="true" />
       <div className="paper-archive-floor-veil" aria-hidden="true" />
+      {readerEntry.error ? <p className="paper-archive-reader-error" role="alert">{readerEntry.error}</p> : null}
       {stats ? (
         <output className="paper-archive-stats" aria-label="文库渲染诊断">
           {stats.fps} fps · DPR {stats.pixelRatio} × {stats.resolutionScale} · {stats.drawn} 卡 · {(stats.triangles / 1e6).toFixed(2)}M 三角形<br />{stats.gpu}
@@ -310,9 +317,8 @@ export default function LibraryPage(props: {
       ) : paper && phase !== 'closed' ? (
         <div className={`paper-archive-detail-layer${phase === 'closing' ? ' closing' : ''}`} inert={phase === 'closing'} aria-hidden={phase === 'closing' ? true : undefined}>
           <ArchiveDetail key={paper.id} paper={paper} category={shelf?.category ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
-            phase={phase} morphFrom={morphFromRef.current} textReveal={decryptReveal || phase === 'open'} onPage={showPage} onOpen={() => props.onOpen(paper.id)}
-            onClose={() => sceneRef.current?.closeDetail()} insights={props.insights}
-            onInspect={() => setInspecting(paper)} />
+            phase={phase} morphFrom={morphFromRef.current} textReveal={decryptReveal || phase === 'open'} onPage={showPage} onOpen={() => readerEntry.open(paper.id)}
+            onClose={() => { readerEntry.cancel(); sceneRef.current?.closeDetail() }} insights={props.insights} openingReader={readerEntry.phase !== null} />
         </div>
       ) : paper ? (
         <article ref={panelRef} className={`paper-archive-panel${returningId === paper.id ? ' returning' : ''}`} data-document-id={paper.id} aria-live="polite">
@@ -327,7 +333,7 @@ export default function LibraryPage(props: {
             <button type="button" className="paper-archive-action" disabled={!preparation.ready} onClick={() => { if (preparation.ready) sceneRef.current?.openDetail() }}>
               <span>查看档案</span><ExpandOutlined aria-hidden="true" />
             </button>
-            <button type="button" className="paper-archive-action" onClick={() => props.onOpen(paper.id)}>
+            <button type="button" className="paper-archive-action" disabled={readerEntry.phase !== null} onClick={() => readerEntry.open(paper.id)}>
               <span>打开阅读</span><ArrowRightOutlined aria-hidden="true" />
             </button>
           </div>
@@ -355,10 +361,6 @@ export default function LibraryPage(props: {
           </div>
           <p className="paper-archive-hints">←→ 切换列<i>/</i>↑↓ 前后论文<i>/</i>滚轮、拖拽 浏览<i>/</i>Enter 查看档案</p>
         </footer>
-      ) : null}
-      {inspecting ? (
-        <ArchiveAnatomy key={inspecting.id} paperId={inspecting.id} displayName={inspecting.displayName}
-          fileNumber={fileNumbers.get(inspecting.id) ?? paperIndex + 1} category={shelf?.category ?? ''} onClose={closeInspector} />
       ) : null}
     </section>
   )

@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowLeftOutlined, ArrowRightOutlined, BlockOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { DocumentDetails } from '@shared/ipcSchemas'
 import type { PaperInsight, PaperInsightSource } from '@shared/paperInsight'
@@ -12,6 +12,7 @@ import { useLineRedaction } from './lineRedaction'
 import { composeSpread, drawFigureSheet, loadSpreadCandidates, loadSpreadImages } from './figureSpread'
 import type { DetailPage } from './detailPage'
 import ArchiveText from './ArchiveText'
+import ArchiveReadingTools from './ArchiveReadingTools'
 
 type Tab = 'abstract' | 'structure' | 'insight' | BriefTab
 
@@ -33,8 +34,7 @@ export default function ArchiveDetail(props: {
   onPage(page: HTMLCanvasElement | null): void
   onOpen(): void
   onClose(): void
-  /** Take the file apart in the 360° viewer (ArchiveAnatomy.tsx). */
-  onInspect?(): void
+  openingReader?: boolean
   insights?: PaperInsightSource
 }): React.JSX.Element {
   const { paper, onPage } = props
@@ -120,7 +120,7 @@ export default function ArchiveDetail(props: {
   const abstract = brief?.analysis?.abstract ?? profile?.translatedAbstract
   // The count beside a tab says how much is behind it before switching.
   const tabs: Array<[Tab, string, number?]> = brief
-    ? [['abstract', '摘要'], ['overview', '背景'], ['findings', '结论', brief.findings.length], ['limits', '讨论']]
+    ? [['abstract', '摘要'], ['overview', '背景'], ['findings', '结论', brief.analysis?.conclusions.length ?? brief.findings.length], ['limits', '讨论']]
     : [['abstract', '摘要'], ['structure', '结构', profile?.sections.length || undefined], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
   const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
   const tabsRef = React.useRef<HTMLDivElement>(null)
@@ -159,10 +159,6 @@ export default function ArchiveDetail(props: {
           {metadata?.venue ? <Field index={3} half label="期刊 / 会议" value={metadata.venue.value} /> : null}
           {metadata?.year ? <Field index={4} half label="发表年份" value={metadata.year.value} /> : null}
           {metadata?.doi ? <Field index={5} wide label="DOI" value={metadata.doi.value} /> : null}
-          {brief && !brief.analysis ? <>
-            <Field index={3} half label="证据基础" value={brief.approach.basis} />
-            <Field index={4} half label="检验方式" value={brief.approach.evaluation} />
-          </> : null}
 
         </dl>
         <div ref={tabsRef} className="paper-archive-tabs" role="tablist" aria-label="档案内容">
@@ -185,29 +181,24 @@ export default function ArchiveDetail(props: {
             </button>
           ))}
         </div>
-        <section id="paper-archive-tabpanel" role="tabpanel" tabIndex={0} aria-labelledby={`paper-archive-tab-${activeTab}`} className="paper-archive-tabpanel paper-archive-reveal" style={{ '--i': 8 } as React.CSSProperties}>
+        <ArchiveReadingTools key={`${paper.id}:${activeTab}`} documentId={paper.id} tab={activeTab} active={props.phase === 'open' && revealed && contentLoaded && !props.openingReader}>
           {activeTab === 'abstract' ? (
             <>
               <div className="paper-archive-tabpanel-head">
                 <span className="paper-archive-eyebrow" data-archive-unredacted>ABSTRACT</span>
               </div>
-              <p className="paper-archive-abstract paper-archive-translated-abstract"><ArchiveText text={abstract ?? (profile ? '暂无译文摘要。' : '正在读取…')} /></p>
+              <p data-annotation-block-key="archive:abstract:body" className="paper-archive-abstract paper-archive-translated-abstract"><ArchiveText text={abstract ?? (profile ? '暂无译文摘要。' : '正在读取…')} /></p>
             </>
           ) : briefState ? <BriefContent brief={briefState.brief} anchors={briefState.anchors} tab={activeTab as BriefTab} /> : activeTab === 'structure' ? (
             profile?.sections.length
               ? <ol className="paper-archive-outline">{profile.sections.map((section) => <li key={section}><ArchiveText text={section} /></li>)}</ol>
               : <p className="paper-archive-abstract">{profile ? '未识别到章节标题。' : '正在读取…'}</p>
           ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} /> : <p className="paper-archive-abstract">在阅读器中生成档案卡后，可在这里查看研究问题、证据、发现与局限。</p>}
-        </section>
+        </ArchiveReadingTools>
         <footer className="paper-archive-detail-actions">
-          <button type="button" className="paper-archive-primary" onClick={props.onOpen}>
-            <span>打开阅读</span><span className="paper-archive-primary-end"><kbd aria-hidden="true">Enter</kbd><ArrowRightOutlined aria-hidden="true" /></span>
+          <button type="button" className="paper-archive-primary" disabled={props.phase !== 'open' || props.openingReader} onClick={props.onOpen}>
+            <span>{props.openingReader ? '正在打开…' : '打开阅读'}</span><span className="paper-archive-primary-end"><kbd aria-hidden="true">Enter</kbd><ArrowRightOutlined aria-hidden="true" /></span>
           </button>
-          {props.onInspect ? (
-            <button type="button" className="paper-archive-action" disabled={props.phase !== 'open'} onClick={props.onInspect}>
-              <span>拆解档案</span><BlockOutlined aria-hidden="true" />
-            </button>
-          ) : null}
         </footer>
       </article>
     </>

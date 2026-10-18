@@ -56,11 +56,11 @@ export const briefGeneration = {
   keywords: briefContent.keywords, coverage: briefContent.coverage,
   analysis: {
     abstract: briefContent.context.background.repeat(3).slice(0, 250),
-    background: briefContent.context.background.repeat(4).slice(0, 360),
+    background: ['领域背景', '已有方法', '研究切入'].map(title => `${title}：${briefContent.context.background}`).join('\n\n'),
     conclusions: briefContent.findings.map(item => ({ title: item.claim,
-      text: (item.evidence + briefContent.context.background.repeat(2)).slice(0, 150), anchors: item.anchors })),
-    discussion: { contribution: briefContent.context.background.repeat(2).slice(0, 180),
-      progress: briefContent.context.gap.repeat(4).slice(0, 180),
-      limitations: briefContent.context.question.repeat(4).slice(0, 180) }
+      text: (item.evidence + briefContent.context.background.repeat(2)).slice(0, 130), anchors: item.anchors })),
+    discussion: { contribution: briefContent.context.background.repeat(2).slice(0, 120),
+      progress: briefContent.context.gap.repeat(4).slice(0, 120),
+      limitations: briefContent.context.question.repeat(4).slice(0, 120) }
   }
 }

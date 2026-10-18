@@ -7,7 +7,7 @@ import { parseBriefResponse, assembleBrief, buildFullBriefContext } from '../src
 import type { PaperInsightSource } from '../src/shared/paperInsight'
 
 const query = vi.hoisted(() => ({ data: undefined as undefined | { markdown: string; translatedMarkdown: string; summary: { updatedAt: string } } }))
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: !query.data, data: query.data }) }))
+vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: !query.data, data: query.data }), useQueryClient: () => ({}) }))
 beforeEach(() => { query.data = undefined; vi.stubGlobal('matchMedia', () => ({ matches: true })) })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -23,16 +23,13 @@ it('renders all legacy v1 fields and preserves navigation and saved data', async
   }
   const original = JSON.stringify(insight)
   const onOpen = vi.fn()
-  const onInspect = vi.fn()
-  const view = render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-14T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="测试" fileNumber={1} phase="open" onPage={vi.fn()} onClose={vi.fn()} onOpen={onOpen} onInspect={onInspect} insights={source} />)
+  const view = render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-14T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="测试" fileNumber={1} phase="open" onPage={vi.fn()} onClose={vi.fn()} onOpen={onOpen} insights={source} />)
   fireEvent.click(await screen.findByRole('tab', { name: /AI 解读/u }))
   await vi.waitFor(() => expect(view.container.querySelectorAll('.paper-archive-insight .katex')).toHaveLength(6))
   expect(view.container.textContent).toContain('论文内容已更新')
   expect(view.container.querySelector('p p, dd p, li p')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /打开阅读/u }))
-  fireEvent.click(screen.getByRole('button', { name: /拆解档案/u }))
   expect(onOpen).toHaveBeenCalledOnce()
-  expect(onInspect).toHaveBeenCalledOnce()
   expect(JSON.stringify(insight)).toBe(original)
 })
 
@@ -50,9 +47,9 @@ it('shows generated abstract, paper background, core work and discussion on four
   expect(screen.getAllByRole('tab')).toHaveLength(4)
   expect(screen.getByRole('tabpanel').textContent).toContain(briefGeneration.analysis.abstract)
   fireEvent.click(screen.getByRole('tab', { name: /背景/u }))
-  expect(screen.getByRole('tabpanel').textContent).toContain(briefGeneration.analysis.background)
+  expect(view.container.querySelectorAll('.paper-archive-reading-points > li')).toHaveLength(3)
   fireEvent.click(screen.getByRole('tab', { name: /结论/u }))
-  expect(view.container.querySelectorAll('.paper-archive-finding')).toHaveLength(3)
+  expect(view.container.querySelectorAll('.paper-archive-reading-points > li')).toHaveLength(3)
   fireEvent.click(screen.getAllByText(/原文依据/u)[0]!)
   expect(view.container.textContent).toContain('Original evidence.')
   fireEvent.click(screen.getByRole('tab', { name: /讨论/u }))

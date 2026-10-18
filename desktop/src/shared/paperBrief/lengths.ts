@@ -7,13 +7,14 @@
  * Only new output is checked; stored briefs keep the looser limits of paperBriefContentSchema.
  */
 import type { PaperBriefContent } from './schema'
+import { backgroundPoints } from './background'
 
 type Range = readonly [min: number, max: number]
 
 export const ARCHIVE_LENGTHS = {
-  abstract: [200, 300], background: [300, 450],
-  conclusions: [400, 650], conclusion: [100, 160],
-  discussion: [450, 650], discussionPart: [120, 230]
+  abstract: [200, 300], background: [300, 420], backgroundPoint: [100, 140],
+  conclusions: [300, 420], conclusion: [100, 140],
+  discussion: [300, 420], discussionPart: [100, 140]
 } as const satisfies Record<string, Range>
 
 export const BRIEF_LENGTHS = {
@@ -101,8 +102,14 @@ export function checkBriefLengths(content: PaperBriefContent): string[] {
       }
     }
     exact('analysis.abstract', analysis.abstract, ARCHIVE_LENGTHS.abstract)
-    exact('analysis.background', analysis.background, ARCHIVE_LENGTHS.background)
-    count('analysis.conclusions', analysis.conclusions, [3, 5])
+    const background = backgroundPoints(analysis.background)
+    if (!MISSING.test(analysis.background.trim())) {
+      count('analysis.background', background, [3, 3])
+      if (background.some(item => !item.title)) problems.push('analysis.background：用三个“短标题：正文”段落分点，段落之间用两个换行分隔')
+      background.forEach((item, index) => exact(`analysis.background.${index}`, item.text, ARCHIVE_LENGTHS.backgroundPoint))
+      exact('analysis.background.total', background.map(item => item.text).join(''), ARCHIVE_LENGTHS.background)
+    }
+    count('analysis.conclusions', analysis.conclusions, [3, 3])
     analysis.conclusions.forEach((item, index) => exact(`analysis.conclusions.${index}.text`, item.text, ARCHIVE_LENGTHS.conclusion))
     exact('analysis.conclusions.total', analysis.conclusions.map(item => item.text).join(''), ARCHIVE_LENGTHS.conclusions)
     for (const [name, value] of Object.entries(analysis.discussion)) exact(`analysis.discussion.${name}`, value, ARCHIVE_LENGTHS.discussionPart)

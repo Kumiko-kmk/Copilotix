@@ -148,10 +148,6 @@ jobs:
         with:
           name: Copilotix-Windows-x64
           path: release
-      - uses: actions/download-artifact@v4
-        with:
-          name: Copilotix-Windows-x64-Bundle
-          path: release-bundle
       - name: Create or reuse a draft release
         shell: pwsh
         env:
@@ -172,40 +168,23 @@ jobs:
             & gh release create $tag --repo $repo --draft --verify-tag --notes-file $notesPath --title $releaseTitle
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-      - name: Upload the complete release asset set to the draft
+      - name: Upload the verified installer to the draft
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $archives = @(Get-ChildItem -LiteralPath 'release-bundle' -Recurse -File -Filter 'Copilotix-*-win-x64.zip')
-          if ($archives.Count -ne 1) { throw "Expected exactly one Windows x64 ZIP; found $($archives.Count)." }
-          $installers = @(Get-ChildItem -LiteralPath 'release' -File -Filter 'setup.exe')
-          if ($installers.Count -ne 1) { throw "Expected exactly one Windows x64 Setup; found $($installers.Count)." }
-          # Compact ZIP is the primary download; standalone Setup remains available.
-          $publicChecksums = Join-Path $env:RUNNER_TEMP 'SHA256SUMS.txt'
           $manifest = Get-Content -LiteralPath 'release/advanced/release-manifest.json' -Raw | ConvertFrom-Json
-          if ($archives[0].Name -ne $manifest.transport.file) { throw 'Compact ZIP does not match the release manifest.' }
-          if ((Get-FileHash -LiteralPath $archives[0].FullName -Algorithm SHA256).Hash -ne $manifest.transport.sha256) { throw 'Compact ZIP hash does not match the release manifest.' }
-          $checksums = @(
-            "$($manifest.installer.sha256) *$($manifest.installer.file)",
-            "$($manifest.transport.sha256) *$($manifest.transport.file)",
-            "$($manifest.installer.sha256) *$($manifest.transport.rootDirectory)/$($manifest.installer.file)",
-            "$($manifest.uninstaller.sha256) *$($manifest.transport.rootDirectory)/$($manifest.uninstaller.file)"
-          ) -join "`n"
-          [IO.File]::WriteAllText($publicChecksums, $checksums + "`n", [Text.UTF8Encoding]::new($false))
-          $files = @($installers[0].FullName, $archives[0].FullName, $publicChecksums, (Join-Path 'release/advanced' 'release-manifest.json'))
-          foreach ($file in $files) { if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Required release asset missing: $file" } }
+          $installer = Join-Path 'release' $manifest.installer.file
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'Verified Setup is missing.' }
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $manifest.installer.sha256) { throw 'Setup hash does not match the build manifest.' }
           if ($env:COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE -ne 'true') {
-            foreach ($installer in $installers) {
-              $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
-              if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Setup Authenticode signature is not valid: $($signature.Status)" }
-            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $installer
+            if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Setup Authenticode signature is not valid: $($signature.Status)" }
           }
-          $arguments = @('release', 'upload', $env:GITHUB_REF_NAME) + $files + @('--repo', $env:GITHUB_REPOSITORY, '--clobber')
-          & gh @arguments
+          & gh release upload $env:GITHUB_REF_NAME $installer --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Verify all draft assets, then publish
+      - name: Verify the installer download, then publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -217,6 +196,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $release = $releaseJson | ConvertFrom-Json
           if (-not $release.isDraft) { throw "Release $tag stopped being a draft before asset verification." }
+          # Source archives are supplied by GitHub from the release tag.
           $env:COPILOTIX_RELEASE_ASSET_NAMES_JSON = ConvertTo-Json -InputObject @($release.assets | ForEach-Object { $_.name }) -Compress
           node desktop/scripts/verify-release-assets.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -225,20 +205,15 @@ jobs:
           & gh release download $tag --repo $repo --dir $remoteAssetDirectory
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $remoteFiles = @(Get-ChildItem -LiteralPath $remoteAssetDirectory -File)
-          if ($remoteFiles.Count -ne 4) { throw "Expected exactly four downloaded release assets; found $($remoteFiles.Count)." }
-          $files = @((Get-ChildItem -LiteralPath 'release' -File -Filter 'setup.exe').FullName, (Get-ChildItem -LiteralPath 'release-bundle' -Recurse -File -Filter 'Copilotix-*-win-x64.zip').FullName, (Join-Path $env:RUNNER_TEMP 'SHA256SUMS.txt'), (Join-Path 'release/advanced' 'release-manifest.json'))
-          if ($files.Count -ne 4) { throw 'Local release asset set must contain exactly four files.' }
-          foreach ($file in $files) {
-            $assetName = Split-Path -Leaf $file
-            $remotePath = Join-Path $remoteAssetDirectory $assetName
-            if (-not (Test-Path -LiteralPath $remotePath -PathType Leaf)) { throw "Uploaded release asset missing from download: $assetName" }
-            $localHash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
-            $remoteHash = (Get-FileHash -LiteralPath $remotePath -Algorithm SHA256).Hash
-            if ($localHash -ne $remoteHash) { throw "Uploaded release asset hash mismatch: $assetName" }
-            if ($assetName -like 'setup.exe' -and $env:COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE -ne 'true') {
-              $signature = Get-AuthenticodeSignature -LiteralPath $remotePath
-              if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Downloaded Setup Authenticode signature is not valid: $($signature.Status)" }
-            }
+          if ($remoteFiles.Count -ne 1 -or $remoteFiles[0].Name -ne 'setup.exe') { throw 'Expected only the Setup release asset.' }
+          $manifest = Get-Content -LiteralPath 'release/advanced/release-manifest.json' -Raw | ConvertFrom-Json
+          $localInstaller = Join-Path 'release' $manifest.installer.file
+          $localHash = (Get-FileHash -LiteralPath $localInstaller -Algorithm SHA256).Hash
+          $remoteHash = (Get-FileHash -LiteralPath $remoteFiles[0].FullName -Algorithm SHA256).Hash
+          if ($localHash -ne $manifest.installer.sha256 -or $localHash -ne $remoteHash) { throw 'Uploaded Setup hash mismatch.' }
+          if ($env:COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE -ne 'true') {
+            $signature = Get-AuthenticodeSignature -LiteralPath $remoteFiles[0].FullName
+            if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { throw "Downloaded Setup Authenticode signature is not valid: $($signature.Status)" }
           }
           & gh release edit $tag --repo $repo --verify-tag --draft=false
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
