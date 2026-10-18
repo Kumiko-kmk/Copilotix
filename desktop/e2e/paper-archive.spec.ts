@@ -23,6 +23,20 @@ for (const disableWebGL of [false, true]) {
         env: workspace.env
       })
       const window = await app.firstWindow()
+      await expect.poll(() => window.evaluate(() => typeof window.copilotix?.paperInsight?.get)).toBe('function')
+      // Navigation covers the saved legacy archive path; provider generation has
+      // its own HTTP/storage acceptance case. Completed analysis unlocks detail.
+      await app.evaluate(({ ipcMain }) => {
+        ipcMain.removeHandler('paperInsight:get')
+        ipcMain.handle('paperInsight:get', () => ({ ok: true, value: {
+          status: 'ready', stale: false, insight: {
+            summary: 'Archive fixture', researchQuestion: 'Archive navigation', method: 'Saved analysis',
+            contributions: [], findings: [], limitations: [], keywords: [],
+            model: { provider: 'deepseek', name: 'deepseek-flash' },
+            generatedAt: '2026-10-07T12:00:00Z', sourceRevision: 'fixture'
+          }
+        } }))
+      })
       if (disableWebGL) {
         // Electron builds may ignore Chromium's --disable-webgl switch. Deny only WebGL
         // contexts in this isolated renderer, leaving the reader's 2D canvas operational.
@@ -84,6 +98,7 @@ for (const disableWebGL of [false, true]) {
       await results.getByRole('button', { name: /Archive Alpha/u }).click()
       if (supported) {
         await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha')
+        await expect(archive.getByRole('button', { name: '查看档案' })).toBeEnabled()
         await archive.focus()
         await window.keyboard.down('Enter')
         await window.keyboard.down('Enter')
@@ -134,6 +149,7 @@ for (const disableWebGL of [false, true]) {
         await search.fill('ARCHIVE alpha')
         await window.keyboard.press('Enter')
         await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha')
+        await expect(archive.getByRole('button', { name: '查看档案' })).toBeEnabled()
         await window.keyboard.press('Enter')
         await expect(archive.getByRole('button', { name: '打开阅读' })).toBeVisible()
         // Explicit Open remains a shortcut, including during extraction.
