@@ -105,6 +105,20 @@ describe('utility persistence lifecycle', () => {
     }
   })
 
+  it.each([Buffer.alloc(0), Buffer.from('Plain text disguised as PDF'), Buffer.from('x'.repeat(1024) + '%PDF-1.7')])('rejects invalid PDFs before publishing artifacts', async (bytes) => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-invalid-import-'))
+    try {
+      const sourcePath = join(root, 'invalid.pdf')
+      await writeFile(sourcePath, bytes)
+      const outputRoot = join(root, 'output')
+      const documentId = '11111111-1111-4111-8111-111111111111'
+      const persistence = createUtilityOperationHandlers({ outputRoot })
+      await expect(persistence.handlers['compute:import-pdf']!({ payload: { sourcePath, documentId } } as never, new AbortController().signal)).rejects.toMatchObject({ code: 'CORE_PROTOCOL_ERROR' })
+      const directory = join(outputRoot, 'documents-v2', documentId)
+      expect(await readdir(directory).catch(() => [])).toEqual([])
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
   it('publishes normalized artifacts only after validation and is idempotent', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-normalize-'))
     try {
@@ -283,6 +297,8 @@ describe('utility persistence lifecycle', () => {
         "SELECT id FROM jobs WHERE document_id=? AND kind='translate'"
       ).get(taskId) as { id: string }
       const originalManager = state.translationPlanManager
+      await persistence.handlers['settings:get']!({ payload: { outputRoot } } as never, signal)
+      expect(state.translationPlanManager).toBe(originalManager)
       await persistence.handlers['compute:translation-plan-open']!({ payload: { taskId, jobId: job.id } } as never, signal)
       expect(state.translationPlanManager).toBe(originalManager)
 
@@ -300,7 +316,7 @@ describe('utility persistence lifecycle', () => {
     }
   })
 
-  it('routes knowledge consent and embedding precondition errors through Utility handlers', async () => {
+  it('reports an unindexed chat knowledge row for a document without parsed content', async () => {
     const root = await mkdtemp(join(tmpdir(), 'copilotix-knowledge-operations-'))
     try {
       const outputRoot = join(root, 'output')
@@ -331,17 +347,8 @@ describe('utility persistence lifecycle', () => {
         updatedAt: '2026-01-01T00:00:00.000Z'
       }
       await persistence.handlers['tasks:insert-many']!({ payload: { tasks: [task] } } as never, signal)
-      await expect(persistence.handlers['knowledge:get']!({ payload: { documentId: task.id } } as never, signal)).resolves.toMatchObject({
-        documentId: task.id,
-        localState: 'unindexed',
-        semanticConsent: false
-      })
-      await expect(persistence.handlers['knowledge:set-semantic-consent']!({
-        payload: { documentId: task.id, consent: true }
-      } as never, signal)).resolves.toMatchObject({ semanticConsent: true, semanticState: 'requires-credential' })
-      await expect(persistence.handlers['knowledge:ensure-embed']!({
-        payload: { documentId: task.id, profileId: 'embedding-default' }
-      } as never, signal)).rejects.toThrow(expect.objectContaining({ code: 'RAG_CONTENT_NOT_READY' }))
+      await expect(persistence.handlers['chat:ensure-index']!({ payload: { documentId: task.id } } as never, signal))
+        .resolves.toEqual({ state: 'unindexed', progress: 0, contentRevisionId: null })
       await persistence.close()
     } finally {
       await rm(root, { recursive: true, force: true })

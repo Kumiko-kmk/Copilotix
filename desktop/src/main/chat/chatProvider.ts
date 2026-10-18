@@ -2,8 +2,9 @@ import { z } from 'zod'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
+import type { MultimodalChatMessage } from '@shared/chatMessages'
+export type { ChatMessage, ChatContentPart } from '@shared/chatMessages'
 
-export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 export type ChatFetcher = (url: string, init: RequestInit) => Promise<Response>
 export class ChatProviderError extends Error {
   constructor(readonly code: string, message: string, readonly retryAfterMs?: number) { super(message) }
@@ -19,9 +20,9 @@ const packetSchema = z.object({
 export class ChatProvider {
   private readonly cooldowns = new Map<PaperChatProvider, number>()
   private readonly tails = new Map<PaperChatProvider, Promise<void>>()
-  constructor(private readonly fetcher: ChatFetcher, private readonly options: { firstByteMs?: number; idleMs?: number; invalidate?(provider: PaperChatProvider): Promise<void> } = {}) {}
+  constructor(private readonly fetcher: ChatFetcher, private readonly options: { firstByteMs?: number; idleMs?: number; invalidate?(provider: Exclude<PaperChatProvider, 'codex'>): Promise<void> } = {}) {}
 
-  stream(input: { provider: PaperChatProvider; baseUrl: string; model: string; key: string; messages: ChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void> }): Promise<ProviderTokenUsage | null> {
+  stream(input: { provider: Exclude<PaperChatProvider, 'codex'>; baseUrl: string; model: string; key: string; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number }): Promise<ProviderTokenUsage | null> {
     // The endpoint is never a renderer field, and even persisted settings must match the provider whitelist.
     const expected = input.provider === 'qwen' ? DEFAULT_SETTINGS.qwenBaseUrl : DEFAULT_SETTINGS.deepseekBaseUrl
     if (input.baseUrl !== expected) return Promise.reject(new ChatProviderError('PROVIDER_UNAVAILABLE', '问答服务地址不受支持'))
@@ -46,16 +47,39 @@ export class ChatProvider {
     }
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
     try {
-      const firstDeadline = Date.now() + (this.options.firstByteMs ?? 30_000)
+      const firstDeadline = Date.now() + (input.firstByteMs ?? this.options.firstByteMs ?? 30_000)
       arm(Math.max(1, firstDeadline - Date.now()))
-      const response = await abortable(this.fetcher(`${input.baseUrl.replace(/\/$/u, '')}/chat/completions`, {
-        method: 'POST', redirect: 'error', signal,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${input.key}` },
-        body: JSON.stringify({ model: input.model, messages: input.messages, stream: true, stream_options: { include_usage: true },
-          max_tokens: input.provider === 'deepseek' && input.model === 'deepseek-v4-pro' ? 32_768 : 8_192,
-          ...(input.provider === 'deepseek' && ['deepseek-flash', 'deepseek-v4-pro'].includes(input.model)
-            ? { thinking: { type: input.model === 'deepseek-flash' ? 'disabled' : 'enabled' } } : {}) })
-      }), signal)
+      const body: Record<string, unknown> = {
+        model: input.model, messages: input.messages, stream: true, stream_options: { include_usage: true },
+        max_tokens: input.maxOutputTokens ?? (input.provider === 'deepseek' && input.model === 'deepseek-v4-pro' ? 32_768 : 8_192),
+        ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+        ...(input.responseFormat ? { response_format: input.responseFormat } : {}),
+        ...(input.provider === 'qwen' && input.messages.some(message => Array.isArray(message.content))
+          ? { enable_thinking: false } : {}),
+        ...(input.provider === 'deepseek' && ['deepseek-flash', 'deepseek-v4-pro'].includes(input.model)
+          ? { thinking: { type: input.responseFormat || input.model === 'deepseek-flash' ? 'disabled' : 'enabled' } } : {})
+      }
+      const send = (): Promise<Response> => {
+        const serialized = JSON.stringify(body)
+        if (input.maxRequestBytes !== undefined && Buffer.byteLength(serialized) > input.maxRequestBytes) {
+          throw new ChatProviderError('RAG_LIMIT_EXCEEDED', '论文摘录超过模型输入预算')
+        }
+        return abortable(this.fetcher(`${input.baseUrl.replace(/\/$/u, '')}/chat/completions`, {
+          method: 'POST', redirect: 'error', signal,
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${input.key}` }, body: serialized
+        }), signal)
+      }
+      let response = await send()
+      // Retry only explicit unsupported-option errors, never auth/rate/network failures.
+      if (response.status === 400 && (input.responseFormat || input.temperature !== undefined || input.maxOutputTokens !== undefined)) {
+        const error = await abortable(response.text(), signal)
+        if (error.length <= 8192 && /response_format|temperature|max_tokens/u.test(error) && /not support|unsupported|not allowed/iu.test(error)) {
+          delete body.response_format
+          delete body.temperature
+          if (input.maxOutputTokens !== undefined) delete body.max_tokens
+          response = await send()
+        }
+      }
       if (response.status === 401 || response.status === 403) {
         await response.body?.cancel().catch(() => undefined)
         await this.options.invalidate?.(input.provider)

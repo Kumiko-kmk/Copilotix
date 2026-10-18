@@ -2,10 +2,10 @@ import { EventEmitter } from 'node:events'
 import type { Job, JobRepositoryPort } from '@core/jobs'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { CopilotixTask } from '@shared/types'
-import type { ImportDocumentsRequest } from '@shared/ipcSchemas'
+import type { ImportDocumentsRequest, CacheDocumentFigureRequest } from '@shared/ipcSchemas'
 import type { SettingsService } from './settingsService'
 import type { TaskLogger } from './logger'
-import { PathPolicy } from './pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import { ArtifactService } from './artifactService'
 import { DocumentCommandService, type ImportPathsResult } from './documentCommandService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
@@ -66,7 +66,8 @@ export class TaskService extends EventEmitter {
   }
 
   async delete(taskId: string, deleteFiles: boolean): Promise<void> {
-    await this.commands.delete(taskId, deleteFiles)
+    await this.artifacts.freezeFigureWrites(taskId)
+    try { await this.commands.delete(taskId, deleteFiles) } finally { this.artifacts.resumeFigureWrites(taskId) }
     this.emit('changed')
   }
 
@@ -76,6 +77,10 @@ export class TaskService extends EventEmitter {
 
   async resolveAsset(taskId: string, assetPath: string): Promise<string> {
     return this.artifacts.resolveAsset(taskId, assetPath)
+  }
+
+  async cacheFigure(request: CacheDocumentFigureRequest) {
+    return this.artifacts.cacheFigure(request)
   }
 
   async createResultZip(taskId: string, destination: string): Promise<void> {

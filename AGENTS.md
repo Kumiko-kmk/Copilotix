@@ -1,157 +1,147 @@
-# 跨 Worktree Agent 協作文檔（不得刪除）
+# 跨 Worktree Agent 協作文檔（永久保留）
 
-> **永久保留：任何 Agent 都不得刪除、改名或以其他文件取代本文件。**
->
-> 本文件是不同分支、worktree 與 Agent 之間的共同協作入口。開始工作前必須先閱讀；新增經驗時應保留既有內容，按編號追加或就地修正已失效的命令。
+本文件是分支與 Agent 的共同入口，不得刪除、改名或以其他文件取代。開始工作前閱讀；維護時保留有效契約，刪除過時進度與重複敘述，細節連到專項文檔。
 
 ## 協作規則
 
-- Git worktree 不共享未提交文件；需要跨 worktree 傳遞的規則或結論必須提交到 Git，再由其他分支 merge、rebase 或 cherry-pick。
-- 不得修改、清理、stash 或重置其他 Agent 的 worktree。
-- 動手前和交付前均執行 `git status --short --branch`，避免覆蓋他人尚未提交的工作。
-- 涉及共享契約、資料庫 migration、IPC、Core RPC、JobRepository、Artifact/PathPolicy 或發布腳本時，記錄兼容策略、測試證據和恢復語義。
-- Setup 交付目錄可獨立安裝；便攜版必須完整交付運行目錄或 ZIP，不得單獨複製 `Copilotix.exe`。
+- 動手前與交付前執行 `git status --short --branch`，確認 worktree、分支及未提交內容；不得修改、清理、stash 或重置其他 Agent 的 worktree。
+- Worktree 不共享未提交文件；跨分支傳遞須先 commit，再 merge、rebase 或 cherry-pick。
+- 不要寫無意義的文檔。維護文檔主要供其他 agent 接手，使用者不會逐份閱讀；只保留當前契約、必要決策、限制、未完成需求與證據入口。不要每次改動都新建總結／審計／交付報告，不記對話、操作流水或重複貼測試輸出；優先更新既有入口，同一事實只留一處，過時內容直接清理。使用者要求的指南與法定許可資料按其用途保留。
+- 使用者不喜歡滑鼠懸停時出現文字提示／浮層，包括原生 `title`、Tooltip、Popover 預覽與以全文補充截斷文字的彈窗。全應用不再添加這類說明；圖示仍保留 `aria-label`，必要資訊在頁面內或明確點擊後顯示。清單與實作邊界見 [介面偏好](docs/UI_PREFERENCES_ZH.md)。
+- 共享 schema、migration、IPC、Core RPC、JobRepository、Artifact/PathPolicy 或發布腳本的修改，須記錄兼容策略、測試證據與恢復語義。
+- 每次功能修改，只有使用者明確要求打包、EXE、安裝包或發布產物時才執行打包；未要求打包時，提供對應改動的實際介面截圖供使用者確認。截圖不代表完整測試驗收，不以示意圖或舊版本截圖代替。截圖與預覽須避開其他修改進程，優先使用隔離資料目錄／預覽，不重建或覆蓋其他進程正在使用的共享 out、不終止其他進程；無法隔離時如實說明。使用者明確要求不截圖時遵從，不追溯補拍先前改動。
+- 預設不跑本地 lint、typecheck、單元／覆蓋率及 E2E。使用者要求驗證時，先跑受影響用例或 `desktop:test:changed`，需要核心回歸再跑 `desktop:test`；不要每個功能都重跑完整 UI、覆蓋率、打包和安裝驗收。2026-10-14 使用者已授權精簡測試：同類小用例合併，重複外觀／源碼字串檢查和過時流程可刪除；資料安全、持久化、IPC 來源與取消恢復等行為回歸保留。未明確授權不得 push、上傳產物或觸發遠端發布。
 
-## 1. 最快捷生成供人工測試的 Windows EXE
+## 1. 本地 Windows 構建與交付
 
-以下命令均在倉庫根目錄使用 PowerShell 執行。首次使用某個 worktree，或 `package.json` / `pnpm-lock.yaml` 有變更時，先安裝依賴：
+使用 Node **24.19.0**、根 `packageManager` 指定的 pnpm **11.19.0**。系統 Node 24.11.1 曾靜默崩潰並留下舊 out；不要使用。Codex fallback pnpm 版本可能不符，可用正確 Node 執行 Corepack 快取的 `11.19.0/bin/pnpm.mjs`，不得偽造 user-agent。
 
-```powershell
-pnpm install
-```
-
-### 修改源碼後的最快可靠路徑
+在倉庫根目錄執行：
 
 ```powershell
-pnpm desktop:build:bundles
-pnpm desktop:release:from-built
+pnpm install                       # 新 worktree 或依賴／lockfile 改變時
+pnpm desktop:build:bundles          # 源碼改動後重建 Main、Preload、Renderer、Utility
+pnpm desktop:release:from-built     # 僅明確要求打包時執行；使用新 out，不與 desktop:release 並行
 ```
 
-第一條命令重建 Main、Preload、Renderer 和 Utility 四個 bundle；第二條直接使用剛生成的 `desktop/out/` 打包，省略重複 build，但仍會完成 ASAR、資源、fuses、體積、ZIP、雜湊和 packaged smoke 驗證，並原子更新發布目錄。
+僅源碼與 `desktop/out/` 均未變更時，才可省略 build。打包內建的 ASAR、資源、fuses、體積、雜湊與 packaged smoke 校驗不可移除；成功後原子更新發布目錄，失敗保留 `.release-next-*` 供排查。
 
-工具版本：Node 24.19.0；打包必須實際使用根 `packageManager` 指定的 pnpm 11.19.0。Codex 的 fallback pnpm 可能是其他版本，此時可用 Node 執行本機 Corepack 快取中 11.19.0 的 `bin/pnpm.mjs --dir desktop package:directory:from-built`；不得偽造 user-agent 繞過版本檢查。
+Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_INSTALLED_ELECTRON='1'` 再打包；只複製本 worktree 已安裝、版本與發行要求一致的 Electron `dist`，不修改依賴來源。預設下載路徑及所有打包門禁不變，版本不符仍失敗並保留 staging。使用後清除此環境變數。回歸入口：`releasePolicy.test.mjs`、`releaseTransaction.test.mjs`。
 
-可供測試的入口為：
-
-```text
-release-artifacts/<build-id>/program/Copilotix.exe
-```
-
-同目錄的 DLL、PAK、`resources/` 等文件是運行所必需的，不要把 EXE 單獨移出。完整 ZIP 位於：
-
-```text
-release-artifacts/<build-id>/Copilotix-<version>-win-x64.zip
-```
-
-### 僅重新打包
-
-如果源碼和 `desktop/out/` 自上次成功 build 後均未改變，只需：
-
-```powershell
-pnpm desktop:release:from-built
-```
-
-若修改過任何會進入 bundle 的源碼，不得跳過 `desktop:build:bundles`，否則會打包舊代碼。
-
-體積預算（2026-10-07）：runtime 上限 360 MiB 中 Electron 本體約占 330 MiB，餘量很小。`dependencies` 會原樣打進 app.asar，只供 Renderer 使用（已由 Vite 打包）的套件必須放 `devDependencies`；Main 需要的純 JS 套件優先用 electron-vite 的 externalize `exclude` 打包進 bundle（如 zod），只有原生模組或刻意外部化的套件（keyring、katex 等）才留在 `dependencies`。調整後 app.asar 由 29.9 降至 22.0 MiB、runtime 由 359.5 降至 351.6 MiB。
-
-### 正式交付前的驗證路徑
-
-依使用者要求，日常開發預設不執行本地 lint、typecheck、單元／覆蓋率或 E2E 測試。2026-10-07 補充：未經使用者明確允許，不得 push、上傳產物或觸發遠端發布。允許本地 commit；只有授權上傳後，才可用 GitHub Actions 驗證最新提交（詳見第 8 節）。
-
-需要供真人驗收的本地 EXE 時，可按上面的快速路徑 build／打包並本地交付，不以 push 為前提；打包內建的產物校驗不能移除，亦不能聲稱已通過完整 CI。`pnpm desktop:release` 會重新 build，不能與 `desktop:release:from-built` 同時並行執行。打包失敗時保留 `.release-next-*` 供排查；確認不再需要後才能清理。
+- 人工測試入口：`release-artifacts/<build-id>/program/Copilotix.exe`，不可單獨搬走 EXE；同目錄 DLL、PAK、resources 均必需。
+- 交付包：`release-artifacts/<build-id>/Copilotix-<version>-win-x64.zip`，Setup 規則見第 6 節。
+- Runtime 上限 **360 MiB**，Electron 約占 330 MiB。Renderer-only 套件放 `devDependencies`；Main 純 JS 優先由 electron-vite externalize `exclude` 打入 bundle；原生或刻意外部化套件才留 `dependencies`。
 
 ## 2. 文檔格式接口（PDF / Markdown）
 
-- 任務列表目前以 `DocumentSummary.originalName` 的副檔名顯示格式標籤：`.md`、`.markdown` 顯示為 `Markdown`，其餘既有記錄按向後兼容規則顯示為 `PDF`。這只是顯示層兼容接口，目前導入、解析與閱讀流程仍只正式支持 PDF。
-- 正式接入 Markdown 時，必須在共享 IPC schema、Core RPC、資料庫文檔記錄與 migration 中增加明確的 `sourceFormat: 'pdf' | 'markdown'`，完成舊資料回填後再讓顯示層優先使用該欄位；不得長期只靠檔名推斷格式。
-- Markdown 導入接口預定接受 UTF-8 編碼的 `.md` / `.markdown` 文件（MIME `text/markdown`）。源文件須按既有 PathPolicy 原子落盤並保留校驗摘要；Markdown 不走 PDF 上傳/解析器，而是在標準化邊界產出可供翻譯、RAG 與閱讀器使用的 canonical Markdown artifact。
-- 新增格式時必須保持現有 PDF 契約與舊資料可讀，並補齊重複文件判定、任務狀態投影、刪除/重試、artifact revision 及恢復語義測試。
+- 現階段導入、解析、閱讀正式支持 PDF。列表僅按 `originalName` 顯示 `.md`／`.markdown` 為 Markdown，其餘舊記錄兼容顯示 PDF。
+- 正式接入 Markdown 時，在 IPC、Core RPC、資料庫及 migration 加入 `sourceFormat: 'pdf' | 'markdown'` 並回填舊資料，不得長期依賴副檔名推斷。
+- Markdown 導入接受 UTF-8 `.md`／`.markdown`（`text/markdown`），經 PathPolicy 原子落盤及摘要校驗，不走 PDF 上傳／解析器；在標準化邊界產生 canonical Markdown artifact。
+- 保持 PDF／舊資料可讀，維護重複判定、狀態投影、刪除／重試、artifact revision 及恢復測試。
 
-## 3. 設定頁及後續 UI 新頁面的對齊標準
+## 3. 設定頁與新 UI 對齊
 
-設定頁右側的「服務連結」內容區是新頁面的尺寸基準：
+- 以「服務連結」內容區為尺寸基準：頁籤根節點是 `.settings-content-body` 的直接子元素，使用 `.settings-section` 並填滿可用寬高。
+- 不重複導覽標題、不用空白標題佔位、不加專屬外層 margin／padding／max-width；首張卡片的頂、左、右邊緣須與基準一致。
+- 卡片內距可自訂；以 `section`／`aria-label` 保留與導覽一致的區域名稱。測試驗證可按名稱查找、無重複標題及共用根類別。
+- 設定「主題外觀」：`theme.ts` 共六套（三淺三深，主題卡不加文字說明）寫入 :root 色 token（`--surface`／`--sheet`／`--ink`／`--on-ink`／`--primary`… 及文庫 3D 用 `--theme-archive-*`）；深色主題另切 antd darkAlgorithm、`color-scheme`、`--lift`、黑色 `--shadow-ink` 與 `--shell-edge`，PDF 頁面保持白紙。antd、canvas 與 Three.js 均從 token 讀色；主題與閱讀字號（13–22px，`--reader-font-size`，Markdown 正文、標題、表格按 em 縮放）點選即預覽，但屬設定草稿：經「保存全部更改」寫入 localStorage `copilotix.theme.v1`／`copilotix.reader.font-size.v1`，「放弃更改」或未保存離開即還原，並參與離開確認；只改外觀時不調用 settings IPC。新增顏色一律用 token，語義色（成功／警告／錯誤）、PDF 疊層與高亮色板除外。
+- 使用者已選擇設定離開確認：應用內離開設定頁時，有草稿須提供「保存并离开／放弃并离开／继续编辑」。保存失敗或憑據部分失敗留在原頁並保留失敗欄位；未保存 API Key 僅留記憶體。設定內頁籤切換保留草稿、不彈確認。
 
-- 頁籤內容必須作為 `.settings-content-body` 的直接子元素，並使用 `.settings-section` 共用類別。
-- 內容區從與「服務連結」卡片相同的頂部基線開始；不得在頁籤內重複顯示「模型設置」「文件存儲」等導覽標題，也不得用空白標題或額外上邊距佔位。
-- `.settings-section` 必須填滿 `.settings-content-body` 的可用高度與寬度，沿用相同的頂部及左、右邊界；不得添加頁面專屬的外層 margin、padding 或 max-width。
-- 頁面自己的卡片可使用內距，但第一張頂層卡片的外邊緣必須與「服務連結」第一張卡片對齊。
-- 刪除可見標題後，仍須以 `section` 搭配 `aria-label` 保留可存取的區域名稱；名稱應與左側導覽文字一致。
-- 新增或修改設定頁籤時，測試至少要驗證：區域可由名稱查找、沒有重複頁面標題，以及內容根節點直接套用 `.settings-section`。
+## 4. 文檔庫維護契約
 
-## 4. 文档库维护契约
+- 維護經 Main 原生選目錄與確認、IPC 維護鎖、Utility 持久化隊列；活動任務期間不可切庫。
+- manifest v1、schema_migrations 與 SQLite 結構共同約束兼容。恢復先校驗並保留舊庫；遷移複製完成後才事務切換路徑，不自動刪除舊文檔目錄。
+- API Key 不進備份。實現、恢復語義與回歸項見 `docs/LIBRARY_MANAGEMENT_ZH.md`。
 
-- 文档库管理经 Main 原生目录选择与确认、IPC 维护锁、Utility 持久化队列执行。
-- manifest v1 与 schema_migrations/SQLite 结构共同约束恢复兼容性。恢复必须校验文件并保留旧库；迁移复制完成后才事务切换路径。
-- 不得把 API 密钥加入备份，不自动删除旧文档目录，不在活动任务期间切换库。
-- 相关实现与恢复语义见 docs/LIBRARY_MANAGEMENT_ZH.md；数据/IPC/UI 修改需回归该文档列出的测试。
+## 5. 許可與簽名
 
-## 5. 许可与签名维护
+- 自有代碼沿用根 `LICENSE.md` 的 MIT，不覆蓋第三方或歷史上游許可。
+- 打包生成第三方許可匯總（包括開發依賴），並複製 MIT 與聲明到 `resources/licenses`；缺少許可文本須如實列出。
+- 本機自簽僅供測試，不自動加入系統信任。正式政策與 SignPath 見 `docs/CODE_SIGNING_POLICY.md`、`docs/SIGNPATH_APPLICATION.md`。
 
-- 当前 master 自有代码使用根 LICENSE.md 的 MIT 许可；不可用其覆盖第三方或历史上游代码。
-- package-directory 在打包前生成第三方许可汇总，并把 MIT 与声明复制到 resources/licenses。清单包括开发依赖，缺少根许可文本的包须如实列出，不能宣称其覆盖完整。
-- 本机自签证书仅用于测试；不得自动加入系统信任或替代正式发布签名。SignPath 申请与代码签名政策见 docs/SIGNPATH_APPLICATION.md、docs/CODE_SIGNING_POLICY.md。
+## 6. Setup 交付契約
 
-## 6. Setup 交付入口
+- 從 1.2.0 起，公開 Release 僅上傳 `setup.exe`，源碼由 GitHub 按 tag 提供 ZIP／tar.gz；不發布運行包 ZIP、SHA 或 manifest。下列緊湊 ZIP 與雜湊清單只作本地／CI 內部校驗，不刪除打包安全檢查。
 
-- 同一發布命令產生精簡 ZIP，解壓後根目錄含 Setup、`uninstall.exe`、安裝說明及小型 advanced 校驗文件。完整 runtime 已嵌入 Setup，開發副本只存 `release-artifacts/<build-id>/program/`；ZIP 存同一產物目錄，不得再把 runtime 放入 ZIP 重複交付。schema 5 標記 distribution compact-setup、runtime.embeddedIn；外層 runtimeArtifactDirectory 指向開發副本，artifactDirectory 指向 ZIP 所在目錄。ZIP 內 bundle-manifest 不含外部產物路徑或 ZIP 自身哈希；外層 release-manifest 在 ZIP 完成後加入 transport.sha256，且不進 ZIP。發布成功只清理上一成功版本的已驗證 artifact 路徑，失敗暫存保留。
-- Setup 強制目前使用者範圍，允許選擇安裝位置。安裝或卸載發現 Copilotix 仍在運行時須提示退出；不得強制結束背景佇列。預設卸載保留應用資料、系統憑證及獨立文檔庫；只有使用者明確勾選清除資料並經 Main 第二次原生確認，才由獨立 Utility 唯讀清單驗證並安全清理。覆蓋升級與靜默卸載不得觸發清理。程序目錄提供 uninstall.exe。新增憑證種類或文檔儲存結構時，須同步更新卸載清單與路徑驗證。
-- 正式發布仍須受信任簽章；Setup、主程式和內嵌卸載器皆受簽章門禁約束。必要安裝驗收可執行 `pnpm desktop:test:installer:wizard` 和 `pnpm desktop:test:installer`，腳本會拒絕覆蓋既有安裝。
+- ZIP 為 compact-setup：根目錄含 Setup、`uninstall.exe`、安裝說明及小型 advanced 校驗文件；runtime 嵌入 Setup，不在 ZIP 重複放置，開發副本留在 `release-artifacts/<build-id>/program/`。
+- schema 5：distribution 為 compact-setup，`runtime.embeddedIn` 標記內嵌；外層 `runtimeArtifactDirectory` 指向開發副本，`artifactDirectory` 指向 ZIP 目錄。ZIP 內 bundle-manifest 不含外部產物路徑或自身哈希；外層 release-manifest 在 ZIP 完成後加入 `transport.sha256`，不進 ZIP。成功只清理上一成功版本已驗證的產物路徑，失敗暫存保留。
+- 強制目前使用者安裝，允許選位置。安裝／卸載發現應用運行時提示退出，不強制結束背景隊列。
+- 卸載預設保留資料、憑據與獨立文庫；只有明確勾選清除、Main 第二次原生確認後，獨立 Utility 才按唯讀清單驗證並安全清理。覆蓋升級／靜默卸載不得清資料；新增憑據或儲存結構須同步卸載清單與路徑驗證。
+- 安裝精靈視覺：`scripts/generate-installer-assets.ps1` 生成字陣風格的 sidebar（164×314）與內頁 header（150×57）BMP；完成頁有專案主頁連結。頁面順序、控件 ID 與歡迎／選項／完成頁文案不變（wizard 測試依賴）。
+- Setup、主程式、內嵌卸載器均受正式簽章門禁。必要驗收入口：`pnpm desktop:test:installer:wizard`、`pnpm desktop:test:installer`；腳本拒絕覆蓋既有安裝。
 
-## 7. 閱讀器基座契約（大文庫、併發與長論文）
+## 7. 閱讀器、併發與問答契約
 
-- Core RPC 只保留 Main 實際調用的 operation；舊的逐塊翻譯、翻譯快取、整表標註替換等已移除。新增 RAG/問答 operation 時沿用「Utility 生成 descriptor、Main 只傳 ID 與小結果」模式。
-- `tasks:list`、`documents:list` 為 keyset 分頁（`{ after? }` → `{ items, next }`，每頁 ≤200 行、≤512 KiB）。任何可能隨文庫增長的列表 RPC 都必須分頁，不得一次返回全量。
-- Utility 觸及 SQLite 的 operation 分三條通道：data、compute（`compute:*`）與獨佔的生命週期（init/flush/close、library）。SQLite 事務必須保持同步（`transaction(() => …)` 內不得 await），否則通道交錯不再安全。Main 側 compute 請求用 `COMPUTE_RPC_TIMEOUT_MS`，並以作業 signal 取消。
-- JobScheduler 事件為 `job-changed(job)`、`job-notification(job)`；通知與 UI 均以 `job.documentId` 定位文檔，job id 與 document id 不同。
-- Main 對文檔變更用 `createCoalescedRefresh` 合併刷新；新的高頻事件源（例如 RAG 索引進度）應走同一路徑，不得每個事件都全量查詢。
-- Reader 傳給 `MarkdownPane` 的 `blocks`、`annotations` 必須保持引用穩定（`useMemo`），否則滾動聯動會反覆重建長論文的高亮與小地圖。
-- PDF 閱讀區無外圍 padding／邊框／陰影，100% 按完整 clientWidth 貼合。原生捲動條必須完全隱藏以免佔用右側／底部空間，使用不佔位且可拖曳／鍵盤操作的浮動捲動條；頁間及末頁底部無額外 gap，DOM 與虛擬頁高計算保持一致。欄寬分隔器透明並覆蓋右欄，不留固定寬度空白條。寬度、縮放及延遲頁面尺寸改變時，在 layout effect 中按 PDF 頁號與頁內比例立即恢復位置；禁用原生 overflow anchoring，並取消舊滾動 frame，避免用舊像素偏移重新判斷頁碼。真人滾動及明確翻頁／引用定位仍正常更新頁碼。
-- 單篇論文 AI 問答的維護與交接見 `docs/READER_AI_CHAT_PLAN_ZH.md`（所有 Agent 的共享入口）。2026-10-07 已加入文獻目錄 `chat/` 下的原子持久化、歷史分頁、草稿／選區／模型恢復；不新增 migration，不合併 demo 分支的 schema 5–7。清空、文獻刪除、文庫維護及退出前必須等待對應問答取消並落盤，防止晚到寫入復活記錄或破壞快照。
-- 問答共用「服務連接」的 API／憑據，默認沿用翻譯服務商，但面板可選已啟用的 Qwen／DeepSeek 及獨立問答模型；不修改翻譯模型。舊 request 省略 provider 保持兼容，舊 chatProvider 設定不參與路由。Key、valid 狀態及 consent 仍分別驗證；不得在聊天文件中保存 Key。
-- 閱讀器只有 PDF、原文 Markdown、中文 Markdown、AI 問答四個視圖，移除 JSON 展示但保留底層 layout 產物與 ZIP。問答只支持共享預設模型清單，IPC／Main 按服務商校驗；舊 session／設定的自訂型號回退到預設值，不損壞历史 turn。首次進入才掛載及建索引；「添加到對話」只加入選區，不切換頁籤。已恢復引用必須再核對 revision。構建 bundle 使用 Node 24.19.0，系統 Node 24.11.1 會靜默崩潰並留下舊 out/。
+- Core RPC 只保留 Main 實際調用的 operation；新增能力採「Utility 生成 descriptor，Main 只傳 ID 與小結果」。可能隨文庫增長的列表一律分頁；`tasks:list`／`documents:list` 採 keyset `{ after? } → { items, next }`，每頁 ≤200 行、≤512 KiB。
+- Utility SQLite operation 分 data、compute（`compute:*`）及獨佔生命週期（init／flush／close／library）通道；事務回調內不得 await。Main compute 用 `COMPUTE_RPC_TIMEOUT_MS` 與作業 signal 取消。
+- JobScheduler 的 `job-changed(job)`／`job-notification(job)` 用 `job.documentId` 定位文檔；Main 高頻事件經 `createCoalescedRefresh` 合併刷新。Reader 給 MarkdownPane 的 blocks／annotations 用 `useMemo` 保持引用穩定。
+- PDF 貼合完整 clientWidth，無外圍 padding／邊框／陰影、原生捲動條、頁間或末頁 gap；浮動捲動條支援拖曳／鍵盤且不佔位。透明欄分隔器覆蓋右欄。寬度／縮放／延遲尺寸改變時，layout effect 按頁號與頁內比例恢復，停用 overflow anchoring 並取消舊 frame；人工翻頁與引用定位正常更新頁碼。
+- 問答共享入口：`docs/READER_AI_CHAT_PLAN_ZH.md`。文獻目錄 `chat/` 原子保存歷史、草稿、選區與模型，歷史分頁；問答文件本身無獨立 migration；Codex provider 使用資料庫 migration 5，不合併 demo schema 5–7。清空、刪文獻、文庫維護及退出前，須等待相關問答取消與落盤，避免晚到寫入。
+- 問答沿用「服務連接」憑據，默認翻譯服務商，可獨立選已啟用 Qwen／DeepSeek 的共享預設模型或 Codex 動態目錄模型，不改翻譯模型；IPC／Main 校驗 provider、Key、valid；Codex 改驗本機登入／模型能力，不讀 API Key。舊 request 可省略 provider；舊 chatProvider 不參與路由，自訂模型回退預設而不損壞歷史，Key 不進聊天文件。首次打開問答才掛載／建索引；添加選區不切頁籤，恢復引用重新核對 revision。
+- 只提供 PDF、原文、中文、問答四視圖，JSON 僅保留底層產物與 ZIP。`readerLayout.ts` 為 split／group 純函式樹，每視圖僅出現一次、最後一個不可關閉；localStorage `copilotix.reader.layout.v1` 校驗修復後載入，缺省「PDF｜原文·中文·問答」，首次沿用舊 sessionStorage 欄寬。
+- 工作台分組最小 240×140；拆分、移動、關閉／重開、拖曳（5px 起拖、Esc 取消；邊緣四分之一拆分，中間合併）不得破壞唯一視圖。拖曳預覽走獨立 DragContext；分隔器拖動僅本地更新、放開提交。最大化純 CSS、其他分組保持掛載、不持久化；split pane 不设 position，分隔線用 ::after。
+- Markdown 僅選中時掛載並恢復 `initialScrollTop`；PDF／問答首次顯示後保持掛載。工具列 portal 到所在分組；PdfPane 的 `toolbarHost`、`initialViewState`／`onViewStateChange` 保持移動／重開錨點。頂欄不再提供複製；另存作用於聚焦分組。
+- 圖片分組（`readerFigureGroups.ts`）：MinerU 常把子圖拆成獨立圖塊、把 `(a) …` 子圖說誤標為 table_caption 或掛在別的圖下；子圖說按幾何視為圖內文字，不作屏障；`Figure N |`（Nature 式）視為圖說。仍無法確認 PDF 裁圖（無圖說／歧義／裁圖失敗）且子圖左右並排時，`ReaderFigureMosaic` 用解析出的子圖按 PDF 相對位置拼排並隱藏逐段原圖，不再逐行堆疊。改動須用真實文庫逐篇核對並排子圖歸屬。
+- 選區工具列：高亮、下劃線、羽毛筆「写笔记」、加入問答。筆記存文獻目錄 `notes/notes.v1.json`（Core RPC `notes:list/upsert/delete`，IPC `reader-notes:*`），錨點同標註以 quote／前後文重定位；虛線底紋＋頁邊羽毛筆，懸停顯示並可直接編輯（使用者明確要求的唯一懸停例外，見介面偏好），點外部自動保存、Esc 放棄。問答選區發送後移入該輪並以 `userSelections` 告知模型，見問答入口文檔。
+- 快捷鍵：Ctrl+1–4 顯示四視圖，Ctrl+反斜線右拆，Ctrl+Alt+←/→ 移組，Ctrl+W 關閉，Ctrl+Shift+T 重開，Ctrl+Shift+M／雙擊最大化，Esc 還原。
+- `readerScrollSync.ts` 以 mappingId＋塊內比例對齊視口 35% 閱讀線；僅人工捲動領先，120ms 程式回聲不回報，每幀最多一次。參與者為分組選中且在 layout.synced 的視圖（預設原文＋中文、PDF 關閉、問答不參與）；PDF 用 `pdfSyncPosition`。引用無可見閱讀視圖時，`ensureReadingView` 在問答旁拆開／重開原文或中文／PDF，先還原最大化，不能取代問答。共用少量 mappingId 的合成夾具有歧義，同步／選段聯動須用真實解析資料驗收。
 
-- 閱讀器為編輯器式工作台（2026-10-07，分支 `ui/reader-workbench`）：四個視圖以分組頁籤呈現，可經頁籤右鍵、分組「⋯」選單左右／上下拆分、移動到其他分組、關閉後由「+」重開；每個視圖同時只出現一次（移動而非複製），最後一個可見視圖不可關閉。佈局是 `readerLayout.ts` 的純函式樹（split／group），全局保存於 localStorage `copilotix.reader.layout.v1`，讀取時校驗修復（未知或重複視圖、空分組、單子節點 split、尺寸）並回退預設；預設等同舊版「PDF｜原文·中文·問答」，首次載入沿用舊的 sessionStorage 欄寬。分隔器只受最小尺寸（寬 240px／高 140px）限制，拖曳期間僅本地狀態更新、放開才提交。
-- 工作台掛載規則：Markdown 視圖只在成為分組選中頁籤時掛載並以 `initialScrollTop` 恢復；PDF 與問答首次顯示後保持掛載（問答仍首次進入才建索引）。視圖專屬控件（PDF 頁碼／縮放、翻譯狀態、問答工具列）經 portal 渲染到所在分組頁籤欄；`PdfPane` 新增可選 `toolbarHost`、`initialViewState`／`onViewStateChange`，移動或重開時按頁內錨點恢復位置。標頭複製／另存作用於「聚焦分組」的選中視圖。第二階段：頁籤可拖曳（5px 起拖，Esc 取消）到其他分組頁籤欄（移動／同組重排）或分組內容區（邊緣四分之一拆分、中間合併），預覽顯示目標區並在空間不足時禁止；拖曳狀態只經獨立 DragContext 更新幽靈、預覽與插入線，不觸發閱讀器重繪。雙擊頁籤或 Ctrl+Shift+M 最大化分組（純 CSS 覆蓋，其他分組保持掛載，Esc 還原，不持久化）；分組間分隔線畫在分隔器 ::after，split pane 不得設定 position，否則最大化會被困在 pane 內。快捷鍵：Ctrl+1–4 顯示 PDF／原文／中文／問答，Ctrl+（反斜線）向右拆分，Ctrl+Alt+←/→ 移到相鄰分組，Ctrl+W 關閉視圖，Ctrl+Shift+T 重開最近關閉。第三階段：捲動同步以「block mappingId + 塊內比例」對齊（`readerScrollSync.ts`），閱讀線為視口 35%；只有本視圖內滾輪／拖曳／鍵盤／觸控引起的捲動才領先，跟隨產生的程式捲動（120ms 內回聲）不回報，避免互相彈跳；每幀最多派發一次。參與者＝各分組選中頁籤且在 layout.synced（🔗 開關，預設原文＋中文、PDF 關閉、問答不參與；舊佈局缺欄位時套預設）。PdfPane 以 `pdfSyncPosition` 找閱讀線所在塊並以頁內錨點跟隨。窄窗口不另做摺疊：每個 split pane 依 `minNodeExtent` 設 min-width／min-height（分組 240×140），四個視圖在最小窗口內必然放得下。問答引用若無閱讀視圖在畫面上，`ensureReadingView` 會把原文（或中文／PDF）拆到問答左側或重開，而非取代問答；最大化的問答分組會先還原。注意：自動生成的 e2e 夾具（自訂 sourceMarkdown）多段共用少數 mappingId，MarkdownPane 會將其視為歧義而不建索引，捲動同步與選段聯動須用真實解析資料驗證。
+Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消／超時、migration 5 恢復與測試入口統一見 [架構文檔](docs/ARCHITECTURE_ZH.md#codex-provider本机-app-server)，使用步驟見 [服務配置](docs/wiki/Service-Setup.md)。
 
-## 8. 遠端 CI 驗證與預設不跑本地測試
+## 8. 遠端 CI 與驗證邊界
 
-- 日常開發不再預設跑本地自動化測試及 lint/typecheck；測試程式仍須隨行為修改一同維護，由遠端執行。只有使用者另行要求本地驗證時才執行。
-- 未經使用者明確允許不得 push 或上傳遠端。預設流程為修改 → 本地 commit → 按要求本地 build／打包交付；完整 CI 未執行時如實說明。獲授權上傳後才 push 工作分支並查看該版本 Actions；合併前 `build` 必須成功，PR 還須通過最新合併結果的檢查。不得用舊版本成功、取消、跳過或未觸發代替成功，也不得為變綠刪掉斷言、降低覆蓋率門檻或關閉安全門禁。
-- `.github/workflows/desktop-windows.yml` 對所有分支 push、PR 和 `desktop-v*` tag 執行，並提供手動觸發。新分支必須包含這份工作流與 CI 設定；基於舊版本的分支要先同步修復。只 commit、不 push 不會執行 GitHub Actions。
-- 保持主分支必需檢查名稱 `build`。CI 包含 frozen-lockfile 安裝、lint、typecheck、覆蓋率、四個 bundle、真實打包 smoke、Electron E2E、安装／升级／卸载／重装及下载解压验收；tag 發布另受版本、許可與簽章門禁約束。
-- 在 Actions 下載 `Copilotix-Windows-x64-Bundle` 供真人安裝驗收；`Copilotix-Windows-verification-reports` 保存單元 JUnit、覆蓋率摘要及 E2E 失敗證據。不要將 CI 未通過的包稱為已驗證版本。
-- 此規則只改變自動化驗證的執行位置；真實 API、視覺效果、硬體／系統差異仍按需求由使用者驗收。CI 不持有個人 API 憑據，不能聲稱付費模型或每台機器都已驗證。
+- 修改 → 本地 commit → 按需本地 build／交付；未授權不 push，未跑完整 CI 如實說明。授權上傳後檢查最新提交的 Actions，合併前 `build` 必須成功，PR 另須通過最新合併結果檢查；舊成功、跳過、取消皆不可替代。
+- `.github/workflows/desktop-windows.yml` 覆蓋所有分支 push、PR、`desktop-v*` tag 及手動觸發；新分支須包含最新工作流。只 commit 不會觸發 Actions。
+- 保留必需檢查名稱 `build`。一般 push／PR 執行 frozen-lockfile、lint、typecheck、快速核心回歸、四 bundle 和源碼啟動 smoke；不預設打包、跑全套 UI／覆蓋率或安裝。`desktop-v*` tag 或手動勾選 `full_validation` 才跑覆蓋率、全部 Electron E2E、打包／安裝生命週期及下載校驗；tag 的版本、許可、簽章與打包內建安全校驗仍必需。
+- `Copilotix-Windows-x64-Bundle` 供安裝驗收；`Copilotix-Windows-verification-reports` 保存 JUnit、覆蓋率及 E2E 失敗證據。CI 未過不可稱已驗證包；CI 無個人 API 憑據，付費模型、視覺及硬體差異仍須真人驗收。
 
-## 9. CI 與夾具維護要點
+## 9. CI 與夾具維護
 
-- Vitest CI 最多 2 workers，Windows Playwright 單 worker；JUnit 放 desktop/unit-test-results，避免被 Playwright 清除。
-- Windows 原子 rename 遇 EPERM／EACCES／EBUSY 最多約 6.3 秒有界重試；永久錯誤失敗，CLI exit 1，不用 copy／delete 替代。E2E 前要求 Setup、uninstaller、release-manifest 和 ZIP 均存在。
-- 僅「未打包 + NODE_ENV=test + COPILOTIX_E2E_USER_DATA」使用夾具獨立 native vault service；打包版一律用正式 service。夾具只清理自己的六種 account，不讀寫真人或其他夾具憑據。問答 E2E 經真實設定 IPC 保存假 Key，只模擬 provider HTTP。
-- 閱讀器從任務列表進入，等 reader-header（最長 30 秒）與 Markdown ready 後再互動；error 不算 ready，不加全局 retry／timeout 或降低原斷言。
-- 縮略圖截圖期間 app-shell 用直角及完整 CSS 像素裁切，保持 channel delta ≤1、changedRatio ≤0.001；失敗保留 expected／actual PNG。
-- 最新 CI 證據必須對應最新提交；付費 API 回答、視覺效果及每台機器的實際驗收不能由假 HTTP 或其他分支綠燈替代。
+- Vitest 預設 ≤2 workers，Windows Playwright 單 worker；JUnit 放 `desktop/unit-test-results`。`desktop:test` 只跑核心 `.test.ts`；DOM／React 測試用 `.test.tsx`，由 `desktop:test:ui` 或 `desktop:test:full` 執行；發布腳本 `.test.mjs` 同樣只進完整回歸。新測試按功能加入現有套件，不為簡單 getter、動畫常數、CSS 或資料形狀再建文件。
+- Windows 原子 rename 對 EPERM／EACCES／EBUSY 最多約 6.3 秒有界重試；永久錯誤 exit 1，不用 copy／delete 替代。E2E 前須有 Setup、uninstaller、release-manifest、ZIP。
+- 僅「未打包＋NODE_ENV=test＋COPILOTIX_E2E_USER_DATA」用獨立 native vault service；夾具只清理自身六種 account，不碰真人憑據。問答 E2E 經真實設定 IPC 存假 Key，僅 mock provider HTTP。
+- 任務管理頁與首頁「繼續閱讀」已移除；閱讀器一般經 `openPaperFromLibrary`（文庫搜尋 → 結果 `data-document-id` → 瀏覽面板「打开阅读」，無 WebGL 時結果直接開啟）進入，等 reader-header（≤30 秒）及 Markdown ready 再互動，error 不算 ready；不加全局 retry／timeout 或降低斷言。從文庫進入的 Reader 返回文庫。
+- 縮略圖截圖用直角 app-shell 與完整 CSS 像素裁切，channel delta ≤1、changedRatio ≤0.001；失敗保留 expected／actual PNG。
 
-## 10. Markdown 公共格式修复（2026-10-06）
+## 10. Markdown 公共格式與導出
 
-- 格式、v4/v5 翻译计划兼容、旧文档映射、原子导出和真实论文验证边界见 `docs/MARKDOWN_FORMAT_ZH.md`。共享规范化入口为 `standardMarkdown.ts`，格式是 CommonMark + GFM + 明确数学扩展；不得把公式降级为代码来冒充修复。
-- Markdown 导出须带相邻图片目录并使用相对链接；图片复制失败时不得覆盖已有导出。任务目录里的原始资料不可作为导出目标。结果 ZIP 也须规范化两份 Markdown。
-- 对比交付只保留用户要求的两份 Markdown；Notion 桌面验收不能用浏览器或 CI 成功替代。
+- `docs/MARKDOWN_FORMAT_ZH.md` 定義格式、版本兼容、映射、原子導出與真實論文驗證；`standardMarkdown.ts` 共享規範為 CommonMark＋GFM＋明確數學擴展，不得將公式降級代碼。
+- Markdown 導出攜帶相鄰圖片目錄及相對鏈接，圖片失敗不得覆蓋既有導出；原任務資料不可作導出目標。ZIP 同樣規範化兩份 Markdown。
+- 對比交付只保留使用者要求的两份 Markdown；瀏覽器／CI 不替代 Notion Desktop 驗收。
 
-## 11. 丰富阅读与标准导出分离（2026-10-07）
+## 11. 豐富閱讀與標準導出分離
 
-- 使用者要求阅读器保留 HTML/LaTeX 丰富结构；解析、翻译发布与阅读器不得将合并表格展平。`prepareReaderMarkdown` 只做非结构性准备和可选图片路径修正；`normalizeMarkdown` 仅用于 Markdown/ZIP 导出投影，不回写源资料。
-- 新翻译计划为 v6，读取合法的 v4/v5/v6 manifest；已有 v5 平面表格无法自动恢复合并结构，不应自动重解析或重翻译。映射、标注、资源与原子发布契约不变。详细契约和测试见 `docs/MARKDOWN_FORMAT_ZH.md`。
+- 解析、翻譯與閱讀保留 HTML／LaTeX 豐富結構，不展平合併表格。`prepareReaderMarkdown` 僅非結構性準備／圖片路徑修正；`normalizeMarkdown` 僅導出投影，不回寫源資料。
+- 新翻譯計劃 v6，兼容合法 v4/v5/v6 manifest；v5 平面表格不可自動恢復，不自動重解析／重翻譯。映射、標註、資源及原子發布契約不變，詳見上述格式文檔。
 
-## 12. 共享開發進度（2026-10-07，可直接清理）
+## 12. 當前狀態與入口
 
-此節是所有 Agent 共享的目前進度，不是私人記錄。後續 Agent 可直接更新；若已過時，可整段刪除此節，無須保留舊進度或額外審批。`AGENTS.md` 文件及其他長期協作規則仍須保留。
+- 當前開發入口為 `Copilotix-master-updated`／本地 `master`，包含文庫 UI 代碼與文檔。1.2.0 為本次發布目標；正式簽章與逐 tag 例外以 docs/CODE_SIGNING_POLICY.md 為準。
+- 首頁背景為「解密字陣」`homeCipher.ts`：字元網格按字標實測字寬／行高對齊，避開前景塊；波浪只由開頁、點擊或 75–120 秒一次的自動波觸發，單向擴散不反彈，經 `homeWave.ts` 與字標逐字解碼同步；波後只浮現文庫論文的原文或譯文標題，不加編號（譯文標題閒時讀最近 10 篇，僅保留標題）；新波出發時上一波的標題 0.45 秒內淡出。待機字陣較密並持續閃爍、增減及零星紫色火花，避免被當成靜態背景。其餘六個背景方案原型（`gallery.html`）與舊等高線實作保存在 `docs/design/home-backdrops/`，不參與構建。
+- README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
 
-- 維護工作目錄為 `Copilotix-master-updated`。1.1.0 源自 `ui/reader-workbench`，包含此前聊天分支的問答和 PDF 修正；已經 PR #8 合併到 `master`，來源、合併結果及 master 的 Windows CI 均通過。其他 worktree 未改動；跨分支傳遞仍依協作規則。
-- 已完成：DeepSeek／Qwen 預設問答模型，按文獻原子保存並恢復對話、草稿、選區和模型；取消自訂模型，保留歷史記錄；移除 JSON 閱讀視圖。詳見第 7 節及 `docs/READER_AI_CHAT_PLAN_ZH.md`。
-- 閱讀器：PDF 外圍、右側、底部和頁間無額外 gutter，浮動捲動條不佔版面；欄寬／縮放保留頁碼及頁內位置；正文間距和工作台頂部緊湊化。編輯器式工作台的分組、拆分、拖曳、最大化、快捷鍵、段落同步及引用定位已完成，契約見第 7 節。
-- 1.1.0 已正式發布，完整簡體中文說明為 `docs/releases/1.1.0.zh-CN.md`，包含 Setup、ZIP、SHA256SUMS 和 manifest。使用者授權的 **僅本次 1.1.0 未簽章例外** 已使用；發布後已移除 `COPILOTIX_UNSIGNED_RELEASE_TAG` 變量，其他版本仍要求受信任簽章。發布 tag 及已發布文件保持不變。
-- 1.1.0 tag 的 Windows CI（run `37606519266`）通過：lint、typecheck、600 項單元測試及覆蓋率、21 項 Electron 測試、安裝／升級／卸載／重裝、下載解壓及遠端四個文件哈希校驗；保留既定跳過項目。付費模型及個人硬體仍需真人驗收；後續合併仍須通過最新合併結果的檢查，不沿用舊版本綠燈。
-- 已依使用者授權清理兩端 `codex/reader-ai-chat` 和 `ui/reader-workbench`，保留 `master` 與仍有獨立開發工作的 `codex/rag-review-20260923`；不得清理其他 worktree 的未提交內容。
-- README／Wiki 已按 1.1.0 整理四視圖工作台、DeepSeek／Qwen 問答、本地聊天恢復、PDF 與排版、導出／備份及安裝。四張實際運行截圖用真實公開論文的獨立示例文庫采集，無真人聊天或 API 憑據；問答圖僅未發送草稿，不代表付費模型回答驗收。兩張藍白示意圖與截圖分開標示。
-- Wiki 的版本化源文件在 `docs/wiki/`，先合併主倉庫圖片與文檔，再同步到獨立 Wiki；此目錄提交不會自動發布 Wiki。用戶已明確授權本次遠端 README 與 Wiki 更新，其他任務仍遵守第 8 節上傳授權與最新 CI 門禁。
+## 13. 文庫頁與 AI 解讀
+
+### 資訊與資料
+
+- 圖片 AI 解讀提供 `window.copilotix.figureInsight.get/generate/cancel/onChanged`，模型只返回 `displayWeight`（唯一綜合展示分數）、`overview`、`takeaway`；不加封面評分／理由／supports。每張結果存 `<文獻目錄>/insight/figures/<SHA256(figureId)>.v1.json`，位置、圖片雜湊和來源版本由程序附加；封面依現有結果讀取排序，不觸發生成，尚無獨立解析窗口或自動批次上傳。2026-10-11 已授權 DeepSeek 六篇共 39 張整圖，39/39 返回並保存，逐圖結果／示例在 `../investigation/figure-insight-live-20261011/`。原 PNG 定位與傳輸 JPEG98 身份須區分；接口、兼容、傳輸及驗證邊界只在 [圖片 AI 解讀](docs/FIGURE_INSIGHT_ZH.md) 維護。
+- `LibraryPage` 懶載入 Three.js；從文庫進 Reader 用 `returnTo: 'library'` 返回並恢復論文，從教程進入返回教程，其他入口返回首頁。重試與刪除論文在閱讀器頂欄（`DocumentLifecycleActions`）。RhineLabUI 來源與 MIT 許可見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`；GLB 僅五個外殼網格，沿用 inline／parseAsync 和原 CSP。
+- 每分類一列，列／行循環並記住論文 ID；右下角列數等於分類數，分類名十二字固定寬度居中，箭頭位置固定。分類算法、分頁與緩存只在 [內容分類](docs/LIBRARY_CATEGORIES_ZH.md) 維護。
+- 瀏覽標題移除末尾 `.pdf`，固定兩行高度、單行垂直居中、超出省略；譯文標題固定一行，沒有譯文留空。停留選中論文 180ms 後讀取，與詳情共用 query cache；不另調模型。
+- 選中頁元信息只含單行關鍵詞（空格分隔，按寬度縮至 11px，仍超出省略）及下方總結（v2 `tldr`／v1 `summary`）；不顯示類型、日期、生成狀態。詳情標題下同樣顯示譯文標題，不重複類型／學科／總結；證據基礎與檢驗方式在新舊檔案展示均不顯示，舊字段只作存儲兼容。
+- 詳情 v2 依「摘要／背景／結論／討論」顯示；正文統一 16px、首行縮排兩字，背景每點顯示短標題。新舊檔案均不顯示證據基礎／檢驗方式。選區提供共用高亮、下劃線及筆記，不提供加入對話；archive 區塊鍵與原文隔離，保存與重定位邊界見 [Paper Brief](docs/PAPER_BRIEF_ZH.md)。新摘要由全文生成，舊檔仍回退譯文，缺失明示；ABSTRACT 不參與遮擋，正文仍沿用解密動畫。詳情延伸至頁面底部，「打开阅读」靠下，隱藏捲動條並保留滾輪／鍵盤捲動。生成操作在閱讀器「AI 问答」頁籤工具列的「档案卡」點擊選單。HTTP(S) 連結保留目標、下劃線且可換行。無 v2 時保留結構／舊解讀頁；v2 分頁與生成欄位以 [Paper Brief](docs/PAPER_BRIEF_ZH.md) 為準。
+- 生成授權、取消、併發、存儲與兼容只在 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md) 維護。解析完成後與翻譯並行生成，翻譯完成事件補足恢復；自動生成已恆為開啟、不提供開關；使用程序即同意發送所需內容，不再獨立確認；發送前仍核對啟用服務、模型與憑據。既有 15 篇真實生成結果已保存，批次證據在 `../investigation/paper-brief-bulk-20261010/SUMMARY.md`，不代表人工品質驗收。
+- 發布時間戳由 `runtime-file-times.mjs` 只更新 staging runtime，避免 Electron 資源顯示 1980 年；不修改依賴、內容、簽章或用戶文庫。
+
+### 互動與渲染
+
+- 不改 `archiveMotion.ts` 已校準曲線。單一 rAF、約 60fps，牆鐘待機，失焦／隱藏停渲染；reduced-motion 直接完成動畫，卸載時釋放 GPU。不得恢復「流暢模式」或材質降檔；未採用效果只在 [動畫候選](docs/LIBRARY_MOTION_IDEAS_ZH.md) 記錄。
+- 瀏覽 DPR ≤1.25／≤3.3M 像素，透射半解析度、陰影 1024；6 幀超時降解析度 15%（下限 0.55），穩定 240 幀且 8 秒未降再升 8%。保留解析拾取、剔除、共享 instanceMatrix、compileAsync 暖機；途經選中卡漣漪最多 6，升起 4.2／回落 4.5。
+- 抽出沿用單一 hero、4.05 升起與 detail 鏡頭；鏡頭 >0.6、升起 >3 才解密。標記以 4.8 倍速、玻璃清除以 2.4 倍速，清除前緣羽化 0.12；`onDecryptReveal` 啟動文字揭開。首頁 1600px／LRU 6，按需載入 PDF／資料／解讀；換篇或卸載取消晚到結果與訂閱。
+- `lineRedaction.ts` 等文字與檔案卡載入後揭開；遮擋期間正文以 `data-redacted` 不繪製（面板淡入時不可透出），墨條開始右滑時才恢復。ResizeObserver 首次回報不算版面變化；ResizeObserver／MutationObserver 忽略遮擋層，重新量測所有可見文字（含部分末行），滑出途中版面改變就移除遮擋。逐行退場 0.95 秒，閱讀順序曲線與卡片解密時間不變；reduced-motion 不畫墨條。詳情標題與譯名不遮擋：opening 時捕捉瀏覽面板標題位置與字級，先平移縮放進詳情標題區（延遲 120ms、440ms），其餘內容與遮擋層 460ms 後一起淡入上移（300ms），標題不會穿過墨條；closing 時內容 120ms 淡出、標題 180ms 退回。瀏覽面板的關鍵詞／總結按論文快取且總結固定三行高，返回時面板整體淡入、不重播標題滾動；`returning` 標記跟隨論文 ID 直到換篇，不可用計時器移除（會重播動畫）。標題左對齊。文庫全區文字兩端對齊（居中標籤除外），遮擋條隨之齊整。
+- Enter 忽略 repeat，抽出／解密中不進 Reader，完全展開後再次 Enter 或「打开阅读」進入；點擊已展開封面、Enter 與「打开阅读」共用可取消的閱讀器入口：先預載閱讀器（10 秒超時），主場景封面推進／放大 4%（280ms）後切頁，閱讀器淡入 180ms；Esc 取消待完成跳轉，減少動態效果直接切換。預載失敗留在文庫並可重試，不掛載第二個閱讀器或 3D 場景。抽出卡片封面為「首頁＋關鍵圖片」跨頁，選圖與排版見 [圖片 AI 解讀](docs/FIGURE_INSIGHT_ZH.md)「文庫封面」。移動 ≥8px、pointercancel／lostpointercapture 不觸發點擊。詳情分頁左右／Home／End 移焦，正文方向鍵保留捲動，僅瀏覽區方向鍵換卡。
+- 搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦，Enter 選首項，Tab 選結果，IME 不誤觸並取消慣性。瀏覽 Esc 先收搜尋；抽出期間檢索收合且 inert、結果關閉，Esc 關詳情並移焦回文庫。收合 0.24 秒內完成，詳情拉伸延遲 120ms 才到達頂部，兩者不交疊；返回時詳情先淡出，橫線 0.2 秒後展開、文字 0.38 秒後展開。搜尋結果與選中頁關鍵詞／總結載入時淡入；詳情分頁以單一滑動指示線切換。WebGL 失敗仍可搜尋進 Reader。
+- `closing` 保留舊文獻／封面／模型：面板 180ms 淡出且 inert，模型／鏡頭 320ms 收回後卸載。僅一個待選目標，方向輸入累積、搜尋覆蓋；目標移除即取消，收回中重開同篇接續姿態並清掉待選；reduced-motion 直接收回。
+- `entryScanTime` 把入場掃描平段壓至約 0.25 秒；肩部在滑入結束時升起。`ARRAY_SCREEN_SHIFT` 將選中卡移向左下（-4%／10% 視口）；瀏覽／詳情共用 `--archive-panel-left` 與 `--archive-detail-width`。
+- `onDetailFrame` 寫入 `--archive-detail-top/height` 供 floor veil 遮蓋陣列；詳情頂端與品牌對齊、底端保留 26px 頁面邊距，分頁高度固定，僅正文捲動。不加裝飾框線；返回按鈕在卡片下方。標題位置必須在 opening 時從仍掛載的瀏覽面板捕捉；reduced-motion 跳過。
+- 展開後 ≤8.3M 像素，用 2 倍顯示器 DPR，放不下回原生 DPR（≤2），透射全解析度；靜止不重繪，收回恢復瀏覽上限。`applyResolution` 只標記，下一幀開頭 `flushResolution` 後立即渲染，禁止在幀間直接改緩衝區尺寸造成空白幀；首頁貼圖按展開後設備像素高度重採樣。

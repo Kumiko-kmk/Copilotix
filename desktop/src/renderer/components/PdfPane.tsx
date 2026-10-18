@@ -616,7 +616,6 @@ const PdfPage = React.memo(function PdfPage(props: {
               onClick={() => props.onSelect(mapping.id, box.blockPosition)}
               aria-label={`${blockTypeLabel(mapping.type)}区块 ${mapping.order + 1}${box.mergeRole === 'continuation' ? '（合并续块）' : ''}`}
             >
-              <span className="pdf-block-label">{blockTypeLabel(mapping.type)}</span>
               {box.mergeRole === 'continuation' ? <span className="pdf-merge-badge">合并</span> : null}
             </button>
           )

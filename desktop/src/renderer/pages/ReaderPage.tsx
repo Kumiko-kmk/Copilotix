@@ -1,7 +1,8 @@
 import React from 'react'
-import { usePaperChat, type PaperChatTurn } from '../usePaperChat'
+import { usePaperChat } from '../usePaperChat'
+import { useReaderNotes } from '../useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeftOutlined, CopyOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Space, Spin, Typography, message } from 'antd'
 import { buildOriginalReaderBlocks, buildTranslatedReaderBlocks } from '@shared/readerDocument'
 import type {
@@ -14,9 +15,12 @@ import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView, ReaderChat
 import { IpcClientError } from '@shared/ipc'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutations'
 import ReaderWorkbench from '../components/ReaderWorkbench'
+import DocumentLifecycleActions from '../components/DocumentLifecycleActions'
+import type { PaperInsightSource } from '@shared/paperInsight'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
   activeSyncedViews,
+  revealView,
   findGroup,
   groupOfView,
   listGroups,
@@ -26,14 +30,24 @@ import {
   type ReaderViewId
 } from '../readerLayout'
 
-export default function ReaderPage(props: { documentId: string; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
+export default function ReaderPage(props: { documentId: string; enterFromLibrary?: boolean; insights?: PaperInsightSource; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
   const queryClient = useQueryClient()
   const chat = usePaperChat(props.documentId)
+  const readerNotes = useReaderNotes(props.documentId)
   const [layout, setLayout] = React.useState<ReaderLayout>(loadReaderLayout)
   const [focusedGroupId, setFocusedGroupId] = React.useState<string | null>(null)
   const [revealReadingNonce, setRevealReadingNonce] = React.useState(0)
+  const [revealPdfNonce, setRevealPdfNonce] = React.useState(0)
   const [selection, setSelection] = React.useState<BlockSelection | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
+  const retryDocument = React.useCallback(async () => {
+    try {
+      await window.copilotix.retryDocument(props.documentId)
+      messageApi.success('已重新排队，将保留已完成的内容')
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '重试失败，请稍后再试')
+    }
+  }, [messageApi, props.documentId])
 
   const documentQuery = useQuery<DocumentDetails>({
     queryKey: ['document', props.documentId],
@@ -76,13 +90,18 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
     [markdown, mappings, translatedMarkdown, translatedSourceBlocks]
   )
   const selectBlock = React.useCallback((next: BlockSelection) => setSelection(next), [])
+  const openFigurePdf = React.useCallback((next: BlockSelection) => {
+    setLayout(current => revealView(current, 'pdf'))
+    setSelection(next)
+    setRevealPdfNonce(value => value + 1)
+  }, [])
 
   // Adding a selection never leaves the current reader; the chat tab shows the count.
   const { addSelection } = chat
   const addToChat = React.useCallback((selection: ReaderChatSelection) => {
     void addSelection(selection).then((failure) => {
       if (failure) messageApi.warning({ content: failure, key: 'paper-chat-pin' })
-      else messageApi.success({ content: '已加入 AI 问答选区', key: 'paper-chat-pin', duration: 1.5 })
+      else messageApi.success({ content: '已加入 Chat 选区', key: 'paper-chat-pin', duration: 1.5 })
     })
   }, [addSelection, messageApi])
   // A citation scrolls the reading views to its block; if none is on screen, the workbench shows one.
@@ -92,9 +111,10 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
   }, [selectBlock])
   const chatOptions = React.useMemo<ReaderChatOptions>(() => ({
     controller: chat,
+    insights: props.insights,
     onOpenSettings: props.onOpenSettings,
     onCitation: openCitation
-  }), [chat, openCitation, props.onOpenSettings])
+  }), [chat, openCitation, props.insights, props.onOpenSettings])
 
   const replaceAnnotations = React.useCallback(async (
     view: ReaderAnnotationView,
@@ -141,16 +161,16 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
 
   const translatedReady = Boolean(document.translatedMarkdown)
   return (
-    <section className="reader-page">
+    <section className={`reader-page${props.enterFromLibrary ? ' reader-from-library' : ''}`}>
       {contextHolder}
       <header className="reader-header">
-        <Space><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName}</Typography.Text></Space>
-        <Space>
+        <div className="reader-header-heading"><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName.replace(/\.pdf\s*$/iu, '')}</Typography.Text></div>
+        <Space className="reader-header-actions">
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
-          <Button type="text" icon={<CopyOutlined />} disabled={focusedView === 'pdf'} title={focusedView === 'pdf' ? 'PDF 视图没有可复制的文本' : undefined} onClick={() => void copyCurrent(document, focusedView, chat.turns, messageApi)} aria-label="复制当前内容" />
           <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
           </Dropdown>
+          <DocumentLifecycleActions summary={document.summary} messageApi={messageApi} onDeleted={props.onBack} />
         </Space>
       </header>
       <ReaderWorkspace
@@ -160,20 +180,28 @@ export default function ReaderPage(props: { documentId: string; onBack(): void; 
         focusedGroupId={focusedGroupId}
         onFocusGroup={setFocusedGroupId}
         revealReadingNonce={revealReadingNonce}
+        revealPdfNonce={revealPdfNonce}
         views={{
           pdfUrl: document.pdfUrl,
           mappings: document.mappings,
+          layoutJson: document.layoutJson,
           originalBlocks,
           translatedBlocks,
           translatedReady,
           taskStatus: document.summary.workflow.status,
+          taskError: document.summary.workflow.error,
+          onRetry: retryDocument,
           assetBaseUrl: document.assetBaseUrl,
           taskId: document.summary.id,
           annotations,
           onReplaceAnnotations: replaceAnnotations,
           selection,
           onSelect: selectBlock,
+          onOpenFigurePdf: openFigurePdf,
           onAddToChat: addToChat,
+          notes: readerNotes.notes,
+          onSaveNote: readerNotes.saveNote,
+          onDeleteNote: readerNotes.deleteNote,
           chat: chatOptions
         }}
       />
@@ -192,6 +220,7 @@ function ReaderWorkspace(props: {
   focusedGroupId: string | null
   onFocusGroup(groupId: string): void
   revealReadingNonce: number
+  revealPdfNonce: number
   views: ReaderViewsInput
 }): React.JSX.Element {
   const scrollSyncViews = React.useMemo(() => activeSyncedViews(props.layout), [props.layout])
@@ -204,6 +233,7 @@ function ReaderWorkspace(props: {
       onLayoutChange={props.onLayoutChange}
       onFocusGroup={props.onFocusGroup}
       revealReadingNonce={props.revealReadingNonce}
+      revealPdfNonce={props.revealPdfNonce}
     />
   )
 }
@@ -280,29 +310,6 @@ function toDocumentAnnotation(annotation: ReaderAnnotation, snapshot: ReaderAnno
     createdAt: annotation.createdAt,
     updatedAt: annotation.updatedAt
   }
-}
-
-async function copyCurrent(
-  document: DocumentDetails,
-  view: ReaderViewId,
-  turns: readonly PaperChatTurn[],
-  messageApi: ReturnType<typeof message.useMessage>[0]
-): Promise<void> {
-  const value = view === 'original' ? document.markdown
-    : view === 'translated' ? document.translatedMarkdown
-      : view === 'chat' ? chatTranscript(turns)
-        : ''
-  if (!value) return
-  await navigator.clipboard.writeText(value)
-  messageApi.success('已复制')
-}
-
-/** Questions as quotes, answers verbatim; evidence markers are kept as written. */
-export function chatTranscript(turns: readonly PaperChatTurn[]): string {
-  return turns
-    .filter((turn) => turn.answer.trim())
-    .map((turn) => `> ${turn.question.replace(/\n/gu, '\n> ')}\n\n${turn.answer.trim()}`)
-    .join('\n\n---\n\n')
 }
 
 async function saveDocument(

@@ -6,11 +6,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@shared/readerDocument'
 import { buildReaderDocumentBlocks } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
-import type { ReaderFigureGroup } from '../src/renderer/readerFigureGroups'
+import type { ReaderFigureGroup } from '../src/shared/readerFigureGroups'
 import MarkdownPane, { MARKDOWN_BLOCKS_PER_FRAME, MARKDOWN_INITIAL_BLOCKS } from '../src/renderer/components/MarkdownPane'
+import { collectAnnotationBlockTexts } from '../src/renderer/readerAnnotations'
+import type { ReaderNote } from '@shared/readerNotes'
+
+const figureMock = vi.hoisted(() => ({
+  initial: 'ready' as string,
+  notify: undefined as ((state: string) => void) | undefined,
+  callbacks: new Map<string, (state: string) => void>()
+}))
 
 vi.mock('../src/renderer/components/ReaderFigureSnapshot', () => ({
-  default: () => <div className="reader-figure-snapshot" data-rendered="true">original PDF figure</div>
+  default: (props: { group: ReaderFigureGroup; onStateChange(state: string): void }) => {
+    React.useEffect(() => { figureMock.notify = props.onStateChange; figureMock.callbacks.set(props.group.id, props.onStateChange); props.onStateChange(figureMock.initial) }, [])
+    return <div className="reader-figure-snapshot" data-reader-annotation-ignore="true" data-rendered="true">original PDF figure</div>
+  }
 }))
 
 let naturalWidth = 320
@@ -23,10 +34,23 @@ class ResizeObserverMock {
 }
 
 beforeEach(() => {
+  figureMock.initial = 'ready'
+  figureMock.notify = undefined
+  figureMock.callbacks.clear()
   naturalWidth = 320
   decodeImage = vi.fn().mockResolvedValue(undefined)
   scrollIntoView = vi.fn()
   vi.stubGlobal('ResizeObserver', ResizeObserverMock)
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-minimap') ? 60 : 400
+  })
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-minimap') ? 400 : 200
+  })
+  // The pane becomes ready only after the minimap's first overview, which needs a laid-out scroller.
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-scroll') ? 1_000 : 0
+  })
   Object.defineProperty(HTMLImageElement.prototype, 'complete', {
     configurable: true,
     get: () => false
@@ -52,6 +76,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   cleanup()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -82,6 +107,7 @@ describe('MarkdownPane', () => {
     fireEvent.load(image)
     await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     expect(article.getAttribute('aria-hidden')).toBe('false')
+    expect(view.container.querySelector<HTMLCanvasElement>('.markdown-minimap-canvas')!.width).toBeGreaterThan(1)
     expect(decodeImage).toHaveBeenCalledTimes(1)
 
     view.rerender(
@@ -248,13 +274,22 @@ describe('MarkdownPane', () => {
       assetSources: ['images/a.jpg', 'images/b.jpg'],
       captionMappingId: 'caption',
       fallbackLegendText: 'original legend',
-      fallbackLegendMarkdown: '原始图例',
+      status: 'complete',
+      reason: 'test fixture',
+      members: [
+        { mappingId: 'chart-a', bbox: [10, 20, 250, 300], kind: 'asset', sourceAsset: 'images/a.jpg', sourceText: '' },
+        { mappingId: 'chart-b', bbox: [260, 20, 500, 300], kind: 'asset', sourceAsset: 'images/b.jpg', sourceText: '' },
+        { mappingId: 'label', bbox: [10, 20, 250, 300], kind: 'supporting', sourceText: '(a)' },
+        { mappingId: 'legend', bbox: [260, 20, 500, 300], kind: 'supporting', sourceText: 'original legend' }
+      ],
       ownerBlockIndex: 0,
       captionBlockIndex: 2,
       memberBlockIndexes: [0, 1, 2],
-      captionMarkdown: '图 4：模型比较。',
-      captionPrefixMarkdown: ''
+      captionMarkdown: '图 4：模型比较。'
     }
+    // The crop is ready on first render, which unmounts the source images the pane still waits on;
+    // they are cached local assets here, so they count as decoded without a load event.
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', { configurable: true, get: () => true })
     const view = render(
       <MarkdownPane
         active
@@ -279,6 +314,80 @@ describe('MarkdownPane', () => {
     expect(caption.textContent).toBe('图 4：模型比较。')
     expect(snapshot.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(view.container.querySelectorAll('.markdown-body img')).toHaveLength(0)
+  })
+
+  it('preserves pending/failed sources, mixed prose, unrelated images and annotation text when a crop becomes ready', async () => {
+    figureMock.initial = 'pending'
+    const blocks = [
+      { ...block('a', 'Before text.\n\n![](images/a.jpg)  \n(a)\n\n![Other](images/other.jpg)\n\nAfter text.'), mappingIds: ['a', 'prose', 'other'], annotationKey: 'content:0' },
+      { ...block('caption', '图 1：第一段。\n\n完整第二段。'), annotationKey: 'content:1' }
+    ]
+    const group: ReaderFigureGroup = {
+      id: 'mixed', pageIndex: 0, cropBox: [10, 20, 500, 300], pageSize: [612, 792],
+      mappingIds: ['a', 'caption'], assetSources: ['a.jpg'], captionMappingId: 'caption',
+      captionBlockPosition: '0-caption', status: 'complete', reason: 'fixture',
+      members: [{ mappingId: 'a', kind: 'supporting', bbox: [10, 20, 20, 30], sourceText: '(a)' }],
+      fallbackLegendText: '', ownerBlockIndex: 0, captionBlockIndex: 1, memberBlockIndexes: [0, 1],
+      captionMarkdown: '图 1：第一段。\n\n完整第二段。'
+    }
+    const openPdf = vi.fn(), select = vi.fn()
+    const view = render(<MarkdownPane active blocks={blocks} figureGroups={[group]} pdfUrl="copilotix-asset://task/original.pdf"
+      assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]} highlightColor="yellow"
+      onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null}
+      onSelect={select} onOpenFigurePdf={openPdf} />)
+    // Sources and unrelated images decode before the overview is prepared.
+    for (const image of view.container.querySelectorAll<HTMLImageElement>('article img')) {
+      Object.defineProperty(image, 'complete', { configurable: true, value: true })
+      fireEvent.load(image)
+    }
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('preparing'))
+    expect(view.container.querySelector('article')?.getAttribute('aria-hidden')).toBe('true')
+    const before = collectAnnotationBlockTexts(view.container.querySelector('article')!)
+    expect(view.container.querySelectorAll('article img')).toHaveLength(2)
+    act(() => figureMock.notify?.('failed'))
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    expect(view.container.querySelectorAll('article img')).toHaveLength(2)
+    fireEvent.click(view.getByText('查看 PDF'))
+    expect(openPdf).toHaveBeenCalledWith({ mappingId: 'caption', blockPosition: '0-caption', origin: 'markdown' })
+    expect(select).not.toHaveBeenCalled()
+    act(() => figureMock.notify?.('ready'))
+    expect(view.container.querySelectorAll('article img')).toHaveLength(1)
+    expect(view.getByText('Before text.')).toBeTruthy()
+    expect(view.getByText('After text.')).toBeTruthy()
+    expect(view.getByText('完整第二段。')).toBeTruthy()
+    expect(view.container.querySelector('[data-annotation-block-key="content:0"]')?.getAttribute('data-block-ids')).toBe('a caption prose other')
+    expect(collectAnnotationBlockTexts(view.container.querySelector('article')!)).toEqual(before)
+  })
+
+  it('preserves shared captions, failed sources and annotation text while two figures finish independently', async () => {
+    figureMock.initial = 'pending'
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', { configurable: true, get: () => true })
+    const blocks = [{ ...block('a', '![](a.jpg)'), annotationKey: 'one' },
+      { ...block('c1', 'Figure 1: First.\n![](b.jpg)'), annotationKey: 'shared' },
+      { ...block('c2', '![](c.jpg)\nFigure 2: Second.'), annotationKey: 'two' }]
+    const make = (id: string, assets: string[], owner: number, caption: number, indexes: number[]): ReaderFigureGroup => ({
+      id, assetSources: assets, ownerBlockIndex: owner, captionBlockIndex: caption, memberBlockIndexes: indexes,
+      pageIndex: 0, pageSize: [612, 792], cropBox: [50, 50, 450, 150], mappingIds: id === 'first' ? ['a','c1'] : ['b','c','c2'],
+      captionMappingId: id === 'first' ? 'c1' : 'c2', captionMarkdown: '', fallbackLegendText: '', status: 'complete', reason: 'fixture', members: []
+    })
+    const view = render(<MarkdownPane active blocks={blocks} figureGroups={[make('first',['a.jpg'],0,1,[0,1]),make('second',['b.jpg','c.jpg'],2,2,[1,2])]}
+      pdfUrl="copilotix-asset://task/original.pdf" assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]}
+      highlightColor="yellow" onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null} onSelect={() => undefined} />)
+    const article = view.container.querySelector('article')!
+    const before = collectAnnotationBlockTexts(article)
+    expect(article.querySelectorAll('img')).toHaveLength(3)
+    expect(article.querySelectorAll('p.reader-figure-hidden-source')).toHaveLength(0)
+    act(() => figureMock.callbacks.get('first')?.('ready'))
+    expect(article.querySelectorAll('img')).toHaveLength(2)
+    act(() => figureMock.callbacks.get('second')?.('failed'))
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    expect(article.textContent).toContain('Figure 1: First.')
+    expect(article.textContent).toContain('Figure 2: Second.')
+    expect(article.querySelectorAll('img')).toHaveLength(2)
+    act(() => figureMock.callbacks.get('second')?.('ready'))
+    expect(article.querySelectorAll('img')).toHaveLength(0)
+    expect(article.querySelectorAll('.reader-figure-snapshot')).toHaveLength(2)
+    expect(collectAnnotationBlockTexts(article)).toEqual(before)
   })
 
   it('uses instant PDF navigation without feeding the synthetic scroll back into selection', async () => {
@@ -392,7 +501,7 @@ describe('MarkdownPane', () => {
     document.dispatchEvent(new Event('selectionchange'))
 
     const toolbar = await view.findByRole('toolbar', { name: '文本标注' })
-    expect(toolbar.querySelectorAll(':scope > button')).toHaveLength(3)
+    expect(toolbar.querySelectorAll(':scope > button')).toHaveLength(3) // no note tool without onSaveNote
     fireEvent.contextMenu(view.getByRole('button', { name: '荧光笔高亮' }))
     expect(view.getAllByRole('option')).toHaveLength(5)
     fireEvent.click(view.getByRole('option', { name: '选择蓝色' }))
@@ -416,6 +525,62 @@ describe('MarkdownPane', () => {
       view: 'original',
       text: 'Alpha'
     }))
+  })
+
+  it('writes a sticky note on a selection, then reopens, edits and deletes it from its quill', async () => {
+    Object.defineProperty(Range.prototype, 'getClientRects', {
+      configurable: true,
+      value: () => [{ top: 120, right: 220, bottom: 144, left: 100, width: 120, height: 24 }]
+    })
+    const saved: ReaderNote[] = []
+    const deleted: string[] = []
+    function Harness(): React.JSX.Element {
+      const [notes, setNotes] = React.useState<ReaderNote[]>([])
+      return (
+        <MarkdownPane
+          active
+          blocks={[{ ...block('first', 'Alpha beta'), annotationKey: 'content:0' }]}
+          assetBaseUrl="copilotix-asset://task/"
+          taskId="task"
+          view="translated"
+          annotations={[]}
+          highlightColor="yellow"
+          onHighlightColorChange={() => undefined}
+          onReplaceAnnotations={async () => undefined}
+          notes={notes}
+          onSaveNote={async (note) => { saved.push(note); setNotes(items => [...items.filter(item => item.id !== note.id), note]) }}
+          onDeleteNote={async (id) => { deleted.push(id); setNotes(items => items.filter(item => item.id !== id)) }}
+          selection={null}
+          onSelect={() => undefined}
+        />
+      )
+    }
+    const view = render(<Harness />)
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    selectBetween(view.getByText('Alpha beta').firstChild!, 6, view.getByText('Alpha beta').firstChild!, 10)
+    document.dispatchEvent(new Event('selectionchange'))
+    fireEvent.click(await view.findByRole('button', { name: '写笔记' }))
+
+    const card = await view.findByRole('dialog', { name: '新建笔记' })
+    expect(card.textContent).toContain('beta')
+    fireEvent.change(view.getByRole('textbox', { name: '笔记内容' }), { target: { value: '  第一条笔记  ' } })
+    fireEvent.click(view.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull())
+    expect(saved[0]).toMatchObject({ view: 'translated', body: '第一条笔记', anchors: [{ blockKey: 'content:0', startOffset: 6, endOffset: 10, quote: 'beta', prefix: 'Alpha ', suffix: '' }] })
+
+    fireEvent.click(await view.findByRole('button', { name: '查看笔记' }))
+    const input = await view.findByRole('textbox', { name: '笔记内容' })
+    expect((input as HTMLTextAreaElement).value).toBe('第一条笔记')
+    fireEvent.change(input, { target: { value: '改过的笔记' } })
+    fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
+    await waitFor(() => expect(saved).toHaveLength(2))
+    expect(saved[1]).toMatchObject({ id: saved[0]!.id, body: '改过的笔记', createdAt: saved[0]!.createdAt })
+
+    fireEvent.click(await view.findByRole('button', { name: '查看笔记' }))
+    fireEvent.click(await view.findByRole('button', { name: '删除' }))
+    fireEvent.click(view.getByRole('button', { name: '确认删除' }))
+    await waitFor(() => expect(deleted).toEqual([saved[0]!.id]))
+    await waitFor(() => expect(view.queryByRole('button', { name: '查看笔记' })).toBeNull())
   })
 })
 

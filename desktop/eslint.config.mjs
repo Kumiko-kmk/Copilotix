@@ -34,7 +34,7 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            { group: ['@main/*', '@renderer/*', 'electron', 'node:*'], message: 'Core code cannot depend on a runtime layer.' }
+            { group: ['@main/*', '@renderer/*', '@runtime/*', 'electron', 'node:*'], message: 'Core code cannot depend on a runtime layer.' }
           ]
         }
       ]
@@ -47,7 +47,7 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            { group: ['@main/*', '@renderer/*', 'electron', 'node:*'], message: 'Shared code cannot depend on a runtime layer.' }
+            { group: ['@main/*', '@renderer/*', '@runtime/*', 'electron', 'node:*'], message: 'Shared code cannot depend on a runtime layer.' }
           ]
         }
       ]
@@ -60,7 +60,7 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            { group: ['@main/*', '@renderer/*'], message: 'Preload may depend on shared contracts, not main or renderer modules.' }
+            { group: ['@main/*', '@renderer/*', '@runtime/*'], message: 'Preload may depend on shared contracts, not main, renderer or runtime modules.' }
           ]
         }
       ]
@@ -73,7 +73,7 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            { group: ['@main/*', 'electron', 'node:*'], message: 'Renderer must use the preload API for privileged work.' }
+            { group: ['@main/*', '@runtime/*', 'electron', 'node:*'], message: 'Renderer must use the preload API for privileged work.' }
           ]
         }
       ]

@@ -1,12 +1,12 @@
 # 常见问题
 
-**适用版本：1.1.0。** 先查看任务错误与服务状态，再按以下步骤排查。
+**适用版本：1.2.0。** 先查看任务错误与服务状态，再按以下步骤排查。
 
 ## 安装与升级
 
 | 问题 | 检查或操作 |
 | --- | --- |
-| Windows 提示发布者未知 | 1.1.0 是经授权的未签章发布；确认下载自本仓库 Release 并核对 SHA-256，见[安装指南](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade) |
+| Windows 提示发布者未知 | 未签章安装包可能出现此提示；签章状态以对应 Release 说明为准，确认下载自本仓库，见[安装指南](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade) |
 | 只下载 `setup.exe` 能安装吗？ | 可以，独立 Setup 已内嵌完整程序 |
 | 只复制 `Copilotix.exe` 无法运行 | 开发副本依赖完整 `program/` 目录，保留 DLL、PAK 与资源，或使用正式 Setup |
 | 升级提示程序仍运行 | 等待任务结束，从系统托盘退出；关闭窗口可能只隐藏到托盘 |

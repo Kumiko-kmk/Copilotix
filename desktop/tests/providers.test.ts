@@ -252,11 +252,11 @@ describe('table provider transports', () => {
     const first = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
     const second = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
 
-    await Promise.all(Array.from({ length: 8 }, (_, index) =>
+    await Promise.all(Array.from({ length: 16 }, (_, index) =>
       (index % 2 === 0 ? first : second).translate(`request-${index}`)
     ))
 
-    expect(peak).toBe(3)
+    expect(peak).toBe(8)
   })
 
   it('applies a shared cooldown after a provider returns HTTP 429', async () => {

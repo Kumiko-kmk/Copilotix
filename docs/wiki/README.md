@@ -1,6 +1,6 @@
 # 中文 Wiki 的版本化源文件
 
-本目录与仓库 README 一起维护，对应 [GitHub Wiki](https://github.com/Kumiko-kmk/Copilotix/wiki)。指南以正式发布的 **1.1.0** 为基线；服务商当前模型权限和价格以官方说明为准。
+本目录与仓库 README 一起维护，对应 [GitHub Wiki](https://github.com/Kumiko-kmk/Copilotix/wiki)。指南以 **1.2.0** 为基线；服务商当前模型权限和价格以官方说明为准。
 
 | 文件 | 发布页面 |
 | --- | --- |

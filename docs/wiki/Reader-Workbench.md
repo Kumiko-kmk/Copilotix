@@ -1,6 +1,6 @@
 # 阅读工作台
 
-**适用版本：1.1.0。** 同一篇文献可以在多个分组中对照 PDF、原文、中文和 AI 问答。
+**适用版本：1.2.0。** 同一篇文献可以在多个分组中对照 PDF、原文、中文和 AI 问答。
 
 ![实际运行：PDF、中文和原文三视图](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/workbench-split-1.1.0.png)
 

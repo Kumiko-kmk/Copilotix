@@ -1,13 +1,10 @@
-import SafeMarkdown, { resolveAsset } from './SafeMarkdown'
+import SafeMarkdown from './SafeMarkdown'
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Button, Spin } from 'antd'
-import { HighlightOutlined, MessageOutlined, UnderlineOutlined } from '@ant-design/icons'
-import 'katex/dist/katex.min.css'
 import type { ReaderBlock } from '@shared/readerDocument'
 import {
   applyReaderAnnotationOperation,
-  READER_HIGHLIGHT_COLORS,
   resolveReaderAnnotation
 } from '@shared/readerAnnotations'
 import type {
@@ -27,10 +24,16 @@ import {
   type ReaderTextSelection
 } from '../readerAnnotations'
 import MarkdownMinimap from './MarkdownMinimap'
-import ReaderFigureSnapshot from './ReaderFigureSnapshot'
-import type { ReaderFigureGroup } from '../readerFigureGroups'
+import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnapshot'
+import ReaderFigureMosaic from './ReaderFigureMosaic'
+import { figureMosaic, type FigureMosaic } from '../readerFigureMosaic'
+import { figureAssetName, markdownAssetSources, type ReaderFigureGroup } from '@shared/readerFigureGroups'
 import { recordReaderDuration } from '../readerPerformance'
 import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
+import { readerReferenceSections } from '../readerReferenceSections'
+import { useReaderNoteLayer } from './ReaderNotes'
+import ReaderAnnotationToolbar from './ReaderAnnotationToolbar'
+import type { ReaderNote } from '@shared/readerNotes'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 /**
@@ -44,6 +47,7 @@ const SCROLL_IDLE_DELAY_MS = 120
 
 type RenderState =
   | { status: 'loading'; completedImages: number; totalImages: number }
+  | { status: 'preparing' }
   | { status: 'ready' }
   | { status: 'error'; message: string }
 
@@ -59,6 +63,7 @@ export default function MarkdownPane(props: {
   assetBaseUrl: string
   pdfUrl?: string
   figureGroups?: ReaderFigureGroup[]
+  onOpenFigurePdf?(selection: BlockSelection): void
   taskId: string
   view: ReaderAnnotationView
   annotations: ReaderAnnotation[]
@@ -66,6 +71,10 @@ export default function MarkdownPane(props: {
   onHighlightColorChange(color: HighlightColor): void
   onReplaceAnnotations(annotations: ReaderAnnotation[]): Promise<void>
   onAddToChat?(selection: ReaderChatSelection): void
+  /** Sticky notes of this view; without `onSaveNote` the note tool is hidden. */
+  notes?: readonly ReaderNote[]
+  onSaveNote?(note: ReaderNote): Promise<void>
+  onDeleteNote?(noteId: string): Promise<void>
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
   onRenderReady?(): void
@@ -105,6 +114,7 @@ export default function MarkdownPane(props: {
     }
   }
   const contentRevision = contentRevisionRef.current.revision
+  const referenceSections = React.useMemo(() => readerReferenceSections(props.blocks), [props.blocks])
   const [annotationOwner] = React.useState(() => `reader-annotations-${crypto.randomUUID()}`)
   const selectionFrameRef = React.useRef<number | null>(null)
   const paletteTimerRef = React.useRef<number | null>(null)
@@ -119,6 +129,7 @@ export default function MarkdownPane(props: {
     totalImages: 0
   })
   const ready = renderState.status === 'ready'
+  const resourcesReady = renderState.status === 'preparing' || ready
   const readyRef = React.useRef(ready)
   readyRef.current = ready
 
@@ -151,12 +162,55 @@ export default function MarkdownPane(props: {
   )
   const allBlocksMounted = mountedCount >= props.blocks.length
   const figureGroupByBlockIndex = React.useMemo(() => {
-    const result = new Map<number, ReaderFigureGroup>()
+    const result = new Map<number, ReaderFigureGroup[]>()
     for (const group of props.figureGroups ?? []) {
-      for (const index of group.memberBlockIndexes) result.set(index, group)
+      for (const index of group.memberBlockIndexes) result.set(index, [...(result.get(index) ?? []), group])
     }
     return result
   }, [props.figureGroups])
+  const figureRevision = contentRevision + '|' + props.pdfUrl
+  const [figureStates, setFigureStates] = React.useState<{ revision: string; states: Record<string, FigureRenderState> }>({ revision: figureRevision, states: {} })
+  const readyFigureKey = figureStates.revision === figureRevision
+    ? Object.keys(figureStates.states).filter(id => figureStates.states[id] === 'ready').sort().join('\0') : ''
+  const readyFigureIds = React.useMemo(() => new Set(readyFigureKey ? readyFigureKey.split('\0') : []), [readyFigureKey])
+  const failedFigureKey = figureStates.revision === figureRevision
+    ? Object.keys(figureStates.states).filter(id => figureStates.states[id] === 'failed').sort().join('\0') : ''
+  // A figure without a PDF crop (unconfirmed, or its crop failed) keeps side-by-side panels
+  // where the PDF puts them instead of one image per line (readerFigureMosaic.ts).
+  const figureMosaics = React.useMemo(() => {
+    const failed = new Set(failedFigureKey ? failedFigureKey.split('\0') : [])
+    const groups = props.figureGroups ?? []
+    const result = new Map<string, FigureMosaic>()
+    for (const group of groups) {
+      if (group.status === 'complete' && !failed.has(group.id)) continue
+      // A panel claimed by two figures is shown once, in its own paragraph.
+      const names = new Set(group.assetSources.map(figureAssetName))
+      if (groups.some(other => other !== group && other.assetSources.some(asset => names.has(figureAssetName(asset))))) continue
+      const mosaic = figureMosaic(group, group.memberBlockIndexes.flatMap(index => markdownAssetSources(props.blocks[index]?.markdown ?? '')))
+      if (mosaic) result.set(group.id, mosaic)
+    }
+    return result
+  }, [props.figureGroups, props.blocks, failedFigureKey])
+  const minimapVisualRevision = React.useMemo(() => JSON.stringify([
+    figureRevision, [...readyFigureIds], [...figureMosaics.keys()]
+  ]), [figureRevision, readyFigureIds, figureMosaics])
+  const figuresSettled = !props.pdfUrl || Array.from(figureGroupByBlockIndex.entries()).every(([index, groups]) => groups.every(group =>
+    group.status !== 'complete' || group.ownerBlockIndex !== index || props.blocks[index]?.role !== 'content' ||
+    (figureStates.revision === figureRevision &&
+      (figureStates.states[group.id] === 'ready' || figureStates.states[group.id] === 'failed'))
+  ))
+  const markMinimapPrepared = React.useCallback(() => {
+    setRenderState(previous => previous.status === 'preparing' ? { status: 'ready' } : previous)
+  }, [])
+  React.useEffect(() => {
+    if (ready) onRenderReadyRef.current?.()
+  }, [ready])
+  const setFigureState = React.useCallback((id: string, state: FigureRenderState) => {
+    setFigureStates(previous => {
+      const states = previous.revision === figureRevision ? previous.states : {}
+      return states[id] === state && previous.revision === figureRevision ? previous : { revision: figureRevision, states: { ...states, [id]: state } }
+    })
+  }, [figureRevision])
 
   const closeTextSelection = React.useCallback((clearBrowser = false) => {
     if (paletteTimerRef.current !== null) {
@@ -203,7 +257,13 @@ export default function MarkdownPane(props: {
           )
         })
         const assets = Promise.all(images.map(async (image) => {
-          await waitForImage(image, controller.signal)
+          try {
+            await waitForImage(image, controller.signal)
+          } catch (error) {
+            // Whole-figure rendering has its own failure fallback; a broken
+            // constituent must not reject a successfully prepared PDF crop.
+            if (controller.signal.aborted || !image.hasAttribute('data-reader-figure-source')) throw error
+          }
           completedImages += 1
           if (!controller.signal.aborted) {
             setRenderState({ status: 'loading', completedImages, totalImages: images.length })
@@ -213,8 +273,7 @@ export default function MarkdownPane(props: {
         await Promise.race([Promise.all([assets, fonts]), timeout])
         await waitForAnimationFrames(2, controller.signal)
         if (!controller.signal.aborted) {
-          setRenderState({ status: 'ready' })
-          onRenderReadyRef.current?.()
+          setRenderState({ status: 'preparing' })
         }
       } catch (error) {
         if (controller.signal.aborted) return
@@ -287,7 +346,7 @@ export default function MarkdownPane(props: {
     navigationElementsRef.current = []
     blockElementsRef.current = new Map()
     ambiguousMappingIdsRef.current = new Set()
-  }, [contentRevision, renderAttempt])
+  }, [contentRevision, renderAttempt, figureStates])
 
   React.useLayoutEffect(() => {
     if (!props.active || !ready || !articleRef.current || !containerRef.current) return
@@ -314,7 +373,7 @@ export default function MarkdownPane(props: {
         resizeFrameRef.current = null
       }
     }
-  }, [props.active, ready, rebuildBlockPositions])
+  }, [props.active, ready, rebuildBlockPositions, figureStates])
 
   React.useLayoutEffect(() => {
     if (!ready || initialScrollAppliedRef.current || !containerRef.current) return
@@ -323,11 +382,24 @@ export default function MarkdownPane(props: {
   }, [props.initialScrollTop, ready])
 
   React.useLayoutEffect(() => {
-    if (!ready || !articleRef.current) return
+    if (!resourcesReady || !figuresSettled || !articleRef.current) return
     const ranges = buildReaderHighlightRanges(articleRef.current, props.annotations)
     setYellowHighlightRanges(ranges.get('copilotix-highlight-yellow') ?? [])
     return registerReaderHighlightRanges(annotationOwner, ranges)
-  }, [annotationOwner, props.annotations, props.blocks, ready, renderAttempt])
+  }, [annotationOwner, props.annotations, props.blocks, resourcesReady, figuresSettled, renderAttempt, figureStates])
+
+  const noteContentKey = React.useMemo(() => ({}), [props.blocks, renderAttempt, figureStates, layoutRevision])
+  const noteLayer = useReaderNoteLayer({
+    active: props.active,
+    ready: resourcesReady && figuresSettled,
+    view: props.view,
+    notes: props.notes ?? NO_NOTES,
+    containerRef,
+    articleRef,
+    contentKey: noteContentKey,
+    onSave: props.onSaveNote,
+    onDelete: props.onDeleteNote
+  })
 
   React.useEffect(() => {
     if (!props.active || !ready) {
@@ -492,6 +564,13 @@ export default function MarkdownPane(props: {
     closeTextSelection(true)
   }, [closeTextSelection, props, textSelection])
 
+  const { startNote } = noteLayer
+  const writeNote = React.useCallback(() => {
+    if (!textSelection) return
+    startNote(textSelection)
+    closeTextSelection(true)
+  }, [closeTextSelection, startNote, textSelection])
+
   React.useEffect(() => () => {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
     if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current)
@@ -512,7 +591,7 @@ export default function MarkdownPane(props: {
   }, [])
 
   return (
-    <div className="markdown-pane" ref={paneRef}>
+    <div className="markdown-pane" ref={paneRef} data-render-state={renderState.status}>
       <div
         id={documentId}
         className={`markdown-scroll markdown-render-${renderState.status}`}
@@ -521,12 +600,12 @@ export default function MarkdownPane(props: {
         aria-busy={!ready}
         data-render-state={renderState.status}
       >
-        {renderState.status === 'loading' ? (
+        {renderState.status === 'loading' || renderState.status === 'preparing' ? (
           <div className="markdown-render-status" role="status">
             <Spin size="large" />
             <span>正在渲染 Markdown…</span>
             {!allBlocksMounted ? <small>段落 {mountedCount} / {props.blocks.length}</small> : null}
-            {renderState.totalImages > 0 ? (
+            {renderState.status === 'loading' && renderState.totalImages > 0 ? (
               <small>图片 {renderState.completedImages} / {renderState.totalImages}</small>
             ) : null}
           </div>
@@ -550,17 +629,22 @@ export default function MarkdownPane(props: {
         >
           {props.blocks.slice(0, mountedCount).map((block, index) => {
             const blockId = block.mappingIds[0] ?? `markdown-${index}`
-            const figureGroup = figureGroupByBlockIndex.get(index)
+            const figureGroups = figureGroupByBlockIndex.get(index)
             return (
               <MarkdownBlockView
                 key={`${blockId}-${index}`}
                 block={block}
-                active={props.selection !== null && (figureGroup
-                  ? figureGroup.ownerBlockIndex === index && figureGroup.mappingIds.includes(props.selection.mappingId)
+                referenceSection={referenceSections.has(index)}
+                active={props.selection !== null && (figureGroups
+                  ? figureGroups.some(group => group.ownerBlockIndex === index && group.mappingIds.includes(props.selection!.mappingId))
                   : block.mappingIds.includes(props.selection.mappingId))}
                 assetBaseUrl={props.assetBaseUrl}
                 pdfUrl={props.pdfUrl}
-                figureGroup={figureGroup}
+                figureGroups={figureGroups}
+                readyFigureIds={figureGroups ? readyFigureIds : NO_READY_FIGURES}
+                figureMosaics={figureGroups ? figureMosaics : NO_MOSAICS}
+                onFigureStateChange={setFigureState}
+                onOpenFigurePdf={props.onOpenFigurePdf}
                 blockIndex={index}
                 onFigureRendered={markFigureRendered}
                 onSelect={selectFromMarkdown}
@@ -587,19 +671,23 @@ export default function MarkdownPane(props: {
             onHighlight={() => applyTextAnnotation('highlight')}
             onUnderline={() => applyTextAnnotation('underline')}
             onAddToChat={addToChat}
+            onNote={noteLayer.enabled ? writeNote : undefined}
           />,
           document.body
         ) : null}
+        {noteLayer.layer}
       </div>
       <MarkdownMinimap
         active={props.active}
-        ready={ready}
+        ready={ready || (resourcesReady && figuresSettled)}
         layoutRevision={layoutRevision}
+        visualRevision={minimapVisualRevision}
         controlledId={documentId}
         scrollerRef={containerRef}
         articleRef={articleRef}
         yellowHighlightRanges={yellowHighlightRanges}
         onDragStateChange={onMinimapDragStateChange}
+        onPrepared={markMinimapPrepared}
       />
     </div>
   )
@@ -625,12 +713,20 @@ function stringArraysEqual(left: string[], right: string[]): boolean {
   return left === right || (left.length === right.length && left.every((value, index) => value === right[index]))
 }
 
+const NO_READY_FIGURES: ReadonlySet<string> = new Set()
+const NO_NOTES: readonly ReaderNote[] = []
+const NO_MOSAICS: ReadonlyMap<string, FigureMosaic> = new Map()
 const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   block: ReaderBlock
+  referenceSection: boolean
   active: boolean
   assetBaseUrl: string
   pdfUrl?: string
-  figureGroup?: ReaderFigureGroup
+  figureGroups?: ReaderFigureGroup[]
+  readyFigureIds: ReadonlySet<string>
+  figureMosaics: ReadonlyMap<string, FigureMosaic>
+  onFigureStateChange(id: string, state: FigureRenderState): void
+  onOpenFigurePdf?(selection: BlockSelection): void
   blockIndex: number
   onFigureRendered(): void
   onSelect(selection: BlockSelection): void
@@ -661,10 +757,9 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
     )
   }
 
-  const figureOwner = props.figureGroup?.ownerBlockIndex === props.blockIndex
-  const navigationMappingIds = props.figureGroup
-    ? figureOwner ? props.figureGroup.mappingIds : []
-    : props.block.mappingIds
+  const readyGroups = props.figureGroups?.filter(group => group.status === 'complete' && props.readyFigureIds.has(group.id)) ?? []
+  const navigationMappingIds = [...new Set([...readyGroups.filter(group => group.ownerBlockIndex === props.blockIndex).flatMap(group => group.mappingIds),
+    ...props.block.mappingIds.filter(id => !readyGroups.some(group => group.mappingIds.includes(id)))])]
 
   return (
     <div
@@ -672,21 +767,25 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
       data-mapping-ids={props.block.mappingIds.join(' ')}
       data-annotation-block-key={props.block.annotationKey}
       data-reader-role={props.block.role}
-      className={props.active ? 'markdown-block active' : 'markdown-block'}
+      className={'markdown-block' + (props.active ? ' active' : '') + (props.referenceSection ? ' reader-references' : '')}
       onClick={() => {
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return
         const mappingId = navigationMappingIds[0]
         if (mappingId) props.onSelect({ mappingId, origin: 'markdown' })
       }}
     >
-      {props.figureGroup && props.pdfUrl ? (
+      {props.figureGroups && props.pdfUrl ? (
         <FigureBlockPresentation
           block={props.block}
           blockIndex={props.blockIndex}
-          group={props.figureGroup}
+          groups={props.figureGroups}
           pdfUrl={props.pdfUrl}
           assetBaseUrl={props.assetBaseUrl}
           onRendered={props.onFigureRendered}
+          readyFigureIds={props.readyFigureIds}
+          mosaics={props.figureMosaics}
+          onStateChange={props.onFigureStateChange}
+          onOpenPdf={props.onOpenFigurePdf}
         />
       ) : (
         <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} />
@@ -698,131 +797,67 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
 function FigureBlockPresentation(props: {
   block: ReaderBlock
   blockIndex: number
-  group: ReaderFigureGroup
+  groups: ReaderFigureGroup[]
   pdfUrl: string
   assetBaseUrl: string
   onRendered(): void
+  readyFigureIds: ReadonlySet<string>
+  mosaics: ReadonlyMap<string, FigureMosaic>
+  onStateChange(id: string, state: FigureRenderState): void
+  onOpenPdf?(selection: BlockSelection): void
 }): React.JSX.Element {
-  const isOwner = props.blockIndex === props.group.ownerBlockIndex
-  const isCaption = props.blockIndex === props.group.captionBlockIndex
-  const hiddenMarkdown = stripMarkdownImages(isCaption ? props.group.captionPrefixMarkdown : props.block.markdown)
+  const owners = props.groups.filter(group => group.ownerBlockIndex === props.blockIndex)
+  const isCaption = props.groups.some(group => props.blockIndex === group.captionBlockIndex)
+  const presentation = React.useMemo(() => {
+    const ready = props.groups.filter(group => group.status === 'complete' && props.readyFigureIds.has(group.id))
+    return {
+    // A shared paragraph may contain one caption and another figure's image.
+    // Only successful crops can hide their own source assets and graphical text.
+    assets: props.groups.flatMap(group => group.assetSources),
+    // Panels drawn in a mosaic are hidden in every paragraph that holds them.
+    hiddenAssets: [...ready.flatMap(group => group.assetSources),
+      ...props.groups.flatMap(group => props.mosaics.get(group.id)?.tiles.map(tile => tile.sourceAsset) ?? [])],
+    hiddenTexts: ready.flatMap(group =>
+      group.supportingTextsByBlock?.[props.blockIndex] ?? group.members.filter(member => member.kind === 'supporting').map(member => member.sourceText)),
+    ready: true
+    }
+  }, [props.groups, props.blockIndex, props.readyFigureIds, props.mosaics])
+  const source = <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} figurePresentation={presentation} />
   return (
     <>
-      {hiddenMarkdown ? (
-        <div className="reader-figure-hidden-source" aria-hidden="true">
-          <SafeMarkdown markdown={hiddenMarkdown} assetBaseUrl={props.assetBaseUrl} />
-        </div>
-      ) : null}
-      {isOwner ? (
+      {owners.filter(group => group.status === 'complete').map(group => (
         <ReaderFigureSnapshot
+          key={props.pdfUrl + '|' + group.id}
           pdfUrl={props.pdfUrl}
-          group={props.group}
+          group={group}
+          preRender
           onRendered={props.onRendered}
-          fallback={(
-            <div className="reader-figure-fallback">
-              <div className="reader-figure-fallback-images">
-                {props.group.assetSources.map((asset) => (
-                  <img key={asset} src={resolveAsset(asset, props.assetBaseUrl)} alt="" />
-                ))}
-              </div>
-              <SafeMarkdown markdown={props.group.fallbackLegendMarkdown} assetBaseUrl={props.assetBaseUrl} />
-            </div>
-          )}
+          onStateChange={state => props.onStateChange(group.id, state)}
         />
-      ) : null}
-      {isCaption ? (
-        <div className="reader-figure-caption">
-          <SafeMarkdown markdown={props.group.captionMarkdown} assetBaseUrl={props.assetBaseUrl} />
-        </div>
-      ) : null}
+      ))}
+      {owners.map(group => {
+        const mosaic = props.mosaics.get(group.id)
+        return mosaic ? <ReaderFigureMosaic key={'mosaic|' + group.id} mosaic={mosaic} assetBaseUrl={props.assetBaseUrl} /> : null
+      })}
+      {isCaption ? <div className="reader-figure-caption">{source}</div> : source}
+      {props.onOpenPdf ? owners.map(group => {
+        const mappingId = group.captionMappingId || group.mappingIds[0]
+        return mappingId ? (
+        <button key={group.id} type="button" className="reader-figure-action" data-reader-annotation-ignore="true"
+          onClick={event => {
+            event.stopPropagation()
+            // The selected mapping retains its stored identity. PDF reveals use
+            // that mapping, not a synthetic figure ID.
+            props.onOpenPdf?.({ mappingId, blockPosition: group.captionBlockPosition ||
+              group.members.find(member => member.mappingId === mappingId)?.blockPosition, origin: 'markdown' })
+          }} aria-label={'查看 PDF 第 ' + (group.pageIndex + 1) + ' 页整图'}>
+          查看 PDF
+        </button>
+        ) : null
+      }) : null}
     </>
   )
 }
-
-function stripMarkdownImages(markdown: string): string {
-  return markdown.replace(/!\[[^\]]*\]\([^)]*\)\s*[\\ ]*/gu, '').trim()
-}
-
-const HIGHLIGHT_COLOR_VALUES: Record<HighlightColor, string> = {
-  yellow: '#F4C542',
-  green: '#67C587',
-  blue: '#64A8E8',
-  pink: '#E98AB4',
-  purple: '#A98BEA'
-}
-
-function ReaderAnnotationToolbar(props: {
-  selection: ReaderTextSelection
-  color: HighlightColor
-  paletteOpen: boolean
-  onPaletteOpen(): void
-  onPaletteClose(): void
-  onPaletteHover(): void
-  onPaletteHoverEnd(): void
-  onColorChange(color: HighlightColor): void
-  onHighlight(): void
-  onUnderline(): void
-  onAddToChat(): void
-}): React.JSX.Element {
-  const above = props.selection.rect.top >= 92
-  const center = props.selection.rect.left + props.selection.rect.width / 2
-  const left = Math.max(68, Math.min(window.innerWidth - 68, center))
-  const top = above ? props.selection.rect.top - 10 : props.selection.rect.bottom + 10
-  return (
-    <div
-      className={`reader-annotation-toolbar ${above ? 'above' : 'below'}`}
-      data-testid="reader-annotation-toolbar"
-      style={{ left, top }}
-      onMouseDown={(event) => event.preventDefault()}
-      role="toolbar"
-      aria-label="文本标注"
-    >
-      {props.paletteOpen ? (
-        <div className="reader-highlight-palette" role="listbox" aria-label="荧光笔颜色">
-          {READER_HIGHLIGHT_COLORS.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={color === props.color ? 'active' : ''}
-              style={{ '--highlight-swatch': HIGHLIGHT_COLOR_VALUES[color] } as React.CSSProperties}
-              aria-label={`选择${highlightColorLabel(color)}`}
-              aria-selected={color === props.color}
-              role="option"
-              onClick={() => {
-                props.onColorChange(color)
-                props.onPaletteClose()
-              }}
-            />
-          ))}
-        </div>
-      ) : null}
-      <button
-        type="button"
-        aria-label="荧光笔高亮"
-        onClick={props.onHighlight}
-        onMouseEnter={props.onPaletteHover}
-        onMouseLeave={props.onPaletteHoverEnd}
-        onContextMenu={(event) => {
-          event.preventDefault()
-          props.onPaletteOpen()
-        }}
-      >
-        <HighlightOutlined style={{ color: HIGHLIGHT_COLOR_VALUES[props.color] }} />
-      </button>
-      <button type="button" aria-label="添加下划线" onClick={props.onUnderline}>
-        <UnderlineOutlined />
-      </button>
-      <button type="button" aria-label="添加到对话" onClick={props.onAddToChat}>
-        <MessageOutlined />
-      </button>
-    </div>
-  )
-}
-
-function highlightColorLabel(color: HighlightColor): string {
-  return ({ yellow: '黄色', green: '绿色', blue: '蓝色', pink: '粉色', purple: '紫色' })[color]
-}
-
 
 function nearestBlockPosition(positions: BlockPosition[], target: number): BlockPosition | null {
   if (positions.length === 0) return null

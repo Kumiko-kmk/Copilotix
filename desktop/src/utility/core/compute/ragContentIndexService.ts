@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { lstat, readFile } from 'node:fs/promises'
-import { PathPolicy, type PathPolicyPort } from '../persistence/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
+import type { PathPolicyPort } from '@core/ports'
 import { V2Database } from '../persistence/v2Database'
 import { SqliteRagRepository, type RagContentRevisionRecord } from '../persistence/sqliteRagRepository'
 import { blockMappingSchema } from '@shared/ipcSchemas'

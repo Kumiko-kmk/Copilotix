@@ -131,6 +131,7 @@ export default function ReaderWorkbench(props: {
   onFocusGroup(groupId: string): void
   /** Bump to make sure a reading view is on screen (e.g. after a chat citation). */
   revealReadingNonce?: number
+  revealPdfNonce?: number
 }): React.JSX.Element {
   const rootRef = React.useRef<HTMLDivElement>(null)
   const layoutRef = React.useRef(props.layout)
@@ -276,6 +277,9 @@ export default function ReaderWorkbench(props: {
     const next = ensureReadingView(layout, available)
     if (next !== layout) changeRef.current(next)
   }, [props.revealReadingNonce])
+  React.useEffect(() => {
+    if (props.revealPdfNonce) setMaximized(null)
+  }, [props.revealPdfNonce])
 
   // Keyboard shortcuts, active while the reader (and so the workbench) is mounted.
   React.useEffect(() => {
@@ -449,7 +453,6 @@ function SplitView(props: { split: LayoutSplit }): React.JSX.Element {
                 aria-valuemax={Math.round(cumulative + sizes[index]! - minPercent(index))}
                 aria-valuenow={Math.round(cumulative)}
                 tabIndex={0}
-                title="拖动调整大小，双击平均分配"
                 onPointerDown={(event) => {
                   event.preventDefault()
                   event.currentTarget.focus()
@@ -587,7 +590,6 @@ function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
                     aria-selected={active}
                     aria-controls={`${baseId}-panel-${view}`}
                     tabIndex={active ? 0 : -1}
-                    title={`${spec.label}：拖动可移动或拆分，双击最大化，右键查看更多操作`}
                     onPointerDown={(event) => actions.beginTabPointer(event, view)}
                     onClick={() => {
                       if (actions.consumeDragClick()) return
@@ -605,7 +607,7 @@ function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
                     <span className="reader-tab-label">{spec.tab ?? spec.label}</span>
                   </button>
                   {canHide ? (
-                    <button type="button" className="reader-tab-close" aria-label={`关闭 ${spec.label}`} title="关闭视图（Ctrl+W，可从 + 重新打开）" onClick={() => actions.hide(view)}>
+                    <button type="button" className="reader-tab-close" aria-label={`关闭 ${spec.label}`} onClick={() => actions.hide(view)}>
                       <CloseOutlined />
                     </button>
                   ) : null}
@@ -625,7 +627,7 @@ function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
                 onClick: onMenuClick
               }}
             >
-              <button type="button" className="reader-group-button reader-tab-add" aria-label="打开已关闭的视图" title="打开已关闭的视图（Ctrl+Shift+T 恢复最近关闭）">
+              <button type="button" className="reader-group-button reader-tab-add" aria-label="打开已关闭的视图">
                 <PlusOutlined />
               </button>
             </Dropdown>
@@ -638,14 +640,13 @@ function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
             className={synced ? 'reader-group-button reader-sync-toggle on' : 'reader-group-button reader-sync-toggle'}
             aria-label="滚动同步"
             aria-pressed={synced}
-            title={synced ? '滚动同步已开启：与其他开启同步的视图按段落一起滚动' : '滚动同步已关闭：点击后与其他开启同步的视图按段落一起滚动'}
             onClick={() => actions.toggleSync(group.active)}
           >
             {synced ? <LinkOutlined /> : <DisconnectOutlined />}
           </button>
         ) : null}
         {maximized ? (
-          <button type="button" className="reader-group-button" aria-label="还原分组" title="还原分组（Esc）" onClick={() => actions.toggleMaximize(group.id)}>
+          <button type="button" className="reader-group-button" aria-label="还原分组" onClick={() => actions.toggleMaximize(group.id)}>
             <ShrinkOutlined />
           </button>
         ) : null}
@@ -663,7 +664,7 @@ function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
             onClick: onMenuClick
           }}
         >
-          <button type="button" className="reader-group-button reader-group-more" aria-label="布局操作" title="布局操作">
+          <button type="button" className="reader-group-button reader-group-more" aria-label="布局操作">
             <LayoutOutlined />
           </button>
         </Dropdown>

@@ -11,7 +11,6 @@ import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { SqliteRagRepository } from '../src/utility/core/persistence/sqliteRagRepository'
 import { SqliteJobRepository } from '../src/utility/core/persistence/sqliteJobRepository'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import { RagDomainService } from '../src/utility/core/ragDomainService'
 import { RagContentIndexService } from '../src/utility/core/compute/ragContentIndexService'
 import { createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
 
@@ -24,7 +23,7 @@ describe('paper chat Utility integration', () => {
       const rag = new SqliteRagRepository(database)
       const jobs = new SqliteJobRepository(database)
       const indexer = new RagContentIndexService(database, rag)
-      const operations = createUtilityOperationHandlers({ database, repository, ragRepository: rag, ragService: new RagDomainService(database, rag, jobs), ragContentIndexService: indexer })
+      const operations = createUtilityOperationHandlers({ database, repository, jobRepository: jobs, ragRepository: rag, ragContentIndexService: indexer })
       const documentId = randomUUID()
       const now = new Date().toISOString()
       const text = '# Abstract\n\nAttention is the main contribution.\n'
@@ -52,17 +51,22 @@ describe('paper chat Utility integration', () => {
       const settings = repository.getSettings(root)
       expect(settings).toMatchObject({ chatProvider: null, qwenChatModel: DEFAULT_SETTINGS.qwenChatModel, chatConsentVersion: null })
       repository.saveSettings({ ...settings, chatProvider: 'qwen', qwenChatModel: 'custom-chat', chatConsentVersion: 1 })
-      expect(repository.getSettings(root)).toMatchObject({ chatProvider: 'qwen', qwenChatModel: 'qwen-plus', chatConsentVersion: 1 })
+      expect(repository.getSettings(root)).toMatchObject({ chatProvider: 'qwen', qwenChatModel: 'qwen-plus', chatConsentVersion: null })
       const turn = { id: randomUUID(), createdAt: now, provider: 'qwen', model: 'qwen-plus', question: 'saved question', answer: 'saved answer', citations: {}, status: 'completed' }
       await operations.handlers['chat:save-turn']!({ payload: { documentId, turn } } as never, signal)
       await operations.handlers['chat:save-session']!({ payload: { documentId, session: { draft: 'next question', pinned: [], selectedModel: null } } } as never, signal)
       const reopened = createUtilityOperationHandlers({ database, repository })
       expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([turn])
       expect(paperChatSessionSchema.parse(await reopened.handlers['chat:session']!({ payload: { documentId } } as never, signal)).draft).toBe('next question')
+      const kept = { ...turn, id: randomUUID(), question: 'kept question' }
+      await reopened.handlers['chat:save-turn']!({ payload: { documentId, turn: kept } } as never, signal)
+      await reopened.handlers['chat:delete-turn']!({ payload: { documentId, turnId: turn.id, createdAt: turn.createdAt } } as never, signal)
+      expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([kept])
+      expect(paperChatSessionSchema.parse(await reopened.handlers['chat:session']!({ payload: { documentId } } as never, signal)).draft).toBe('next question')
       await reopened.handlers['chat:clear']!({ payload: { documentId } } as never, signal)
       expect(paperChatPageSchema.parse(await reopened.handlers['chat:load']!({ payload: { documentId } } as never, signal)).turns).toEqual([])
       const migration = database.connection.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as { version: number }
-      expect(migration.version).toBe(4)
+      expect(migration.version).toBe(5)
       const cancelled = new AbortController(); cancelled.abort()
       await expect(ensure({ payload: { documentId } } as never, cancelled.signal)).rejects.toThrow()
       await expect(ensure({ payload: { documentId: randomUUID() } } as never, signal)).rejects.toMatchObject({ code: 'QUERY_SCOPE_INVALID' })

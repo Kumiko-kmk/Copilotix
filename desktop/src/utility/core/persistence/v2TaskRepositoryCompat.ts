@@ -4,7 +4,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
 import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
-import type { PathPolicyPort } from './pathPolicy'
+import type { PathPolicyPort } from '@core/ports'
 import type {
   AppSettings,
   CopilotixTask,
@@ -25,9 +25,9 @@ import {
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { normalizeEnabledProviders, normalizeProviderOrder } from '@shared/providerPolicy'
 import type { ArtifactReference } from './taskRepositoryCompat'
-import { PathPolicy, resolveLexicalWithinRoot } from './pathPolicy'
+import { PathPolicy, resolveLexicalWithinRoot } from '@runtime/pathPolicy'
 import { V2Database } from './v2Database'
-import { projectDocumentSummary } from './documentProjection'
+import { projectDocumentSummary } from '@shared/documentSummary'
 import { SqliteJobRepository } from './sqliteJobRepository'
 
 export interface CompatDocumentRow {
@@ -36,7 +36,7 @@ export interface CompatDocumentRow {
   display_title: string | null
   storage_path: string
   source_checksum: string
-  translation_provider: 'qwen' | 'deepseek' | 'bing' | 'transmart'
+  translation_provider: 'qwen' | 'deepseek' | 'bing' | 'transmart' | 'codex'
   created_at: string
   updated_at: string
 }
@@ -184,22 +184,26 @@ export class V2TaskRepositoryCompat {
       translationProvider: enabledTranslationProviders[0]!,
       translationProviderOrder,
       enabledTranslationProviders,
+      codex: stored.codex ?? DEFAULT_SETTINGS.codex,
       qwenBaseUrl: stored.qwenBaseUrl ?? DEFAULT_SETTINGS.qwenBaseUrl,
       qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
       deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
       deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
       chatProvider: stored.chatProvider ?? DEFAULT_SETTINGS.chatProvider,
+      // Automatic AI briefs after translation are always on; an old stored false is ignored.
+      autoGeneratePaperInsight: true,
       qwenChatModel: resolvePaperChatModel('qwen', stored.qwenChatModel),
       deepseekChatModel: resolvePaperChatModel('deepseek', stored.deepseekChatModel),
-      chatConsentProvider: stored.chatConsentProvider ?? null,
-      chatConsentVersion: stored.chatConsentVersion ?? null,
+      chatConsentProvider: null,
+      chatConsentVersion: null,
       credentials: DEFAULT_SETTINGS.credentials
     }
   }
 
   saveSettings(settings: AppSettings): void {
-    const hidden = new Set(['credentials'])
+    const hidden = new Set(['credentials', 'chatConsentProvider', 'chatConsentVersion'])
     this.database.transaction(() => {
+      this.database.connection.exec("DELETE FROM settings WHERE key IN ('chatConsentProvider', 'chatConsentVersion')")
       const statement = this.database.connection.prepare(
         'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
       )
@@ -549,35 +553,9 @@ export class V2TaskRepositoryCompat {
     return this.translationBlocksByJob.all(taskId, job.id) as unknown as TranslationBlockRecord[]
   }
 
-  updateTranslationRun(taskId: string, total: number, completed: number, failed: number): void {
-    this.database.transaction(() => {
-      const job = this.latestJob(taskId, 'translate')
-      if (!job) throw new Error('翻译作业尚未创建')
-      const checkpoint = {
-        ...parseObject(job.checkpoint_json),
-        totalBlocks: total,
-        completedBlocks: completed,
-        failedBlocks: failed
-      }
-      this.database.connection.prepare('UPDATE jobs SET checkpoint_json=?, updated_at=? WHERE id=?')
-        .run(JSON.stringify(checkpoint), new Date().toISOString(), job.id)
-    })
-  }
-
   getCache(cacheKey: string): string | null {
     const row = this.database.connection.prepare('SELECT translated_markdown FROM translation_cache WHERE cache_key=?').get(cacheKey) as { translated_markdown: string } | undefined
     return row?.translated_markdown ?? null
-  }
-
-  putCache(cacheKey: string, translated: string, provider: string, model: string): void {
-    this.database.transaction(() => {
-      this.database.connection.prepare(`
-        INSERT INTO translation_cache(cache_key,translated_markdown,provider,model,created_at)
-        VALUES(?,?,?,?,?)
-        ON CONFLICT(cache_key) DO UPDATE SET translated_markdown=excluded.translated_markdown,
-          provider=excluded.provider,model=excluded.model,created_at=excluded.created_at
-      `).run(cacheKey, translated, provider, model, new Date().toISOString())
-    })
   }
 
   listReaderAnnotations(taskId: string): ReaderAnnotation[] {

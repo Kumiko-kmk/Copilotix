@@ -4,7 +4,8 @@ import {
   CORE_RPC_VERSION,
   CoreRpcProtocolError,
   coreJobKindSchema,
-  coreKnowledgeSchema,
+  coreOperationSchema,
+  coreOperationRegistry,
   coreErrorResponseSchema,
   coreEventSchema,
   coreRequestSchema,
@@ -22,6 +23,9 @@ import {
 const requestId = '00000000-0000-4000-8000-000000000001'
 
 describe('core RPC schemas', () => {
+  it('keeps dispatchable operation names aligned with the wire registry', () => {
+    expect([...coreOperationSchema.options].sort()).toEqual(Object.keys(coreOperationRegistry).sort())
+  })
   it('allows only the shared durable job kinds and keeps the payload metadata-only', () => {
     expect(coreJobKindSchema.options).toEqual(['parse', 'translate', 'rag-content-index', 'rag-embed', 'rag-delete'])
     for (const kind of coreJobKindSchema.options) {
@@ -137,50 +141,9 @@ describe('core RPC schemas', () => {
     expect(translationPlanWorkDescriptorSchema.safeParse({ ...descriptor, requestPath: 'C:/outside/request.json' }).success).toBe(false)
   })
 
-  it('exposes only bounded knowledge lifecycle metadata and rejects sensitive/unknown fields', () => {
-    const knowledgeRequest = {
-      version: CORE_RPC_VERSION,
-      requestId,
-      operation: 'knowledge:get' as const,
-      payload: { documentId: 'document-1' }
+  it('does not expose the removed semantic-index operations', () => {
+    for (const operation of ['knowledge:get', 'knowledge:set-semantic-consent', 'knowledge:ensure-embed']) {
+      expect(coreOperationSchema.safeParse(operation).success).toBe(false)
     }
-    expect(coreRequestSchema.parse(knowledgeRequest)).toEqual(knowledgeRequest)
-    for (const forbidden of ['sourceText', 'vector', 'path', 'url', 'apiKey', 'token', 'secret']) {
-      expect(coreRequestSchema.safeParse({
-        ...knowledgeRequest,
-        payload: { documentId: 'document-1', [forbidden]: 'not allowed' }
-      }).success).toBe(false)
-    }
-    expect(coreRequestSchema.safeParse({
-      version: CORE_RPC_VERSION,
-      requestId,
-      operation: 'knowledge:set-semantic-consent',
-      payload: { documentId: 'document-1', consent: true, unexpected: true }
-    }).success).toBe(false)
-    expect(coreRequestSchema.safeParse({
-      version: CORE_RPC_VERSION,
-      requestId,
-      operation: 'knowledge:ensure-embed',
-      payload: { documentId: 'document-1', profileId: 'p', key: 'secret-token' }
-    }).success).toBe(false)
-    expect(coreRequestSchema.safeParse({
-      ...knowledgeRequest,
-      payload: { documentId: 'x'.repeat(513) }
-    }).success).toBe(false)
-    expect(coreKnowledgeSchema.safeParse({
-      documentId: 'document-1',
-      localState: 'ready',
-      localProgress: 100,
-      localError: null,
-      activeContentRevisionId: 'revision-1',
-      semanticConsent: true,
-      semanticState: 'queued',
-      semanticProgress: 0,
-      semanticError: null,
-      semanticContentRevisionId: null,
-      activeVectorIndexId: null,
-      semanticProfileId: null,
-      updatedAt: '2026-01-01T00:00:00.000Z'
-    }).success).toBe(true)
   })
 })

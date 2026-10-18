@@ -8,7 +8,6 @@ import { splitMarkdownMath } from './mathDelimiters'
 import { renderToString } from 'katex'
 
 /** Public artifacts use CommonMark + GFM tables and the explicit $ / $$ math extension. */
-export const MARKDOWN_FORMAT_VERSION = 'commonmark-gfm-math-v1'
 export const READER_MARKDOWN_FORMAT_VERSION = 'markdown-html-math-v1'
 
 interface Node {
@@ -59,7 +58,7 @@ export interface MarkdownNormalization {
 }
 
 /** Code is opaque. Normalize alternate TeX delimiters before Markdown consumes their escapes. */
-function canonicalDelimiters(source: string): string {
+export function normalizeMathDelimiters(source: string): string {
   const root = processor.parse(source) as unknown as Node
   const protectedRanges: Array<[number, number]> = []
   walk(root, (node) => {
@@ -254,7 +253,7 @@ export function repairMathSizing(value: string): string {
 
 /** Preserve rich layout; patch only math and image URLs without serializing HTML. */
 export function prepareReaderMarkdown(source: string, rewriteImage?: (url: string) => string): string {
-  const clean = canonicalDelimiters(source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
+  const clean = normalizeMathDelimiters(source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
     .replace(/\p{Cc}/gu, (character) => character === '\t' || character === '\n' ? character : '\uFFFD'))
   const root = processor.parse(clean) as unknown as Node
   if (rewriteImage) resolveMarkdownReferences(root)
@@ -307,7 +306,7 @@ export function normalizeMarkdown(source: string, rewriteImage?: (url: string) =
       stats.controlsReplaced += 1
       return '\uFFFD'
     })
-  const root = normalizeTree(processor.parse(canonicalDelimiters(clean)) as unknown as Node, stats)[0]!
+  const root = normalizeTree(processor.parse(normalizeMathDelimiters(clean)) as unknown as Node, stats)[0]!
   walk(root, (node) => {
     trimInlineEdges(node)
     if (node.type === 'tableCell') tableMath(node)

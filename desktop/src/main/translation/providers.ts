@@ -15,8 +15,9 @@ type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Re
 type UsageObserver = (provider: 'qwen' | 'deepseek', usage: ProviderTokenUsage) => void | Promise<void>
 
 const PROVIDER_CONCURRENCY: Readonly<Record<TranslationProviderId, number>> = Object.freeze({
-  qwen: 3,
-  deepseek: 3,
+  codex: 8,
+  qwen: 8,
+  deepseek: 8,
   bing: 1,
   transmart: 1
 })
@@ -29,6 +30,7 @@ export interface TranslationProvider {
   readonly credentialName?: CredentialName
   isAvailable(): Promise<boolean>
   translate(text: string, signal?: AbortSignal): Promise<string>
+  translatePlain?(request: import('@shared/translationPlanProtocol').PlainTranslationRequest, signal: AbortSignal): Promise<import('@shared/translationPlanProtocol').PlainTranslationResponse>
   translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse>
 }
 

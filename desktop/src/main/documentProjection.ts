@@ -7,30 +7,8 @@ import {
   documentChangeEventSchema,
   documentSummarySchema
 } from '@shared/ipcSchemas'
-import type { DocumentPayload, CopilotixTask } from '@shared/types'
-
-/**
- * Convert the temporary task projection at the application boundary.  The
- * legacy task still contains local paths, but this DTO deliberately has no
- * filesystem identity that can cross into preload/renderer.
- */
-export function projectDocumentSummary(task: CopilotixTask): DocumentSummary {
-  return documentSummarySchema.parse({
-    id: task.id,
-    originalName: task.originalName,
-    displayName: task.name,
-    sourceHash: task.sourceHash,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-    workflow: {
-      status: task.status,
-      progress: task.progress,
-      activeJobKind: activeJobKindFor(task.status),
-      error: task.error
-    },
-    processing: { translationProvider: task.translationProvider }
-  })
-}
+import type { DocumentPayload } from '@shared/types'
+import { projectDocumentSummary } from '@shared/documentSummary'
 
 /**
  * Strip all legacy task fields, especially sourcePath/outputDir. Fields are
@@ -72,8 +50,7 @@ export function computeDocumentChange(
     next.set(summary.id, summary)
   }
 
-  const upserted = current
-    .map((candidate) => documentSummarySchema.parse(candidate))
+  const upserted = [...next.values()]
     .filter((candidate) => !sameSummary(previous.get(candidate.id), candidate))
   const removedIds = [...previous.keys()].filter((id) => !next.has(id))
   if (upserted.length === 0 && removedIds.length === 0) return { next, event: null }
@@ -89,11 +66,5 @@ export function computeDocumentChange(
 }
 
 function sameSummary(left: DocumentSummary | undefined, right: DocumentSummary): boolean {
-  return left !== undefined && JSON.stringify(documentSummarySchema.parse(left)) === JSON.stringify(documentSummarySchema.parse(right))
-}
-
-function activeJobKindFor(status: DocumentSummary['workflow']['status']): 'parse' | 'translate' | null {
-  if (status === 'uploading' || status === 'parsing' || status === 'queued') return 'parse'
-  if (status === 'translating') return 'translate'
-  return null
+  return left !== undefined && JSON.stringify(documentSummarySchema.parse(left)) === JSON.stringify(right)
 }

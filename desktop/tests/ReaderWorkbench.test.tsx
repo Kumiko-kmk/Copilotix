@@ -10,7 +10,7 @@ import { defaultReaderLayout, normalizeLayout, splitView, type ReaderLayout } fr
 import type { PaperChatController } from '../src/renderer/usePaperChat'
 
 vi.mock('../src/renderer/components/ReaderChatPanel', () => ({
-  default: () => <section aria-label="论文 AI 问答"><textarea aria-label="问答草稿" /></section>,
+  default: () => <section aria-label="论文 Chat"><textarea aria-label="问答草稿" /></section>,
   ReaderChatToolbar: () => <div>问答工具栏</div>
 }))
 
@@ -25,6 +25,17 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ResizeObserverMock)
   scrollIntoView = vi.fn()
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView })
+  // A Markdown pane becomes ready only after its minimap's first overview, which needs a laid-out
+  // rail and scroller; every other element keeps jsdom's zero metrics.
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-minimap') ? 60 : 0
+  })
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-minimap') ? 400 : this.classList.contains('markdown-scroll') ? 200 : 0
+  })
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('markdown-scroll') ? 1_000 : 0
+  })
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     value: vi.fn((query: string) => ({
@@ -36,6 +47,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -59,15 +71,15 @@ describe('ReaderWorkbench', () => {
     fireEvent.scroll(originalScroller)
     expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeNull()
 
-    fireEvent.click(view.getByText('Markdown（中文）'))
+    fireEvent.click(view.getByText('译文'))
     expect(panel(view.container, 'translated')?.classList.contains('active')).toBe(true)
     expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBeNull()
     await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
 
-    fireEvent.click(view.getByText('Markdown', { exact: true }))
+    fireEvent.click(view.getByText('原文', { exact: true }))
     await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     expect(view.container.querySelector<HTMLElement>('[data-reader-tab-panel="original"] .markdown-scroll')?.scrollTop).toBe(360)
-    expect(view.getByRole('tab', { name: /Markdown（中文）/u }).getAttribute('aria-selected')).toBe('false')
+    expect(view.getByRole('tab', { name: /译文/u }).getAttribute('aria-selected')).toBe('false')
   })
 
   it('keeps chat lazy until first opened, then mounted, with its toolbar in the tab bar', async () => {
@@ -77,7 +89,7 @@ describe('ReaderWorkbench', () => {
       onCitation: vi.fn()
     }
     const view = render(<Harness chat={chat} />)
-    const tab = view.getByText('AI 问答')
+    const tab = view.getByText('Chat')
     expect(tab.closest('.reader-chat-tab')?.querySelector('[aria-label="正在生成"]')).toBeTruthy()
     expect(tab.closest('.reader-chat-tab')?.textContent).toContain('2')
     expect(view.queryByText('问答工具栏')).toBeNull()
@@ -92,7 +104,7 @@ describe('ReaderWorkbench', () => {
     expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBeNull()
     fireEvent.change(view.getByLabelText('问答草稿'), { target: { value: 'draft' } })
 
-    fireEvent.click(view.getByText('Markdown', { exact: true }))
+    fireEvent.click(view.getByText('原文', { exact: true }))
     await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="original"] .markdown-scroll')).toBeTruthy())
     expect(chatPanel.classList.contains('inactive')).toBe(true)
     expect(view.queryByText('问答工具栏')).toBeNull()
@@ -126,20 +138,20 @@ describe('ReaderWorkbench', () => {
     await waitFor(() => expect(view.container.querySelectorAll('.reader-group')).toHaveLength(2))
     // Scoped to the workbench: antd menu dividers also use role="separator".
     expect(view.container.querySelectorAll('.reader-split-handle')).toHaveLength(1)
-    expect(view.container.querySelector('.reader-split-handle')?.getAttribute('aria-label')).toBe('调整 Markdown 与 Markdown（中文） 阅读器宽度')
+    expect(view.container.querySelector('.reader-split-handle')?.getAttribute('aria-label')).toBe('调整 原文 与 译文 阅读器宽度')
     await waitFor(() => expect(view.container.querySelectorAll('.reader-tab-panel.active .markdown-scroll')).toHaveLength(2))
     expect(onLayout).toHaveBeenLastCalledWith(expect.objectContaining({ hidden: ['pdf'] }))
   })
 
   it('closes a view and reopens it from the + menu', async () => {
     const view = render(<Harness />)
-    fireEvent.click(view.getByRole('button', { name: '关闭 Markdown（中文）' }))
-    expect(view.queryByRole('tab', { name: /Markdown（中文）/u })).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: '关闭 译文' }))
+    expect(view.queryByRole('tab', { name: /译文/u })).toBeNull()
     expect(panel(view.container, 'translated')).toBeNull()
 
     fireEvent.click(view.getByRole('button', { name: '打开已关闭的视图' }))
-    fireEvent.click(await screen.findByText('Markdown（中文）'))
-    await waitFor(() => expect(view.getByRole('tab', { name: /Markdown（中文）/u }).getAttribute('aria-selected')).toBe('true'))
+    fireEvent.click(await screen.findByText('译文'))
+    await waitFor(() => expect(view.getByRole('tab', { name: /译文/u }).getAttribute('aria-selected')).toBe('true'))
   })
 
   it('never offers to close the last visible view', () => {
@@ -217,16 +229,36 @@ describe('minimum sizes and scroll sync toggle', () => {
 })
 
 describe('workbench keyboard shortcuts and maximize', () => {
+  it('shows a failed missing original with a retry action while leaving populated panes readable', async () => {
+    const retry = vi.fn(async () => undefined)
+    const view = render(<Workbench input={{ ...BASE_INPUT, originalBlocks: [], translatedReady: false, translatedBlocks: [], taskStatus: 'failed', taskError: 'fetch failed', onRetry: retry }} />)
+    expect(view.getByRole('alert').textContent).toContain('原文未生成，文档处理失败')
+    expect(view.getByRole('alert').textContent).toContain('检查网络或代理')
+    fireEvent.click(view.getByRole('button', { name: '重试文档处理' }))
+    await waitFor(() => expect(retry).toHaveBeenCalledOnce())
+    fireEvent.click(view.getByRole('tab', { name: /译文/u }))
+    expect(view.getByRole('alert').textContent).toContain('译文未生成')
+    view.rerender(<Workbench input={{ ...BASE_INPUT, taskStatus: 'failed', taskError: '翻译失败' }} />)
+    await waitFor(() => expect(view.container.querySelector('[data-reader-tab-panel="translated"] .markdown-scroll')).toBeTruthy())
+    expect(view.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows processing state instead of an empty original while parsing', () => {
+    const view = render(<Workbench input={{ ...BASE_INPUT, originalBlocks: [], taskStatus: 'parsing' }} />)
+    expect(view.getByRole('status').textContent).toContain('原文正在准备中')
+    expect(view.queryByRole('button', { name: '重试文档处理' })).toBeNull()
+  })
+
   it('switches, closes, restores and splits views from the keyboard', async () => {
     const view = render(<Harness />)
     const selected = (): string | null => view.container.querySelector('[role="tab"][aria-selected="true"] .reader-tab-label')?.textContent ?? null
 
     fireEvent.keyDown(window, { key: '3', ctrlKey: true })
-    expect(selected()).toBe('Markdown（中文）')
+    expect(selected()).toBe('译文')
     fireEvent.keyDown(window, { key: 'w', ctrlKey: true })
-    expect(view.queryByRole('tab', { name: /Markdown（中文）/u })).toBeNull()
+    expect(view.queryByRole('tab', { name: /译文/u })).toBeNull()
     fireEvent.keyDown(window, { key: 'T', ctrlKey: true, shiftKey: true })
-    expect(selected()).toBe('Markdown（中文）')
+    expect(selected()).toBe('译文')
     fireEvent.keyDown(window, { key: '\\', ctrlKey: true })
     await waitFor(() => expect(view.container.querySelectorAll('.reader-group')).toHaveLength(2))
     // The moved view's new group takes focus, so Ctrl+Alt+← sends it back.
@@ -247,7 +279,7 @@ describe('workbench keyboard shortcuts and maximize', () => {
       }
     })
     const view = render(<Harness layout={twoGroups} />)
-    fireEvent.doubleClick(view.getByRole('tab', { name: /Markdown（中文）/u }))
+    fireEvent.doubleClick(view.getByRole('tab', { name: /译文/u }))
     expect(view.container.querySelector('[data-reader-group="g2"]')?.classList.contains('maximized')).toBe(true)
     expect(view.getByRole('button', { name: '还原分组' })).toBeTruthy()
     fireEvent.keyDown(window, { key: 'Escape' })

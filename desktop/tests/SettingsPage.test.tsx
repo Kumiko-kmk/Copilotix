@@ -11,6 +11,56 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('SettingsPage appearance', () => {
+  it('previews themes and reader text size at once, saves them with the page and reverts them on discard', async () => {
+    const saveSettings = vi.fn()
+    Object.defineProperty(window, 'copilotix', {
+      configurable: true,
+      value: { getUsageAnalytics: vi.fn(async () => ({ days: [] })), saveSettings } as unknown as CopilotixDesktopApi
+    })
+    window.localStorage.removeItem('copilotix.theme.v1')
+    window.localStorage.removeItem('copilotix.reader.font-size.v1')
+    const root = document.documentElement
+    const view = render(<SettingsPage settings={configuredSettings()} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /主题外观/u }))
+    expect(document.querySelector('.settings-content-body > .settings-section.theme-settings')).toBeTruthy()
+    expect(within(screen.getByRole('radiogroup', { name: '浅色主题' })).getAllByRole('radio')).toHaveLength(3)
+    expect(within(screen.getByRole('radiogroup', { name: '深色主题' })).getAllByRole('radio')).toHaveLength(3)
+
+    // A choice previews everywhere at once but is only a draft until saved.
+    fireEvent.click(screen.getByRole('radio', { name: /朱砂/u }))
+    fireEvent.click(screen.getByRole('button', { name: '增大阅读字号' }))
+    expect(root.style.getPropertyValue('--primary')).toBe('#b8432f')
+    expect(root.style.getPropertyValue('--theme-archive-tray')).toBe('#86553e')
+    expect(root.style.getPropertyValue('--reader-font-size')).toBe('17px')
+    expect(window.localStorage.getItem('copilotix.theme.v1')).toBeNull()
+    expect(screen.getByText('有未保存的更改')).toBeTruthy()
+
+    // Appearance alone saves locally, without the settings IPC.
+    fireEvent.click(screen.getByRole('button', { name: /保存全部更改/u }))
+    await vi.waitFor(() => expect(screen.getByText('所有更改均已保存')).toBeTruthy())
+    expect(saveSettings).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem('copilotix.theme.v1')).toBe('cinnabar')
+    expect(window.localStorage.getItem('copilotix.reader.font-size.v1')).toBe('17')
+
+    // Night themes switch the whole palette; discarding returns to the saved choice.
+    fireEvent.click(screen.getByRole('radio', { name: /深靛/u }))
+    expect(root.style.colorScheme).toBe('dark')
+    expect(root.style.getPropertyValue('--on-ink')).toBe('#11151d')
+    expect(root.style.getPropertyValue('--shadow-ink')).toBe('#000000')
+    fireEvent.click(screen.getByRole('button', { name: /放弃更改/u }))
+    expect(root.style.getPropertyValue('--primary')).toBe('#b8432f')
+    expect(root.style.colorScheme).toBe('light')
+
+    // Leaving with an unsaved preview never keeps it.
+    fireEvent.click(screen.getByRole('radio', { name: /深靛/u }))
+    view.unmount()
+    expect(root.style.getPropertyValue('--primary')).toBe('#b8432f')
+    window.localStorage.removeItem('copilotix.theme.v1')
+    window.localStorage.removeItem('copilotix.reader.font-size.v1')
+  })
+})
+
 describe('SettingsPage credential editor', () => {
   it('renders activity and provider token history in two chart panels', async () => {
     const days = Array.from({ length: 84 }, (_, index) => ({
@@ -35,7 +85,7 @@ describe('SettingsPage credential editor', () => {
     expect(within(dashboard).queryByText(/份文/u)).toBeNull()
     expect(within(dashboard).getByText('模型 Token')).toBeTruthy()
     expect(dashboard.querySelectorAll('.activity-heatmap .activity-cell')).toHaveLength(84)
-    expect(dashboard.querySelectorAll('.token-line')).toHaveLength(2)
+    expect(dashboard.querySelectorAll('.token-line')).toHaveLength(3)
   })
 
   it('keeps all services open and sends direct replacement or delete mutations explicitly', async () => {
@@ -64,7 +114,7 @@ describe('SettingsPage credential editor', () => {
     expect(screen.getAllByLabelText('APIKey')).toHaveLength(3)
     expect(screen.queryByText('服务地址')).toBeNull()
     expect(screen.queryByText('高级设置')).toBeNull()
-    expect(screen.getAllByRole('button', { name: '测试连接' })).toHaveLength(3)
+    expect(screen.getAllByRole('button', { name: '测试连接' })).toHaveLength(4)
     expect(screen.queryByText('配置服务')).toBeNull()
     expect(screen.queryByText('千问 / Qwen')).toBeNull()
     expect(screen.getByText('Qwen')).toBeTruthy()
@@ -128,7 +178,7 @@ describe('SettingsPage credential editor', () => {
     await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
     expect(saveSettings.mock.calls[0]![0]).toMatchObject({
       translationProvider: 'deepseek',
-      translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart']
+      translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart', 'codex']
     })
     expect(screen.getByText('DeepSeek → 千问 → Bing → Transmart')).toBeTruthy()
   })

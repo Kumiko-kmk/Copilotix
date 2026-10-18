@@ -1,6 +1,17 @@
+import { CodexRuntime } from '@runtime/codexRuntime'
+import { ModelGateway } from './chat/modelGateway'
+import { codexProbeSchema, codexStatusSchema, DEFAULT_CODEX_SETTINGS } from '@shared/codex'
+import { PaperInsightService, loadFullBriefContext } from './chat/paperInsightService'
+import { FigureInsightService } from './chat/figureInsightService'
+import { registerFigureInsightHandlers } from './chat/figureInsightIpc'
+import { figureInsightChangedSchema } from '@shared/figureInsight'
+import { registerPaperInsightHandlers } from './chat/paperInsightIpc'
+import { paperInsightChangedSchema } from '@shared/paperInsight'
+import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { ChatProvider } from './chat/chatProvider'
 import { PaperChatService } from './chat/paperChatService'
 import { registerPaperChatHandlers } from './chat/paperChatIpc'
+import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema } from '@shared/readerNotes'
 import { sanitizeTitleStem } from '@shared/titleNaming'
 import { TUTORIAL_PAPER_BYTES, TUTORIAL_PAPER_SHA256, TUTORIAL_PAPER_SOURCE_URL, MINERU_API_TOKEN_URL } from '@shared/tutorialSample'
 import { verifiedTutorialPaperPath } from './tutorialSample'
@@ -15,6 +26,7 @@ import {
   BrowserWindow,
   dialog,
   Menu,
+  nativeImage,
   net,
   Notification,
   protocol,
@@ -36,6 +48,8 @@ import { probeOpenAiCompatibleCredential } from './translation/providers'
 import { refreshNetworkProxy } from './networkProxy'
 import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike } from './ipc'
 import {
+  cacheDocumentFigureRequestSchema,
+  cacheDocumentFigureResultSchema,
   appSettingsSchema,
   credentialValidationRequestSchema,
   credentialValidationResultSchema,
@@ -66,7 +80,8 @@ import {
   type DocumentSummary
 } from '@shared/ipcSchemas'
 import type { WindowState } from '@shared/types'
-import { computeDocumentChange, projectDocumentDetails, projectDocumentSummary } from './documentProjection'
+import { computeDocumentChange, projectDocumentDetails } from './documentProjection'
+import { projectDocumentSummary } from '@shared/documentSummary'
 import { createCoalescedRefresh } from './coalescedRefresh'
 import { UtilitySupervisor } from './utilitySupervisor'
 import { forkUtilityProcess } from './electronUtilityFork'
@@ -76,7 +91,7 @@ import { ParseJobRunner } from './parseJobRunner'
 import { TranslationJobRunner } from './translationJobRunner'
 import { RagContentIndexJobRunner } from './ragContentIndexJobRunner'
 import { RpcRagContentIndexer } from './rpcRagContentIndexer'
-import { PathPolicy } from './pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import { formatPackagedSmokeMarker, shouldRunPackagedSmoke } from '@shared/packagedSmoke'
 import { inspectStorage } from './storageService'
 import { resolveUtilityEntryPath } from './utilityEntryPath'
@@ -91,7 +106,10 @@ let documentRevision = 0
 let documentSummaries = new Map<string, DocumentSummary>()
 let utilitySupervisor: UtilitySupervisor | null = null
 let utilityShutdownPromise: Promise<void> | null = null
+let codex: CodexRuntime | null = null
 let paperChat: PaperChatService | null = null
+let paperInsight: PaperInsightService | null = null
+let figureInsight: FigureInsightService | null = null
 let jobScheduler: JobScheduler | null = null
 let startupPhase = 'module-load'
 const libraryGate = new LibraryAccessGate()
@@ -152,20 +170,57 @@ async function bootstrap(): Promise<void> {
   await settings.initialize()
   const logger = new JsonLineLogger(join(userData, 'copilotix-desktop.log'))
   const usageAnalytics = new UsageAnalyticsService(join(userData, 'usage-analytics-v1.json'))
+  codex = new CodexRuntime(join(userData, 'codex-runtime'), async () => (await settings.get()).codex ?? DEFAULT_CODEX_SETTINGS)
   const chatProvider = new ChatProvider(fetcher, { invalidate: (provider) => settings.invalidateCredential(provider) })
+  const modelGateway = new ModelGateway(chatProvider, codex)
+  figureInsight = new FigureInsightService({
+    settings: () => settings.get(),
+    key: provider => provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    descriptor: (request, signal) => utilitySupervisor!.request('compute:figure-insight-descriptor', request, { signal, timeoutMs: 30_000 }),
+    get: request => utilitySupervisor!.request('figureInsight:get', request),
+    save: request => utilitySupervisor!.request('figureInsight:save', request, { timeoutMs: 30_000 }),
+    stream: input => modelGateway.stream(input),
+    encodeImage: async png => {
+      if (png.length <= 2 * 1024 * 1024) return { bytes: png, mimeType: 'image/png' }
+      const image = nativeImage.createFromBuffer(png)
+      if (image.isEmpty()) throw new Error('无法编码整图')
+      const jpeg = image.toJPEG(98)
+      return jpeg.length < png.length ? { bytes: jpeg, mimeType: 'image/jpeg', jpegQuality: 98 } : { bytes: png, mimeType: 'image/png' }
+    },
+    recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
+    canStart: () => !libraryGate.busy && !libraryGate.restarting && !isQuitting,
+    changed: (request, state) => {
+      if (mainWindow && !mainWindow.webContents.isDestroyed()) sendValidatedEvent(mainWindow.webContents, 'figureInsight:changed', figureInsightChangedSchema, { ...request, state })
+    }
+  })
   paperChat = new PaperChatService({
     saveTurn: (documentId, turn) => utilitySupervisor!.request('chat:save-turn', { documentId, turn }),
     load: (request) => utilitySupervisor!.request('chat:load', request),
     session: (documentId) => utilitySupervisor!.request('chat:session', { documentId }),
     saveSession: (documentId, session) => utilitySupervisor!.request('chat:save-session', { documentId, session }),
+    deleteTurn: (request) => utilitySupervisor!.request('chat:delete-turn', request),
     clear: (documentId) => utilitySupervisor!.request('chat:clear', { documentId }),
     settings: () => settings.get(),
-    key: (provider) => vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    key: (provider) => provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
     buildContext: (request, signal) => utilitySupervisor!.request('chat:build-context', request, { signal, timeoutMs: 10_000 }),
-    stream: (input) => chatProvider.stream(input),
+    stream: (input) => modelGateway.stream(input),
     recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
     log: (details) => logger.info('paper-chat', details)
   })
+  paperInsight = new PaperInsightService({
+    settings: () => settings.get(),
+    key: (provider) => provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key'),
+    get: (documentId) => utilitySupervisor!.request('insight:get', { documentId }),
+    context: (documentId, signal) => loadFullBriefContext(documentId, signal, () => utilitySupervisor!.request('insight:brief-source', { documentId }, { signal, timeoutMs: 10_000 })),
+    save: (documentId, brief, anchors) => utilitySupervisor!.request('insight:save-brief', { documentId, brief, anchors }),
+    stream: (input) => modelGateway.stream(input),
+    recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
+    canStart: () => !libraryGate.busy && !libraryGate.restarting && !isQuitting,
+    changed: (documentId, state) => {
+      if (mainWindow && !mainWindow.webContents.isDestroyed()) sendValidatedEvent(mainWindow.webContents, 'paperInsight:changed', paperInsightChangedSchema, { documentId, state })
+    }
+  })
+  jobScheduler.on('job-changed', (job) => { void paperInsight?.onJobChanged(job).catch(() => logger.info('paper-insight', { status: 'refresh-failed' })) })
   const compute = new RpcTaskCompute(utilitySupervisor)
   const pathPolicy = new PathPolicy()
   const tasks = new TaskService(repository, settings, compute, pathPolicy, {
@@ -230,6 +285,7 @@ async function bootstrap(): Promise<void> {
     }
   }))
   jobScheduler.registerRunner('translate', new TranslationJobRunner({
+    codex,
     repository,
     settingsService: settings,
     vault,
@@ -347,6 +403,10 @@ function registerIpc(
     rendererOrigin: process.env.ELECTRON_RENDERER_URL
   }
 
+  registerPaperInsightHandlers(paperInsight!, validationOptions)
+  registerFigureInsightHandlers(figureInsight!, validationOptions)
+  registerValidatedHandler('library:categories', libraryCategoriesRequestSchema, libraryCategoriesPageSchema,
+    (_event, request) => utilitySupervisor!.request('compute:library-categories', request, { timeoutMs: 120_000 }), validationOptions)
   registerPaperChatHandlers(paperChat!, async (documentId) => {
     const status = await utilitySupervisor!.request('chat:ensure-index', { documentId })
     jobScheduler?.wake()
@@ -382,9 +442,11 @@ function registerIpc(
       if (confirmation.response !== 1) return { status: 'cancelled' as const, restartRequired: false }
     }
     await utilitySupervisor.request('library:check', {})
-    await paperChat?.settle()
-    await jobScheduler.shutdown()
+    await paperInsight?.pause()
+    await figureInsight?.pause()
     try {
+      await paperChat?.settle()
+      await jobScheduler.shutdown()
       const result = await utilitySupervisor.request('library:manage', { ...request, path: selected.filePaths[0] }, { timeoutMs: 2 * 60 * 60 * 1000 })
       if (result.restartRequired) {
         libraryGate.requireRestart()
@@ -392,14 +454,26 @@ function registerIpc(
       }
       return result
     } finally {
-      if (!libraryGate.restarting) await jobScheduler.start()
+      if (!libraryGate.restarting) { await jobScheduler.start(); paperInsight?.resume(); figureInsight?.resume() }
     }
+  }, validationOptions)
+  registerValidatedHandler('codex:cached', codexProbeSchema.shape.settings, codexStatusSchema.nullable(), (_event, request) => codex!.cached(request), validationOptions)
+  registerValidatedHandler('codex:inspect', codexProbeSchema, codexStatusSchema, (_event, request) => codex!.inspect(request.settings, request.testModel), validationOptions)
+  registerValidatedHandler('codex:select-executable', noRequestSchema, outputDirectorySchema, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, { title: '选择 codex.exe', properties: ['openFile'], filters: [{ name: 'Codex', extensions: ['exe'] }] })
+    return result.canceled ? null : result.filePaths[0] ?? null
   }, validationOptions)
   registerValidatedHandler('settings:get', noRequestSchema, appSettingsSchema, () => settings.get(), validationOptions)
   registerValidatedHandler('settings:save', settingsUpdateSchema, settingsSaveResultSchema, async (_event, update) => {
     const before = await settings.get()
     const result = await settings.save(update)
-    if (before.enabledTranslationProviders.join(',') !== result.settings.enabledTranslationProviders.join(',') || before.translationProvider !== result.settings.translationProvider || before.chatConsentVersion !== result.settings.chatConsentVersion || before.chatConsentProvider !== result.settings.chatConsentProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
+    if (before.enabledTranslationProviders.join(',') !== result.settings.enabledTranslationProviders.join(',') || before.translationProvider !== result.settings.translationProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat?.cancelAll()
+    const next = result.settings
+    if (before.enabledTranslationProviders.join(',') !== next.enabledTranslationProviders.join(',')
+      || before.translationProvider !== next.translationProvider
+      || before.qwenChatModel !== next.qwenChatModel
+      || before.deepseekChatModel !== next.deepseekChatModel
+      || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) { paperInsight?.cancelAll(); figureInsight?.cancelAll() }
     return result
   }, validationOptions)
   registerValidatedHandler('settings:validate-credential', credentialValidationRequestSchema, credentialValidationResultSchema, (_event, request) => settings.validateCredential(request.name, request.value), validationOptions)
@@ -468,8 +542,10 @@ function registerIpc(
     return tasks.retry(documentId)
   }, validationOptions)
   registerValidatedHandler('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, async (_event, request) => {
-    await paperChat?.settleDocument(request.documentId)
-    return tasks.delete(request.documentId, request.deleteFiles)
+    return figureInsight!.deleteDocument(request.documentId, () => paperInsight!.deleteDocument(request.documentId, async () => {
+      await paperChat?.settleDocument(request.documentId)
+      return tasks.delete(request.documentId, request.deleteFiles)
+    }))
   }, validationOptions)
   registerValidatedHandler('documents:get', documentIdRequestSchema, documentDetailsSchema, async (_event, documentId) => {
     const details = projectDocumentDetails(await tasks.getDocument(documentId))
@@ -481,6 +557,9 @@ function registerIpc(
     if (!task) throw new Error('文档不存在')
     const result = await shell.openPath(task.outputDir)
     if (result) throw new Error(result)
+  }, validationOptions)
+  registerValidatedHandler('documents:cache-figure', cacheDocumentFigureRequestSchema, cacheDocumentFigureResultSchema, (_event, request) => {
+    return tasks.cacheFigure(request)
   }, validationOptions)
   registerValidatedHandler('documents:save-as', saveDocumentAsRequestSchema, saveDocumentAsResultSchema, async (_event, request) => {
     const task = await repository?.getTask(request.documentId)
@@ -496,6 +575,13 @@ function registerIpc(
     else await tasks.exportMarkdown(task.id, request.kind, result.filePath)
     return { saved: true }
   }, validationOptions)
+  const requireNotesUtility = (): UtilitySupervisor => {
+    if (!utilitySupervisor || !repository) throw new Error('数据库尚未初始化')
+    return utilitySupervisor
+  }
+  registerValidatedHandler('reader-notes:list', readerNotesRequestSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:list', request), validationOptions)
+  registerValidatedHandler('reader-notes:upsert', readerNoteUpsertSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:upsert', request), validationOptions)
+  registerValidatedHandler('reader-notes:delete', readerNoteDeleteSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:delete', request), validationOptions)
   registerValidatedHandler('reader-annotations:list', listReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema, async (_event, request) => {
     if (!repository) throw new Error('数据库尚未初始化')
     return repository.listDocumentAnnotations(request)
@@ -533,7 +619,7 @@ function startNormalApp(): void {
     isQuitting = true
     if (!utilitySupervisor || utilitySupervisor.isStopped() || utilityShutdownPromise) return
     event.preventDefault()
-    utilityShutdownPromise = (paperChat?.settle() ?? Promise.resolve()).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => utilitySupervisor!.shutdown()).catch(() => undefined).then(() => {
+    utilityShutdownPromise = Promise.all([paperChat?.settle(), paperInsight?.dispose(), figureInsight?.dispose()]).then(() => jobScheduler?.shutdown()).catch(() => undefined).then(() => { codex?.close(); return utilitySupervisor!.shutdown() }).catch(() => undefined).then(() => {
       app.quit()
     })
   })

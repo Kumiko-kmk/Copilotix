@@ -1,4 +1,4 @@
-**Copilotix 1.1.0 使用指南**
+**Copilotix 1.2.0 使用指南**
 
 - [首页](https://github.com/Kumiko-kmk/Copilotix/wiki)
 - [安装、升级与卸载](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade)
@@ -9,4 +9,4 @@
 - [本地资料与导出](https://github.com/Kumiko-kmk/Copilotix/wiki/Local-Data-and-Export)
 - [常见问题](https://github.com/Kumiko-kmk/Copilotix/wiki/FAQ)
 
-[下载 1.1.0](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.1.0) · [仓库 README](https://github.com/Kumiko-kmk/Copilotix#readme)
+[下载 1.2.0](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.2.0) · [仓库 README](https://github.com/Kumiko-kmk/Copilotix#readme)

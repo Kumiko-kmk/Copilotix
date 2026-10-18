@@ -1,15 +1,16 @@
 import React from 'react'
-import { Button, Dropdown, Empty, Input, Progress, Select, message } from 'antd'
+import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
+import { Button, Dropdown, Empty, Input, Modal, Progress, Select } from 'antd'
 import { ArrowUpOutlined, BorderOutlined, CloseOutlined, MoreOutlined } from '@ant-design/icons'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CHAT_CONSENT_VERSION, PAPER_CHAT_MODELS, resolvePaperChatModel, resolvePaperChatProvider, hasPaperChatConsent, type PaperChatProvider } from '@shared/paperChatSchemas'
+import { useQuery } from '@tanstack/react-query'
+import { PAPER_CHAT_MODELS, resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { Citation } from '@shared/ragSchemas'
 import type { AppSettings, BlockSelection } from '@shared/types'
 import type { PaperChatController, PaperChatTurn } from '../usePaperChat'
 import SafeMarkdown from './SafeMarkdown'
 import './paperChat.css'
 
-const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek' }
+const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek', codex: 'Codex' }
 const SUGGESTIONS = ['总结这篇论文的主要贡献', '解释论文的核心方法', '实验得出了哪些结论？']
 
 /** Provider, model and readiness derived from the shared translation settings. */
@@ -17,53 +18,28 @@ function useChatRouting(chat: PaperChatController) {
   const settingsQuery = useQuery<AppSettings>({ queryKey: ['settings'], queryFn: () => window.copilotix.getSettings() })
   const settings = settingsQuery.data
   const provider = settings ? resolvePaperChatProvider(settings, chat.selectedModel?.provider) : null
-  const configured = Boolean(settings && provider && settings.credentials[provider].state === 'valid')
-  const defaultModel = provider === 'qwen' ? settings?.qwenChatModel ?? 'qwen-plus' : settings?.deepseekChatModel ?? 'deepseek-flash'
+  const codexQuery = useQuery({ queryKey: ['codex', settings?.codex], queryFn: () => window.copilotix.codex.inspect({ settings: settings?.codex ?? DEFAULT_CODEX_SETTINGS }), enabled: provider === 'codex', staleTime: 60_000, retry: false })
+  const configured = Boolean(settings && provider && (provider === 'codex' ? codexQuery.data?.state === 'ready' : settings.credentials[provider].state === 'valid'))
+  const defaultModel = provider === 'codex' ? settings?.codex?.chatModel ?? 'default' : provider === 'qwen' ? settings?.qwenChatModel ?? 'qwen-plus' : settings?.deepseekChatModel ?? 'deepseek-flash'
   const selectedModel = chat.selectedModel?.provider === provider ? chat.selectedModel.model : defaultModel
   const model = provider ? resolvePaperChatModel(provider, selectedModel) : ''
-  const models = provider ? PAPER_CHAT_MODELS[provider] : []
+  const models = provider === 'codex' ? codexQuery.data?.models.map(model => model.id) ?? [] : provider ? PAPER_CHAT_MODELS[provider] : []
   const validModel = Boolean(provider && models.includes(model))
-  const consented = Boolean(settings && provider && hasPaperChatConsent(settings, provider))
-  return { settings, provider, configured, model, models, validModel, consented }
-}
-
-async function saveConsent(version: number | null, provider: PaperChatProvider | null = null): Promise<AppSettings> {
-  const { credentials: _credentials, ...update } = await window.copilotix.getSettings()
-  return (await window.copilotix.saveSettings({ ...update, chatConsentVersion: version, chatConsentProvider: provider })).settings
+  return { settings, provider, configured, model, models, validModel }
 }
 
 /** Lives in the reader's shared tab toolbar while the chat tab is active. */
-export function ReaderChatToolbar(props: { chat: PaperChatController }): React.JSX.Element | null {
-  const routing = useChatRouting(props.chat)
-  const queryClient = useQueryClient()
-  const [messageApi, contextHolder] = message.useMessage()
-  const [revoking, setRevoking] = React.useState(false)
-  const revoke = async (): Promise<void> => {
-    setRevoking(true)
-    props.chat.stop()
-    try {
-      queryClient.setQueryData(['settings'], await saveConsent(null))
-      messageApi.success('已撤销发送授权')
-    } catch {
-      messageApi.error('撤销授权失败，请重试')
-    } finally {
-      setRevoking(false)
-    }
-  }
-  const menuItems = [
-    { key: 'clear', label: '清空对话', disabled: props.chat.loading || props.chat.turns.length === 0 },
-    ...(routing.consented ? [{ key: 'revoke', label: '撤销发送授权', disabled: revoking }] : [])
-  ]
+export function ReaderChatToolbar(props: { chat: PaperChatController; children?: React.ReactNode }): React.JSX.Element | null {
+  const menuItems = [{ key: 'clear', label: '清空对话', disabled: props.chat.loading || props.chat.turns.length === 0 }]
   return (
     <div className="reader-chat-toolbar">
-      {contextHolder}
+      {props.children}
       <Dropdown
         trigger={['click']}
         menu={{
           items: menuItems,
           onClick: ({ key }) => {
             if (key === 'clear') void props.chat.clear()
-            else if (key === 'revoke') void revoke()
           }
         }}
       >
@@ -80,12 +56,14 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
   return (
     <div className="reader-chat-model-picker">
       <Select
+        title=""
         size="small" variant="borderless" aria-label="问答服务商" className="reader-chat-provider"
         value={provider} disabled={props.locked} popupMatchSelectWidth={false} placement="topLeft" placeholder="服务商"
-        options={(Object.keys(PROVIDER_LABELS) as PaperChatProvider[]).map((value) => ({ value, label: PROVIDER_LABELS[value], disabled: !routing.settings?.enabledTranslationProviders.includes(value) }))}
-        onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: resolvePaperChatModel(value, value === 'qwen' ? routing.settings?.qwenChatModel : routing.settings?.deepseekChatModel) })}
+        options={(Object.keys(PROVIDER_LABELS) as PaperChatProvider[]).map((value) => ({ value, label: PROVIDER_LABELS[value], title: '', disabled: !routing.settings?.enabledTranslationProviders.includes(value) }))}
+        onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: resolvePaperChatModel(value, value === 'codex' ? routing.settings?.codex?.chatModel : value === 'qwen' ? routing.settings?.qwenChatModel : routing.settings?.deepseekChatModel) })}
       />
       <Select
+        title=""
         size="small"
         variant="borderless"
         aria-label="问答模型"
@@ -94,7 +72,7 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
         placement="topLeft"
         value={routing.model}
         disabled={props.locked || !provider}
-        options={routing.models.map((name) => ({ value: name, label: name }))}
+        options={routing.models.map((name) => ({ value: name, label: name, title: '' }))}
         onChange={(model: string) => { if (provider) chat.setSelectedModel({ provider, model }) }}
       />
     </div>
@@ -110,9 +88,6 @@ export default function ReaderChatPanel(props: {
 }): React.JSX.Element {
   const { chat } = props
   const routing = useChatRouting(chat)
-  const queryClient = useQueryClient()
-  const [consentOpen, setConsentOpen] = React.useState(false)
-  const [consentSaving, setConsentSaving] = React.useState(false)
   const [localError, setLocalError] = React.useState('')
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -124,9 +99,8 @@ export default function ReaderChatPanel(props: {
   })
   const ready = indexQuery.data?.state === 'ready'
   const question = chat.draft.trim()
-  const canSend = routing.configured && ready && routing.validModel && !consentSaving && !chat.busy && !chat.loading && chat.loaded && question.length > 0
+  const canSend = routing.configured && ready && routing.validModel && !chat.busy && !chat.loading && chat.loaded && question.length > 0
 
-  React.useEffect(() => { setConsentOpen(false) }, [props.documentId])
 
   // Follow streaming output only while the reader is already at the bottom.
   const lastAnswer = chat.turns.at(-1)?.answer
@@ -136,8 +110,8 @@ export default function ReaderChatPanel(props: {
     if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120) scroller.scrollTop = scroller.scrollHeight
   }, [chat.turns.length, lastAnswer])
 
-  // The question moves into the conversation immediately; a failed turn keeps
-  // it and offers retry, so the draft can be cleared up front.
+  // The question and its selections move into the conversation immediately; a
+  // failed turn keeps them and offers retry, so the composer can be cleared up front.
   const submit = React.useCallback(async (): Promise<void> => {
     chat.setDraft('')
     await chat.ask(question, routing.model.trim(), routing.provider ?? undefined)
@@ -145,24 +119,7 @@ export default function ReaderChatPanel(props: {
 
   const send = (): void => {
     if (!canSend) return
-    if (!routing.consented) { setConsentOpen(true); return }
     void submit()
-  }
-
-  const agree = async (): Promise<void> => {
-    if (!routing.settings || !routing.provider || consentSaving || !routing.validModel) return
-    setConsentSaving(true); setLocalError('')
-    try {
-      const current = await window.copilotix.getSettings()
-      if (resolvePaperChatProvider(current, chat.selectedModel?.provider) !== routing.provider) throw new Error('服务商已变更，请重新确认')
-      queryClient.setQueryData(['settings'], await saveConsent(CHAT_CONSENT_VERSION, routing.provider))
-      setConsentOpen(false)
-      await submit()
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : '同意保存失败')
-    } finally {
-      setConsentSaving(false)
-    }
   }
 
   const cite = React.useCallback(async (citation: Citation): Promise<void> => {
@@ -200,7 +157,7 @@ export default function ReaderChatPanel(props: {
 
   const error = localError || chat.error
   return (
-    <section className="paper-chat" aria-label="论文 AI 问答">
+    <section className="paper-chat" aria-label="论文 Chat">
       <div className="paper-chat-scroll" ref={scrollRef}>
         {chat.loading ? <p role="status">正在读取本地对话…</p> : null}
         {chat.next ? <Button size="small" loading={chat.loadingOlder} onClick={() => void chat.loadOlder()}>查看更早的对话</Button> : null}
@@ -218,10 +175,12 @@ export default function ReaderChatPanel(props: {
           <div className="paper-chat-turns markdown-body" role="log" aria-label="问答记录">
             {chat.turns.map((turn, index) => (
               <ChatTurn
-                key={index}
+                key={turn.id ?? `${turn.createdAt ?? index}:${turn.question}`}
                 turn={turn}
+                deleteDisabled={chat.busy || chat.loadingOlder}
+                onDelete={() => chat.deleteTurn(turn)}
                 retryable={!chat.busy && index === chat.turns.length - 1}
-                onRetry={() => void chat.ask(turn.question, routing.model.trim(), routing.provider ?? undefined)}
+                onRetry={() => void chat.ask(turn.question, routing.model.trim(), routing.provider ?? undefined, turn.pinned ?? [])}
                 onCitation={cite}
               />
             ))}
@@ -230,25 +189,12 @@ export default function ReaderChatPanel(props: {
       </div>
       <div className="paper-chat-composer">
         {error ? <div className="paper-chat-error" role="alert">{error}</div> : null}
-        {consentOpen ? (
-          <div className="paper-chat-consent" role="group" aria-label="同意发送论文片段">
-            <strong>同意发送论文片段</strong>
-            <p>接收方：{routing.provider === 'qwen' ? '阿里云 Qwen' : 'DeepSeek'}，模型：{routing.model}。API 与当前翻译服务共用。</p>
-            <p>会发送当前问题、最近的对话、选中文本与当前论文片段；短论文可能发送完整的已解析文本。可在「⋯」菜单撤销后续发送授权，但不会远程删除服务商已收到的数据。</p>
-            <div className="paper-chat-consent-actions">
-              <Button size="small" onClick={() => setConsentOpen(false)}>取消</Button>
-              <Button size="small" type="primary" loading={consentSaving} onClick={() => void agree()}>同意并发送</Button>
-            </div>
-          </div>
-        ) : null}
         {chat.pinned.length > 0 ? (
           <div className="paper-chat-pins" aria-label="固定选区">
             {chat.pinned.map((pin, index) => {
-              const page = pin.fragments[0]?.pageIndex
               return (
-                <span className="paper-chat-pin" key={index} title={pin.text}>
-                  <span className="paper-chat-pin-source">{pin.view === 'original' ? '原文' : '译文'}{page !== undefined && page !== null ? ` · 第 ${page + 1} 页` : ''}</span>
-                  <span className="paper-chat-pin-text">{pin.text.slice(0, 40)}{pin.text.length > 40 ? '…' : ''}</span>
+                <span className="paper-chat-pin" key={index}>
+                  <SelectionLabel view={pin.view} text={pin.text} pageIndex={pin.fragments[0]?.pageIndex} />
                   <button type="button" aria-label={`移除选区 ${index + 1}`} disabled={chat.busy} onClick={() => chat.removePin(index)}><CloseOutlined /></button>
                 </span>
               )
@@ -272,7 +218,7 @@ export default function ReaderChatPanel(props: {
             }}
           />
           <div className="paper-chat-input-footer">
-            <ChatModelPicker chat={chat} routing={routing} locked={chat.busy || chat.loading || consentOpen || consentSaving} />
+            <ChatModelPicker chat={chat} routing={routing} locked={chat.busy || chat.loading} />
             {chat.busy ? (
               <Button shape="circle" size="small" icon={<BorderOutlined />} aria-label="停止" onClick={chat.stop} />
             ) : (
@@ -325,28 +271,79 @@ function ChatEmptyState(props: {
 
 function ChatTurn(props: {
   turn: PaperChatTurn
+  deleteDisabled: boolean
+  onDelete(): Promise<void>
   retryable: boolean
   onRetry(): void
   onCitation(citation: Citation): void
 }): React.JSX.Element {
   const { turn } = props
+  const [collapsed, setCollapsed] = React.useState(false)
+  const [confirming, setConfirming] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
+  const [deleteError, setDeleteError] = React.useState('')
+  const remove = async (): Promise<void> => {
+    setDeleting(true); setDeleteError('')
+    try { await props.onDelete(); setConfirming(false) }
+    catch (error) { setDeleteError(error instanceof Error ? error.message : '删除失败，请重试') }
+    finally { setDeleting(false) }
+  }
   const citations = turn.status === 'completed' ? turn.citations : undefined
   const labels = React.useMemo(() => citationLabels(turn.answer, citations), [citations, turn.answer])
   return (
     <article className="paper-chat-turn">
-      <h4 className="paper-chat-question">{turn.question}</h4>
+      {turn.selections?.length ? (
+        <div className="paper-chat-turn-selections" aria-label="提问附带的选区">
+          {turn.selections.map((selection, index) => (
+            <span className="paper-chat-pin" key={index}><SelectionLabel {...selection} /></span>
+          ))}
+        </div>
+      ) : null}
+      <div className="paper-chat-question-row">
+        <h4 className="paper-chat-question">{turn.question}</h4>
+        <Dropdown trigger={['click']} menu={{ items: [
+          { key: 'collapse', label: collapsed ? '展开回复' : '折叠回复' },
+          { key: 'delete', label: '删除聊天', danger: true, disabled: props.deleteDisabled || deleting }
+        ], onClick: ({ key }) => { if (key === 'collapse') setCollapsed(value => !value); else setConfirming(true) } }}>
+          <Button type="text" size="small" icon={<MoreOutlined />} aria-label="此条聊天操作" />
+        </Dropdown>
+      </div>
+      <div hidden={collapsed}>
+
       <div className="paper-chat-answer">
         <SafeMarkdown markdown={turn.answer} citations={citations ?? {}} citationLabels={labels} onCitation={props.onCitation} />
         {turn.status === 'pending' ? <span className="paper-chat-caret" aria-label="正在生成" /> : null}
       </div>
+      {turn.status !== 'pending' ? (
+        <div className="paper-chat-metadata" aria-label="回答信息">
+          <span>{turn.model ?? '模型未记录'}</span>
+          {turn.completedAt || turn.createdAt ? <time dateTime={turn.completedAt ?? turn.createdAt}>{new Date(turn.completedAt ?? turn.createdAt!).toLocaleString('zh-CN', { hour12: false })}</time> : <span>时间未记录</span>}
+          <span>{turn.usage ? `${turn.usage.totalTokens.toLocaleString()} Tokens（输入 ${turn.usage.promptTokens.toLocaleString()} / 输出 ${turn.usage.completionTokens.toLocaleString()}）` : 'Token 用量未提供'}</span>
+        </div>
+      ) : null}
       {turn.status === 'cancelled' || turn.status === 'failed' ? (
         <div className="paper-chat-status">
           <span>{turn.status === 'cancelled' ? '已停止' : '回答失败'}</span>
           {props.retryable ? <Button type="link" size="small" onClick={props.onRetry}>重试</Button> : null}
         </div>
       ) : null}
+      </div>
+      <Modal title="删除聊天" open={confirming} okText="删除" cancelText="取消" okButtonProps={{ danger: true, disabled: props.deleteDisabled }} confirmLoading={deleting}
+        onOk={() => void remove()} onCancel={() => { if (!deleting) setConfirming(false) }}>
+        <p>确定删除这条问题及回复吗？删除后无法恢复。</p>
+        <p className="paper-chat-delete-question">{turn.question}</p>
+        {deleteError ? <p role="alert">{deleteError}</p> : null}
+      </Modal>
     </article>
   )
+}
+
+function SelectionLabel(props: { view: 'original' | 'translated'; text: string; pageIndex?: number | null }): React.JSX.Element {
+  const page = props.pageIndex
+  return <>
+    <span className="paper-chat-pin-source">{props.view === 'original' ? '原文' : '译文'}{page !== undefined && page !== null ? ` · 第 ${page + 1} 页` : ''}</span>
+    <span className="paper-chat-pin-text">{props.text.slice(0, 40)}{props.text.length > 40 ? '…' : ''}</span>
+  </>
 }
 
 /** Number verified evidence markers 1…n in the order they first appear. */

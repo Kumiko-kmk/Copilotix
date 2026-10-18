@@ -205,11 +205,6 @@ export class CoreClient {
     this.fail(new CoreClientError(CORE_UNAVAILABLE, 'Core utility closed', false))
   }
 
-  dispose(): void {
-    this.close()
-    this.eventListeners.clear()
-  }
-
   private sendRequest<K extends CoreOperation>(
     request: Extract<CoreMessage, { operation: K }>,
     options: CoreRequestOptions

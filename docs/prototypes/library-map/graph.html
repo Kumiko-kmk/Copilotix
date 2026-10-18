@@ -1,0 +1,377 @@
+<title>文库关系图谱</title>
+<style>
+/* Layout: one graph canvas, Obsidian-style — a settings drawer on the right, a hover card on the
+   left, groups and the relatedness formula below. Palette from Copilotix. */
+:root {
+  --bg: #f7f2e8; --canvas: #fbf8f2; --ink: #2f2a24; --text: #3a342d; --muted: #857c70; --rule: #e1d9cc;
+  --node: #8c8378; --edge: #b9b0a3; --accent: #5b58d6; --panel: #fffdf9;
+  --g0: #5b58d6; --g1: #2f8a76; --g2: #c0832a; --g3: #b4513d; --g4: #4f7ca8; --g5: #8a5a9e;
+  --sans: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1b1916; --canvas: #201e1b; --ink: #ece6dc; --text: #d9d2c6; --muted: #9a9185; --rule: #34302a;
+  --node: #a39a8e; --edge: #4d473f; --accent: #a29ff7; --panel: #262420;
+  --g0: #a29ff7; --g1: #5cc0a6; --g2: #e3aa55; --g3: #e07e66; --g4: #82acd6; --g5: #c09ad3; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #1b1916; --canvas: #201e1b; --ink: #ece6dc; --text: #d9d2c6; --muted: #9a9185; --rule: #34302a;
+  --node: #a39a8e; --edge: #4d473f; --accent: #a29ff7; --panel: #262420;
+  --g0: #a29ff7; --g1: #5cc0a6; --g2: #e3aa55; --g3: #e07e66; --g4: #82acd6; --g5: #c09ad3; color-scheme: dark }
+body { background: var(--bg); color: var(--text); font: 14px/1.6 var(--sans); }
+.page { display: grid; gap: 18px; max-width: 1400px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 36px); padding-block: 22px 36px; }
+header h1 { margin: 0; color: var(--ink); font-size: 22px; font-weight: 600; letter-spacing: .02em; }
+header p { margin: 4px 0 0; max-width: 72ch; color: var(--muted); font-size: 13px; }
+
+.graph { position: relative; height: min(76vh, 760px); min-height: 460px; background: var(--canvas); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.graph canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.graph canvas.dragging { cursor: grabbing; }
+
+/* Settings drawer, after Obsidian's graph settings. */
+.settings { position: absolute; top: 10px; right: 10px; width: 250px; max-height: calc(100% - 20px); overflow: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; font-size: 12.5px; }
+.settings[data-collapsed="true"] { width: auto; }
+.settings[data-collapsed="true"] details { display: none; }
+.settings > button { display: flex; width: 100%; justify-content: space-between; align-items: center; padding: 8px 10px; border: 0; background: none; color: var(--ink); font: 600 12.5px var(--sans); cursor: pointer; }
+.settings details { border-top: 1px solid var(--rule); }
+.settings summary { padding: 7px 10px; color: var(--ink); font-weight: 600; cursor: pointer; }
+.settings .body { display: grid; gap: 8px; padding: 2px 10px 10px; }
+.settings label { display: grid; gap: 3px; color: var(--text); }
+.settings label.check { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.settings input[type="range"] { width: 100%; accent-color: var(--accent); }
+.settings input[type="checkbox"] { accent-color: var(--accent); }
+.settings input[type="search"] { width: 100%; padding: 5px 7px; border: 1px solid var(--rule); border-radius: 4px; background: var(--canvas); color: var(--ink); font: 12.5px var(--sans); }
+.settings :focus-visible, .settings > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.group-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.group-list li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 8px; align-items: start; }
+.group-list i { width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: currentColor; }
+.group-list span { color: var(--text); }
+.group-list small { display: block; color: var(--muted); }
+
+/* Hover card: the selected paper and how much each part contributes to its links. */
+.card { position: absolute; left: 10px; bottom: 10px; width: min(360px, calc(100% - 20px)); padding: 10px 12px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; font-size: 12.5px; }
+.card h2 { margin: 0; color: var(--ink); font-size: 14px; line-height: 1.4; }
+.card .sub { margin: 2px 0 8px; color: var(--muted); font: 11px var(--mono); }
+.card ol { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.card li { display: grid; gap: 3px; }
+.card .row { display: flex; justify-content: space-between; gap: 8px; color: var(--text); }
+.card .row b { font: 500 11.5px var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.stack { display: flex; height: 5px; background: var(--rule); border-radius: 3px; overflow: hidden; }
+.stack span { display: block; height: 100%; }
+.key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+.key span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 2px; background: var(--c); vertical-align: -1px; }
+.hint { color: var(--muted); }
+
+.below { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; }
+.below h2 { margin: 0 0 8px; color: var(--ink); font-size: 15px; font-weight: 600; }
+.columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.column { padding: 10px; background: var(--canvas); border: 1px solid var(--rule); border-top: 3px solid var(--c); border-radius: 4px; min-width: 0; }
+.column strong { display: block; color: var(--ink); font-size: 13px; }
+.column ol { margin: 6px 0 0; padding-left: 18px; color: var(--text); font-size: 12.5px; }
+.formula { display: grid; gap: 8px; font-size: 13px; }
+.formula code { display: block; padding: 8px 10px; background: var(--canvas); border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); font: 12.5px/1.7 var(--mono); white-space: pre-wrap; }
+.formula p { margin: 0; color: var(--text); }
+footer { color: var(--muted); font-size: 12px; }
+@media (max-width: 860px) {
+  .below { grid-template-columns: minmax(0, 1fr); }
+  .settings { width: 210px; }
+  .card { width: calc(100% - 20px); }
+}
+</style>
+
+<div class="page">
+  <header>
+    <h1>文库关系图谱</h1>
+    <p>每个点是一篇论文。连线越短越粗，两篇论文越相关；相关度由内容相似、直接引用与共同参考文献合成，分组也按它划分。悬停查看构成，拖动节点重排。</p>
+  </header>
+
+  <div class="graph" id="graph">
+    <canvas id="canvas" aria-label="论文关系图谱" role="img"></canvas>
+    <div class="settings" id="settings" data-collapsed="false">
+      <button type="button" id="settings-toggle" aria-expanded="true">图谱设置 <span aria-hidden="true">−</span></button>
+      <details open>
+        <summary>筛选</summary>
+        <div class="body">
+          <input type="search" id="filter" placeholder="搜索论文" aria-label="搜索论文">
+          <label class="check">显示共同参考文献 <input type="checkbox" id="show-refs"></label>
+          <label class="check">显示箭头（引用方向） <input type="checkbox" id="show-arrows"></label>
+          <label>最低相关度 <input type="range" id="min-weight" min="0" max="0.4" step="0.01" value="0.12"></label>
+        </div>
+      </details>
+      <details open>
+        <summary>分组</summary>
+        <div class="body"><ul class="group-list" id="group-list"></ul></div>
+      </details>
+      <details>
+        <summary>显示</summary>
+        <div class="body">
+          <label>节点大小 <input type="range" id="node-size" min="0.5" max="2" step="0.05" value="1"></label>
+          <label>连线粗细 <input type="range" id="line-width" min="0.3" max="3" step="0.05" value="1"></label>
+          <label>文字淡出缩放 <input type="range" id="text-fade" min="0.3" max="2" step="0.05" value="0.7"></label>
+        </div>
+      </details>
+      <details>
+        <summary>力</summary>
+        <div class="body">
+          <label>分组聚拢 <input type="range" id="f-group" min="0" max="0.5" step="0.01" value="0.22"></label>
+          <label>中心力 <input type="range" id="f-center" min="0" max="0.2" step="0.005" value="0.04"></label>
+          <label>排斥力 <input type="range" id="f-repel" min="20" max="800" step="10" value="200"></label>
+          <label>连线力 <input type="range" id="f-link" min="0" max="2" step="0.05" value="1"></label>
+          <label>连线距离 <input type="range" id="f-distance" min="60" max="500" step="5" value="260"></label>
+        </div>
+      </details>
+    </div>
+    <div class="card" id="card"></div>
+  </div>
+
+  <div class="below">
+    <section>
+      <h2>分组即文库列</h2>
+      <div class="columns" id="columns"></div>
+    </section>
+    <section class="formula">
+      <h2>相关度怎么算</h2>
+      <code id="formula"></code>
+      <p id="formula-note"></p>
+    </section>
+  </div>
+  <footer id="footer"></footer>
+</div>
+
+<script type="application/json" id="graph-data">/*GRAPH_DATA*/</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+(() => {
+  const DATA = JSON.parse(document.getElementById('graph-data').textContent)
+  const css = getComputedStyle(document.documentElement)
+  const token = (name) => css.getPropertyValue(name).trim()
+  let colors = {}
+  const readColors = () => { colors = { canvas: token('--canvas'), ink: token('--ink'), node: token('--node'), edge: token('--edge'), muted: token('--muted'), accent: token('--accent'), groups: [0, 1, 2, 3, 4, 5].map((g) => token(`--g${g}`)) } }
+  readColors()
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); draw() })
+  new MutationObserver(() => { readColors(); draw() }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const short = (title) => title.split(/[：:（(]/u)[0].slice(0, 18)
+  const groupName = (group) => group.terms.slice(0, 3).join(' · ')
+  const escape = (text) => text.replace(/[&<>"]/gu, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  const W = DATA.method.weights
+
+  // ── Graph model. ──
+  const pair = new Map(DATA.pairs.map(([i, j, total, content, citation, references]) => [`${i}:${j}`, { total, content, citation, references }]))
+  const rel = (i, j) => pair.get(i < j ? `${i}:${j}` : `${j}:${i}`)
+  const papers = DATA.papers.map((p, i) => ({ ...p, kind: 'paper', index: i, id: `p${i}` }))
+  const refs = DATA.sharedReferences.map((r, k) => ({ kind: 'ref', id: `r${k}`, title: r.title, papers: r.papers }))
+  const cites = new Set(DATA.citations.map((c) => `${c.from}>${c.to}`))
+  const paperLinks = DATA.edges.map(([a, b, w]) => ({ source: papers[a], target: papers[b], w, kind: 'paper' }))
+  const refLinks = refs.flatMap((r) => r.papers.map((p) => ({ source: r, target: papers[p], w: 0.06, kind: 'ref' })))
+  papers.forEach((p) => { p.strength = d3.sum(paperLinks.filter((l) => l.source === p || l.target === p), (l) => l.w) })
+  // Every pair is a spring sized by its relatedness, drawn or not: strong pairs sit close and tight,
+  // weak ones far and loose, so distance on screen follows the overall score, not only the lines shown.
+  const maxTotal = d3.max(DATA.pairs, (p) => p[2]) || 1
+  const springs = DATA.pairs.map(([i, j, total]) => ({ source: papers[i], target: papers[j], t: total / maxTotal, kind: 'spring' }))
+
+  const state = { hover: null, selected: null, filter: '', showRefs: false, arrows: false, minWeight: 0.12, nodeSize: 1, lineWidth: 1, textFade: 0.7 }
+  let nodes = [], links = []
+  const rebuild = () => {
+    nodes = state.showRefs ? [...papers, ...refs] : [...papers]
+    links = [...paperLinks.filter((l) => l.w >= state.minWeight), ...(state.showRefs ? refLinks : [])]
+    simulation.nodes(nodes)
+    simulation.force('link').links([...springs, ...(state.showRefs ? refLinks : [])])
+    simulation.alpha(0.6).restart()
+  }
+
+  // ── Forces: link strength and length follow relatedness. ──
+  const forces = { center: 0.04, repel: 200, link: 1, distance: 260, group: 0.22 }
+  const linkDistance = (l) => l.kind === 'ref' ? 50 : forces.distance * (1.25 - l.t)
+  const linkStrength = (l) => (l.kind === 'ref' ? 0.25 : 0.02 + 0.7 * l.t * l.t) * forces.link
+  // Papers of one group drift toward that group's centre, so membership reads at a glance; the
+  // springs still decide how far apart papers sit within and between groups.
+  const groupForce = (() => {
+    let members = []
+    const force = (alpha) => {
+      const centres = new Map()
+      for (const n of members) { const c = centres.get(n.group) ?? { x: 0, y: 0, count: 0 }; c.x += n.x; c.y += n.y; c.count++; centres.set(n.group, c) }
+      for (const n of members) { const c = centres.get(n.group); n.vx += (c.x / c.count - n.x) * forces.group * alpha; n.vy += (c.y / c.count - n.y) * forces.group * alpha }
+    }
+    force.initialize = (all) => { members = all.filter((n) => n.kind === 'paper') }
+    return force
+  })()
+  const simulation = d3.forceSimulation()
+    .force('link', d3.forceLink().id((d) => d.id).distance(linkDistance).strength(linkStrength))
+    .force('charge', d3.forceManyBody().strength((d) => d.kind === 'ref' ? -forces.repel * 0.15 : -forces.repel))
+    .force('x', d3.forceX(0).strength(forces.center))
+    .force('y', d3.forceY(0).strength(forces.center))
+    .force('collide', d3.forceCollide((d) => radius(d) + 4))
+    .force('group', groupForce)
+    .alphaDecay(reduced ? 0.2 : 0.03)
+    .on('tick', () => draw())
+  const radius = (d) => (d.kind === 'ref' ? 2.5 : 4 + Math.sqrt(d.strength) * 7) * state.nodeSize
+
+  // ── Canvas and camera. ──
+  const canvas = document.getElementById('canvas')
+  const context = canvas.getContext('2d')
+  let transform = d3.zoomIdentity, width = 0, height = 0
+  const resize = () => {
+    const box = canvas.getBoundingClientRect()
+    const ratio = Math.min(2, devicePixelRatio || 1)
+    width = box.width; height = box.height
+    canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio)
+    context.setTransform(ratio, 0, 0, ratio, 0, 0)
+    draw()
+  }
+  new ResizeObserver(resize).observe(canvas)
+  const zoom = d3.zoom().scaleExtent([0.25, 5]).on('zoom', (event) => { transform = event.transform; draw() })
+  const selection = d3.select(canvas)
+  // Fit the papers into the canvas, leaving room for the settings drawer on the right.
+  const centre = () => {
+    const xs = d3.extent(papers, (d) => d.x), ys = d3.extent(papers, (d) => d.y)
+    const room = { w: Math.max(200, width - (width > 700 ? 290 : 40)), h: Math.max(200, height - 150) }
+    const k = Math.min(2, room.w / ((xs[1] - xs[0]) + 160), room.h / ((ys[1] - ys[0]) + 80))
+    selection.call(zoom.transform, d3.zoomIdentity.translate(20 + room.w / 2 - k * (xs[0] + xs[1]) / 2, 10 + room.h / 2 - k * (ys[0] + ys[1]) / 2).scale(k))
+  }
+
+  const neighbours = (node) => {
+    if (!node) return null
+    const set = new Set([node])
+    for (const l of links) { if (l.source === node) set.add(l.target); if (l.target === node) set.add(l.source) }
+    return set
+  }
+  const matches = (node) => !state.filter || (node.kind === 'paper' && (node.title + node.original).toLowerCase().includes(state.filter))
+  const colorOf = (node) => node.kind === 'ref' ? colors.muted : colors.groups[node.group % 6]
+
+  function draw() {
+    if (!width) return
+    const focus = state.hover ?? state.selected
+    const near = neighbours(focus)
+    context.save()
+    context.fillStyle = colors.canvas
+    context.fillRect(0, 0, width, height)
+    context.translate(transform.x, transform.y)
+    context.scale(transform.k, transform.k)
+    // Links.
+    for (const l of links) {
+      const lit = near && near.has(l.source) && near.has(l.target) && (l.source === focus || l.target === focus)
+      const faded = (near && !lit) || (state.filter && !(matches(l.source) || matches(l.target)))
+      context.globalAlpha = faded ? 0.08 : l.kind === 'ref' ? 0.45 : 0.35 + l.w * 0.9
+      context.strokeStyle = lit ? colors.accent : colors.edge
+      context.lineWidth = (l.kind === 'ref' ? 0.6 : 0.6 + l.w * 4) * state.lineWidth / Math.sqrt(transform.k)
+      context.setLineDash(l.kind === 'ref' ? [2, 3] : [])
+      context.beginPath(); context.moveTo(l.source.x, l.source.y); context.lineTo(l.target.x, l.target.y); context.stroke()
+      if (state.arrows && l.kind === 'paper') for (const [from, to] of [[l.source, l.target], [l.target, l.source]]) {
+        if (!cites.has(`${from.index}>${to.index}`)) continue
+        const angle = Math.atan2(to.y - from.y, to.x - from.x), r = radius(to) + 3, size = 6 / Math.sqrt(transform.k)
+        const x = to.x - Math.cos(angle) * r, y = to.y - Math.sin(angle) * r
+        context.fillStyle = lit ? colors.accent : colors.edge
+        context.beginPath(); context.moveTo(x, y)
+        context.lineTo(x - size * Math.cos(angle - 0.45), y - size * Math.sin(angle - 0.45))
+        context.lineTo(x - size * Math.cos(angle + 0.45), y - size * Math.sin(angle + 0.45)); context.fill()
+      }
+    }
+    context.setLineDash([])
+    // Nodes.
+    for (const n of nodes) {
+      const faded = (near && !near.has(n)) || (state.filter && !matches(n))
+      context.globalAlpha = faded ? 0.15 : 1
+      context.fillStyle = n === focus ? colors.accent : colorOf(n)
+      context.beginPath(); context.arc(n.x, n.y, radius(n), 0, Math.PI * 2); context.fill()
+      if (n === state.selected) { context.strokeStyle = colors.ink; context.lineWidth = 1.5 / transform.k; context.stroke() }
+    }
+    // Labels fade in as you zoom, like Obsidian; the focused neighbourhood always shows.
+    const base = Math.max(0, Math.min(1, (transform.k - state.textFade) / 0.35))
+    context.font = `${12 / Math.sqrt(transform.k)}px ${token('--sans') || 'sans-serif'}`
+    context.textAlign = 'center'; context.textBaseline = 'top'
+    for (const n of nodes) {
+      if (n.kind === 'ref' && !(near && near.has(n))) continue
+      const shown = near ? (near.has(n) ? 1 : 0) : (state.filter ? (matches(n) ? 1 : 0) : base)
+      if (shown <= 0.01) continue
+      context.globalAlpha = shown
+      context.fillStyle = colors.ink
+      context.fillText(n.kind === 'ref' ? n.title.slice(0, 40) : short(n.title), n.x, n.y + radius(n) + 4 / Math.sqrt(transform.k))
+    }
+    context.restore()
+  }
+
+  // ── Pointer: hover, select, drag. ──
+  const find = (event) => {
+    const [x, y] = transform.invert(d3.pointer(event, canvas))
+    let best = null, bestDistance = Infinity
+    for (const n of nodes) { const d = Math.hypot(n.x - x, n.y - y); if (d < radius(n) + 6 / transform.k && d < bestDistance) { best = n; bestDistance = d } }
+    return best
+  }
+  canvas.addEventListener('pointermove', (event) => {
+    const n = find(event)
+    if (n !== state.hover) { state.hover = n; canvas.style.cursor = n ? 'pointer' : ''; showCard(n ?? state.selected); draw() }
+  })
+  canvas.addEventListener('pointerleave', () => { state.hover = null; showCard(state.selected); draw() })
+  canvas.addEventListener('click', (event) => { const n = find(event); state.selected = n; showCard(n); draw() })
+  // Drag is bound before zoom so grabbing a node does not pan the view.
+  selection.call(d3.drag().container(canvas).subject((event) => {
+    const [x, y] = transform.invert([event.x, event.y])
+    return nodes.find((n) => Math.hypot(n.x - x, n.y - y) < radius(n) + 6 / transform.k)
+  }).on('start', (event) => { if (!event.active) simulation.alphaTarget(0.25).restart(); event.subject.fx = event.subject.x; event.subject.fy = event.subject.y; canvas.classList.add('dragging') })
+    .on('drag', (event) => { const [x, y] = transform.invert([event.x, event.y]); event.subject.fx = x; event.subject.fy = y })
+    .on('end', (event) => { if (!event.active) simulation.alphaTarget(0); event.subject.fx = null; event.subject.fy = null; canvas.classList.remove('dragging') }))
+  selection.call(zoom).on('dblclick.zoom', null)
+
+  // ── Card: the paper and the make-up of its strongest links. ──
+  const card = document.getElementById('card')
+  const parts = [['内容', 'content', '--g4'], ['引用', 'citation', '--g2'], ['共同参考', 'references', '--g1']]
+  function showCard(n) {
+    if (!n) {
+      card.innerHTML = `<p class="hint">悬停或点击一篇论文，查看它与其他论文的相关度由哪些部分组成。滚轮缩放，拖动空白处平移。</p>`
+      return
+    }
+    if (n.kind === 'ref') {
+      card.innerHTML = `<h2>${escape(n.title)}</h2><p class="sub">库外文献 · 被 ${n.papers.length} 篇论文共同引用</p><ol>${n.papers.map((p) => `<li>${escape(short(papers[p].title))}</li>`).join('')}</ol>`
+      return
+    }
+    const group = DATA.groups[n.group]
+    const others = papers.filter((p) => p !== n).map((p) => [p, rel(n.index, p.index)]).sort((a, b) => b[1].total - a[1].total).slice(0, 5)
+    const max = others[0]?.[1].total || 1
+    card.innerHTML = `<h2>${escape(n.title)}</h2><p class="sub">${escape(n.original)}<br>分组 ${n.group + 1} · ${escape(groupName(group))} · ${n.references} 条参考文献</p>
+      <ol>${others.map(([p, r]) => {
+        const out = cites.has(`${n.index}>${p.index}`), back = cites.has(`${p.index}>${n.index}`)
+        const note = out && back ? '互相引用' : out ? '它引用' : back ? '被它引用' : ''
+        return `<li><div class="row"><span>${escape(short(p.title))}${note ? ` <span class="hint">· ${note}</span>` : ''}</span><b>${r.total.toFixed(2)}</b></div>
+        <div class="stack" style="width:${Math.max(8, r.total / max * 100)}%">${parts.map(([, key, color]) => `<span style="width:${(W[key] * r[key] / (r.total || 1)) * 100}%;background:var(${color})"></span>`).join('')}</div></li>`
+      }).join('')}</ol>
+      <div class="key">${parts.map(([name, , color]) => `<span style="--c:var(${color})">${name}</span>`).join('')}</div>`
+  }
+
+  // ── Settings. ──
+  const settings = document.getElementById('settings')
+  document.getElementById('settings-toggle').addEventListener('click', (event) => {
+    const collapsed = settings.dataset.collapsed !== 'true'
+    settings.dataset.collapsed = String(collapsed)
+    event.currentTarget.setAttribute('aria-expanded', String(!collapsed))
+    event.currentTarget.querySelector('span').textContent = collapsed ? '+' : '−'
+  })
+  const bind = (id, apply, event = 'input') => document.getElementById(id).addEventListener(event, (e) => { apply(e.target.type === 'checkbox' ? e.target.checked : e.target.type === 'range' ? Number(e.target.value) : e.target.value); draw() })
+  bind('filter', (v) => { state.filter = v.trim().toLowerCase() })
+  bind('show-refs', (v) => { state.showRefs = v; rebuild() }, 'change')
+  bind('show-arrows', (v) => { state.arrows = v }, 'change')
+  bind('min-weight', (v) => { state.minWeight = v; rebuild() })
+  bind('node-size', (v) => { state.nodeSize = v; simulation.force('collide').radius((d) => radius(d) + 4); simulation.alpha(0.2).restart() })
+  bind('line-width', (v) => { state.lineWidth = v })
+  bind('text-fade', (v) => { state.textFade = v })
+  const reheat = () => simulation.alpha(0.5).restart()
+  bind('f-center', (v) => { forces.center = v; simulation.force('x').strength(v); simulation.force('y').strength(v); reheat() })
+  bind('f-repel', (v) => { forces.repel = v; simulation.force('charge').strength((d) => d.kind === 'ref' ? -v * 0.15 : -v); reheat() })
+  bind('f-group', (v) => { forces.group = v; reheat() })
+  bind('f-link', (v) => { forces.link = v; simulation.force('link').strength(linkStrength); reheat() })
+  bind('f-distance', (v) => { forces.distance = v; simulation.force('link').distance(linkDistance); reheat() })
+
+  document.getElementById('group-list').innerHTML = DATA.groups.map((g, k) => `<li style="color:var(--g${k % 6})"><i></i><span>${escape(groupName(g))}<small>${g.papers.length} 篇</small></span></li>`).join('')
+  document.getElementById('columns').innerHTML = DATA.groups.map((g, k) => `<div class="column" style="--c:var(--g${k % 6})"><strong>${escape(groupName(g))}</strong><ol>${g.papers.map((p) => `<li>${escape(short(DATA.papers[p].title))}</li>`).join('')}</ol></div>`).join('')
+  document.getElementById('formula').textContent = `相关度 = ${W.content} × 内容相似\n       + ${W.citation} × 直接引用\n       + ${W.references} × 共同参考文献`
+  document.getElementById('formula-note').textContent = `内容相似是切块向量合成的论文向量余弦（去掉全库共性后）。引用被越多论文引用越弱（1/√被引次数），所以都引用 Attention 不会把论文拉成一组。共同参考文献按特异性加权（只有两篇共引的书目比人人都引的 Adam 更有分量），${DATA.method.couplingFull} 视为满分。分组是在这张图上做社区发现（Louvain），模块度 ${DATA.method.modularity}。`
+  document.getElementById('footer').textContent = `演示：${DATA.papers.length} 篇论文、${DATA.method.chunks} 个切块，本地 TF-IDF + LSA 向量，组名由关键词拼出；${DATA.citations.length} 条库内引用、${DATA.sharedReferences.length} 篇库外共同参考文献。生成于 ${DATA.generatedAt.slice(0, 10)}。`
+
+  rebuild()
+  // Settle before the first frame the user sees, then frame the graph.
+  simulation.stop()
+  for (let t = 0; t < 300; t++) simulation.tick()
+  resize()
+  centre()
+  showCard(null)
+  simulation.alpha(reduced ? 0 : 0.05).restart()
+})()
+</script>

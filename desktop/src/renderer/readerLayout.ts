@@ -46,7 +46,7 @@ const DEFAULT_SYNCED: readonly ReaderViewId[] = ['original', 'translated']
 
 export const LAYOUT_STORAGE_KEY = 'copilotix.reader.layout.v1'
 const LEGACY_SPLIT_KEY = 'copilotix.reader.split-percent'
-export const DEFAULT_PDF_PERCENT = 100 / 2.05
+export const DEFAULT_PDF_PERCENT = 50
 
 export function defaultReaderLayout(pdfPercent = DEFAULT_PDF_PERCENT): ReaderLayout {
   const left = Number.isFinite(pdfPercent) && pdfPercent >= 20 && pdfPercent <= 80 ? pdfPercent : DEFAULT_PDF_PERCENT
@@ -322,7 +322,11 @@ export function normalizeLayout(input: unknown): ReaderLayout {
 export function loadReaderLayout(): ReaderLayout {
   try {
     const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
-    if (stored) return normalizeLayout(JSON.parse(stored))
+    if (stored) {
+      const layout = normalizeLayout(JSON.parse(stored))
+      if (layout.root.kind === 'split' && layout.root.direction === 'row' && layout.root.children.length === 2 && Math.abs(layout.root.sizes[0]! - 100 / 2.05) < 0.001) layout.root.sizes = [50, 50]
+      return layout
+    }
   } catch {
     // Corrupt or unavailable storage falls back to the default layout.
   }
@@ -333,7 +337,7 @@ export function loadReaderLayout(): ReaderLayout {
   } catch {
     // Ignore unavailable session storage.
   }
-  return defaultReaderLayout(legacy)
+  return defaultReaderLayout(Math.abs(legacy - 100 / 2.05) < 0.001 ? 50 : legacy)
 }
 
 export function saveReaderLayout(layout: ReaderLayout): void {

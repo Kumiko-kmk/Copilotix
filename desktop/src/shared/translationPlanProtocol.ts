@@ -73,14 +73,6 @@ export interface PlainTranslationResponse {
 export type TranslationPlanRequest = PlainTranslationRequest | TableTranslationRequest
 export type TranslationPlanResponse = PlainTranslationResponse | TableTranslationResponse
 
-export interface TranslationPlanResponseEnvelope {
-  protocol: 'copilotix-translation-response-v1'
-  unitId: string
-  kind: TranslationPlanUnitKind
-  sourceHash: string
-  response: TranslationPlanResponse
-}
-
 export interface TranslationPlanWorkDescriptor {
   unitId: string
   kind: TranslationPlanUnitKind

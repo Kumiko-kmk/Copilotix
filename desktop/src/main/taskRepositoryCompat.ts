@@ -33,13 +33,3 @@ export interface TaskRepositoryCompat {
 export interface DocumentMetadataPatch {
   displayTitle?: string | null
 }
-
-export interface ArtifactReference {
-  id: string
-  documentId: string
-  kind: ArtifactKind
-  revision: number
-  relativePath: string
-  contentHash: string
-  metadata: Record<string, unknown>
-}

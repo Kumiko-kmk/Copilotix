@@ -52,14 +52,13 @@ export default function TutorialPage(props: {
   const [apiError, setApiError] = React.useState('')
   const [readerOpened, setReaderOpened] = React.useState(false)
   const [replaying, setReplaying] = React.useState(() => window.localStorage.getItem('copilotix:tutorial:replay') === '1')
-  const [apiVerified, setApiVerified] = React.useState(() => window.localStorage.getItem(TUTORIAL_API_VERIFIED_KEY) === '1')
   const [activeId, setActiveId] = React.useState(() => window.localStorage.getItem('copilotix:tutorial:active-id'))
   const [messageApi, contextHolder] = message.useMessage()
   const sample = replaying ? lastImported : activeId
     ? props.documents.find((document) => document.id === activeId) ?? lastImported
     : props.documents.find((document) => document.sourceHash === TUTORIAL_PAPER_SHA256) ?? lastImported
   const parserReady = props.settings.credentials.parser.state === 'valid'
-  const apiStepComplete = parserReady && apiVerified
+  const apiStepComplete = parserReady
   const taskComplete = sample?.workflow.status === 'completed'
   const canRead = sample && ['translating', 'partial', 'completed'].includes(sample.workflow.status)
   const progress = stageProgress(sample ?? null)
@@ -89,7 +88,6 @@ export default function TutorialPage(props: {
       }
       props.onSettingsSaved(saved.settings)
       window.localStorage.setItem(TUTORIAL_API_VERIFIED_KEY, '1')
-      setApiVerified(true)
       setApiToken('')
       setApiOpen(false)
       messageApi.success('MinerU API 已自动验证并保存')
@@ -131,7 +129,6 @@ export default function TutorialPage(props: {
     setLastImported(null)
     setActiveId(null)
     setReaderOpened(false)
-    setApiVerified(false)
     setReplaying(true)
   }
 
@@ -145,8 +142,8 @@ export default function TutorialPage(props: {
   return (
     <section className="page tutorial-page" aria-label="新手教程">
       {contextHolder}
-      <header className="page-header tutorial-page-header">
-        <div><span className="tutorial-eyebrow">COPILOTIX · 入门体验</span><h1>用一篇经典论文，走完第一次解析</h1></div>
+      <header className="page-header page-brand tutorial-page-header">
+        <div className="page-brand-copy"><span className="eyebrow tutorial-eyebrow">COPILOTIX / TUTORIAL · 入门体验</span><h1>用一篇经典论文，走完第一次解析</h1></div>
         <div className="tutorial-header-actions">
           <Button onClick={restartTutorial}>重新体验教程</Button>
           <Button onClick={props.onClose}>返回新解析</Button>

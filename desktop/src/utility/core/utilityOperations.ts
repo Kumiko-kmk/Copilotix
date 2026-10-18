@@ -1,6 +1,15 @@
+import { paperBriefSaveSchema } from '@shared/paperBrief/contracts'
+import { PaperInsightStore } from './persistence/paperInsightStore'
+import { FigureInsightStore } from './persistence/figureInsightStore'
+import { figureInsightRequestSchema, figureInsightSaveSchema } from '@shared/figureInsight'
+import { paperInsightRequestSchema } from '@shared/paperInsight'
+import { libraryCategoriesRequestSchema } from '@shared/libraryCategories'
+import { LibraryCategoryService } from './libraryCategoryService'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
-import { paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
+import { paperChatDeleteTurnSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
 import { PaperChatStore } from './persistence/paperChatStore'
+import { ReaderNoteStore } from './persistence/readerNoteStore'
+import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema } from '@shared/readerNotes'
 import { PaperContextBuilder, PaperContextError } from './paperContextBuilder'
 import { assertLibraryIdle, manageLibrary } from './libraryMaintenance'
 import { libraryCoreRequestSchema } from '@shared/librarySchemas'
@@ -28,9 +37,6 @@ import {
   coreJobManualRetryPayloadSchema,
   coreJobRecoverExpiredPayloadSchema,
   coreJobEventsPayloadSchema,
-  coreKnowledgeGetPayloadSchema,
-  coreSemanticConsentPayloadSchema,
-  coreEnsureEmbeddingPayloadSchema,
   coreSettingsMigrationPayloadSchema,
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
@@ -52,8 +58,7 @@ import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
 import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sqliteJobRepository'
 import { SqliteRagRepository, SqliteRagRepositoryError } from './persistence/sqliteRagRepository'
-import { RagDomainService } from './ragDomainService'
-import { PathPolicy } from './persistence/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
 import { RagContentIndexError, RagContentIndexService } from './compute/ragContentIndexService'
 
@@ -64,7 +69,6 @@ interface UtilityPersistenceState {
   repository?: V2TaskRepositoryCompat
   jobRepository?: SqliteJobRepository
   ragRepository?: SqliteRagRepository
-  ragService?: RagDomainService
   ragContentIndexService?: RagContentIndexService
   translationPlanManager?: MarkdownTranslationPlanManager
   databasePath?: string
@@ -115,9 +119,9 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     if (!state.jobRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
     return state.jobRepository
   }
-  const requireRagService = (): RagDomainService => {
-    if (!state.ragService) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
-    return state.ragService
+  const requireRagRepository = (): SqliteRagRepository => {
+    if (!state.ragRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
+    return state.ragRepository
   }
   const requireRagContentIndexService = (): RagContentIndexService => {
     if (!state.ragContentIndexService) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
@@ -135,23 +139,37 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     return state.translationPlanManager
   }
   const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
+  const noteStore = new ReaderNoteStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
+  const insightStore = () => new PaperInsightStore(requireRepository())
+  const figureInsightStore = () => new FigureInsightStore(requireRepository())
+  const categories = new LibraryCategoryService(insightStore, requireRepository)
   const handlers: UtilityHandlerMap = {
+    'figureInsight:get': request => figureInsightStore().get(figureInsightRequestSchema.parse(request.payload)),
+    'compute:figure-insight-descriptor': (request, signal) => figureInsightStore().descriptor(figureInsightRequestSchema.parse(request.payload), signal),
+    'figureInsight:save': request => figureInsightStore().save(figureInsightSaveSchema.parse(request.payload)),
+    // Reads every paper's text on first use: compute lane, so quick data requests are not held up.
+    'compute:library-categories': (request, signal) => categories.page(libraryCategoriesRequestSchema.parse(request.payload).after ?? 0, signal),
+    'insight:get': (request) => insightStore().get(paperInsightRequestSchema.parse(request.payload).documentId),
+    'insight:save-brief': (request) => { const { documentId, brief, anchors } = paperBriefSaveSchema.parse(request.payload); return insightStore().saveBrief(documentId, brief, anchors) },
+    'insight:brief-source': (request) => insightStore().briefSource(paperInsightRequestSchema.parse(request.payload).documentId),
     'chat:load': (request) => { const { documentId, before } = paperChatLoadRequestSchema.parse(request.payload); return chatStore.load(documentId, before) },
     'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
     'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),
     'chat:save-session': (request) => { const { documentId, session } = paperChatSaveSessionSchema.parse(request.payload); return chatStore.saveSession(documentId, session) },
+    'chat:delete-turn': (request) => chatStore.deleteTurn(paperChatDeleteTurnSchema.parse(request.payload)),
     'chat:clear': (request) => chatStore.clear(paperChatDocumentRequestSchema.parse(request.payload).documentId),
+    'notes:list': (request) => noteStore.list(readerNotesRequestSchema.parse(request.payload).documentId),
+    'notes:upsert': (request) => { const { documentId, note } = readerNoteUpsertSchema.parse(request.payload); return noteStore.upsert(documentId, note) },
+    'notes:delete': (request) => { const { documentId, noteId } = readerNoteDeleteSchema.parse(request.payload); return noteStore.delete(documentId, noteId) },
     'chat:ensure-index': (request, signal) => {
       signal.throwIfAborted()
       const { documentId } = paperChatStatusRequestSchema.parse(request.payload)
       requireRepository().ensureContentIndex(documentId)
-      const k = requireRagService().getKnowledge(documentId)
+      const rag = requireRagRepository()
+      const k = rag.getDocumentKnowledge(documentId) ?? rag.ensureDocumentKnowledge(documentId)
       return { state: k?.localState ?? 'unindexed', progress: k?.localProgress ?? 0, contentRevisionId: k?.activeContentRevisionId ?? null }
     },
-    'chat:build-context': (request, signal) => {
-      if (!state.ragRepository) throw new CoreUtilityOperationError('CORE_UNAVAILABLE', 'Core database is not initialized', true)
-      return new PaperContextBuilder(state.ragRepository).build(paperContextRequestSchema.parse(request.payload), signal)
-    },
+    'chat:build-context': (request, signal) => new PaperContextBuilder(requireRagRepository()).build(paperContextRequestSchema.parse(request.payload), signal),
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {
       if (!state.databasePath) throw new Error('文档库尚未初始化')
@@ -163,7 +181,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'database:init': async (request) => {
       const payload = coreDatabaseInitPayloadSchema.parse(request.payload)
       validateBootstrapPaths(payload.databasePath, payload.outputRoot)
-      if (state.databasePath === payload.databasePath && state.outputRoot === payload.outputRoot && state.repository && state.jobRepository && state.ragService && state.ragContentIndexService) return { initialized: true }
+      if (state.databasePath === payload.databasePath && state.outputRoot === payload.outputRoot && state.repository && state.jobRepository && state.ragRepository && state.ragContentIndexService) return { initialized: true }
       closeState(state)
       try {
         await mkdir(dirname(payload.databasePath), { recursive: true })
@@ -172,7 +190,6 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
         state.repository = new V2TaskRepositoryCompat(state.database, new PathPolicy())
         state.jobRepository = new SqliteJobRepository(state.database)
         state.ragRepository = new SqliteRagRepository(state.database)
-        state.ragService = new RagDomainService(state.database, state.ragRepository, state.jobRepository)
         state.ragContentIndexService = new RagContentIndexService(state.database, state.ragRepository, new PathPolicy())
         state.translationPlanManager = new MarkdownTranslationPlanManager(state.repository, new PathPolicy(), { outputRoot: payload.outputRoot })
         state.databasePath = payload.databasePath
@@ -195,16 +212,20 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const repository = requireRepository()
       const payload = request.payload as { outputRoot: string }
       const settings = appSettingsSchema.parse(repository.getSettings(payload.outputRoot))
-      state.outputRoot = settings.outputRoot
-      state.translationPlanManager = undefined
+      if (state.outputRoot !== settings.outputRoot) {
+        state.outputRoot = settings.outputRoot
+        state.translationPlanManager = undefined
+      }
       return settings
     },
     'settings:save': (request) => {
       const repository = requireRepository()
       const settings = appSettingsSchema.parse((request.payload as { settings: unknown }).settings)
       repository.saveSettings(settings)
-      state.outputRoot = settings.outputRoot
-      state.translationPlanManager = undefined
+      if (state.outputRoot !== settings.outputRoot) {
+        state.outputRoot = settings.outputRoot
+        state.translationPlanManager = undefined
+      }
       return settings
     },
     'settings:migration-get': (request) => {
@@ -251,18 +272,6 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const payload = coreDocumentMetadataPayloadSchema.parse(request.payload)
       requireRepository().updateDocumentMetadata(payload.id, payload.patch)
       return { changed: true }
-    },
-    'knowledge:get': (request) => {
-      const payload = coreKnowledgeGetPayloadSchema.parse(request.payload)
-      return requireRagService().getKnowledge(payload.documentId)
-    },
-    'knowledge:set-semantic-consent': (request) => {
-      const payload = coreSemanticConsentPayloadSchema.parse(request.payload)
-      return requireRagService().setSemanticConsent(payload.documentId, payload.consent, payload.now)
-    },
-    'knowledge:ensure-embed': (request) => {
-      const payload = coreEnsureEmbeddingPayloadSchema.parse(request.payload)
-      return requireRagService().ensureEmbeddingJob(payload)
     },
     'artifacts:record-revision': (request) => {
       const payload = request.payload as { taskId: string; kind: Parameters<V2TaskRepositoryCompat['recordArtifactRevision']>[1]; path: string; checksum: string; metadata?: Record<string, unknown>; jobId?: string }
@@ -392,7 +401,6 @@ function closeState(state: UtilityPersistenceState): void {
     state.translationPlanManager = undefined
     state.repository = undefined
     state.jobRepository = undefined
-    state.ragService = undefined
     state.ragRepository = undefined
     state.ragContentIndexService = undefined
   } finally {
@@ -447,6 +455,7 @@ async function importPdf(
     throw new CoreUtilityOperationError('CORE_NOT_FOUND', 'PDF source is unavailable', false)
   }
   if (!sourceInfo.isFile()) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'PDF source must be a regular file', false)
+  if (sourceInfo.size === 0) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'PDF source is empty', false)
   if (sourceInfo.size > MAX_PDF_BYTES) throw new CoreUtilityOperationError('CORE_LIMIT_EXCEEDED', 'PDF exceeds the supported size limit', false)
   const policy = new PathPolicy()
   await mkdir(state.outputRoot, { recursive: true })
@@ -462,12 +471,14 @@ async function importPdf(
 
   const hash = createHash('sha256')
   let size = 0
+  let header = Buffer.alloc(0)
   let published = false
   try {
     const hashing = new Transform({
       transform(chunk, _encoding, callback) {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
         size += buffer.length
+        if (header.length < 1024) header = Buffer.concat([header, buffer.subarray(0, 1024 - header.length)])
         if (size > MAX_PDF_BYTES) {
           callback(new CoreUtilityOperationError('CORE_LIMIT_EXCEEDED', 'PDF exceeds the supported size limit', false))
           return
@@ -482,6 +493,9 @@ async function importPdf(
       createWriteStream(partial, { flags: 'wx' }),
       { signal }
     )
+    if (size === 0 || !/%PDF-\d\.\d/u.test(header.toString('latin1'))) {
+      throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Invalid PDF header', false)
+    }
     const handle = await open(partial, 'r+')
     try {
       await handle.sync()

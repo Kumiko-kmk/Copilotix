@@ -1,6 +1,6 @@
 # 论文 AI 问答
 
-**适用版本：1.1.0。** 问答围绕当前文献展开，回答和会话状态保存在该文献的本地目录中。
+**适用版本：1.2.0。** 问答围绕当前文献展开，回答和会话状态保存在该文献的本地目录中。
 
 ![实际运行：问答入口与未发送草稿](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/paper-chat-1.1.0.png)
 

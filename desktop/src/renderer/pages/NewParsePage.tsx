@@ -1,12 +1,12 @@
 import React from 'react'
-import { FilePdfOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, FilePdfOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Modal, Tag, message } from 'antd'
 import { MAX_PDF_BYTES, MAX_PDF_PAGES } from '@shared/constants'
 import type { AppSettings } from '@shared/types'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import CopilotixWordmark from '../components/CopilotixWordmark'
 import { HomeBackdrop, UploadGlyph } from '../components/HomeScene'
-import { HomeGreeting, RecentShelf } from '../components/HomeWidgets'
+import { HomeGreeting } from '../components/HomeWidgets'
 
 interface PendingPdf {
   file: File
@@ -22,8 +22,6 @@ export default function NewParsePage(props: {
   onCreated(): void
   onOpenSettings(): void
   onOpenTutorial(): void
-  onOpenDocument?(documentId: string): void
-  onOpenTasks?(): void
 }): React.JSX.Element {
   const [files, setFiles] = React.useState<PendingPdf[]>([])
   const [tutorialEntryUsed, setTutorialEntryUsed] = React.useState(() => window.localStorage.getItem(TUTORIAL_ENTRY_USED_KEY) === '1')
@@ -82,24 +80,6 @@ export default function NewParsePage(props: {
     }
   }, [setPdfFiles])
 
-  React.useEffect(() => {
-    const page = pageRef.current
-    if (!page || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-    let frame = 0
-    const onPointerMove = (event: PointerEvent): void => {
-      if (frame) return
-      frame = window.requestAnimationFrame(() => {
-        frame = 0
-        page.style.setProperty('--px', (event.clientX / window.innerWidth * 2 - 1).toFixed(3))
-        page.style.setProperty('--py', (event.clientY / window.innerHeight * 2 - 1).toFixed(3))
-      })
-    }
-    window.addEventListener('pointermove', onPointerMove)
-    return () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      if (frame) window.cancelAnimationFrame(frame)
-    }
-  }, [])
 
   const start = React.useCallback(async () => {
     setSubmitting(true)
@@ -131,7 +111,7 @@ export default function NewParsePage(props: {
   return (
     <section ref={pageRef} className={`page new-parse-page${dragging ? ' is-dragging' : ''}`}>
       {contextHolder}
-      <HomeBackdrop />
+      <HomeBackdrop documents={props.documents} />
       <div className="new-parse-hero">
         <CopilotixWordmark />
         <div className="new-parse-heading">
@@ -163,7 +143,7 @@ export default function NewParsePage(props: {
             </div>
           </div>
           <Button type="primary" size="large" loading={submitting} onClick={chooseFiles}>
-            选择文档
+            <span>选择文档</span><ArrowRightOutlined aria-hidden="true" />
           </Button>
           <input
             ref={inputRef}
@@ -183,9 +163,6 @@ export default function NewParsePage(props: {
           setTutorialEntryUsed(true)
           props.onOpenTutorial()
         }}>第一次使用？从内置论文开始新手教程 <span aria-hidden="true">→</span></button> : null}
-        {props.documents && props.onOpenDocument ? (
-          <RecentShelf documents={props.documents} onOpen={props.onOpenDocument} onViewAll={() => props.onOpenTasks?.()} />
-        ) : null}
       </div>
 
       <div className="drop-veil" aria-hidden="true">

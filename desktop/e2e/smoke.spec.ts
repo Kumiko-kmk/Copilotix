@@ -12,7 +12,7 @@ const desktopPackage = JSON.parse(readFileSync(join(__dirname, '../package.json'
   devDependencies: { electron: string }
 }
 
-test('opens the minimal new parse page', async () => {
+test('starts source navigation and PDF import controls', async () => {
   const workspace = await createE2EWorkspace()
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -25,23 +25,16 @@ test('opens the minimal new parse page', async () => {
     await expect(newParse).toBeVisible()
     await newParse.focus()
     await newParse.press('Enter')
-    await expect(window.locator('aside[aria-label="主导航"]')).toHaveCount(0)
     await expect(window.getByRole('group', { name: '窗口控制' })).toBeVisible()
-    await expect(window.locator('.titlebar-brand')).toHaveCount(0)
-    expect(await window.title()).toBe('')
     await window.locator('[data-edge-dock="top"]').hover()
-    await expect(window.getByRole('button', { name: '任务管理' })).toBeVisible()
-    await expect(window.getByText('智能解析')).toHaveCount(0)
+    await expect(window.getByRole('button', { name: '文库' })).toBeVisible()
     await expect(window.getByText('拖入文档')).toBeVisible()
     await expect(window.getByText(`当前支持 PDF，单篇最多 ${MAX_PDF_PAGES} 页`)).toBeVisible()
-    await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '选择文档' })).toBeEnabled()
     const uploadEntry = window.getByTestId('pdf-upload-entry')
     await expect(uploadEntry).toBeVisible()
-    await expect(uploadEntry).toHaveCSS('border-radius', '20px')
-    await expect(uploadEntry).toHaveCSS('border-style', 'solid')
-    await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
-    await window.getByRole('button', { name: '任务管理' }).click()
-    await expect(window.locator('.titlebar-brand')).toHaveText('COPILOTIX')
+    await window.getByRole('button', { name: '设置' }).click()
+    await expect(window.locator('.settings-page')).toBeVisible()
   } finally {
     await app.close()
     await workspace.cleanup()

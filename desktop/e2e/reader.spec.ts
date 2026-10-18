@@ -1,7 +1,7 @@
 import { chromium, expect, test, type Locator, type Page } from '@playwright/test'
 import { execFileSync, spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
 import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
 import type { CopilotixDesktopApi } from '../src/shared/types'
 
@@ -105,7 +105,7 @@ test('renders compact scrollable tables and independent real formula minimaps', 
         configurable: true
       })
     })
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     await assertCompactMarkdownLayout(activeTextPanel)
     await expect(activeTextPanel.locator('article')).not.toHaveText(/Academic cell/u)
     expect(await window.evaluate(() =>
@@ -303,7 +303,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await expect(window.getByText('1 / 2')).toBeVisible()
     await expect.poll(() => window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
     await expect(window.locator('.pdf-block')).toHaveCount(8)
-    await expect(window.locator('.pdf-block-label')).toHaveCount(8)
+    await expect(window.locator('.pdf-block-label')).toHaveCount(0)
     await expect(window.locator('.pdf-merge-layer line')).toHaveCount(1)
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(activeTextPanel.locator('.markdown-body sup')).toHaveText('12')
@@ -346,7 +346,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await window.locator('[data-block-position="1-2"]').click()
     await expect.poll(() => isCentered(markdownImageBlock, '.markdown-scroll')).toBe(true)
 
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(originalBlockCount)
     await expect(window.locator('[data-reader-tab-panel="original"] .markdown-scroll')).toHaveCount(0)
@@ -437,7 +437,7 @@ test('persists original and translated Markdown annotations with color and under
       (CSS as typeof CSS & { highlights?: { get(name: string): { size: number } | undefined } }).highlights?.get('copilotix-highlight-blue')?.size ?? 0
     )).toBeGreaterThan(0)
 
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     const translatedBlock = activeTextPanel.locator('.markdown-block', { hasText: '第二段落包含' })
@@ -454,7 +454,7 @@ test('persists original and translated Markdown annotations with color and under
       ['translated', 'underline', '第二段落']
     ])
 
-    await window.getByText('Markdown', { exact: true }).click()
+    await window.getByText('原文', { exact: true }).click()
     activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await selectText(activeTextPanel.locator('.markdown-block', { hasText: 'Second paragraph with' }), 0, 6)
@@ -513,7 +513,7 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
     await expect(window.locator('.pdf-block.discarded.active')).toHaveCount(0)
     await expect(activeTextPanel.locator('.markdown-block.active')).toHaveCount(0)
 
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(activeTextPanel.locator('[data-reader-role="page-header"]')).toHaveText([
       'Fixture journal header',
@@ -595,17 +595,14 @@ test('shows a recoverable error when the local PDF is missing', async () => {
   }
 })
 
-test('shows the parsed English title in recent tasks and the Reader header', async () => {
+test('shows the parsed English title in library search and in the Reader header', async () => {
   const workspace = await createE2EWorkspace()
-  await seedReaderTask(workspace, { englishTitle: 'Attention Is All You Need' })
+  const documentId = await seedReaderTask(workspace, { englishTitle: 'Attention Is All You Need' })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const window = await app.firstWindow()
-    await openTaskList(window)
-    const paper = window.locator('.task-link', { hasText: 'Attention Is All You Need.pdf' })
-    await expect(paper).toBeVisible()
-    await paper.click()
-    await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need.pdf')
+    await openPaperFromLibrary(window, documentId)
+    await expect(window.locator('.reader-title')).toHaveText('Attention Is All You Need')
   } finally {
     await app.close()
     await workspace.cleanup()
@@ -660,7 +657,7 @@ test('renders and safely links an optional real Copilotix task', async () => {
         images.every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)
       )).toBe(true)
     }
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready', { timeout: 30_000 })
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(1110)
     await expect(activeTextPanel.locator('.markdown-block[data-block-ids=""]')).toHaveCount(1)
@@ -683,16 +680,8 @@ test('renders and safely links an optional real Copilotix task', async () => {
   }
 })
 
-async function openTaskList(window: Page): Promise<void> {
-  await window.locator('[data-edge-dock="top"]').hover()
-  await window.getByRole('button', { name: '任务管理' }).click()
-}
-
 async function openPaper(window: Page, taskId: string): Promise<void> {
-  await openTaskList(window)
-  const item = window.locator(`tr[data-row-key="${taskId}"] .task-link`)
-  await expect(item).toBeVisible()
-  await item.click()
+  await openPaperFromLibrary(window, taskId)
   await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
   // Image/font readiness has a production 30 s deadline. Wait for the actual
   // ready/error state, failing promptly on errors rather than operating during loading.

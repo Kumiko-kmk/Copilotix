@@ -18,18 +18,6 @@ import {
   type TableTranslationResponse
 } from '@shared/translationPlanProtocol'
 
-export {
-  TABLE_TRANSLATION_PROTOCOL,
-  TABLE_TRANSLATION_CACHE_VERSION,
-  validateTableTranslationResponse,
-  type TableTextSegment,
-  type TableCellPayload,
-  type TableAttachmentPayload,
-  type TablePayload,
-  type TableTranslationRequest,
-  type TableTranslationResponse
-} from '@shared/translationPlanProtocol'
-
 export interface TableTranslationSourceBlock {
   sourceIndex: number
   markdown: string
@@ -178,20 +166,6 @@ export function applyTableTranslation(
     const translated = translations.get(binding.id)
     binding.apply(normalizeTableText(binding.source, translated!))
   }
-}
-
-export function parseTableTranslationResponse(
-  raw: string,
-  request: TableTranslationRequest
-): TableTranslationResponse {
-  const text = stripJsonCodeFence(raw)
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    throw new Error('表格翻译源返回的内容不是有效 JSON')
-  }
-  return validateTableTranslationResponse(parsed, request)
 }
 
 function buildMarkdownTablePayload(table: any, tableId: string, bindings: SegmentBinding[]): TablePayload {
@@ -394,12 +368,4 @@ function normalizeTableText(source: string, translated: string): string {
     ? normalized.replace(/[ \t]*\n+[ \t]*/g, ' ')
     : normalized.replace(/\n{2,}/g, '\n')
   return `${leadingWhitespace}${content}${trailingWhitespace}`
-}
-
-function stripJsonCodeFence(value: string): string {
-  return value
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim()
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from '@shared/e2eLaunchPolicy'
+import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from '../e2e/launchPolicy'
 import { findForbiddenUtilityRuntime, isExpectedUtilityBundleFailure, MAX_CAPTURED_OUTPUT } from '../scripts/utility-bundle-smoke.mjs'
 
 describe('E2E GPU launch policy', () => {

@@ -1,8 +1,11 @@
 import type { PaperChatAskRequest, PaperChatStatus } from './paperChatSchemas'
 import type { PaperChatLoadRequest, PaperChatPage, PaperChatSession } from './paperChatStorageSchemas'
+import type { ReaderNote, ReaderNotes } from './readerNotes'
 import type { RagStreamEvent } from './ragSchemas'
 import type { LibraryRequest, LibraryResult } from './librarySchemas'
 import type {
+  CacheDocumentFigureRequest,
+  CacheDocumentFigureResult,
   DeleteDocumentRequest,
   DocumentChangeEvent,
   DocumentDetails,
@@ -18,7 +21,7 @@ import type {
   UsageAnalytics
 } from './ipcSchemas'
 
-export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart'
+export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart' | 'codex'
 
 export type CredentialName = 'parser' | 'qwen' | 'deepseek'
 
@@ -58,6 +61,7 @@ export type TaskStatus =
   | 'failed'
 
 export interface AppSettings {
+  codex?: import('./codex').CodexSettings
   outputRoot: string
   formulaEnabled: boolean
   tableEnabled: boolean
@@ -69,10 +73,11 @@ export interface AppSettings {
   deepseekBaseUrl: string
   deepseekModel: string
   /** Legacy persisted field, ignored by chat routing; use translationProvider. */
-  chatProvider: 'qwen' | 'deepseek' | null
+  chatProvider: 'qwen' | 'deepseek' | 'codex' | null
+  autoGeneratePaperInsight: boolean
   qwenChatModel: string
   deepseekChatModel: string
-  chatConsentProvider: 'qwen' | 'deepseek' | null
+  chatConsentProvider: 'qwen' | 'deepseek' | 'codex' | null
   chatConsentVersion: number | null
   credentials: CredentialStatuses
 }
@@ -221,12 +226,33 @@ export interface WindowState {
 }
 
 export interface CopilotixDesktopApi {
+  codex: import('./codex').CodexApi
+  figureInsight: {
+    get(request: import('./figureInsight').FigureInsightRequest): Promise<import('./figureInsight').FigureInsightState>
+    generate(request: import('./figureInsight').FigureInsightRequest): Promise<void>
+    cancel(request: import('./figureInsight').FigureInsightRequest): Promise<{ cancelled: boolean }>
+    onChanged(listener: (event: import('./figureInsight').FigureInsightRequest & { state: import('./figureInsight').FigureInsightState }) => void): () => void
+  }
+  /** One page of the library's content categories (see shared/libraryCategories.ts). */
+  libraryCategories(request: import('./libraryCategories').LibraryCategoriesRequest): Promise<import('./libraryCategories').LibraryCategoriesPage>
+  paperInsight: {
+    get(request: { documentId: string }): Promise<import('./paperInsight').PaperInsightState>
+    generate(request: { documentId: string }): Promise<void>
+    cancel(request: { documentId: string }): Promise<{ cancelled: boolean }>
+    onChanged(listener: (event: { documentId: string; state: import('./paperInsight').PaperInsightState }) => void): () => void
+  }
+  readerNotes: {
+    list(request: { documentId: string }): Promise<ReaderNotes>
+    upsert(request: { documentId: string; note: ReaderNote }): Promise<ReaderNotes>
+    delete(request: { documentId: string; noteId: string }): Promise<ReaderNotes>
+  }
   paperChat: {
     load(request: PaperChatLoadRequest): Promise<PaperChatPage>
     session(request: { documentId: string }): Promise<PaperChatSession>
     saveSession(request: { documentId: string; session: PaperChatSession }): Promise<{ saved: true }>
+    deleteTurn(request: { documentId: string; turnId: string; createdAt: string }): Promise<{ deleted: true }>
     clear(request: { documentId: string }): Promise<{ cleared: true }>
-    ask(request: PaperChatAskRequest): Promise<{ requestId: string }>
+    ask(request: PaperChatAskRequest): Promise<{ requestId: string; createdAt?: string }>
     cancel(request: { requestId: string }): Promise<{ cancelled: boolean }>
     ensureIndex(request: { documentId: string }): Promise<PaperChatStatus>
     onEvent(listener: (event: RagStreamEvent) => void): () => void
@@ -245,6 +271,7 @@ export interface CopilotixDesktopApi {
   retryDocument(documentId: string): Promise<void>
   deleteDocument(request: DeleteDocumentRequest): Promise<void>
   getDocument(documentId: string): Promise<DocumentDetails>
+  cacheDocumentFigure?(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult>
   openDocumentOutput(documentId: string): Promise<void>
   saveDocumentAs(request: SaveDocumentAsRequest): Promise<SaveDocumentAsResult>
   listReaderAnnotations(request: ListReaderAnnotationsRequest): Promise<ReaderAnnotationSnapshot>

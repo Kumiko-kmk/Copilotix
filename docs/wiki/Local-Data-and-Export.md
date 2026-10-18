@@ -1,6 +1,6 @@
 # 本地资料、导出与文库管理
 
-**适用版本：1.1.0。** 文献目录保存 PDF、解析产物、译文及聊天；独立应用数据库保存任务、文献记录等应用状态，凭据由系统管理。
+**适用版本：1.2.0。** 文献目录保存 PDF、解析产物、译文及聊天；独立应用数据库保存任务、文献记录等应用状态，凭据由系统管理。
 
 ![当前文献目录、聊天记录、结果 ZIP 与独立数据库](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/local-paper-files-1.1.0.png)
 

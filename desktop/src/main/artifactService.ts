@@ -9,10 +9,16 @@ import { normalizeMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdow
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
+import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
+import { projectFigureMarkdown, type FigureArtifact } from '@shared/figureArtifacts'
+import type { CacheDocumentFigureRequest, CacheDocumentFigureResult } from '@shared/ipcSchemas'
+import { figureGeometryKey, figureSourceRevision, readFigureArtifacts, storeFigureArtifact, writeDerivedFile } from './figureArtifactStore'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 
 /** Filesystem-facing document/artifact operations kept out of command and runner orchestration. */
 export class ArtifactService {
+  private readonly figureWrites = new Map<string, Promise<CacheDocumentFigureResult>>()
+  private readonly blockedFigureWrites = new Set<string>()
   constructor(
     private readonly repository: TaskRepositoryCompat,
     private readonly compute: TaskComputePort,
@@ -53,12 +59,66 @@ export class ArtifactService {
     return this.pathPolicy.resolveChild(task.outputDir, decodeURIComponent(assetPath.replace(/^\/+/, '')))
   }
 
+  /** Main resolves paths and recomputes complete geometry; Renderer supplies only bounded PNG data. */
+  async cacheFigure(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult> {
+    if (this.blockedFigureWrites.has(request.documentId)) throw new Error('文献正在删除')
+    const pending = (this.figureWrites.get(request.documentId) ?? Promise.resolve()).catch(() => undefined).then(async () => {
+      const document = await this.getDocument(request.documentId)
+      const task = document.task
+      const geometries = buildReaderFigureGeometries(document.mappings, document.layoutJson)
+      const geometry = geometries.find(g => g.id === request.figureId && g.status === 'complete')
+      if (!geometry || figureGeometryKey(geometry) !== request.geometryKey) throw new Error('整图来源已变化或归属不确定')
+      const revision = await figureSourceRevision(task.outputDir, task.sourceHash, document.layoutJson)
+      const previous = await readFigureArtifacts(task.outputDir, revision, geometries)
+      let artifact = previous.find(f => f.figureId === geometry.id)
+      if (request.pngBase64) {
+        if (request.sourceRevision !== revision) throw new Error('文献已更新，请重新生成整图')
+        artifact = await storeFigureArtifact(task.outputDir, revision, geometry, request.pngBase64, previous)
+      }
+      if (artifact) {
+        const saved = artifact
+        const figures = [...previous.filter(f => f.figureId !== saved.figureId), saved]
+        await this.publishFigureMarkdown(task, document.markdown, document.translatedMarkdown, figures)
+      }
+      return { imagePath: artifact?.imagePath ?? null, sourceRevision: revision }
+    })
+    this.figureWrites.set(request.documentId, pending)
+    try { return await pending } finally {
+      if (this.figureWrites.get(request.documentId) === pending) this.figureWrites.delete(request.documentId)
+    }
+  }
+
+  async freezeFigureWrites(documentId: string): Promise<void> {
+    this.blockedFigureWrites.add(documentId)
+    await this.figureWrites.get(documentId)?.catch(() => undefined)
+  }
+  resumeFigureWrites(documentId: string): void { this.blockedFigureWrites.delete(documentId) }
+
+  private async publishFigureMarkdown(task: CopilotixTask, original: string, translated: string, figures: readonly FigureArtifact[]): Promise<void> {
+    for (const [name, source] of [['full.figures.md', original], ['full.zh-CN.figures.md', translated]] as const) {
+      if (!source) continue
+      const projected = projectFigureMarkdown(source, figures)
+      const path = join(task.outputDir, name)
+      if (await this.readOptional(path) !== projected) await writeDerivedFile(path, projected)
+    }
+  }
+
+  private async figureProjection(task: CopilotixTask, markdown: string): Promise<string> {
+    try {
+      const layout = await this.readOptional(join(task.outputDir, 'layout.json'), '{}')
+      const mappings = await this.loadMappings(task)
+      const geometries = buildReaderFigureGeometries(mappings, layout)
+      const revision = await figureSourceRevision(task.outputDir, task.sourceHash, layout)
+      return projectFigureMarkdown(markdown, await readFigureArtifacts(task.outputDir, revision, geometries))
+    } catch { return markdown }
+  }
+
   async createResultZip(taskId: string, destination: string): Promise<void> {
     const task = await this.requireTask(taskId)
     await this.assertExportDestination(task, destination)
-    const original = await this.readOptional(join(task.outputDir, 'full.md'))
+    const original = await this.figureProjection(task, await this.readOptional(join(task.outputDir, 'full.md')))
     const blocks = await this.loadTranslatedBlocks(task)
-    const translated = blocks?.length ? joinTranslatedMarkdownBlocks(blocks) : await this.readOptional(join(task.outputDir, 'full.zh-CN.md'))
+    const translated = await this.figureProjection(task, blocks?.length ? joinTranslatedMarkdownBlocks(blocks) : await this.readOptional(join(task.outputDir, 'full.zh-CN.md')))
     const images = new Set<string>()
     const normalize = (markdown: string): string => normalizeMarkdown(markdown, (url) => {
       if (!isLocalMarkdownImage(url)) return url
@@ -108,7 +168,7 @@ export class ArtifactService {
     const assetDir = join(dirname(destination), folder)
     const partialAssets = `${assetDir}.partial`
     const assets = new Map<string, string>()
-    const normalized = normalizeMarkdown(source, (url) => {
+    const normalized = normalizeMarkdown(await this.figureProjection(task, source), (url) => {
       if (!isLocalMarkdownImage(url)) return url
       const path = this.pathPolicy.resolveChild(task.outputDir, decodeURIComponent(url.split(/[?#]/u)[0]!).replace(/^\/+/, ''))
       let name = assets.get(path)

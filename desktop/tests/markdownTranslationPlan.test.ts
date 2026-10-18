@@ -10,7 +10,7 @@ import { flattenSegments, TRANSLATION_PIPELINE_VERSION, type TableTranslationReq
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import { PathPolicy } from '../src/utility/core/persistence/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111'
 const roots: string[] = []
@@ -222,6 +222,13 @@ describe('utility markdown translation plan manager', () => {
       expect((await manager.listWork(fixture.task.id, fixture.jobId)).items[0]).toMatchObject({ status: 'pending' })
       expect(await readJson(absolutePath(fixture.outputDir, `.translation/${fixture.jobId}/plan.json`)))
         .toMatchObject({ attempt: 1, units: [expect.objectContaining({ unitId: descriptor.unitId, status: 'pending' })] })
+      const restartedRetry = new MarkdownTranslationPlanManager(fixture.repository)
+      await expect(restartedRetry.open(fixture.task.id, fixture.jobId)).resolves.toMatchObject({ failed: 0 })
+      expect((await restartedRetry.listWork(fixture.task.id, fixture.jobId)).items[0]).toMatchObject({ status: 'pending' })
+      // A failure produced by the new attempt must still survive another restart.
+      await restartedRetry.fail(fixture.task.id, fixture.jobId, descriptor.unitId, 'new provider failure')
+      const failedRetry = new MarkdownTranslationPlanManager(fixture.repository)
+      await expect(failedRetry.open(fixture.task.id, fixture.jobId)).resolves.toMatchObject({ failed: 1 })
     } finally {
       closeFixture(fixture)
     }

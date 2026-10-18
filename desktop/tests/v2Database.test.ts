@@ -230,21 +230,21 @@ describe('v2 migration ledger and strict persistence schema', () => {
     const database = new V2Database(path)
     try {
       database.connection.prepare(`
-        INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES(5, 'future', ?, 'now')
+        INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES(6, 'future', ?, 'now')
       `).run('f'.repeat(64))
     } finally {
       database.close()
     }
 
     const snapshotsBefore = (await readdir(dirname(path))).filter((name) => name.includes('.pre-migration-'))
-    expect(() => new V2Database(path)).toThrow(/schema version 5 is newer than supported version 4/)
+    expect(() => new V2Database(path)).toThrow(/schema version 6 is newer than supported version 5/)
     const snapshotsAfter = (await readdir(dirname(path))).filter((name) => name.includes('.pre-migration-'))
     expect(snapshotsAfter).toEqual(snapshotsBefore)
 
     const unchanged = new DatabaseSync(path, { readOnly: true })
     try {
       expect(unchanged.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([
-        { version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }
+        { version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }
       ])
     } finally {
       unchanged.close()

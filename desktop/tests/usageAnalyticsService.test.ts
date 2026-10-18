@@ -25,7 +25,7 @@ describe('UsageAnalyticsService', () => {
 
     const result = await service.snapshot([task], 3, new Date(2026, 8, 20, 12))
     const active = result.days.find((day) => day.date === '2026-09-19')
-    expect(active).toEqual({ date: '2026-09-19', documents: 1, pages: 14, deepseekTokens: 10, qwenTokens: 20 })
+    expect(active).toEqual({ date: '2026-09-19', documents: 1, pages: 14, deepseekTokens: 10, qwenTokens: 20, codexTokens: 0 })
 
     const reloaded = new UsageAnalyticsService(path)
     const persisted = await reloaded.snapshot([task], 3, new Date(2026, 8, 20, 12))

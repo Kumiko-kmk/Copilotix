@@ -48,7 +48,7 @@ describe('paper chat wire contracts', () => {
   it('checks trusted IPC senders, payload bounds and unknown request IDs through the actual registrations', async () => {
     const handlers = new Map<string, (event: IpcInvokeEventLike, request: unknown) => Promise<unknown>>()
     const service = new PaperChatService({
-      saveTurn: vi.fn(), load: vi.fn(), session: vi.fn(), saveSession: vi.fn(), clear: vi.fn(), settings: vi.fn(async () => DEFAULT_SETTINGS), key: vi.fn(), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
+      saveTurn: vi.fn(), load: vi.fn(), session: vi.fn(), saveSession: vi.fn(), deleteTurn: vi.fn(), clear: vi.fn(), settings: vi.fn(async () => DEFAULT_SETTINGS), key: vi.fn(), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
     const owner = { isDestroyed: () => false }
     const entry = resolve('renderer/index.html')
     const url = pathToFileURL(entry).href
@@ -56,11 +56,12 @@ describe('paper chat wire contracts', () => {
     const event: IpcInvokeEventLike = { sender: { mainFrame: frame, getURL: () => url, isDestroyed: () => false, send: vi.fn() }, senderFrame: frame }
     const ensureIndex = vi.fn(async () => ({ state: 'queued' as const, progress: 0, contentRevisionId: null }))
     registerPaperChatHandlers(service, ensureIndex, { getMainWindow: () => owner, fromWebContents: () => owner, rendererEntryPath: entry, ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } })
-    expect([...handlers.keys()]).toEqual(['paper-chat:load', 'paper-chat:session', 'paper-chat:save-session', 'paper-chat:clear', 'paper-chat:ask', 'paper-chat:cancel', 'paper-chat:ensure-index'])
+    expect([...handlers.keys()]).toEqual(['paper-chat:load', 'paper-chat:session', 'paper-chat:save-session', 'paper-chat:delete-turn', 'paper-chat:clear', 'paper-chat:ask', 'paper-chat:cancel', 'paper-chat:ensure-index'])
     const ask = handlers.get('paper-chat:ask')!
     await expect(ask({ ...event, senderFrame: { url } }, request)).resolves.toMatchObject({ ok: false, error: { code: 'UNTRUSTED_SENDER' } })
     for (const invalid of [{ question: 'a'.repeat(2001) }, { pinned: Array(9).fill(pin) }]) await expect(ask(event, { ...request, ...invalid })).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } })
-    await expect(ask(event, request)).resolves.toMatchObject({ ok: false, error: { code: 'CHAT_CONSENT_REQUIRED' } })
+    // The separate consent dialog was removed; missing credentials must still block sending.
+    await expect(ask(event, request)).resolves.toMatchObject({ ok: false, error: { code: 'CHAT_CREDENTIALS_REQUIRED' } })
     await expect(handlers.get('paper-chat:cancel')!(event, { requestId: doc })).resolves.toEqual({ ok: true, value: { cancelled: false } })
     await expect(handlers.get('paper-chat:ensure-index')!(event, { documentId: doc })).resolves.toMatchObject({ ok: true, value: { state: 'queued' } })
     expect(ensureIndex).toHaveBeenCalledWith(doc)

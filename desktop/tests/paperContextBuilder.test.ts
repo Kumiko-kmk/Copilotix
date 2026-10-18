@@ -65,6 +65,11 @@ describe('PaperContextBuilder', () => {
     expect(result.evidence.every((e) => e.mappingConfidence === 'translated')).toBe(true)
     expect(result.evidence[0]!.translatedSelections).toEqual(['译文😀内容'])
     expect(result.evidence[0]!.text).toBe('original part ')
+    // A translation without source alignment carries no mapping ids: the question still goes out.
+    f.input.pinned = [{ ...f.input.pinned[0]!, fragments: [{ quote: '译文😀内容', mappingIds: [], startOffset: 0, endOffset: 7 }] }]
+    expect(f.builder.build(f.input).evidence.every((e) => e.scoreProvenance[0]!.source !== 'selection')).toBe(true)
+    f.input.pinned = [{ ...f.input.pinned[0]!, contentRevisionId: 'old-revision' }]
+    expect(() => f.builder.build(f.input)).toThrow(expect.objectContaining({ code: 'SELECTION_STALE' }))
   })
   it('validates a visible selection containing Markdown formatting against trusted source text', () => {
     const f = fixture(['A **bold** contribution using [attention](https://example.test).'])

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
 import { MAX_PDF_PAGES } from '../src/shared/constants'
 
 const MINIMAP_TRANSLATED_MARKDOWN = [
@@ -71,7 +71,7 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
   }
 })
 
-test('keeps the new parse page static across supported sizes and themes', async () => {
+test('keeps the new parse page layout across supported sizes and themes', async () => {
   const workspace = await createE2EWorkspace()
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
@@ -91,7 +91,9 @@ test('keeps the new parse page static across supported sizes and themes', async 
     expect(compactViewport[0]).toBeLessThanOrEqual(1102)
     expect(compactViewport[1]).toBeGreaterThanOrEqual(700)
     expect(compactViewport[1]).toBeLessThanOrEqual(702)
-    await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
+    // The only canvas is the cipher backdrop; the hero itself stays DOM.
+    await expect(window.locator('.new-parse-page canvas')).toHaveCount(1)
+    await expect(window.locator('.new-parse-page canvas.home-cipher')).toHaveCount(1)
     await expect(window.locator('.titlebar-brand')).toHaveCount(0)
     await expect(window.getByRole('img', { name: 'COPILOTIX' })).toBeVisible()
     await expect(window.locator('.copilotix-wordmark span')).toHaveCount(10)
@@ -128,7 +130,9 @@ test('keeps the new parse page static across supported sizes and themes', async 
     expect(spaciousViewport[0]).toBeLessThanOrEqual(1442)
     expect(spaciousViewport[1]).toBeGreaterThanOrEqual(900)
     expect(spaciousViewport[1]).toBeLessThanOrEqual(902)
-    await expect(window.locator('.new-parse-page canvas')).toHaveCount(0)
+    // The only canvas is the cipher backdrop; the hero itself stays DOM.
+    await expect(window.locator('.new-parse-page canvas')).toHaveCount(1)
+    await expect(window.locator('.new-parse-page canvas.home-cipher')).toHaveCount(1)
     await expect(window.locator('.app-shell')).toHaveCSS('border-radius', '8px')
     await expect(window.locator('.main-surface')).toHaveCSS('border-radius', '0px')
     await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
@@ -193,6 +197,12 @@ test('lays out service credentials as compact connection cards', async () => {
     await expect(window.getByRole('region', { name: 'APIKey 用量分析' })).toBeVisible()
     await expect(window.locator('.settings-page')).toHaveCSS('overflow', 'hidden')
     expect(await window.locator('.settings-page').evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true)
+    await expect(window.getByRole('region', { name: 'Codex 连接' })).toBeVisible()
+    for (const size of [[1440, 900], [1100, 700]] as const) {
+      await app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0]?.setSize(width, height), size)
+      await expect.poll(() => window.locator('.settings-content-body').evaluate((element) => element.scrollHeight <= element.clientHeight && element.querySelector('.usage-dashboard')!.getBoundingClientRect().bottom <= element.getBoundingClientRect().bottom + 1)).toBe(true)
+    }
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await capture(window, 'settings-services-reference.png')
   } finally {
     await app.close()
@@ -228,12 +238,18 @@ test('reorders and enables translation providers with explicit persistent saves'
       const bounds = element.getBoundingClientRect()
       return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
     }))
-    expect(modelCardBounds).toHaveLength(4)
+    expect(modelCardBounds).toHaveLength(5)
     for (const [index, bounds] of modelCardBounds.entries()) {
       expect(bounds.x).toBeCloseTo(modelCardBounds[0]!.x, 0)
-      expect(bounds.height).toBeGreaterThanOrEqual(82)
+      expect(bounds.height).toBeGreaterThanOrEqual(52)
       if (index > 0) expect(bounds.y).toBeGreaterThan(modelCardBounds[index - 1]!.y)
     }
+    // The whole model page, including the AI note, fits without scrolling down to the minimum window.
+    for (const size of [[1440, 900], [1100, 700]] as const) {
+      await app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0]?.setSize(width, height), size)
+      await expect.poll(() => window.locator('.settings-content-body').evaluate((element) => element.scrollHeight <= element.clientHeight && [...element.querySelectorAll('.model-priority-card')].every((card) => card.getBoundingClientRect().bottom <= element.getBoundingClientRect().bottom + 1))).toBe(true)
+    }
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await capture(window, 'settings-models-reference.png')
 
     await window.getByRole('button', { name: '移动千问 / Qwen' }).dragTo(window.locator('[data-provider="bing"]'))
@@ -305,10 +321,8 @@ test('provides an interactive minimap for original and translated Markdown', asy
   try {
     const window = await app.firstWindow()
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 700))
-    // The bottom paper switcher was removed; papers open from the task list.
-    await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('button', { name: '任务管理' }).click()
-    await window.locator(`tr[data-row-key="${taskId}"] .task-link`).click()
+    // Papers open from the library search; the task list and home shelf were removed.
+    await openPaperFromLibrary(window, taskId)
 
     // Opening a paper loads its details through IPC before the Markdown pane exists.
     await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
@@ -371,7 +385,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThan(80)
     await capture(window, 'reader-minimap-1100x700-original.png')
 
-    await window.getByText('Markdown（中文）').click()
+    await window.getByText('译文').click()
     const translatedPanel = window.locator('.reader-tab-panel.active')
     const translatedMinimap = translatedPanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
     await expect(translatedPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
@@ -383,7 +397,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await capture(window, 'reader-minimap-1440x900-translated.png')
 
     await expect(window.getByText('JSON', { exact: true })).toHaveCount(0)
-    await window.getByText('AI 问答', { exact: true }).click()
+    await window.getByText('Chat', { exact: true }).click()
     await expect(window.locator('.reader-tab-panel.active .markdown-minimap')).toHaveCount(0)
     await expect(window.locator('.reader-tab-panel.active .paper-chat')).toBeVisible()
   } finally {

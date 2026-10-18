@@ -18,6 +18,7 @@ function setup() {
     load: vi.fn<PaperChatDependencies['load']>(async () => ({ turns: [], next: null })),
     session: vi.fn<PaperChatDependencies['session']>(async () => ({ draft: '', pinned: [], selectedModel: null })),
     saveSession: vi.fn<PaperChatDependencies['saveSession']>(async () => ({ saved: true })),
+    deleteTurn: vi.fn<PaperChatDependencies['deleteTurn']>(async () => ({ deleted: true })),
     clear: vi.fn<PaperChatDependencies['clear']>(async () => ({ cleared: true })),
     settings: vi.fn(async () => settings), key: vi.fn(async () => 'private key'), buildContext: vi.fn(async () => context),
     stream: vi.fn<PaperChatDependencies['stream']>(async ({ onDelta }) => { onDelta('private answer [E1] [E99]'); return { promptTokens: 3, completionTokens: 4, totalTokens: 7 } }),
@@ -36,7 +37,8 @@ describe('PaperChatService', () => {
     await f.service.ask(request, f.send); await f.terminal()
     expect(f.events.map((e) => e.type)).toEqual(['accepted', 'retrieving', 'evidence-ready', 'delta', 'citation', 'completed'])
     f.events.forEach((e, i) => { expect(e.sequence).toBe(i); expect(canTransitionRagStreamEvent(f.events[i - 1]?.type ?? null, e.type)).toBe(true) })
-    expect(f.events.at(-1)).toMatchObject({ type: 'completed', answer: 'private answer [E1] ' })
+    expect(f.events.at(-1)).toMatchObject({ type: 'completed', answer: 'private answer [E1] ', metadata: { model: 'qwen-plus', createdAt: expect.any(String), completedAt: expect.any(String), durationMs: expect.any(Number), usage: { promptTokens: 3, completionTokens: 4, totalTokens: 7 } } })
+    expect(f.deps.saveTurn.mock.calls.at(-1)?.[1]).toMatchObject({ usage: { totalTokens: 7 }, durationMs: expect.any(Number), completedAt: expect.any(String) })
     expect(f.events.find((e) => e.type === 'citation')).toMatchObject({ citation: { evidenceId: 'E1', chunkId: 'chunk1', locator: context.evidence[0]!.locator } })
     expect(f.deps.recordUsage).toHaveBeenCalledWith('qwen', { promptTokens: 3, completionTokens: 4, totalTokens: 7 })
     const log = JSON.stringify(f.deps.log.mock.calls)
@@ -50,13 +52,22 @@ describe('PaperChatService', () => {
     expect(messages.at(-1)!.content.match(/<\/evidence>/gu)).toHaveLength(1)
     expect(messages.at(-1)!.content).toContain('\\u003c/evidence\\u003e')
     expect(messages.at(-1)!.content).toContain('private translation')
+    expect(messages.at(-1)!.content).not.toContain('userSelections')
+  })
+  it('tells the model which passages were selected and stores them with the turn', async () => {
+    const f = setup()
+    const pinned = [{ view: 'translated' as const, text: '选中的译文段落', contentRevisionId: 'revision-current', fragments: [{ startOffset: 0, endOffset: 7, quote: '选中的译文段落', mappingIds: ['m1'], pageIndex: 2 }] }]
+    const messages = buildPaperChatMessages({ ...request, pinned }, context)
+    expect(messages[0]!.content).toContain('userSelections are the passages the user selected')
+    expect(JSON.parse(messages.at(-1)!.content.split('\n')[1]!).userSelections).toEqual([{ view: 'translation', text: '选中的译文段落' }])
+    await f.service.ask({ ...request, pinned }, f.send); await f.terminal()
+    expect(f.deps.saveTurn.mock.calls.at(-1)?.[1]).toMatchObject({ status: 'completed', selections: [{ view: 'translated', text: '选中的译文段落', pageIndex: 2 }] })
   })
   it.each([
-    ['provider', 'CHAT_PROVIDER_REQUIRED'], ['consent', 'CHAT_CONSENT_REQUIRED'], ['key', 'CHAT_CREDENTIALS_REQUIRED'], ['unverified', 'CHAT_CREDENTIAL_UNVERIFIED'], ['invalid', 'CHAT_CREDENTIAL_UNVERIFIED']
+    ['provider', 'CHAT_PROVIDER_REQUIRED'], ['key', 'CHAT_CREDENTIALS_REQUIRED'], ['unverified', 'CHAT_CREDENTIAL_UNVERIFIED'], ['invalid', 'CHAT_CREDENTIAL_UNVERIFIED']
   ])('rejects missing %s independently without any context or network request', async (gate, code) => {
     const f = setup()
     if (gate === 'provider') Object.assign(f.settings, { translationProvider: 'bing' })
-    if (gate === 'consent') f.settings.chatConsentVersion = 99
     if (gate === 'key') f.deps.key.mockResolvedValue(null as unknown as string)
     if (gate === 'unverified' || gate === 'invalid') Object.assign(f.settings.credentials.qwen, { state: gate === 'invalid' ? 'invalid' : 'unknown' })
     await expect(f.service.ask(request, f.send)).rejects.toMatchObject({ code })
@@ -126,11 +137,11 @@ describe('PaperChatService', () => {
     expect(f.events.at(-1)).toMatchObject({ type: 'failed', error: { code: 'QUERY_SCOPE_INVALID' } })
     expect(f.deps.stream).not.toHaveBeenCalled()
   })
-  it('rechecks consent and credentials after context retrieval', async () => {
+  it('rechecks credentials after context retrieval', async () => {
     const f = setup()
-    f.deps.buildContext.mockImplementation(async () => { f.settings.chatConsentVersion = 0; return context })
+    f.deps.buildContext.mockImplementation(async () => { Object.assign(f.settings.credentials.qwen, { state: 'invalid' }); return context })
     await f.service.ask(request, f.send); await f.terminal()
-    expect(f.events.at(-1)).toMatchObject({ type: 'failed', error: { code: 'CHAT_CONSENT_REQUIRED' } }); expect(f.deps.stream).not.toHaveBeenCalled()
+    expect(f.events.at(-1)).toMatchObject({ type: 'failed', error: { code: 'CHAT_CREDENTIAL_UNVERIFIED' } }); expect(f.deps.stream).not.toHaveBeenCalled()
   })
   it('bounds answer size and rejects unsafe deltas without uncaught timer exceptions', async () => {
     for (const text of ['x'.repeat(32769), 'unsafe\0text']) {
@@ -164,19 +175,17 @@ describe('PaperChatService', () => {
     expect(f.deps.saveTurn).not.toHaveBeenCalled()
     expect(f.deps.stream).not.toHaveBeenCalled()
   })
-  it('rejects disabled translation providers and consent from the previous routing version', async () => {
+  it('rejects disabled providers before reading credentials', async () => {
     const f = setup()
     Object.assign(f.settings, { enabledTranslationProviders: ['deepseek'] })
     await expect(f.service.ask(request, f.send)).rejects.toMatchObject({ code: 'CHAT_PROVIDER_REQUIRED' })
-    Object.assign(f.settings, { enabledTranslationProviders: ['qwen'], chatConsentVersion: 1 })
-    await expect(f.service.ask(request, f.send)).rejects.toMatchObject({ code: 'CHAT_CONSENT_REQUIRED' })
     expect(f.deps.key).not.toHaveBeenCalled(); expect(f.deps.stream).not.toHaveBeenCalled()
   })
   it('does not send evidence if the translation recipient changes during retrieval', async () => {
     const f = setup()
     f.deps.buildContext.mockImplementation(async () => { Object.assign(f.settings, { translationProvider: 'deepseek' }); return context })
     await f.service.ask(request, f.send); await f.terminal()
-    expect(f.events.at(-1)).toMatchObject({ type: 'failed', error: { code: 'CHAT_CONSENT_REQUIRED' } })
+    expect(f.events.at(-1)).toMatchObject({ type: 'failed', error: { code: 'CHAT_PROVIDER_REQUIRED' } })
     expect(f.deps.stream).not.toHaveBeenCalled()
   })
   it('routes an explicitly selected DeepSeek model while keeping Qwen translation unchanged', async () => {

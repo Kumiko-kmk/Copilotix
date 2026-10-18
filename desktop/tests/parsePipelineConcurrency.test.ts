@@ -9,7 +9,7 @@ import type { TaskComputePort } from '@core/ports'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { CopilotixTask } from '@shared/types'
 import { ParseJobRunner } from '@main/parseJobRunner'
-import { PathPolicy } from '@main/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import type { ParserClient } from '@main/parserClient'
 
 const roots: string[] = []

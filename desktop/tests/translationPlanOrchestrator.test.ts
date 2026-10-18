@@ -1,9 +1,10 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TaskComputePort } from '../src/core/ports'
-import { PathPolicy } from '../src/main/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import { TranslationCredentialError, TranslationHttpError, type TranslationProvider } from '../src/main/translation/providers'
 import { TranslationPlanOrchestrator, withRetry } from '../src/main/translation/translationPlanOrchestrator'
 import type {
@@ -183,6 +184,35 @@ function run(
 }
 
 describe('translation plan orchestrator', () => {
+  it('bounds preparation to 64 units across metadata pages and drains all correlated results', async () => {
+    const fixture = await makeFixture('Short source')
+    const descriptors = Array.from({ length: 160 }, () => {
+      const id = randomUUID()
+      return { ...fixture.descriptor, unitId: id, requestPath: `.translation/${JOB_ID}/requests/${id}.json`, responsePath: `.translation/${JOB_ID}/responses/${id}.json` }
+    })
+    await Promise.all(descriptors.map(d => writeFile(join(fixture.root, d.requestPath), JSON.stringify({ ...fixture.request, unitId: d.unitId }))))
+    const completed = new Set<string>(), lists: number[] = []
+    const counts = () => ({ total: descriptors.length, completed: completed.size, failed: 0 })
+    const base = fixture.compute.asTaskCompute()
+    const compute: TaskComputePort = { ...base,
+      openTranslationPlan: async () => ({ ...counts(), planId: PLAN_ID, taskId: TASK_ID, jobId: JOB_ID, sourceHash: SOURCE_HASH, reused: false }),
+      listTranslationWork: async (_task, _job, cursor = 0) => { lists.push(cursor); return { items: descriptors.slice(cursor, cursor + 32), nextCursor: cursor + 32 < descriptors.length ? cursor + 32 : null, counts: counts() } },
+      tryTranslationCache: async (_task, _job, unitId) => ({ ...counts(), unitId, status: 'pending' }),
+      applyTranslation: async (_task, _job, unitId) => { completed.add(unitId); return { ...counts(), unitId, status: 'completed' } },
+      finalizeTranslation: async () => ({ ...(await base.finalizeTranslation!(TASK_ID, JOB_ID)), ...counts() })
+    }
+    let release!: () => void, active = 0, peak = 0
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const backend = provider('qwen', async text => { active++; peak = Math.max(peak, active); await gate; active--; return text }, [])
+    const running = new TranslationPlanOrchestrator({ task: fixture.task, jobId: JOB_ID, providers: new Map([['qwen', backend]]), providerOrder: ['qwen'], compute, signal: new AbortController().signal, onProgress: async () => undefined }).run()
+    try {
+      await vi.waitFor(() => expect(active).toBe(64), { timeout: 3000 })
+      expect(lists.length).toBeLessThanOrEqual(3)
+    } finally { release() }
+    await expect(running).resolves.toMatchObject({ completed: 160, failed: 0 })
+    expect(peak).toBe(64)
+    expect(completed.size).toBe(160)
+  })
   it('fails clearly without opening a plan when no enabled provider is executable', async () => {
     const fixture = await makeFixture('No verified provider')
     const calls: string[] = []
@@ -221,7 +251,7 @@ describe('translation plan orchestrator', () => {
     expect(response.response.translations[0]!.text).toHaveLength(9_001 + 2 * lengths.length)
   })
 
-  it('consumes and releases each translation-plan page before requesting the next page', async () => {
+  it('prefetches metadata pages while retaining per-unit correlation and completion', async () => {
     const fixture = await makeFixture('First page')
     const secondId = '55555555-5555-4555-8555-555555555555'
     const second: TranslationPlanWorkDescriptor = {
@@ -290,7 +320,7 @@ describe('translation plan orchestrator', () => {
     }).run()
 
     expect(result.completed).toBe(2)
-    expect(events.indexOf(`apply:${fixture.descriptor.unitId}`)).toBeLessThan(events.indexOf('list:1'))
+    expect(events.indexOf('list:1')).toBeLessThan(events.indexOf(`apply:${fixture.descriptor.unitId}`))
     expect(calls).toHaveLength(2)
   })
 

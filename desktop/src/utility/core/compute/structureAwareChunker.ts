@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { BlockMapping } from '@shared/types'
-import type { RagChunk, RagChunkContentType, RagChunkInput, RagMappingConfidence } from '@core/types'
+import type { RagChunk, RagChunkContentType, RagMappingConfidence } from '@core/types'
 import { alignMarkdownBlocks, parseMarkdownAst, stringifyMarkdownAst } from '@shared/markdownBlocks'
 
 /** Bumping either value intentionally creates a new content-revision identity. */
@@ -8,9 +8,7 @@ export const STRUCTURE_AWARE_CHUNKER_VERSION = 1
 export const TOKEN_ESTIMATOR_VERSION = 1
 export const STRUCTURE_AWARE_CHUNKER_FINGERPRINT = `structure-aware-v${STRUCTURE_AWARE_CHUNKER_VERSION}:tokens-v${TOKEN_ESTIMATOR_VERSION}:utf16`
 
-export const DEFAULT_CHUNK_TARGET_TOKENS = 420
 export const DEFAULT_CHUNK_HARD_MAX_TOKENS = 700
-export const MAX_CHUNK_OVERLAP_TOKENS = 64
 
 export interface StructureAwareChunkInput {
   documentId: string
@@ -19,14 +17,6 @@ export interface StructureAwareChunkInput {
   contentHash: string
   sourceText: string
   mappings?: readonly BlockMapping[]
-}
-
-/** Port adapter used by future Utility pipelines without exposing AST data. */
-export class StructureAwareChunker {
-  chunk(input: RagChunkInput, signal?: AbortSignal): Promise<readonly RagChunk[]> {
-    if (signal?.aborted) return Promise.reject(new Error('RAG_CONTENT_INDEX_CANCELLED'))
-    return Promise.resolve(structureAwareChunk(input))
-  }
 }
 
 type AstNode = {

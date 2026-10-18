@@ -8,12 +8,12 @@ import { DocumentCommandService } from '@main/documentCommandService'
 import { isTrustedRendererUrl, sendValidatedEvent, toIpcError } from '@main/ipc'
 import { AsyncSemaphore, fullJitterExponentialBackoff, JobScheduler } from '@main/jobScheduler'
 import { JsonLineLogger } from '@main/logger'
-import { PathPolicy } from '@main/pathPolicy'
+import { PathPolicy } from '@runtime/pathPolicy'
 import { ParseJobRunner } from '@main/parseJobRunner'
-import { projectDocumentDetails, projectDocumentSummary } from '@main/documentProjection'
+import { projectDocumentDetails } from '@main/documentProjection'
+import { projectDocumentSummary } from '@shared/documentSummary'
 import { RpcJobRepository } from '@main/rpcJobRepository'
 import { RpcRagContentIndexer } from '@main/rpcRagContentIndexer'
-import { RpcRagRepository } from '@main/rpcRagRepository'
 import { COMPUTE_RPC_TIMEOUT_MS, RpcTaskCompute } from '@main/rpcTaskCompute'
 import { RpcTaskRepository } from '@main/rpcTaskRepository'
 import { SettingsService } from '@main/settingsService'
@@ -156,18 +156,7 @@ describe('main quality boundaries', () => {
         if (operation === 'compute:rag-content-index') return {
           documentId: 'task', contentRevisionId: 'revision', chunkCount: 3, revisionState: 'ready'
         }
-        if (operation === 'tasks:get' || operation === 'documents:get-summary' || operation === 'knowledge:get') return null
-        if (operation === 'knowledge:set-semantic-consent') return {
-          documentId: 'task', localState: 'unindexed', localProgress: 0, localError: null,
-          activeContentRevisionId: null, semanticConsent: true, semanticState: 'requires-credential',
-          semanticProgress: 0, semanticError: null, semanticContentRevisionId: null,
-          activeVectorIndexId: null, semanticProfileId: null, updatedAt: now
-        }
-        if (operation === 'knowledge:ensure-embed') return {
-          documentId: 'task', profileId: 'profile', contentRevisionId: 'revision',
-          vectorIndexId: 'vector-index', jobId: 'embed-job', jobKind: 'rag-embed',
-          jobStatus: 'queued', vectorIndexState: 'queued', semanticState: 'queued'
-        }
+        if (operation === 'tasks:get' || operation === 'documents:get-summary') return null
         if (operation === 'jobs:list' || operation === 'jobs:claim-batch' || operation === 'jobs:recover-expired') return []
         if (operation === 'tasks:list' || operation === 'documents:list') {
           // Two pages: the repository must follow the cursor to the end.
@@ -226,11 +215,6 @@ describe('main quality boundaries', () => {
     await jobs.recoverExpired({ now })
     await jobs.listEvents('job')
 
-    const rag = new RpcRagRepository(supervisor)
-    await expect(rag.getKnowledge('task')).resolves.toBeNull()
-    await rag.setSemanticConsent('task', true, now)
-    await rag.ensureEmbeddingJob('task', 'profile', now)
-
     const contentIndexer = new RpcRagContentIndexer(supervisor)
     const indexSignal = new AbortController().signal
     await expect(contentIndexer.index('task', 'revision', indexSignal)).resolves.toMatchObject({ chunkCount: 3 })
@@ -238,17 +222,6 @@ describe('main quality boundaries', () => {
     expect(calls.some((call) => call.operation === 'compute:translation-plan-open' && call.payload === 'full.md')).toBe(false)
     expect(calls.filter((call) => call.operation === 'documents:list').map((call) => call.payload)).toEqual([{}, { after: { createdAt: now, id: 'task' } }])
     expect(calls.map((call) => call.operation)).toContain('jobs:cancel')
-    expect(calls).toContainEqual({ operation: 'knowledge:get', payload: { documentId: 'task' }, options: undefined })
-    expect(calls).toContainEqual({
-      operation: 'knowledge:set-semantic-consent',
-      payload: { documentId: 'task', consent: true, now },
-      options: undefined
-    })
-    expect(calls).toContainEqual({
-      operation: 'knowledge:ensure-embed',
-      payload: { documentId: 'task', profileId: 'profile', now },
-      options: undefined
-    })
     expect(calls).toContainEqual({
       operation: 'compute:rag-content-index',
       payload: { documentId: 'task', contentRevisionId: 'revision' },

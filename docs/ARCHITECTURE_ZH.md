@@ -6,17 +6,17 @@
 
 | 项目 | 当前基线 |
 |---|---|
-| 适用分支 | `refactor/p0-p1-architecture` 的 P0/P1 架构线 |
-| Desktop 版本 | `1.0.0` |
+| 适用分支 | 当前工作分支见根 `AGENTS.md` |
+| Desktop 版本 | 以 `desktop/package.json` 为准 |
 | Electron | `44.1.1` |
 | Node.js | `24.19.0`（`.node-version` 与 CI 一致） |
 | pnpm | `11.19.0` |
-| 支持目标 | Windows x64 Setup 安装版与 ZIP 免安装版；其他平台未接入发布验收 |
+| 支持目标 | Windows x64 Setup 与包含 Setup 的精简 ZIP；其他平台未接入发布验收 |
 | 本地应用数据目录 | `%APPDATA%\Copilotix-Translation-v2`（Electron `userData`） |
 | 数据库文件 | `copilotix-desktop-v2.sqlite3`，位于上述 `userData` 目录 |
 | 结果目录 | `<outputRoot>\documents-v2\{documentId}`；`documentId` 为 UUID |
 | 当前产品能力 | Parser API 解析、Markdown/表格翻译、PDF 与 Markdown 阅读、映射和阅读标注、可恢复作业与验证发布 |
-| RAG | 尚未实现；见第 10 节和 `RAG_DEVELOPMENT_PLAN_ZH.md` |
+| 问答 | 单篇问答与其切块索引已接入；多文献 RAG 路线已放弃（第 10 节） |
 
 本文只讨论 `desktop/` 运行时。Desktop 连接 MinerU 在线 v4 API，不依赖 Python CLI 或本地解析模型。旧 Python 引擎和 Docker 配置已从当前 master 工作树移除。
 
@@ -47,24 +47,42 @@ Utility Process（受监督；SQLite 与 compute 的唯一拥有者）
 5. 文件内容、PDF、ZIP、完整 Markdown、HTML、Buffer、TypedArray 和 stream 不通过 RPC 搬运；跨进程只传受限 JSON、路径/作业/产物标识及小型结果。
 6. 所有跨边界数据都必须有明确 schema、最大尺寸、错误码和取消/超时语义；没有“先传过去再由另一端猜测”的隐式契约。
 
-## 3. 代码地图
+## 3. 代码地图与模块边界
 
-| 路径 | 权威职责 | 边界 |
+### 3.1 依赖方向（已用 import 图核对，无反向或跨层依赖）
+
+```text
+renderer ──▶ shared ◀── preload
+main ──▶ core ──▶ shared ◀── utility ──▶ core
+main ──▶ runtime ──▶ core ◀── runtime ◀── utility
+```
+
+- `shared`：三端共用的纯 TS，不得导入 Node/Electron/DOM 专有 API；跨层契约（schema、DTO、版本常量）只在这里定义一次。
+- `core`：Main 与 Utility 共用的纯逻辑、Core RPC 客户端、作业模型与端口、block mapping；不得导入 Node/Electron 或 runtime 层，Renderer 不得导入。
+- `runtime`：Main 与 Utility 共用的 Node 运行时实现；`PathPolicy` 在此实现 `core/ports.ts` 的路径端口，Renderer 与 shared/core 不得导入。
+- `renderer` 只依赖 `shared`；`main` 与 `utility` 互不导入，只经 Core RPC 通信。
+
+### 3.2 模块表
+
+| 模块 | 主要文件 | 职责与边界 |
 |---|---|---|
-| `desktop/src/renderer` | React 页面、阅读器、视图状态和选区 | 只能使用 `window.copilotix` |
-| `desktop/src/preload` | `contextBridge` API、IPC 编解码 | 只能暴露显式领域方法 |
-| `desktop/src/main/index.ts` | Electron 生命周期、窗口、组装、IPC 注册、托盘 | 不直接持有数据库连接 |
-| `desktop/src/main/ipc.ts` | sender/frame/URL 校验、IPC envelope 和 schema 驱动 handler | 所有新增 IPC 必须经过此层 |
-| `desktop/src/main/utilitySupervisor.ts` | Utility 启动、ready、超时、重启、drain/shutdown | 正常应用的 Utility 生命周期入口 |
-| `desktop/src/main/*Runner.ts`、`jobScheduler.ts` | parse/translate 作业执行与调度 | 只能通过 JobRepository/Compute port 改状态 |
-| `desktop/src/main/parserClient.ts`、`translation/` | 官方 API、翻译 Provider、网络重试 | Token/Key 只在 Main/Vault 侧 |
-| `desktop/src/utility` | Utility 进程入口、RPC loop、SQLite 与 compute handler | 不导入 renderer、credential 或网络 adapter |
-| `desktop/src/utility/core/persistence` | v2 数据库、Repository、Job、PathPolicy | 数据库连接只在 Utility |
-| `desktop/src/utility/core/compute` | 导入、hash、解析归一化、映射和翻译计划 | 通过受限 Core operation 调用 |
-| `desktop/src/shared` | IPC/Core RPC schema、DTO、纯函数和版本常量 | 是跨层契约的单一来源 |
-| `desktop/tests` | Vitest 单元/集成/契约/质量门禁 | 不等同 GUI E2E |
-| `desktop/e2e` | Playwright Electron 场景 | 只能在具备原生 Renderer/GPU 条件的环境运行 |
-| `desktop/scripts` | bundle smoke、发布审计、原子发布和 packaged smoke | 不得被普通测试当作清理脚本调用 |
+| 跨层契约 | `shared/ipcSchemas.ts`、`types.ts`、`coreRpcSchemas.ts`、`ragSchemas.ts`、`paperChat*Schemas.ts`、`paperInsight.ts`、`figureInsight.ts`、`librarySchemas.ts`、`libraryCategories.ts`、`translationPlanProtocol.ts` | 所有 IPC／RPC／磁盘 JSON 的 Zod 契约；`documentSummary.ts` 是文档摘要唯一投影 |
+| 文档纯逻辑 | `shared/markdownBlocks.ts`、`standardMarkdown.ts`、`mathDelimiters.ts`、`readerDocument.ts`、`readerAnnotations.ts`、`readerFigureGroups.ts`、`readerFigureLayout.ts`、`figureArtifacts.ts`、`titleNaming.ts`、`paperBrief/` | 无 I/O 的解析、映射、导出投影与提示词构造，可在任意进程运行 |
+| Core 契约与基础件 | `core/coreClient.ts`、`jobs.ts`、`types.ts`、`ports.ts`、`blockMapping.ts` | 文件系统路径实现位于 `runtime/pathPolicy.ts`，由 Main 与 Utility 共用 |
+| Preload 桥 | `preload/index.ts`、`ipcClient.ts` | 只暴露 `window.copilotix` 显式领域方法 |
+| Main：外壳与 IPC | `main/index.ts`、`ipc.ts`、`libraryAccessGate.ts`、`assetProtocol.ts`、`singleInstance.ts`、`networkProxy.ts`、`logger.ts` | 生命周期、窗口、托盘、IPC 注册；所有 handler 经 `registerValidatedHandler` |
+| Main：Utility 桥 | `utilitySupervisor.ts`、`electronUtilityFork.ts`、`utilityEntryPath.ts`、`rpc*.ts`、`taskRepositoryCompat.ts` | Utility 生命周期与 RPC 代理；`rpc*` 只把端口方法映射为固定 operation |
+| Main：文档与作业 | `taskService.ts`、`documentCommandService.ts`、`documentProjection.ts`、`artifactService.ts`、`figureArtifactStore.ts`、`jobScheduler.ts`、`*JobRunner.ts`、`progressReporter.ts` | 导入／重试／删除／导出与 durable job 执行；只经 JobRepository／TaskCompute 端口改状态 |
+| Main：外部服务 | `parserClient.ts`、`fileUploader.ts`、`translation/`、`chat/chatProvider.ts`、`credentialVault.ts`、`settingsService.ts`、`usageAnalyticsService.ts` | 网络、凭据与设置；Token／Key 不离开 Main |
+| Main：AI 功能 | `chat/paperChatService.ts`、`paperInsightService.ts`、`figureInsightService.ts` 及各自 `*Ipc.ts` | 问答、档案卡（Paper Brief v2）、图片解读的授权、队列与取消 |
+| Utility：运行时 | `utility/index.ts`、`coreUtilityRuntime.ts`、`core/utilityOperations.ts` | RPC loop、operation registry 与 data／compute／exclusive 三通道 |
+| Utility：持久化 | `core/persistence/v2Database.ts`、`v2TaskRepositoryCompat.ts`、`sqliteJobRepository.ts`、`sqliteRagRepository.ts`、`paperChatStore.ts`、`paperInsightStore.ts`、`figureInsightStore.ts` | SQLite 与文献目录内 JSON 的唯一读写者 |
+| Utility：计算 | `core/compute/markdownTranslationPlan.ts`、`tableTranslation.ts`、`structureAwareChunker.ts`、`ragContentIndexService.ts`、`libraryCategories.ts` 及 `core/paperContextBuilder.ts`、`libraryCategoryService.ts`、`libraryMaintenance.ts` | 翻译计划、问答切块与证据、文库分类、备份／恢复／迁移 |
+| Renderer：外壳与页面 | `App.tsx`、`pages/`、`components/{WindowControls,PageBrand,CopilotixWordmark,EdgeDock,HomeScene,HomeWidgets}.tsx`、`documentCache.ts` | 视图路由与文档列表缓存 |
+| Renderer：阅读工作台 | `components/{ReaderWorkbench,ReaderViews,PdfPane,MarkdownPane,MarkdownMinimap,SafeMarkdown,ReaderFigureSnapshot,DocumentLifecycleActions}.tsx`、`reader*.ts`、`pdf*.ts`、`annotationMutations.ts`、`rehypeTableMath.ts`、`useFigureArtifacts.ts` | 四视图工作台、PDF／Markdown 渲染、同步、标注 |
+| Renderer：问答与解读 | `components/ReaderChatPanel.tsx`、`PaperInsightActions.tsx`、`usePaperChat.ts`、`usePaperInsight.ts` | 只经 `window.copilotix` 调用 |
+| Renderer：文库 | `pages/LibraryPage.tsx`、`paperArchive/` | Three.js 档案场景、详情与可取消的阅读器进入过渡（懒加载） |
+| 测试与发布 | `tests/`、`e2e/`（含 `launchPolicy.ts`）、`scripts/` | 不属于运行时 bundle |
 
 四个构建 bundle 分别来自 `main`、`preload`、`renderer`、`utility`，输出到 `desktop/out/`；测试和输出目录不属于源码契约。
 
@@ -130,7 +148,7 @@ Main 先验证 sender，再解析请求；handler 结果再次验证，schema �
 | 取消 | `cancel` 以 requestId 取消活动 operation，并传播 AbortSignal |
 | 超时 | supervisor/CoreClient 默认 handshake `10s`、request `30s`；调用者可传更短的 operation timeout |
 
-当前 registry 只保留 Main 实际调用的操作：`database:*`、`library:*`、`settings:*`、任务/文档（含批量插入）、作业、artifact revision、`knowledge:*`、标注快照/修改以及 `compute:*`（导入、归一化、映射、RAG 内容索引和翻译计划）。旧的逐块翻译、翻译缓存、整表标注替换等未被调用的 operation 已移除，Utility 内部仍可直接使用对应 Repository 方法。增加 operation 必须添加严格 payload/result schema、registry 项、两端 handler、取消/超时测试，并评估 1 MiB 上限。
+当前 registry 只保留 Main 实际调用的操作：`database:*`、`library:*`、`settings:*`、任务/文档（含批量插入）、作业、artifact revision、`insight:*`／`figureInsight:*`、`chat:*`、标注快照/修改以及 `compute:*`（导入、归一化、映射、问答索引、文库分类、图片解读描述和翻译计划）。旧的逐块翻译、翻译缓存、整表标注替换与 `knowledge:*` 等未被调用的 operation 已移除，Utility 内部仍可直接使用对应 Repository 方法。增加 operation 必须添加严格 payload/result schema、registry 项、两端 handler、取消/超时测试，并评估 1 MiB 上限。
 
 文库列表（`tasks:list`、`documents:list`）按 `(createdAt DESC, id ASC)` 做 keyset 分页：请求 `{ after? }`，响应 `{ items, next }`；Utility 每页最多 200 行并按 512 KiB 字节预算截断，Main 的 `RpcTaskRepository` 循环取完。这样大型文库不会触及 1 MiB 上限。Utility 端每页只用两次查询（文档 + 其 parse/translate 作业）完成投影，没有逐文档查询。
 
@@ -188,7 +206,7 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 ### 6.3 PathPolicy
 
-Main 和 Utility 各有对应 `PathPolicy` port/实现。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
+`runtime/pathPolicy.ts` 是 Main 与 Utility 共用的唯一 `PathPolicy` 实现（端口见 `core/ports.ts`）。实现从 Core 移入 runtime 层，导出的类与词法校验函数、磁盘路径规则及恢复语义保持不变；无需数据库或 IPC migration。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
 
 1. 拒绝 NUL、绝对跨平台路径和 `..` 段；
 2. 先做 lexical containment，再做 realpath containment；
@@ -205,6 +223,8 @@ Main 和 Utility 各有对应 `PathPolicy` port/实现。任何相对 artifact�
 当前作业类型为 `parse` 和 `translate`。`jobs` 保存 queued/running/retry-wait/succeeded/partial/failed/cancelled、progress、priority、attempt/maxAttempts、payload、checkpoint、availableAt、leaseOwner/leaseExpiresAt、错误和时间戳；`job_events` 记录带序号的状态变化。每个 document 的 active parse/translate 作业有唯一约束，translate 可依赖 parse。
 
 Scheduler 从 Utility-owned JobRepository claim 作业，以 lease owner/expiry 防止重复 worker；运行中由 owner heartbeat 延长 lease，进度和 checkpoint 以 owner 条件更新。作业退出、Utility 重启或 lease 过期时恢复为 queued（未超过 retry 上限）或 failed；网络/超时/5xx 等可恢复错误使用退避，协议/输入错误不盲目重试。手动 retry 只允许 partial/failed/cancelled 等受限终态。
+
+翻译手动重试保留已完成结果，把失败单元改为 pending。重新载入已保存的 pending 计划时，旧尝试残留的失败块不能将其覆盖回 failed；本次新失败仍须持久化并在重启后保留。恢复回归见 `markdownTranslationPlan.test.ts`。
 
 ### 7.2 Parse
 
@@ -259,11 +279,9 @@ PDF -> Utility 流式导入/hash -> v2 document/job
     -> sandbox Reader（PDF、Markdown、标注）
 ```
 
-## 10. RAG 状态与 Reader 选区边界
+## 10. Reader 問答與索引邊界
 
-P0/P1 **没有实现 RAG**。当前代码中没有 chunk 生成、chunk 持久化、索引、embedding、vector store、SQLite FTS/FTS5、reranker、retrieval service、query backend 或 chat backend。现有 `ReaderChatSelection`/`ReaderChatSelectionFragment` 只是 Renderer 侧的类型化选区 payload，用于未来集成的输入形状；它没有 IPC channel、会话/消息表、模型调用、流式回答、引用校验或聊天历史。不要把“添加到对话”按钮或选区 payload 写成已支持聊天。
-
-未来 RAG 必须依赖稳定 artifact/revision/mapping，而不是直接把 `BlockMapping.id` 当跨文档身份。具体端口、表、阶段、DoD 和隐私条件见 `RAG_DEVELOPMENT_PLAN_ZH.md`；在对应代码、migration、测试和评测合入前，所有 RAG 章节只能标记为 planned/proposed。
+單篇文獻問答、切塊索引與證據構造見 [維護契約](READER_AI_CHAT_PLAN_ZH.md)。多文獻 FTS／向量／混合檢索路線已於 2026-10-12 放棄並刪除相關代碼與計劃；schema 4 的 rag_* 語義／向量表及 `rag-embed`／`rag-delete` 作業類型只為 migration checksum 與舊庫兼容保留：除刪除文檔／內容換版時的兼容清理（FK RESTRICT 要求）外不再讀寫。來源身份始終綁定 artifact／revision／hash，不把 BlockMapping.id 當成跨文檔身份。
 
 ## 11. 公开 API 打包与 verified atomic release
 
@@ -272,7 +290,7 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 1. 只在仓库根目录精确的 `.release-next-{buildId}` staging 中构建；不得把 `desktop/out/` 当正式发布目录。
 2. 校验 `main/preload/renderer/utility` bundle、独立 `uninstall-cleanup.js`、`app.asar` 必需 entry、`@napi-rs/keyring` unpack 路径、Electron locale、fuses、运行时文件以及体积上限（当前 `app.asar < 40 MiB`、运行目录 `< 360 MiB`、精简 ZIP `< 155 MiB`、Setup `< 180 MiB`）。
 3. 以同一已验证运行目录生成 NSIS Setup 与 ZIP、`release-manifest.json` 和 `SHA256SUMS.txt`，并重新解压 ZIP 校验入口/ASAR/资源/哈希。正式构建验证主程序、Setup 与内嵌卸载器签章。
-4. 启动已打包的 `Copilotix.exe --copilotix-packaged-smoke`，只接受精确 `COPILOTIX_PACKAGED_SMOKE_OK app=1.0.0 electron=44.1.1` marker 和空 stderr；该 smoke 是 CLI 启动检查，不创建 Renderer 窗口。
+4. 启动已打包的 `Copilotix.exe --copilotix-packaged-smoke`，只接受与 package 版本及 Electron 版本匹配的精确 marker 和空 stderr；该 smoke 是 CLI 启动检查，不创建 Renderer 窗口。
 5. 所有审计、哈希和 smoke 成功后，才把现有 `release/` 原子换到 `.release-previous-{buildId}`，再把 next rename 为 `release/`；失败时恢复旧 release，并保留 staging 供诊断。
 
 精简 Release ZIP 包含 Setup、注册安装卸载入口、安装说明及小型 payload 校验元数据。完整程序已嵌入 Setup；开发运行目录仅存在 `release-artifacts/<build-id>/program/`，不进入下载 ZIP。schema 5 的 distribution 为 compact-setup，runtime.embeddedIn 指明安装器；外层 runtimeArtifactDirectory 定位开发副本，runtime 内的目录与入口相对开发产物目录。外层 release-manifest 含 ZIP 哈希且不进 ZIP，内层 bundle-manifest 不含外部产物路径或自引用 ZIP 哈希。卸载入口仅交给已注册安装的卸载器。更新前退出托盘程序；userData 和 Credential Manager 不属于发布目录。
@@ -290,15 +308,13 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 | functions | 80% |
 | branches | 75% |
 
-覆盖统计 `src/main/**`、`src/core/**`、`src/shared/**`；明确排除 renderer、preload、utility、测试、生成目录、Main Electron bootstrap/utility fork 以及纯类型文件。CI 的 Desktop job 实际执行 `lint`、`typecheck`、`test:coverage`、`build:bundles`、`release:from-built` 和 `test:e2e`；任一质量门禁失败都不能称为发布通过。不要用一次本地单元测试结果代替 coverage gate。
+覆盖统计 `src/main/**`、`src/core/**`、`src/shared/**`，范围与阈值由 `vitest.config.ts` 维护。一般 push／PR 执行 lint、typecheck、快速核心回归、四 bundle 和源码启动 smoke；版本 tag 或手动 `full_validation` 才执行完整覆盖率、全量 Electron、打包和安装验收。发布门禁失败不能称为发布通过；日常核心回归也不代表完整发布验收。
 
 单元/集成测试至少覆盖：Core RPC schema/1 MiB/超时/取消、sender/frame/URL、Utility ready/restart/drain、STRICT migration/checksum、Repository/lease/checkpoint/retry、PathPolicy/符号链接、流式导入与 atomic artifact、翻译 cache/表格协议、映射/标注以及 release transaction/manifest/fuse/packaged smoke。真实 API、真实翻译和真实 PDF 属于 opt-in fixture，不是所有 PR 的默认证据。
 
-### 12.2 当前 Windows 环境记录
+### 12.2 本地驗證邊界
 
-在当前 Windows build `26200` + GameViewer 环境，sandboxed Renderer/GPU 的原生启动失败；因此不能声称本机 GUI E2E 已通过，也不能把 GUI E2E 失败伪装成产品功能通过。专用 packaged CLI smoke 已通过，并且该 smoke 不启动 Renderer。
-
-此环境事实不改变产品安全基线：不得为了本地通过而修改产品默认、发布配置或 CI 去降低 Renderer/GPU sandbox；不得把 `--disable-gpu-sandbox` 当作产品建议。GUI E2E 的通过证据必须来自具备原生条件的受控环境，并单独记录运行环境、构建和测试结果。
+本地驗證是否執行按根 AGENTS 與當次使用者指示；只聲明實際運行的環境與範圍。packaged CLI smoke 不啟動 Renderer，不能代替 GUI／GPU 驗收。不得為本地驗證降低產品默认或 CI 的 sandbox。
 
 ## 13. P0/P1 Definition of Done
 
@@ -306,38 +322,43 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 |---|---|
 | P0：边界与持久化 | Electron 44.1.1/Node 24.19.0 锁定；sandbox Renderer；最小 preload API；IPC/Core RPC schema、sender 校验、1 MiB、timeout/cancel/restart；Utility 独占 SQLite/compute；v2 userData/DB/`documents-v2/{documentId}`；STRICT migrations；PathPolicy；coverage gates 通过 |
 | P1：可恢复工作流 | durable parse/translate jobs；lease/heartbeat/checkpoint/retry/recovery；Utility 流式导入、解析归一化和 translation plan；artifact hash/revision、fsync/atomic publish、结果 ZIP 排除内部文件；provider/credential 边界；verified atomic release 与 packaged CLI smoke |
-| 文档基线 | 三份文档不把 RAG 目标写成实现；记录本机 GUI E2E 限制；公共 API/路径/错误/数据表变更有 owner、schema、测试和迁移说明 |
+| 文档基线 | 区分现有功能与目标设计；公共 API/路径/错误/数据表变更有 schema、测试、兼容与恢复说明 |
 
 任何 DoD 未满足都只能标记为 partial/proposed，不能使用“已完成”作为发布结论。
 
-## 14. 多 Agent 共改规范
+## 14. 已知結構債（未處理）
 
-这些文档和公共契约会被多个 Agent 共同参考，但共享参考不等于共享写入：
+- `v2TaskRepositoryCompat.ts`（約 1300 行）仍以舊 `CopilotixTask` 投影同時承擔文檔、artifact、翻譯塊、標註、設置；宜按聚合拆成獨立 Repository，Main 側 `TaskRepositoryCompat` 隨之收窄。
+- `main/index.ts` 內聯約 20 個 IPC handler；宜按 `chat/*Ipc.ts` 的模式拆出文檔、文庫、設置、窗口註冊模組。
+- 過大單文件：`paperArchive/PaperArchiveScene.ts`、`compute/markdownTranslationPlan.ts`、`MarkdownPane.tsx`、`MarkdownMinimap.tsx`、`PdfPane.tsx`。
+- Renderer 根目錄平鋪十餘個 reader／pdf 模組，待按「閱讀工作台／文庫」分子目錄；搬移前先與其他 worktree 協調以免衝突。
+- `ragSchemas`／`sqliteRagRepository`／`rag-content-index` 的 rag 前綴已名不副實；作業類型字串已持久化，只能改代碼名。`database:flush` operation 目前 Main 未調用。
 
-1. 开始工作前记录 `git status --short --branch`，确认当前分支和工作树；结束时再次记录。现有用户/Agent 改动属于他人，不能覆盖、回滚或顺手清理。
-2. 一个工作项一个 owner；同一工作树同一时刻只允许一个 Agent 修改同一文件。需要并行实现时使用独立分支/worktree，集成时保留最小 diff。
-3. `shared/*` schema、`preload/index.ts`、`main/ipc.ts`、`main/index.ts`、`v2Database.ts`、JobRepository、release scripts 是高风险公共边界；任何契约改动先更新 schema/测试，再更新本文件与 RAG 计划。
-4. 实现 Agent 不得在不相干工作项中升级依赖、格式化全仓、修改许可证、清理 release、stash 或触碰其他 worktree。
-5. 每项声明都要标注 `implemented`、`verified`、`planned` 或 `blocked`，并附源码/测试路径；本机未运行的 package/E2E 不得写成通过。
-6. 迁移、公开 API、错误码、artifact 格式、job 状态、路径布局和安全设置属于权威边界；改动必须说明兼容策略、失败回滚和测试。
-7. 文档只由负责该章节的 owner 更新；基线、公共契约、决策记录和总进度由集成 Agent 串行维护。
+## 15. 維護與後續事項
 
-## 15. 已知后续事项
+協作、文檔精簡、本地驗證與發布授權統一見根 [AGENTS.md](../AGENTS.md)。變更前定位 port／schema／handler／repository，跨邊界修改須保留兼容、回滾與相關回歸。macOS／Linux 的 Vault、原生窗口、路徑、打包與簽名尚未完成发布驗收。
 
-- Copilotix 自有代码已采用根目录 MIT 许可证，桌面 package 元数据同步为 MIT；第三方组件仍按各自许可分发。
-- macOS/Linux 的 Credential Vault、原生 Renderer/GPU、路径、打包、签名/公证和 CI 尚未形成发布验收，不能从纯函数测试推断桌面发布可用。
-- RAG 的 chunk/index/embedding/vector/FTS/reranker/retrieval/chat 仍需按独立计划实现，不得直接添加未经 migration 和隐私评审的表或 Provider。
 
-## 16. 修改前后清单
+## Codex provider（本机 App Server）
 
-### 修改前
+- Main 的 `runtime/codexRuntime.ts` 通过 `codex.exe app-server --listen stdio://` 建立 JSON-RPC；`modelGateway.ts` 统一远端与 Codex 流式调用，翻译适配器保留现有表格 ID 校验。翻译、问答、Paper Brief 和图片解读共享此运行时；不提供 embeddings 或 PDF 解析替代。
+- `shared/codex.ts` 定义可兼容旧设置的可选配置与状态。Preload 只开放经 Main 校验的检查／模型测试与原生选执行文件 IPC；无令牌接口。模型、视觉输入和推理强度来自当前模型目录，模型缺失显式失败。旧四服务顺序可读取，默认追加但不启用 Codex；翻译回退顺序在 Codex 处截止。
+- 交互保留独立 FIFO，后台共用等待队列，由空闲槽位领取下一请求，最多 8 个独立进程槽位，每槽同时一个请求。槽内复用经过隔离配置校验的进程，每次请求创建新 ephemeral thread；闲置 30 秒、出错或退出关闭进程。避免每段重复 account/read／model/list；不复用论文会话。最终回答、token usage、结构化 schema 经业务校验后落盘。CLI 限定 0.159.x，子进程不经 shell，工作目录在 userData 的 codex-runtime。
+- 翻译按 32 条元数据分页预取，同时准备最多 64 个单元，Codex／Qwen／DeepSeek 请求上限 8。Codex 仅合并同一作业 signal 的短片段：每批最多 16 组／64 片段／约 8K 字符，单个超长组独立发送而不截断；短传输 ID 在本地还原后逐单元校验、保存。表格保留行列结构，使用同样的短 ID 映射与完整性检查。翻译 low、档案 medium；thread/start 与 turn/start 均使用任务实际档位，问答沿用全局设置。读取相同输出根目录的设置不重建翻译计划。
+- 会话级覆盖关闭 shell、MCP、应用、插件、浏览器、联网搜索、记忆和子代理，设置只读沙箱、无持久历史、忽略项目文档；启动时读回隔离配置。工具请求一律拒绝并终止任务。覆盖不写入用户配置。用户文档、图片与历史均作为不可信内容；图片只接收应用已验证的 PNG/JPEG 数据。
+- 初始化 RPC 15 秒，生成空闲 120 秒、总计 10 分钟；排队取消立即返回，运行取消请求 turn/interrupt，5 秒后关闭进程。进程异常、非成功完成、空结果和工具尝试均不能当作成功；退出关闭所有进程。不会静默切换模型或其他供应商。诊断不记录提示正文、图片或令牌。
+- SQLite migration **5 / add-codex-provider** 仅扩展 documents、translation_blocks、translation_cache 的 provider 约束；迁移 1–4 不改，复制原数据并恢复索引。仅在事务外临时关闭外键，提交前检查外键，异常回滚并恢复外键开关；沿用迁移前快照。旧程序不可直接打开 schema 5，回退需用迁移前快照恢复，不删除用户原库。聊天／解读 JSON 增加 codex 枚举，既有内容不改写；token 统计兼容缺失的 Codex 计数。
+- 回归入口：codexConnection、codexRuntime、codexIntegration、credentialGate、v2Database 测试；真实调用仅显式 `COPILOTIX_CODEX_LIVE=1` 运行 e2e/codex.spec.ts，使用合成论文。2026-10-13 本机 111 个测试文件通过（759 通过、3 跳过），类型检查与 lint 通过；合成文本翻译、表格、证据问答、Brief schema／引用、图片解读和取消实测成功，Electron 设置→授权→真实问答→引用落盘流程通过；不替代真实论文人工质量审阅或远端 CI。使用步骤见 [服务配置](wiki/Service-Setup.md)。
 
-- 找到对应 port、schema、handler、repository 和测试；确认是否跨 Main/Preload/Utility/Renderer 边界。
-- 确认是否会改变 document path、artifact 格式、job 状态、公开 API、错误码或凭证流向；若会，先登记兼容和迁移方案。
-- 对大文件、网络、SQLite、Utility 和 release 变更定义可重复的 fake/fixture 验证。
+2026-10-13：使用程序即同意向已配置、已啟用的模型服務發送功能所需內容，問答／檔案卡／圖片解讀不再彈出單獨授權或提供撤銷入口。舊 chatConsent 欄位僅供 wire 相容，忽略舊值且保存設定時清除持久化記錄。Codex「測試連接」成功填入實際 exe 路徑，所選模型測試全部成功顯示「驗證成功」。存儲統計在啟動與文檔更新時預載，按文庫根目錄緩存 60 秒、合併並行掃描，存儲頁立即顯示已有結果；手動刷新強制更新。
 
-### 修改后
+窗口控制固定在标题栏的独立持久区域，层级高于普通弹层，按钮显式 no-drag；e2e/window-controls.spec.ts 验证跨页面、最大化／还原及删除确认弹窗时三个按钮可见且命中正确元素。
 
-- 运行与工作项匹配的 lint/typecheck/unit/coverage；修改发布逻辑时运行脚本测试和受控 packaged smoke。
-- 对 IPC、Core RPC、migration、PathPolicy、lease/checkpoint、atomic artifact 和隐私边界补测试。
-- 检查 `git diff --check`、只提交所属文件、记录验证环境和未运行的测试；不把 GUI E2E 或 release 结果凭空补写。
+
+2026-10-14：Codex 连接状态经校验 IPC `codex:cached` 读取，Renderer 共享缓存避免设置页重挂载丢失；每次程序启动恢复上次状态后后台自动检测，不自动发送模型测试消息。Main 在 `userData/codex-runtime/connection-status.json` 原子保存最多 8 组程序路径／推理强度对应的状态、模型目录与已测模型；不存登录令牌，不修改 Codex 登录文件。版本／程序变化不继承旧验证，实际登录失效显示未登录；快照损坏或缺失重新检测，卸载清数据按既有 userData 验证清单覆盖此文件。
+问答 turn JSON 增加可选 completedAt、durationMs 和 usage（输入／输出／总 Token），completed stream 可选 metadata 携带实际模型及时间。旧记录无需迁移、照常读；旧客户端／旧记录缺字段时显示未提供，不将未知用量记为零。新结果元信息随原有原子 turn 保存。2026-10-14 此次按用户要求不运行测试、lint 或类型检查，仅构建打包并保留打包内置校验。
+
+
+普通 ChatGPT 聊天接入分析（2026-10-14，尚未实现）：可用 OpenAI Responses API 请求聊天模型（chat-latest 为 ChatGPT 当前 Instant 别名），也可按 Sign in with ChatGPT 的本地／开源应用授权流程请求账户目录中的可用模型；两者均不要求经过 Codex agent。订阅接入仍取决于实际资格与模型目录，不能直接使用 ChatGPT backend-api 或假设已有 Codex 登录代表获得所有聊天模型权限。
+来源：[chat-latest](https://developers.openai.com/api/docs/models/chat-latest)、[订阅推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)、[预览限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)。订阅路线当前不支持图片生成、Code Interpreter、文件搜索等托管工具；标准平台 API 可另接对应工具。API 不返回 ChatGPT 客户端的完整呈现树；模型接口切换与富内容 UI 是两项工作。
+当前 Chat 已支持 Markdown 文本、标题、列表、表格及 KaTeX 公式；图示四宫格可由结构化 JSON 与本地组件复现，来源胶囊需要返回的引用元信息与独立组件。当前回答中的图片和外链仅显示文本，未加载图片；图片需增加验证、资源下载／持久化与受控展示，生成图片还需独立工具。交互图表／地图／视频／音频／Canvas 等需对应资源和组件，不能靠文本回答自动保持 ChatGPT 原格式。本次仅修改页签、公式渲染和隐藏用时，保留既有 Codex 路由。

@@ -18,6 +18,10 @@ async function fixture() {
   const doc = '00000000-0000-4000-8000-000000000001'
   const documentPath = join(output, 'documents-v2', doc)
   await mkdir(documentPath, { recursive: true })
+  await mkdir(join(documentPath, 'insight'))
+  await writeFile(join(documentPath, 'insight', 'insight.v1.json'), '{"version":1,"summary":"stored insight"}')
+  await writeFile(join(documentPath, 'insight', 'brief.v2.json'), 'stored brief v2')
+  await writeFile(join(documentPath, 'insight', '.pending-brief'), 'partial brief')
   await writeFile(join(documentPath, 'original.pdf'), '%PDF-1.4 test document')
   await writeFile(join(documentPath, 'full.md'), '# Research\n\nOriginal text.')
   const now = new Date().toISOString()
@@ -44,6 +48,10 @@ describe('document library maintenance', () => {
     expect(restored.restartRequired).toBe(true)
     const row = f.db.connection.prepare('SELECT display_title,storage_path FROM documents').get() as { display_title: string; storage_path: string }
     expect(row.display_title).toBe('Research')
+    expect(await readFile(join(row.storage_path, 'insight', 'insight.v1.json'), 'utf8')).toContain('stored insight')
+    expect(await readFile(join(row.storage_path, 'insight', 'brief.v2.json'), 'utf8')).toBe('stored brief v2')
+    expect(await readFile(join(backup.path!, 'documents', f.doc, 'insight', 'brief.v2.json'), 'utf8')).toBe('stored brief v2')
+    expect(await readFile(join(backup.path!, 'documents', f.doc, 'insight', 'insight.v1.json'), 'utf8')).toContain('stored insight')
     expect(await readFile(join(row.storage_path, 'full.md'), 'utf8')).toContain('Original text.')
     expect(f.db.connection.prepare('SELECT quote FROM reader_annotations').get()).toMatchObject({ quote: 'text' })
     expect(f.db.connection.prepare("SELECT value FROM settings WHERE key='qwenApiKey'").get()).toBeUndefined()

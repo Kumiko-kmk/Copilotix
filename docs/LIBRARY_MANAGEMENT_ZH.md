@@ -24,7 +24,7 @@
 6. 操作失败前未切换时，原库不变。磁盘可能保留 .copilotix-* 暂存目录，不能把它当完整备份。确认不再需要后由用户清理。
 7. 成功切换后维护锁持续到重启，防止旧缓存继续写入。
 
-验证范围以本次实际测试结果为准。相关测试：libraryMaintenance.test.ts、libraryAccessGate.test.ts、LibrarySettings.test.tsx。
+验证范围以本次实际测试结果为准。相关测试：libraryMaintenance.test.ts、libraryAccessGate.test.ts、SettingsPage.test.tsx；界面用例由显式 UI 回归执行。
 
 ## 数据库升级保护与恢复
 
@@ -41,4 +41,11 @@
 
 ## 文獻問答記錄
 
+每篇文獻的 `notes/notes.v1.json` 保存閱讀器便利貼筆記（原文／譯文錨點與正文），經 Utility data 通道原子讀改寫，隨完整文獻目錄備份、恢復和遷移，不新增 migration；舊版本忽略此目錄。
+
 每篇文獻的 `chat/` 保存對話輪次與 `session.json`（草稿、固定選區、模型）。記錄隨完整文獻目錄備份、恢復和遷移，不包含系統 API 憑據；維護前先停止問答並等待落盤。清空對話只刪當篇對話輪次，保留其他文獻和源文件。卸載默認保留，明確選擇清除文庫時才按既有已登記目錄清理。
+
+
+## AI 結構化解讀
+
+文獻內 `insight/insight.v1.json` 隨完整文獻目錄備份、恢復與遷移，由既有 manifest v1 記錄文件雜湊，不新增 migration。維護前取消生成並等待原子寫入完成；失敗保持既有文庫。舊庫無文件視為尚未生成，正文 artifact revision 改變時保留結果並標示過期。卸載預設保留；明確清理文庫時，唯讀清單包含解讀與 `.pending-*` 殘留，沿用路徑／鏈接與確認後變更校驗。詳見 [AI 解讀契約](PAPER_INSIGHT_ZH.md)。

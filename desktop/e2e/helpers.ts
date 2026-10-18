@@ -2,13 +2,13 @@ import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'n
 import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { _electron as electron } from '@playwright/test'
+import { _electron as electron, expect, type Page } from '@playwright/test'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/core/blockMapping'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/shared/translationPlanProtocol'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import type { ArtifactKind } from '../src/core/types'
-import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from '../src/shared/e2eLaunchPolicy'
+import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from './launchPolicy'
 import { credentialServiceForRuntime, WindowsCredentialVault, type CredentialAccount } from '../src/main/credentialVault'
 import {
   alignMarkdownBlocks,
@@ -71,6 +71,8 @@ export async function createE2EWorkspace(): Promise<E2EWorkspace> {
 export async function seedReaderTask(
   workspace: E2EWorkspace,
   options?: {
+    taskId?: string
+    createdAt?: string
     missingPdf?: boolean
     sourcePdf?: string
     sourceTaskDir?: string
@@ -82,7 +84,7 @@ export async function seedReaderTask(
     englishTitle?: string
   }
 ): Promise<string> {
-  const taskId = options?.missingPdf
+  const taskId = options?.taskId ?? (options?.missingPdf
     ? '00000000-0000-4000-8000-000000000001'
     : options?.sourceTaskDir
       ? '00000000-0000-4000-8000-000000000002'
@@ -90,7 +92,7 @@ export async function seedReaderTask(
         ? '00000000-0000-4000-8000-000000000003'
         : options?.alignmentRegression
           ? '00000000-0000-4000-8000-000000000004'
-          : '00000000-0000-4000-8000-000000000005'
+          : '00000000-0000-4000-8000-000000000005')
   const outputDir = join(workspace.root, 'documents-v2', taskId)
   const originalName = options?.missingPdf
     ? 'missing.pdf'
@@ -177,7 +179,7 @@ export async function seedReaderTask(
     remoteDataId: null,
     remoteResultUrl: null,
     error: options?.missingPdf ? 'fixture missing file' : null,
-    createdAt: now,
+    createdAt: options?.createdAt ?? now,
     updatedAt: now
   })
   repository.updateTask(taskId, {
@@ -424,4 +426,25 @@ function createTwoPagePdf(): Buffer {
   for (const offset of offsets.slice(1)) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`
   return Buffer.from(pdf)
+}
+
+/**
+ * Opens a paper the way a user finds it now that the home page has no shelf: the library search,
+ * then 「打开阅读」 on its browse panel. Without WebGL the search result opens the Reader directly.
+ */
+export async function openPaperFromLibrary(window: Page, documentId: string): Promise<void> {
+  const archive = window.getByRole('region', { name: '文库', exact: true })
+  if (!(await archive.isVisible())) {
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
+  }
+  const name = await window.evaluate(async (id) => {
+    const api = (globalThis as unknown as { copilotix: { listDocuments(): Promise<Array<{ id: string; displayName: string }>> } }).copilotix
+    return (await api.listDocuments()).find((document) => document.id === id)?.displayName ?? ''
+  }, documentId)
+  await archive.getByRole('searchbox', { name: '搜索文库' }).fill(name.replace(/\.pdf\s*$/iu, ''))
+  await archive.locator(`#paper-archive-results button[data-document-id="${documentId}"]`).click()
+  const panel = archive.locator(`.paper-archive-panel[data-document-id="${documentId}"]`)
+  await expect(panel.or(window.locator('.reader-header'))).toBeVisible({ timeout: 20_000 })
+  if (await panel.isVisible()) await panel.getByRole('button', { name: /打开阅读/u }).click()
 }

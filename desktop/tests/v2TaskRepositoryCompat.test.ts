@@ -62,7 +62,7 @@ describe('temporary v2 task repository compatibility projection', () => {
       await mkdir(outside)
       await symlink(outside, join(fixture.task.outputDir, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
       expect(() => fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'escape', 'full.md'), 'unsafe'))
-        .toThrow(/path escapes root/)
+        .toThrow(/symlink\/junction/)
     } finally {
       closeFixture(fixture.repository)
     }

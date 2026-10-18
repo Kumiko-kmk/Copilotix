@@ -2,7 +2,7 @@
 
 Copilotix 是个人开发的 Electron 论文阅读客户端。当前版本连接 MinerU 在线 v4 API，在本地保存解析产物并生成简体中文 Markdown，不包含本地解析引擎或模型。
 
-完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`ARCHITECTURE_ZH.md`](ARCHITECTURE_ZH.md)；RAG 未来计划见 [`RAG_DEVELOPMENT_PLAN_ZH.md`](RAG_DEVELOPMENT_PLAN_ZH.md)。
+完整的进程边界、数据布局、作业状态、发布约束和修改纪律见 [`ARCHITECTURE_ZH.md`](ARCHITECTURE_ZH.md)。
 
 ## 当前架构基线
 
@@ -41,21 +41,23 @@ pnpm desktop:dev
 
 ## 测试与实际门禁
 
-```powershell
-pnpm desktop:lint
-pnpm desktop:typecheck
-pnpm desktop:test:coverage
-```
+日常修改先跑受影响的测试；需要扩大检查时使用以下入口，不默认执行全部验收：
 
-当前 Vitest coverage gate（`desktop/vitest.config.ts`）是：lines `80%`、statements `80%`、functions `80%`、branches `75%`。统计范围主要是 `src/main/**`、`src/core/**`、`src/shared/**`，renderer、preload、utility、测试、生成文件及纯类型文件等按配置排除；新代码不可通过扩大排除项规避门禁。
+| 命令 | 范围 |
+| --- | --- |
+| `pnpm desktop:test:changed` | 与 Git 未提交修改有关的核心测试 |
+| `pnpm desktop:test` | 快速核心回归，不加载大型 React 页面和发布脚本 |
+| `pnpm desktop:test:ui` | 显式运行 DOM／React 回归 |
+| `pnpm desktop:test:full` | 所有保留的单元与集成测试 |
+| `pnpm desktop:test:e2e` | 源码启动和窗口操作 smoke，无需安装包 |
+| `pnpm desktop:test:e2e:full` | 全部 Electron 回归，需要发布产物的用例也包含在内 |
+| `pnpm desktop:test:coverage` | 完整回归与覆盖率，仅用于完整验收 |
 
-CI 还执行 bundle build、verified directory release、脚本/发布校验和 Playwright E2E。真实 API、真实翻译、真实 PDF 和 GUI E2E 是有条件的验证，不得用未运行的本机命令补写通过结论。
+普通 push／PR 的 `build` 检查执行 lint、typecheck、核心回归、四 bundle 和启动 smoke。版本 tag 或手动 `full_validation` 才增加完整覆盖率、Electron 回归、打包、安装／升级／卸载及下载校验。发布签章、资料保留和打包内建完整性检查仍保留。
 
-### 当前 Windows 环境说明
+覆盖率阈值仍为 lines/statements/functions `80%`、branches `75%`，仅在显式完整检查中执行。真实 API、真实翻译及个人 GUI 配置仍需单独授权和实际验证。
 
-在当前 Windows build `26200` + GameViewer 环境，sandboxed Renderer/GPU 原生启动失败；因此没有本机 GUI E2E 通过证据。专用 packaged CLI smoke 已通过，且不启动 Renderer，它不能证明 GUI、GPU、Renderer 或 RAG 可用。
-
-该限制不授权修改产品安全基线：不得降低产品默认、发布配置或 CI 的 Renderer/GPU sandbox，也不得把 `--disable-gpu-sandbox` 作为产品建议。GUI E2E 的通过证据必须来自具备原生启动条件的受控环境。
+同类测试合并维护；不为布局常数、CSS 字符串或简单辅助函数单独建立套件。取消、恢复、持久化、路径隔离和凭证保护保留行为回归。流程入口与验证边界见根 [AGENTS.md](../AGENTS.md)。
 
 ## 构建与发布
 
@@ -70,16 +72,14 @@ pnpm desktop:release:from-built
 Copilotix.exe --copilotix-packaged-smoke
 ```
 
-只有精确的 `COPILOTIX_PACKAGED_SMOKE_OK app=1.0.0 electron=44.1.1` marker、空 stderr、哈希/manifest 审计全部成功后，才会把新目录原子发布到根目录 `release/`；失败时恢复旧目录并保留 staging。发布包是完整目录，不要只复制 `Copilotix.exe`；`userData` 和 Credential Manager 不在发布包内。
+只有版本匹配的精确 smoke marker、空 stderr、哈希／manifest 校验全部成功后才原子发布；失败恢复旧目录并保留 staging。发布布局以 [Windows 发布](DESKTOP_RELEASE_ZH.md) 为准，勿单独复制 EXE；用户数据与凭据不在发布包内。
 
 ## 功能与隐私
 
-当前提供 PDF 导入、官方解析、Markdown/表格翻译、原文/译文/布局阅读、PDF 与 block mapping 联动、荧光笔/下划线标注和另存结果。`ReaderChatSelection` 目前只是 Renderer 选区 payload；当前没有 chunk、index、embedding、vector、FTS、reranker、retrieval 或 chat backend，不要把“添加到对话”当作已实现聊天。
+当前提供 PDF 导入、官方解析、Markdown／表格翻译、阅读工作台、映射联动、标注、导出、文库与档案卡、单篇论文问答。问答与索引边界见 [维护契约](READER_AI_CHAT_PLAN_ZH.md)；多文献 RAG 路线已放弃。
 
 PDF 会上传到 Parser 服务返回的预签名地址；待翻译文本会发送到所选翻译 Provider。Token 只发送到代码中固定的 Parser API 来源；API Key 进入 Credential Manager，不写 SQLite、Renderer、日志或结果 ZIP。日志会遮蔽 Token、API Key、Authorization 和预签名 URL 查询参数，不记录论文正文。
 
-## 协作与已知事项
+## 協作
 
-共享工作区中的公共契约必须有唯一 owner：`shared` schema、Preload API、Main IPC、Core RPC、v2 migration、JobRepository、Artifact/PathPolicy 和发布脚本均需先登记变更、兼容策略、测试和恢复语义。开始/结束记录 `git status --short --branch`；不得覆盖他人改动、stash、清理 release、升级无关依赖或修改其他 worktree。文档中的 `implemented`、`verified`、`planned`、`blocked` 必须有源码/测试证据。
-
-Copilotix 自有代码已采用根目录 MIT 许可证，桌面 package 元数据同步为 MIT；第三方组件仍按各自许可分发。
+遵循根 [AGENTS.md](../AGENTS.md)，不在此複製 owner、worktree、交付紀錄或授權規則。

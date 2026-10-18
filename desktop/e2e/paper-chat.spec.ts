@@ -1,6 +1,6 @@
 import { _electron as electron, expect, test } from '@playwright/test'
 import { join } from 'node:path'
-import { createE2EWorkspace, seedReaderTask } from './helpers'
+import { createE2EWorkspace, openPaperFromLibrary, seedReaderTask } from './helpers'
 
 test('reuses the translation API and switches chat models without a second settings page', async () => {
   test.setTimeout(60_000)
@@ -42,26 +42,24 @@ test('reuses the translation API and switches chat models without a second setti
     expect(saved.settings.credentials.qwen.state).toBe('valid')
     expect(await app.evaluate(() => Reflect.get(globalThis, '__chatCredentialProbeCount'))).toBe(1)
     await window.reload()
-    await window.getByRole('button', { name: '展开主导航' }).click()
-    await window.getByRole('button', { name: '任务管理' }).click()
-    await window.locator(`tr[data-row-key="${documentId}"] .task-link`).click()
+    await openPaperFromLibrary(window, documentId)
     // Chat is the third tab of the reader's text group, sized exactly like the Markdown reader.
-    const chatTab = window.locator('.reader-tab', { hasText: 'AI 问答' })
+    const chatTab = window.locator('.reader-tab', { hasText: 'Chat' })
     const model = window.locator('.reader-chat-model .ant-select-selection-item')
     await chatTab.click()
-    await expect(window.getByRole('region', { name: '论文 AI 问答' })).toBeVisible()
-    await expect(model).toHaveAttribute('title', 'qwen-plus')
+    await expect(window.getByRole('region', { name: '论文 Chat' })).toBeVisible()
+    await expect(model).toHaveText('qwen-plus')
     await expect(window.locator('.reader-chat-provider')).toHaveText('Qwen')
     await expect(window.getByRole('button', { name: '前往设置' })).toHaveCount(0)
     await expect.poll(() => window.evaluate(() => typeof window.copilotix.paperChat.ask)).toBe('function')
     await window.locator('.reader-chat-model').click()
-    await window.locator('.ant-select-item-option[title="qwen3.8-flash"]').click()
-    await expect(model).toHaveAttribute('title', 'qwen3.8-flash')
+    await window.locator('.ant-select-item-option').filter({ hasText: /^qwen3\.8-flash$/u }).click()
+    await expect(model).toHaveText('qwen3.8-flash')
     // Leaving and returning to the tab keeps the session's model choice.
-    await window.getByText('Markdown', { exact: true }).click()
-    await expect(window.getByRole('region', { name: '论文 AI 问答' })).toBeHidden()
+    await window.getByText('原文', { exact: true }).click()
+    await expect(window.getByRole('region', { name: '论文 Chat' })).toBeHidden()
     await chatTab.click()
-    await expect(model).toHaveAttribute('title', 'qwen3.8-flash')
+    await expect(model).toHaveText('qwen3.8-flash')
     await window.getByLabel('向当前论文提问').fill('记住这个问题')
     await expect(window.getByRole('button', { name: '发送', exact: true })).toBeEnabled({ timeout: 30_000 })
     await window.getByRole('button', { name: '发送', exact: true }).click()
@@ -71,21 +69,19 @@ test('reuses the translation API and switches chat models without a second setti
     // Wait for the durable session write, then reload through the real preload/Main/Utility path.
     await expect.poll(() => window.evaluate((documentId) => window.copilotix.paperChat.session({ documentId }), documentId)).toMatchObject({ draft: '未发送草稿' })
     await window.reload()
-    await window.getByRole('button', { name: '展开主导航' }).click()
-    await window.getByRole('button', { name: '任务管理' }).click()
-    await window.locator(`tr[data-row-key="${documentId}"] .task-link`).click()
+    await openPaperFromLibrary(window, documentId)
     await chatTab.click()
     await expect(window.getByRole('log', { name: '问答记录' })).toContainText('记住这个问题')
     await expect(window.getByRole('log', { name: '问答记录' })).toContainText('持久保存的测试回答')
     await expect(window.getByLabel('向当前论文提问')).toHaveValue('未发送草稿')
-    await expect(model).toHaveAttribute('title', 'qwen3.8-flash')
+    await expect(model).toHaveText('qwen3.8-flash')
     expect((await window.evaluate((documentId) => window.copilotix.paperChat.load({ documentId }), documentId)).turns).toEqual([expect.objectContaining({ question: '记住这个问题', answer: '持久保存的测试回答', status: 'completed' })])
     await expect(window.locator('.ant-drawer')).toHaveCount(0)
     await window.locator('[data-edge-dock="top"]').hover()
     await expect(window.getByRole('navigation', { name: '主导航' })).toBeVisible()
     await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '设置' }).click()
     await expect(window.getByRole('region', { name: '服务连接' })).toBeVisible()
-    await expect(window.getByRole('button', { name: 'AI 问答', exact: true })).toHaveCount(0)
+    await expect(window.getByRole('button', { name: 'Chat', exact: true })).toHaveCount(0)
   } finally {
     await app?.close()
     await workspace.cleanup()
