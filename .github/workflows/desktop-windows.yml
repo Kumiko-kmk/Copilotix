@@ -12,6 +12,10 @@ on:
         description: 'Run coverage, all UI/E2E tests and installation acceptance'
         type: boolean
         default: false
+      archive_diagnostic:
+        description: 'Diagnose archive E2E only; does not replace full release validation'
+        type: boolean
+        default: false
 
 # Keep PR merge checks separate from push checks. Never interrupt a master or tag release.
 concurrency:
@@ -69,6 +73,9 @@ jobs:
       - name: Source application smoke
         if: env.FULL_VALIDATION != 'true'
         run: pnpm desktop:test:e2e
+      - name: Diagnose archive interactions
+        if: github.event_name == 'workflow_dispatch' && inputs.archive_diagnostic && env.FULL_VALIDATION != 'true'
+        run: pnpm --dir desktop exec playwright test e2e/archive-layout.spec.ts e2e/archive-math.spec.ts e2e/paper-archive.spec.ts e2e/paper-insight.spec.ts
       - name: Package verified compact Windows installation bundle
         if: env.FULL_VALIDATION == 'true'
         run: pnpm desktop:release:from-built

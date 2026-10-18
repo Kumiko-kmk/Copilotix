@@ -221,12 +221,6 @@ export function launchElectron(options: {
 }) {
   const env = { ...process.env, ...(options.env ?? {}) }
   const args = [...(options.args ?? [])]
-  // Exercise the same WebGL paths on GPU-less Windows CI using Chromium's
-  // explicit SwANGLE driver, rather than the slow Microsoft Basic Render Driver.
-  // This applies only to isolated source fixtures, never the shipped application.
-  if (process.platform === 'win32' && env.NODE_ENV === 'test' && env.CI === 'true' && env.COPILOTIX_E2E_USER_DATA) {
-    args.unshift('--use-gl=angle', '--use-angle=swiftshader')
-  }
   if (shouldDisableGpuSandbox(env)) args.unshift('--disable-gpu-sandbox')
   if (shouldUseHostCompatibilityMode(env)) args.unshift('--no-sandbox')
   return electron.launch({ ...options, args, env })
