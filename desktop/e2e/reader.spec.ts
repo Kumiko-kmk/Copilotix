@@ -179,7 +179,7 @@ test('fits PDF pages without an outer frame and preserves the current page while
         return Math.abs((viewport.top + element.clientHeight * 0.45 - page.top) / page.height - 0.35)
       })).toBeLessThan(0.01)
     }
-    const split = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
+    const split = window.getByRole('separator', { name: '调整 PDF 与 原文 阅读器宽度' })
     for (const key of ['Home', 'End', 'Home', 'End']) {
       const previousWidth = await scroller.evaluate((element) => element.clientWidth)
       await split.press(key)
@@ -820,7 +820,7 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     await headings.nth(headingIndex).press('Enter')
     await window.waitForTimeout(600)
     await expectSnapshot(original)
-    const split = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
+    const split = window.getByRole('separator', { name: '调整 PDF 与 原文 阅读器宽度' })
     const initialWidth = await panel.locator('article').evaluate((element) => element.clientWidth)
     await split.focus()
     await split.press('End')

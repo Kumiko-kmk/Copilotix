@@ -146,7 +146,7 @@ test('keeps the new parse page layout across supported sizes and themes', async 
     await window.waitForTimeout(300)
     await expect(window.locator('.titlebar-brand')).toHaveCount(0)
     const uploadBounds = await uploadEntry.boundingBox()
-    expect(uploadBounds?.width).toBeCloseTo(720, 0)
+    expect(uploadBounds?.width).toBeCloseTo(780, 0)
     expect(uploadBounds?.height).toBeCloseTo(94, 0)
     await capture(window, 'new-parse-1584x992-reference.png')
     await window.locator('input[type="file"]').setInputFiles({
@@ -256,7 +256,7 @@ test('reorders and enables translation providers with explicit persistent saves'
     await expect(window.getByText('DeepSeek → Bing → 千问 → Transmart')).toBeVisible()
     await window.getByRole('button', { name: '保存全部更改' }).click()
     await expect.poll(async () => (await window.evaluate(() => window.copilotix.getSettings())).translationProviderOrder)
-      .toEqual(['deepseek', 'bing', 'qwen', 'transmart'])
+      .toEqual(['deepseek', 'bing', 'qwen', 'transmart', 'codex'])
 
     await window.getByRole('checkbox', { name: '启用DeepSeek' }).click()
     await expect(window.getByText('Bing → 千问 → Transmart')).toBeVisible()
@@ -329,7 +329,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
     const activePanel = window.locator('.reader-tab-panel.active')
     const scroller = activePanel.locator('.markdown-scroll')
     const minimap = activePanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
-    const separator = window.getByRole('separator', { name: '调整 PDF 与 Markdown 阅读器宽度' })
+    const separator = window.getByRole('separator', { name: '调整 PDF 与 原文 阅读器宽度' })
     await expect(scroller).toHaveAttribute('data-render-state', 'ready')
     // Compact reader chrome leaves more height for reading.
     await expect(window.locator('.reader-header')).toHaveCSS('height', '36px')

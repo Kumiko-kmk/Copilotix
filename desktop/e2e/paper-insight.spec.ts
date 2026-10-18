@@ -2,7 +2,8 @@ import { briefGeneration } from '../tests/fixtures/paperBrief'
 import { expect, test } from '@playwright/test'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
-import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
+import { backgroundPoints } from '../src/shared/paperBrief/background'
 
 test('archive insight uses validated settings, provider HTTP and durable local storage', async ({}, testInfo) => {
   const workspace = await createE2EWorkspace()
@@ -11,6 +12,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
   try {
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
     const window = await app.firstWindow()
+    await window.emulateMedia({ reducedMotion: 'reduce' })
     await expect.poll(() => window.evaluate(() => typeof window.copilotix?.paperInsight?.get)).toBe('function')
     const initial = await window.evaluate(() => window.copilotix.getSettings())
     expect(initial.autoGeneratePaperInsight).toBe(true)
@@ -34,11 +36,14 @@ test('archive insight uses validated settings, provider HTTP and durable local s
       if (await legacyTab.count()) await legacyTab.click()
       return archive
     }
-    let archive = await openDetail()
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
+    let archive = window.getByRole('region', { name: '文库', exact: true })
     expect(await window.evaluate((id) => window.copilotix.paperInsight.get({ documentId: id }), documentId)).toEqual({
       status: 'unavailable', reason: '请先在服务连接中保存模型 API Key。'
     })
     await expect(archive.locator('.paper-archive-brief-status')).toHaveCount(0)
+    await expect(archive.getByRole('button', { name: '查看档案' })).toBeDisabled()
     await expect(archive.getByRole('button', { name: '生成 AI 档案卡' })).toHaveCount(0)
     await app.evaluate(({ net }, brief) => {
       Reflect.set(globalThis, '__insightRequests', [])
@@ -59,9 +64,9 @@ test('archive insight uses validated settings, provider HTTP and durable local s
       return window.copilotix.saveSettings({ ...settings, credentialMutations: { qwen: { action: 'set', value: 'copilotix-e2e-insight-fake-key' } } })
     })
     expect(saved.fieldErrors).toEqual({}); expect(saved.settings.credentials.qwen.state).toBe('valid')
-    await window.reload(); archive = await openDetail()
+    await window.reload()
     await expect(archive.getByRole('button', { name: /生成.*档案卡/u })).toHaveCount(0)
-    await archive.getByRole('button', { name: '打开阅读' }).click()
+    await openPaperFromLibrary(window, documentId)
     const reader = window.locator('.reader-header')
     await expect(reader.getByRole('button', { name: '档案卡', exact: true })).toHaveCount(0)
     await window.getByRole('tab', { name: 'Chat', exact: true }).click()
@@ -78,7 +83,10 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     await expect(archive.getByRole('tab', { name: /摘要/u })).toHaveAttribute('aria-selected', 'true')
     await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.abstract)
     await archive.getByRole('tab', { name: /背景/u }).click()
-    await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.background)
+    for (const point of backgroundPoints(briefGeneration.analysis.background)) {
+      await expect(archive.getByRole('tabpanel')).toContainText(point.title)
+      await expect(archive.getByRole('tabpanel')).toContainText(point.text)
+    }
     const requests = await app.evaluate(() => Reflect.get(globalThis, '__insightRequests')) as unknown[]
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests)).toContain('Original paper content')
@@ -90,8 +98,8 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     await expect(archive.getByText('证据基础', { exact: true })).toHaveCount(0)
     await expect(archive.getByText('页数', { exact: true })).toHaveCount(0)
     await archive.getByRole('tab', { name: /结论/u }).click()
-    await expect(archive.getByText('证据需核对', { exact: true })).toBeVisible()
-    const firstFinding = archive.locator('.paper-archive-finding').first()
+    await expect(archive.getByText('证据需核对', { exact: true })).toHaveCount(0)
+    const firstFinding = archive.locator('.paper-archive-reading-points > li').first()
     await expect(firstFinding.locator('.paper-archive-anchor summary')).toContainText('E1')
     await firstFinding.locator('.paper-archive-anchor summary').click()
     await expect(firstFinding.locator('.paper-archive-anchor p')).toContainText('Original paper content')
@@ -99,7 +107,10 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     await window.reload(); archive = await openDetail()
     await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.abstract)
     await archive.getByRole('tab', { name: /背景/u }).click()
-    await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.background)
+    for (const point of backgroundPoints(briefGeneration.analysis.background)) {
+      await expect(archive.getByRole('tabpanel')).toContainText(point.title)
+      await expect(archive.getByRole('tabpanel')).toContainText(point.text)
+    }
     expect(await app.evaluate(() => (Reflect.get(globalThis, '__insightRequests') as unknown[]).length)).toBe(1)
     await window.locator('[data-edge-dock="top"]').hover()
     await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '设置' }).click()

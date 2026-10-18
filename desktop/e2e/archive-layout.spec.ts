@@ -25,6 +25,7 @@ test('archive keeps titles separate, category controls fixed, and translated abs
     }
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
     const page = await app.firstWindow()
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(error.message))
     await expect.poll(() => page.evaluate(() => typeof window.copilotix?.libraryCategories)).toBe('function')
@@ -92,12 +93,12 @@ test('archive keeps titles separate, category controls fixed, and translated abs
     await expect(archive.locator('.paper-archive-keywords')).toContainText('论文阅读')
     await archive.getByRole('button', { name: '查看档案' }).click()
     await expect(archive).toHaveAttribute('data-detail-phase', 'open', { timeout: 20_000 })
-    await expect(archive.getByRole('tab')).toHaveText([/01摘要/u, /02概览/u, /03发现/u, /04局限与前提/u])
+    await expect(archive.getByRole('tab')).toHaveText([/01摘要/u, /02背景/u, /03结论/u, /04讨论/u])
     await expect(archive.getByRole('tab', { name: /摘要/u })).toHaveAttribute('aria-selected', 'true')
     await expect(archive.getByRole('tabpanel')).toContainText(translatedAbstract)
     await expect(archive.locator('.paper-archive-fields')).not.toContainText('关键词')
     await expect(archive.getByRole('tab', { name: /阅读路线|术语/u })).toHaveCount(0)
-    await archive.getByRole('tab', { name: /概览/u }).click()
+    await archive.getByRole('tab', { name: /背景/u }).click()
     await expect(archive.getByRole('tabpanel')).toContainText(briefContent.context.question)
     await page.screenshot({ path: testInfo.outputPath('updated-detail.png') })
     expect(errors).toEqual([])
