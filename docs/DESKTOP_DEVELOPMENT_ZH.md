@@ -59,6 +59,8 @@ pnpm desktop:dev
 
 文库性能检查区分真实硬件与软件渲染：硬件保留 30 fps 下限；Microsoft Basic Render Driver、SwiftShader 等软件渲染器验证持续出帧，并保留帧率上限及三角形负载限制。软件渲染通过不代表真实显卡达到性能目标。阅读器专项通过减少动态效果模式进入，完整动画仍由文库专项验收。
 
+Windows CI 的隔离源码 E2E 使用 Chromium 官方的 [SwANGLE 软件驱动](https://chromium.googlesource.com/chromium/src/+/main/docs/gpu/swiftshader.md)，避免依赖宿主的 Microsoft Basic Render Driver。仅 `NODE_ENV=test`、`CI=true` 且指定隔离资料目录时生效；不修改应用启动参数、发布包或正式签章及沙箱检查。
+
 同类测试合并维护；不为布局常数、CSS 字符串或简单辅助函数单独建立套件。取消、恢复、持久化、路径隔离和凭证保护保留行为回归。流程入口与验证边界见根 [AGENTS.md](../AGENTS.md)。
 
 ## 构建与发布

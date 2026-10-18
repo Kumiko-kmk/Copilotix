@@ -56,6 +56,7 @@ test('archive renders maths across fields and tabs without clipping or changing 
     for (const size of [{ width: 1100, height: 720 }, { width: 1600, height: 900 }]) {
       const win = await app.browserWindow(page)
       await win.evaluate((window, next) => window.setContentSize(next.width, next.height), size)
+      await expect.poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight }))).toEqual(size)
       for (const name of ['摘要', '背景', '结论', '讨论']) {
         const tab = archive.getByRole('tab', { name: new RegExp(name, 'u') })
         await tab.click()

@@ -9,7 +9,8 @@ const translatedTitle = '基于算子通用逼近定理通过深度算子网络�
 const translatedAbstract = '本文研究非线性算子的学习方法，使用深度算子网络比较不同方程与训练条件。'
 
 test('archive keeps titles separate, category controls fixed, and translated abstract first', async ({}, testInfo) => {
-  test.setTimeout(120_000)
+  // Thirteen papers, three viewport captures and a full row wrap on software GL.
+  test.setTimeout(180_000)
   const baseline = process.env.COPILOTIX_LAYOUT_BASELINE === '1'
   const workspace = await createE2EWorkspace()
   let app: Awaited<ReturnType<typeof launchElectron>> | undefined

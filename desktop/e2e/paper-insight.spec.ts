@@ -39,6 +39,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     await window.locator('[data-edge-dock="top"]').hover()
     await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
     let archive = window.getByRole('region', { name: '文库', exact: true })
+    await expect(archive.locator('canvas[data-archive-state="ready"]')).toBeVisible({ timeout: 20_000 })
     expect(await window.evaluate((id) => window.copilotix.paperInsight.get({ documentId: id }), documentId)).toEqual({
       status: 'unavailable', reason: '请先在服务连接中保存模型 API Key。'
     })

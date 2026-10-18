@@ -56,7 +56,6 @@ for (const disableWebGL of [false, true]) {
       await expect(navigation).toBeVisible()
       await navigation.click()
       const archive = window.getByRole('region', { name: '文库', exact: true })
-      await expect(archive).toBeVisible()
       const fallback = archive.getByRole('heading', { name: '当前环境无法显示三维文库' })
       const canvas = archive.locator('canvas.paper-archive-canvas[data-archive-state="ready"]')
       // A canvas alone does not prove that the model loaded. Accept only ready or explicit fallback.
