@@ -5,6 +5,9 @@ import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
 
 for (const disableWebGL of [false, true]) {
   test(`paper archive search, navigation and reader return${disableWebGL ? ' without WebGL' : ''}`, async ({}, testInfo) => {
+    // This case seeds 37 papers and measures live 3D input before reader return;
+    // software-rendered Windows takes longer than the reader-only cases.
+    if (!disableWebGL) test.setTimeout(180_000)
     const workspace = await createE2EWorkspace()
     let app: Awaited<ReturnType<typeof launchElectron>> | null = null
     try {
