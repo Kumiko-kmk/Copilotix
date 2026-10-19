@@ -95,9 +95,10 @@ jobs:
           $archive = [IO.Path]::GetFullPath((Join-Path (Join-Path 'release' $manifest.artifactDirectory) $manifest.transport.file))
           if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Verified compact archive is missing.' }
           "COPILOTIX_RELEASE_ZIP=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Full Electron regression
+      # The other Electron E2E runs in the parallel e2e shards; only this case needs the package.
+      - name: Packaged Electron smoke
         if: env.FULL_VALIDATION == 'true'
-        run: pnpm desktop:test:e2e:full
+        run: pnpm --dir desktop exec playwright test smoke.spec.ts --grep "hardened packaged"
       - name: Verify install, upgrade, uninstall and reinstall with isolated data
         if: env.FULL_VALIDATION == 'true'
         shell: pwsh
@@ -137,8 +138,49 @@ jobs:
             desktop/unit-test-results/
             desktop/coverage/coverage-summary.json
 
+  # Full validation runs Electron E2E beside build, split by measured duration in
+  # desktop/playwright.config.ts; each shard still uses one worker. The total must match that list.
+  e2e:
+    if: startsWith(github.ref, 'refs/tags/desktop-v') || (github.event_name == 'workflow_dispatch' && inputs.full_validation)
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Electron downloads its binary on first require, not at install. In build the unit tests
+      # trigger that; here the Utility bundle smoke would otherwise find no electron.exe.
+      - name: Install the Electron binary
+        working-directory: desktop
+        run: node -e "require('electron')"
+      - run: pnpm desktop:build:bundles
+      - name: Electron regression shard
+        run: pnpm --dir desktop exec playwright test --grep-invert "hardened packaged"
+        env:
+          COPILOTIX_E2E_SHARD: ${{ matrix.shard }}/3
+      - name: Preserve E2E shard reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Copilotix-Windows-e2e-reports-${{ matrix.shard }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: desktop/test-results/
+
   publish:
-    needs: build
+    needs: [build, e2e]
     if: startsWith(github.ref, 'refs/tags/desktop-v')
     runs-on: windows-2025
     timeout-minutes: 15
