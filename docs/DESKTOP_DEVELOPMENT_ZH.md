@@ -61,6 +61,8 @@ pnpm desktop:dev
 
 手动工作流可选择 `archive_diagnostic`，在常规检查后单独诊断文库布局、公式、导航和档案生成，避免每次定位界面问题都重跑覆盖率与打包。该选项不替代完整验收；版本 tag 和 `full_validation` 仍执行全部回归、打包、安装及下载校验。
 
+Windows CI 的源码 E2E 对可信隔离夹具显式启用 Chromium [SwiftShader WebGL 回退](https://chromium.googlesource.com/chromium/src/+/main/docs/gpu/swiftshader.md)，不使用影响整个合成器的完整 SwANGLE 驱动。仅 Windows、`CI=true`、`NODE_ENV=test`、独立资料目录且未指定打包程序时生效；正式程序、安装包及打包后的安全检查不使用该开关。
+
 同类测试合并维护；不为布局常数、CSS 字符串或简单辅助函数单独建立套件。取消、恢复、持久化、路径隔离和凭证保护保留行为回归。流程入口与验证边界见根 [AGENTS.md](../AGENTS.md)。
 
 ## 构建与发布

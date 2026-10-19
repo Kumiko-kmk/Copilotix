@@ -221,6 +221,12 @@ export function launchElectron(options: {
 }) {
   const env = { ...process.env, ...(options.env ?? {}) }
   const args = [...(options.args ?? [])]
+  // Use Chromium's explicit WebGL-only fallback for trusted source fixtures on
+  // GPU-less Windows CI. Keep the compositor out of the full SwANGLE driver path.
+  // Packaged executables and normal application launches never receive these flags.
+  if (!options.executablePath && process.platform === 'win32' && env.NODE_ENV === 'test' && env.CI === 'true' && env.COPILOTIX_E2E_USER_DATA) {
+    args.unshift('--use-gl=angle', '--use-angle=swiftshader-webgl', '--enable-unsafe-swiftshader')
+  }
   if (shouldDisableGpuSandbox(env)) args.unshift('--disable-gpu-sandbox')
   if (shouldUseHostCompatibilityMode(env)) args.unshift('--no-sandbox')
   return electron.launch({ ...options, args, env })
