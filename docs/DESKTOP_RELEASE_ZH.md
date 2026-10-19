@@ -54,6 +54,8 @@ manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`�
 
 2026-10-18，维护者明确授权 **仅本次 `desktop-v1.2.0` 未签章发布**。沿用上述逐 tag 约束，只有 tag 与 `COPILOTIX_UNSIGNED_RELEASE_TAG` 同为 `desktop-v1.2.0` 才能启用；版本说明标注未签章，全部 CI 与完整性检查保留，发布后移除变量。此授权不延续到后续版本。
 
+托管 Windows runner 无 GPU，文库 3D 场景（约 260 万三角形）以软件光栅化运行在 1–3 fps。2026-10-19 维护者同意：文库导航 E2E（`paper-archive.spec.ts`）的单用例预算由 180 秒放宽到 300 秒，断言不变；软件渲染下的帧率门槛沿用 ≥1 fps（硬件仍要求 30 fps）。这只覆盖吞吐量，不是卡死放行；1.2.0 的点击卡死已由动画步长修正（见根 AGENTS 第 13 节），有 GPU 的真实帧率仍以本机与真人验收为准。
+
 正式发布 tag 必须严格等于 `desktop-v<desktop/package.json version>`，例如 package version 为 `1.0.0` 时只能推送 `desktop-v1.0.0`。CI 会先核对 tag 与包版本，再构建并验证 Electron fuses、签名、运行包和哈希。
 
 当前实现只直接接入文件式证书；以下 Secrets 仅适用于已有适用 PFX/P12 的情况。新购公开受信任证书通常使用 Token/HSM/云签名，需按所选服务改造预检查和签名步骤，详见 [许可证选择与签名配置](LICENSE_AND_SIGNING_ZH.md)。
