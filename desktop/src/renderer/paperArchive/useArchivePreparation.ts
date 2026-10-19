@@ -70,8 +70,8 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
       return () => controller.abort()
     }
     void Promise.all([import('./detailPage'), import('./ArchiveDetail')])
-      .then(([{ loadDetailPage, renderPdfFirstPage }, { renderSpread }]) => loadDetailPage(coverKey,
-        () => renderSpread(id, data, renderPdfFirstPage, controller.signal, () => undefined), controller.signal))
+      .then(([{ loadDetailPage, firstPageRenderer }, { renderSpread }]) => loadDetailPage(coverKey,
+        () => renderSpread(id, data, firstPageRenderer(data.summary.sourceHash), controller.signal, () => undefined), controller.signal))
       .then(() => { if (!controller.signal.aborted) setPreparedCover(coverKey) })
       .catch(() => { /* No completed state until the composed cover is usable. */ })
     return () => controller.abort()

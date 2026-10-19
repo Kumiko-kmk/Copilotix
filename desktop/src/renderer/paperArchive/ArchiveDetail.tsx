@@ -102,8 +102,8 @@ export default function ArchiveDetail(props: {
     const key = `${paper.id}:${data.summary.updatedAt}`
     // pdf.js is loaded only when a paper is extracted.
     import('./detailPage')
-      .then(({ drawTextPage, loadDetailPage, renderPdfFirstPage }) => loadDetailPage(`${key}:spread`, () => pdf
-        ? renderSpread(paper.id, data, renderPdfFirstPage, controller.signal, page => {
+      .then(({ drawTextPage, loadDetailPage, firstPageRenderer }) => loadDetailPage(`${key}:spread`, () => pdf
+        ? renderSpread(paper.id, data, firstPageRenderer(data.summary.sourceHash), controller.signal, page => {
           if (!cancelled) onPage(page.canvas)
         })
         : Promise.resolve(drawTextPage(profile.title ?? paper.displayName, profile.translatedAbstract ?? profile.abstract)), controller.signal))

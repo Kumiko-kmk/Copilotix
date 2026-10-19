@@ -5,7 +5,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { acquirePdfDocument } from '../src/renderer/pdfDocumentCache'
 import ReaderFigureSnapshot, { FIGURE_CACHE_BYTES, figureRegionCacheStats } from '../src/renderer/components/ReaderFigureSnapshot'
 import type { ReaderFigureGroup } from '../src/shared/readerFigureGroups'
-import { ensureFigureArtifacts } from '../src/renderer/useFigureArtifacts'
+import { ensureFigureArtifacts, forgetConfirmedCrops } from '../src/renderer/useFigureArtifacts'
 
 vi.mock('../src/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
 const group: ReaderFigureGroup = {
@@ -18,6 +18,7 @@ let renderPdf: ReturnType<typeof vi.fn>
 let release: ReturnType<typeof vi.fn>
 beforeEach(() => {
   vi.clearAllMocks()
+  forgetConfirmedCrops()
   renderPdf = vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() }))
   release = vi.fn()
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage: vi.fn() })) as unknown as HTMLCanvasElement['getContext'])

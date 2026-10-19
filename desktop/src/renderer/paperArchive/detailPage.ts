@@ -31,6 +31,89 @@ export function loadDetailPage(key: string, create: () => Promise<DetailPage>, s
   return promise
 }
 
+/**
+ * Rendered first pages persist across sessions in renderer storage, keyed by the PDF's content hash,
+ * so browsing back to a paper does not re-parse and re-rasterise its PDF (the largest remaining
+ * archive cost after the in-memory cache misses). Any storage failure falls back to rendering.
+ */
+const PAGE_STORE = 'copilotix-archive-pages'
+const PAGE_STORE_VERSION = 1
+const PAGE_STORE_LIMIT = 160
+let pageStore: Promise<IDBDatabase | null> | null = null
+
+function openPageStore(): Promise<IDBDatabase | null> {
+  pageStore ??= new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') { resolve(null); return }
+    const request = indexedDB.open(PAGE_STORE, PAGE_STORE_VERSION)
+    request.onupgradeneeded = () => request.result.createObjectStore('pages', { keyPath: 'key' }).createIndex('at', 'at')
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => resolve(null)
+    request.onblocked = () => resolve(null)
+  })
+  return pageStore
+}
+
+interface StoredPage { key: string; blob: Blob; pages: number; at: number }
+
+async function readStoredPage(key: string): Promise<DetailPage | null> {
+  try {
+    const db = await openPageStore()
+    if (!db) return null
+    const stored = await new Promise<StoredPage | undefined>((resolve, reject) => {
+      const request = db.transaction('pages').objectStore('pages').get(key)
+      request.onsuccess = () => resolve(request.result as StoredPage | undefined)
+      request.onerror = () => reject(request.error)
+    })
+    if (!stored) return null
+    const bitmap = await createImageBitmap(stored.blob)
+    try {
+      const canvas = window.document.createElement('canvas')
+      canvas.width = bitmap.width
+      canvas.height = bitmap.height
+      const context = canvas.getContext('2d', { alpha: false })
+      if (!context) return null
+      context.drawImage(bitmap, 0, 0)
+      return { canvas, pages: stored.pages }
+    } finally { bitmap.close() }
+  } catch { return null }
+}
+
+function storePage(key: string, page: DetailPage): void {
+  const pages = page.pages
+  if (pages === null) return
+  page.canvas.toBlob((blob) => {
+    if (!blob) return
+    void openPageStore().then((db) => {
+      if (!db) return
+      const store = db.transaction('pages', 'readwrite').objectStore('pages')
+      store.put({ key, blob, pages, at: Date.now() } satisfies StoredPage)
+      const count = store.count()
+      count.onsuccess = () => {
+        let excess = count.result - PAGE_STORE_LIMIT
+        if (excess <= 0) return
+        store.index('at').openCursor().onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result
+          if (!cursor || excess-- <= 0) return
+          cursor.delete()
+          cursor.continue()
+        }
+      }
+    }).catch(() => undefined)
+  }, 'image/webp', 0.92)
+}
+
+/** First-page renderer for one PDF content hash: reads the stored page, else renders and stores it. */
+export function firstPageRenderer(sourceHash: string): (url: string) => Promise<DetailPage> {
+  const key = `${sourceHash}:${PAGE_PIXEL_HEIGHT}`
+  return async (url) => {
+    const stored = await readStoredPage(key)
+    if (stored) return stored
+    const page = await renderPdfFirstPage(url)
+    storePage(key, page)
+    return page
+  }
+}
+
 export async function renderPdfFirstPage(url: string): Promise<DetailPage> {
   const handle = acquirePdfDocument(url)
   try {

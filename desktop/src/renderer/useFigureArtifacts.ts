@@ -13,6 +13,20 @@ function pngBase64(canvas: HTMLCanvasElement): Promise<string> {
   }, 'image/png'))
 }
 
+/**
+ * Crops already confirmed on disk this session. Each existence check makes Main reload and re-derive
+ * the whole document, so browsing back over prepared papers repeated that work for every figure.
+ * A changed layout gives a new geometry key, so a stale entry is never reused for new geometry.
+ */
+const confirmedCrops = new Set<string>()
+const CONFIRMED_LIMIT = 4096
+/** Test isolation only: forget crops confirmed by earlier cases. */
+export function forgetConfirmedCrops(): void { confirmedCrops.clear() }
+function confirmCrop(key: string): void {
+  confirmedCrops.add(key)
+  if (confirmedCrops.size > CONFIRMED_LIMIT) confirmedCrops.delete(confirmedCrops.values().next().value!)
+}
+
 /** Shared by the reader and archive: newly imported papers need crops before either view exists. */
 export async function ensureFigureArtifacts(documentId: string, pdfUrl: string,
   geometries: readonly ReaderFigureGeometry[], signal: AbortSignal,
@@ -29,10 +43,12 @@ export async function ensureFigureArtifacts(documentId: string, pdfUrl: string,
       signal.throwIfAborted()
       const request = { documentId, figureId: geometry.id,
         geometryKey: JSON.stringify([geometry.pageIndex, geometry.cropBox, geometry.pageSize]) }
+      const confirmed = [documentId, geometry.id, request.geometryKey].join('|')
+      if (confirmedCrops.has(confirmed)) { result.available++; onProgress?.(result.available, result.failed, figures.length); continue }
       try {
         const existing = await persist(request)
         signal.throwIfAborted()
-        if (existing.imagePath) { result.available++; onProgress?.(result.available, result.failed, figures.length); continue }
+        if (existing.imagePath) { confirmCrop(confirmed); result.available++; onProgress?.(result.available, result.failed, figures.length); continue }
         handle ??= acquirePdfDocument(pdfUrl)
         const document = await handle.promise
         signal.throwIfAborted()
@@ -41,7 +57,7 @@ export async function ensureFigureArtifacts(documentId: string, pdfUrl: string,
           const png = await pngBase64(canvas)
           signal.throwIfAborted()
           const saved = await persist({ ...request, sourceRevision: existing.sourceRevision, pngBase64: png })
-          if (saved.imagePath) result.available++
+          if (saved.imagePath) { confirmCrop(confirmed); result.available++ }
           else result.failed++
         } finally { canvas.width = 0; canvas.height = 0 }
       } catch (error) {

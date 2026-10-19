@@ -16,6 +16,16 @@ interface CacheEntry {
 }
 
 const entries = new Map<string, CacheEntry>()
+/**
+ * One long-lived worker parses every document. Without it each document started its own worker and
+ * recompiled the pdf.js module, which dominated CPU when browsing papers in the archive. A worker
+ * passed in is never destroyed with a document (unlike a shared GlobalWorkerOptions.workerPort).
+ */
+let sharedWorker: pdfjs.PDFWorker | null = null
+function pdfWorker(): pdfjs.PDFWorker {
+  if (!sharedWorker || sharedWorker.destroyed) sharedWorker = new pdfjs.PDFWorker()
+  return sharedWorker
+}
 const PDF_RANGE_CHUNK_SIZE = 128 * 1024
 const PDF_IMAGE_CANVAS_MAX_BYTES = 32 * 1024 * 1024
 
@@ -29,6 +39,7 @@ export function acquirePdfDocument(url: string, callbacks: PdfCallbacks = {}): P
   if (!entry) {
     const task = pdfjs.getDocument({
       url,
+      worker: pdfWorker(),
       rangeChunkSize: PDF_RANGE_CHUNK_SIZE,
       canvasMaxAreaInBytes: PDF_IMAGE_CANVAS_MAX_BYTES
     })

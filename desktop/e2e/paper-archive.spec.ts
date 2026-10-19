@@ -104,10 +104,21 @@ for (const disableWebGL of [false, true]) {
         await window.keyboard.up('Enter')
         await window.keyboard.press('Enter')
         await expect(window.locator('.reader-header')).toHaveCount(0)
-        // Escape during extraction, then reopen during the short return.
+        // Escape during extraction, then reopen during the short return. The return lasts about
+        // 320 ms of wall time, so record the layer's state at every change while it is closing
+        // instead of sampling once after it may already have finished.
+        await archive.evaluate((root) => {
+          const record: boolean[] = []
+          Reflect.set(window, '__closingLayerInert', record)
+          new MutationObserver(() => {
+            if (root.getAttribute('data-detail-phase') !== 'closing') return
+            const layer = root.querySelector('.paper-archive-detail-layer')
+            if (layer) record.push(layer.hasAttribute('inert'))
+          }).observe(root, { attributes: true, childList: true, subtree: true })
+        })
         await window.keyboard.press('Escape')
-        await expect(archive).toHaveAttribute('data-detail-phase', 'closing')
-        await expect(archive.locator('.paper-archive-detail-layer')).toHaveAttribute('inert', '')
+        await expect.poll(() => window.evaluate(() => (Reflect.get(window, '__closingLayerInert') as boolean[]).length)).toBeGreaterThan(0)
+        expect(await window.evaluate(() => (Reflect.get(window, '__closingLayerInert') as boolean[]).every(Boolean))).toBe(true)
         await window.keyboard.press('Enter')
         await expect(archive).toHaveAttribute('data-detail-phase', 'open', { timeout: 20_000 })
         const abstract = archive.getByRole('tab', { name: /摘要/u })
