@@ -135,7 +135,7 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 
 ### 互動與渲染
 
-- 不改 `archiveMotion.ts` 已校準曲線。單一 rAF、約 60fps，牆鐘待機，失焦／隱藏停渲染；reduced-motion 直接完成動畫，卸載時釋放 GPU。不得恢復「流暢模式」或材質降檔；未採用效果只在 [動畫候選](docs/LIBRARY_MOTION_IDEAS_ZH.md) 記錄。
+- 不改 `archiveMotion.ts` 已校準曲線。單一 rAF、約 60fps，牆鐘待機，失焦／隱藏停渲染；reduced-motion 直接完成動畫（含漣漪增益），卸載時釋放 GPU。每幀動畫步長上限 `MAX_STEP_SECONDS` 0.25 秒：舊 0.05 秒上限在軟體渲染下把過場拉長數十倍並以多秒重幀阻塞輸入（1.2.0 CI 點擊卡死的實測主因），不得改回。選中論文停留 400ms 後才準備圖片／封面（`useArchivePreparation`），快速翻閱不渲染 PDF；本次會話已確認的整圖不再逐圖查詢 Main。封面首頁按 PDF 內容雜湊存於 renderer IndexedDB `copilotix-archive-pages`（≤160 頁，WebP，失敗回退重繪），關鍵圖頁仍按當前整圖與解讀合成；pdf.js 全應用共用單一 worker（傳入 `worker`，不用會隨文獻銷毀的 `workerPort`）。不得恢復「流暢模式」或材質降檔；未採用效果只在 [動畫候選](docs/LIBRARY_MOTION_IDEAS_ZH.md) 記錄。
 - 瀏覽 DPR ≤1.25／≤3.3M 像素，透射半解析度、陰影 1024；6 幀超時降解析度 15%（下限 0.55），穩定 240 幀且 8 秒未降再升 8%。保留解析拾取、剔除、共享 instanceMatrix、compileAsync 暖機；途經選中卡漣漪最多 6，升起 4.2／回落 4.5。
 - 抽出沿用單一 hero、4.05 升起與 detail 鏡頭；鏡頭 >0.6、升起 >3 才解密。標記以 4.8 倍速、玻璃清除以 2.4 倍速，清除前緣羽化 0.12；`onDecryptReveal` 啟動文字揭開。首頁 1600px／LRU 6，按需載入 PDF／資料／解讀；換篇或卸載取消晚到結果與訂閱。
 - `lineRedaction.ts` 等文字與檔案卡載入後揭開；遮擋期間正文以 `data-redacted` 不繪製（面板淡入時不可透出），墨條開始右滑時才恢復。ResizeObserver 首次回報不算版面變化；ResizeObserver／MutationObserver 忽略遮擋層，重新量測所有可見文字（含部分末行），滑出途中版面改變就移除遮擋。逐行退場 0.95 秒，閱讀順序曲線與卡片解密時間不變；reduced-motion 不畫墨條。詳情標題與譯名不遮擋：opening 時捕捉瀏覽面板標題位置與字級，先平移縮放進詳情標題區（延遲 120ms、440ms），其餘內容與遮擋層 460ms 後一起淡入上移（300ms），標題不會穿過墨條；closing 時內容 120ms 淡出、標題 180ms 退回。瀏覽面板的關鍵詞／總結按論文快取且總結固定三行高，返回時面板整體淡入、不重播標題滾動；`returning` 標記跟隨論文 ID 直到換篇，不可用計時器移除（會重播動畫）。標題左對齊。文庫全區文字兩端對齊（居中標籤除外），遮擋條隨之齊整。

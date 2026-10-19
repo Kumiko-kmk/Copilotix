@@ -99,6 +99,13 @@ const IDLE_DELAY = 2.5
 // with full-resolution transmission, ~9 ms with the limits below).
 const TARGET_FRAME_MS = 1000 / 60
 const LATE_FRAME_MS = 23
+/**
+ * Longest animation step for one rendered frame. Motion keeps wall-clock pace down to 4 fps; a
+ * smaller cap stretched every transition on software renderers (a 50 ms cap at 1 fps played
+ * 0.75 s of settling over 15 multi-second frames and held input behind them). The integrators are
+ * closed-form, so larger steps stay stable; a hidden window stops the loop instead.
+ */
+const MAX_STEP_SECONDS = 0.25
 const MAX_PIXEL_RATIO = 1.25
 const MAX_DRAWING_PIXELS = 3.3e6
 const MIN_RESOLUTION_SCALE = 0.55
@@ -1122,7 +1129,7 @@ export class PaperArchiveScene {
     const elapsedMs = continuous ? now - this.lastPresented : TARGET_FRAME_MS
     this.justWoke = false
     this.lastPresented = now
-    const dt = Math.min(Math.max(0, elapsedMs) / 1000, 0.05)
+    const dt = Math.min(Math.max(0, elapsedMs) / 1000, MAX_STEP_SECONDS)
     this.clock += dt
     if (this.resolutionDirty) this.flushResolution()
     const motion = this.loaded && this.update(dt)
@@ -1303,7 +1310,7 @@ export class PaperArchiveScene {
     }
     this.heroUniforms.uReveal.value = this.reveal
     const pulseTarget = this.targetDetail ? 0 : 1
-    this.pulseGain += (pulseTarget - this.pulseGain) * (1 - Math.exp(-dt * 8))
+    this.pulseGain += (pulseTarget - this.pulseGain) * (reduced ? 1 : 1 - Math.exp(-dt * 8))
     if (Math.abs(pulseTarget - this.pulseGain) < 1e-3) this.pulseGain = pulseTarget
     else moving = true
     return moving

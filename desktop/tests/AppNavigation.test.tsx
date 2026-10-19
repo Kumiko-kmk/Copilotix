@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ConfigProvider } from 'antd'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
@@ -40,51 +41,54 @@ beforeEach(() => {
 afterEach(() => { cleanup(); client.clear(); window.localStorage.clear(); vi.restoreAllMocks() })
 
 async function edit() {
-  render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
+  // Navigation guards need the real settings page and modal, without exit animations.
+  render(<QueryClientProvider client={client}><ConfigProvider theme={{ token: { motion: false } }}><App /></ConfigProvider></QueryClientProvider>)
   fireEvent.click(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('button', { name: /设置$/u }))
-  fireEvent.click(screen.getByRole('button', { name: /模型设置/u }))
-  fireEvent.click(screen.getAllByRole('checkbox')[0]!)
+  fireEvent.click(settingsNavigation().getByRole('button', { name: /模型设置/u }))
+  fireEvent.click(screen.getByLabelText('启用千问 / Qwen'))
   expect(screen.getByText('有未保存的更改')).toBeTruthy()
 }
 function leave() { fireEvent.click(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('button', { name: /新解析$/u })) }
+function settingsNavigation() { return within(screen.getByRole('navigation', { name: '设置分类' })) }
+function dialogButton(name: string) { return within(screen.getByRole('dialog')).getByRole('button', { name }) }
 
 it('continues editing or explicitly discards unsaved settings before navigation', async () => {
   await edit(); leave()
-  fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+  fireEvent.click(dialogButton('继续编辑'))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-  expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(false)
-  leave(); fireEvent.click(screen.getByRole('button', { name: '放弃并离开' }))
+  expect((screen.getByLabelText('启用千问 / Qwen') as HTMLInputElement).checked).toBe(false)
+  leave(); fireEvent.click(dialogButton('放弃并离开'))
   await waitFor(() => expect(screen.getByRole('region', { name: '新解析页面' })).toBeTruthy())
   expect(saveSettings).not.toHaveBeenCalled()
 })
 it('saves successfully before leaving', async () => {
-  await edit(); leave(); fireEvent.click(screen.getByRole('button', { name: '保存并离开' }))
+  await edit(); leave(); fireEvent.click(dialogButton('保存并离开'))
   await waitFor(() => expect(screen.getByRole('region', { name: '新解析页面' })).toBeTruthy())
   expect(saveSettings).toHaveBeenCalledOnce()
   expect(settings.enabledTranslationProviders).not.toContain('qwen')
 })
 it('stays on the settings page and retains drafts when saving fails', async () => {
   await edit(); saveSettings.mockRejectedValueOnce(new Error('保存失败'))
-  leave(); fireEvent.click(screen.getByRole('button', { name: '保存并离开' }))
+  leave(); fireEvent.click(dialogButton('保存并离开'))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(screen.queryByRole('region', { name: '新解析页面' })).toBeNull()
   expect(screen.getByText('有未保存的更改')).toBeTruthy()
-  expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(false)
+  expect((screen.getByLabelText('启用千问 / Qwen') as HTMLInputElement).checked).toBe(false)
 })
 it('guards native document-open requests and retains failed credential fields after a partial save', async () => {
   await edit()
   saveSettings.mockResolvedValueOnce({ settings, fieldErrors: { qwen: { message: '密钥无效' } } })
-  fireEvent.click(screen.getByRole('button', { name: /服务连接/u }))
+  fireEvent.click(settingsNavigation().getByRole('button', { name: /服务连接/u }))
   const input = within(document.querySelector('[data-provider="qwen"]') as HTMLElement).getByPlaceholderText('输入新密钥')
   fireEvent.change(input, { target: { value: 'invalid-test-key' } })
-  fireEvent.click(screen.getByRole('button', { name: /模型设置/u }))
+  fireEvent.click(settingsNavigation().getByRole('button', { name: /模型设置/u }))
   await waitFor(() => expect(openDocument).toBeTypeOf('function'))
   // Use an actual event so React processes the native callback through its normal event boundary.
   const trigger = document.createElement('button'); trigger.onclick = () => openDocument('00000000-0000-4000-8000-000000000001'); document.body.append(trigger); fireEvent.click(trigger); trigger.remove()
-  fireEvent.click(screen.getByRole('button', { name: '保存并离开' }))
+  fireEvent.click(dialogButton('保存并离开'))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(screen.queryByRole('region', { name: '阅读页面' })).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: /服务连接/u }))
+  fireEvent.click(settingsNavigation().getByRole('button', { name: /服务连接/u }))
   expect(screen.getByDisplayValue('invalid-test-key')).toBeTruthy()
   expect(screen.getByText('密钥无效')).toBeTruthy()
 })

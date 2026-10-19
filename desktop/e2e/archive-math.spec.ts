@@ -19,10 +19,13 @@ test('archive renders maths across fields and tabs without clipping or changing 
     })
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
     const page = await app.firstWindow()
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     const errors: string[] = []
     page.on('pageerror', error => errors.push(error.message))
     await expect.poll(() => page.evaluate(() => typeof window.copilotix?.getDocument)).toBe('function')
     const content = structuredClone(briefContent)
+    content.metadata = { title: null, authors: { value: text, evidence: text, anchors: ['E1'] },
+      venue: { value: text, evidence: text, anchors: ['E1'] }, year: null, doi: null }
     content.context = { background: text, gap: text, question: text }
     content.approach = { ...content.approach, summary: text, keyIdeas: [text], basis: text, evaluation: text }
     content.approach.summary += `\n\n$$\n${Array.from({ length: 45 }, () => 'a_i').join('+')}\n$$`
@@ -53,6 +56,7 @@ test('archive renders maths across fields and tabs without clipping or changing 
     for (const size of [{ width: 1100, height: 720 }, { width: 1600, height: 900 }]) {
       const win = await app.browserWindow(page)
       await win.evaluate((window, next) => window.setContentSize(next.width, next.height), size)
+      await expect.poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight }))).toEqual(size)
       for (const name of ['摘要', '背景', '结论', '讨论']) {
         const tab = archive.getByRole('tab', { name: new RegExp(name, 'u') })
         await tab.click()

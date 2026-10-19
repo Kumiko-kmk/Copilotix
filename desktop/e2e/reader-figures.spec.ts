@@ -38,7 +38,7 @@ test('renders every row of a compound figure and reveals its hidden PDF from a m
     await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
     await window.keyboard.press('Control+2')
     let pane = window.locator('.reader-tab-panel.active').filter({ has: window.locator('.markdown-pane') }).first()
-    await expect(pane.locator('[data-render-state="ready"]')).toBeVisible()
+    await expect(pane.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(pane.locator('.reader-figure-snapshot[data-rendered="true"]')).toHaveCount(1)
     await expect(pane.locator('article img')).toHaveCount(0)
     await expect(pane.getByText('Control; Treatment', { exact: true })).toBeHidden()

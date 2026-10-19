@@ -52,6 +52,10 @@ manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`�
 
 首次 `desktop-v1.0.0` 的未签章例外要求仓库 Actions variable `COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE` 精确等于 `desktop-v1.0.0`。2026-10-07，维护者另行明确授权 **仅本次 `desktop-v1.1.0` 未签章发布**；此例外要求 `COPILOTIX_UNSIGNED_RELEASE_TAG` 精确等于 `desktop-v1.1.0`，工作流也严格限制相同 tag，其他 tag 或变量值不能启用例外。Release 说明醒目标注未签章。完整构建、安装／卸载、下载删除、资产数量和远端哈希校验照常执行。对应发布完成后移除变量，后续版本继续要求受信任签章，不以自签证书代替。
 
+2026-10-18，维护者明确授权 **仅本次 `desktop-v1.2.0` 未签章发布**。沿用上述逐 tag 约束，只有 tag 与 `COPILOTIX_UNSIGNED_RELEASE_TAG` 同为 `desktop-v1.2.0` 才能启用；版本说明标注未签章，全部 CI 与完整性检查保留，发布后移除变量。此授权不延续到后续版本。
+
+托管 Windows runner 无 GPU，文库 3D 场景（约 260 万三角形）以软件光栅化运行在 1–3 fps，展开档案单帧可超过 10 秒。2026-10-19 维护者同意：文库导航 E2E（`paper-archive.spec.ts`）检测到软件渲染器时改用减少动态效果运行，断言共用；只有抽出中再按 Enter、收回期间 inert 与收回中重开这几步依赖动画，仅在有 GPU 时验证；软件渲染下逐秒帧率采样改为要求导航与拖拽期间确有场景渲染（硬件仍要求 30 fps，三角形与帧率上限不变）。单用例预算保持 180 秒。1.2.0 的点击卡死已由动画步长修正（见根 AGENTS 第 13 节）；完整动画在 CI 上不再覆盖，有 GPU 的真实帧率与动画以本机与真人验收为准。
+
 正式发布 tag 必须严格等于 `desktop-v<desktop/package.json version>`，例如 package version 为 `1.0.0` 时只能推送 `desktop-v1.0.0`。CI 会先核对 tag 与包版本，再构建并验证 Electron fuses、签名、运行包和哈希。
 
 当前实现只直接接入文件式证书；以下 Secrets 仅适用于已有适用 PFX/P12 的情况。新购公开受信任证书通常使用 Token/HSM/云签名，需按所选服务改造预检查和签名步骤，详见 [许可证选择与签名配置](LICENSE_AND_SIGNING_ZH.md)。

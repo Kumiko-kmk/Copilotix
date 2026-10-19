@@ -25,6 +25,13 @@ blanket exemption for future releases. Release notes must clearly state that the
 binaries are unsigned. All build, test, integrity and installation checks remain
 required. Remove the variable after publication; other tags require trusted signing.
 
+On 2026-10-18 the maintainer explicitly authorized one unsigned release,
+`desktop-v1.2.0`. The workflow permits only that exact tag with
+`COPILOTIX_UNSIGNED_RELEASE_TAG=desktop-v1.2.0`. This authorization does not
+extend to later releases. The release notes disclose the unsigned binaries;
+all build, test, integrity and installation checks remain required. Remove the
+repository variable after publication to close this one-time exception.
+
 ## Network use and privacy
 
 When a user starts parsing, PDF content is uploaded to the configured parsing
@@ -39,7 +46,8 @@ before uploading documents. See the service links and data-flow description in
 ## Removal
 
 The primary Windows distribution is a guided Setup installer for the current user;
-the complete portable ZIP remains an alternative. Production signing covers both
+older releases also offered a complete portable ZIP. Starting with 1.2.0, public
+release downloads contain only Setup and the source archives. Production signing covers both
 the application executable and Setup executable before final hashes and publication.
 Exit Copilotix through the tray menu after tasks finish before upgrading or removing
 the program. Uninstall through Windows installed applications; portable users may

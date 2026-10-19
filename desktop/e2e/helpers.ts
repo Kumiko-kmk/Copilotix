@@ -433,6 +433,8 @@ function createTwoPagePdf(): Buffer {
  * then 「打开阅读」 on its browse panel. Without WebGL the search result opens the Reader directly.
  */
 export async function openPaperFromLibrary(window: Page, documentId: string): Promise<void> {
+  // Reader acceptance does not measure archive animation; its dedicated suite does.
+  await window.emulateMedia({ reducedMotion: 'reduce' })
   const archive = window.getByRole('region', { name: '文库', exact: true })
   if (!(await archive.isVisible())) {
     await window.locator('[data-edge-dock="top"]').hover()

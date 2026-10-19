@@ -8,6 +8,7 @@ const { getDocumentMock } = vi.hoisted(() => ({ getDocumentMock: vi.fn() }))
 
 vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
+  PDFWorker: class { destroyed = false },
   getDocument: getDocumentMock
 }))
 
@@ -120,6 +121,7 @@ describe('PdfPane mapping navigation', () => {
     await waitFor(() => expect(view.container.querySelectorAll('[data-block-id]').length).toBe(3))
     expect(getDocumentMock).toHaveBeenCalledWith({
       url: 'copilotix-asset://document/original.pdf',
+      worker: expect.any(Object),
       rangeChunkSize: 128 * 1024,
       canvasMaxAreaInBytes: 32 * 1024 * 1024
     })

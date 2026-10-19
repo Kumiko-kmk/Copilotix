@@ -9,7 +9,7 @@ vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mocks.data })
 vi.mock('@shared/readerFigureGroups', () => ({ buildReaderFigureGeometries: () => [{ id: 'figure', status: 'complete' }] }))
 vi.mock('../src/renderer/useFigureArtifacts', () => ({ ensureFigureArtifacts: mocks.crop }))
 vi.mock('../src/renderer/paperArchive/ArchiveDetail', () => ({ renderSpread: mocks.cover }))
-vi.mock('../src/renderer/paperArchive/detailPage', () => ({ loadDetailPage: (_key: string, create: () => Promise<unknown>) => create(), renderPdfFirstPage: vi.fn() }))
+vi.mock('../src/renderer/paperArchive/detailPage', () => ({ loadDetailPage: (_key: string, create: () => Promise<unknown>) => create(), firstPageRenderer: () => vi.fn() }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 function fixture(id = crypto.randomUUID()) {
   mocks.data = { markdown: 'Original paper', mappings: [], layoutJson: '{}', pdfUrl: 'https://local/'+id, summary: { updatedAt: '2026-10-16', workflow: { status: 'completed' } } }
@@ -65,4 +65,17 @@ it('aborts old selection preparation and ignores its late completion', async () 
   expect(signal.aborted).toBe(true)
   await act(async () => finish({ available: 1, failed: 0 }))
   expect(view.result.current.ready).toBe(false)
+})
+it('prepares only the paper the selection rests on, not those passed while browsing', async () => {
+  const f = fixture()
+  mocks.crop.mockResolvedValue({ available: 1, failed: 0 })
+  const passed = { ...f.paper, id: crypto.randomUUID() }
+  const resting = { ...f.paper, id: crypto.randomUUID() }
+  const view = renderHook(({ paper }) => useArchivePreparation(paper, f.source), { initialProps: { paper: f.paper } })
+  view.rerender({ paper: passed })
+  view.rerender({ paper: resting })
+  await waitFor(() => expect(mocks.crop).toHaveBeenCalledOnce())
+  await new Promise(resolve => setTimeout(resolve, 600))
+  expect(mocks.crop).toHaveBeenCalledOnce()
+  expect(mocks.crop.mock.calls[0]![0]).toBe(resting.id)
 })

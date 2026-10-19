@@ -4,10 +4,23 @@ import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight
 import { buildReaderFigureGeometries, type ReaderFigureGeometry } from '@shared/readerFigureGroups'
 import type { ArchivePaper } from './archiveShelves'
 
+/**
+ * Figure crops, PDF rendering and the cover are heavy main-thread work; they start only once the
+ * selection rests, so papers passed while browsing cost nothing (browsing used 4x the CPU without it).
+ */
+const PREPARE_DWELL_MS = 400
+
 /** Readiness includes the saved analysis and complete figure files, not just translation. */
 export function useArchivePreparation(paper: ArchivePaper | null, source?: PaperInsightSource): { ready: boolean; progress: number } {
   const id = paper?.id
   const status = paper?.workflow.status
+  const [restingId, setRestingId] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    if (!id) return
+    const timer = window.setTimeout(() => setRestingId(id), PREPARE_DWELL_MS)
+    return () => window.clearTimeout(timer)
+  }, [id])
+  const resting = Boolean(id) && restingId === id
   const insightKey = `${id ?? ''}:${status ?? ''}`
   const [insight, setInsight] = React.useState<{ key: string; state: PaperInsightState } | null>(null)
   React.useEffect(() => {
@@ -20,10 +33,10 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
   }, [id, source, insightKey])
 
   const details = useQuery({ queryKey: ['document', id], queryFn: () => window.copilotix.getDocument(id!),
-    enabled: Boolean(id && ['translating', 'partial', 'completed'].includes(status ?? '')), staleTime: 30_000 })
+    enabled: resting && ['translating', 'partial', 'completed'].includes(status ?? ''), staleTime: 30_000 })
   const data = details.data
-  const geometryJson = React.useMemo(() => data?.markdown.trim()
-    ? JSON.stringify(buildReaderFigureGeometries(data.mappings, data.layoutJson)) : null, [data?.markdown, data?.mappings, data?.layoutJson])
+  const geometryJson = React.useMemo(() => resting && data?.markdown.trim()
+    ? JSON.stringify(buildReaderFigureGeometries(data.mappings, data.layoutJson)) : null, [resting, data?.markdown, data?.mappings, data?.layoutJson])
   const pdfUrl = data?.pdfUrl
   const figureKey = `${id ?? ''}:${pdfUrl ?? ''}:${geometryJson ?? ''}`
   const [figures, setFigures] = React.useState<{ key: string; done: boolean; ratio: number } | null>(null)
@@ -50,19 +63,19 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
   const coverKey = data && id ? `${id}:${data.summary.updatedAt}:spread` : null
   const [preparedCover, setPreparedCover] = React.useState<string | null>(null)
   React.useEffect(() => {
-    if (!id || !data || !coverKey || !workflowReady || !analysisReady || !imagesReady || data.summary.workflow.status !== 'completed') return
+    if (!resting || !id || !data || !coverKey || !workflowReady || !analysisReady || !imagesReady || data.summary.workflow.status !== 'completed') return
     const controller = new AbortController()
     if (/\.(?:md|markdown)$/iu.test(paper?.originalName ?? '')) {
       setPreparedCover(coverKey)
       return () => controller.abort()
     }
     void Promise.all([import('./detailPage'), import('./ArchiveDetail')])
-      .then(([{ loadDetailPage, renderPdfFirstPage }, { renderSpread }]) => loadDetailPage(coverKey,
-        () => renderSpread(id, data, renderPdfFirstPage, controller.signal, () => undefined), controller.signal))
+      .then(([{ loadDetailPage, firstPageRenderer }, { renderSpread }]) => loadDetailPage(coverKey,
+        () => renderSpread(id, data, firstPageRenderer(data.summary.sourceHash), controller.signal, () => undefined), controller.signal))
       .then(() => { if (!controller.signal.aborted) setPreparedCover(coverKey) })
       .catch(() => { /* No completed state until the composed cover is usable. */ })
     return () => controller.abort()
-  }, [id, data, coverKey, workflowReady, analysisReady, imagesReady, paper?.originalName])
+  }, [resting, id, data, coverKey, workflowReady, analysisReady, imagesReady, paper?.originalName])
   const ready = Boolean(id && workflowReady && analysisReady && imagesReady && preparedCover === coverKey)
   const progress = ready ? 100 : !workflowReady ? Math.min(94, Math.max(0, (paper?.workflow.progress ?? 0) * 0.94))
     : !analysisReady ? 96 : 98 + Math.min(1, figures?.key === figureKey ? figures.ratio : 0)
