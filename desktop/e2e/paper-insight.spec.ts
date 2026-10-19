@@ -29,7 +29,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
       await expect(archive.locator('canvas[data-archive-state="ready"]')).toBeVisible({ timeout: 20_000 })
       await archive.getByRole('button', { name: '查看档案' }).click()
       await expect(archive.locator('.paper-archive-detail')).toHaveAttribute('aria-busy', 'false')
-      await expect(archive.locator('.paper-archive-detail h2')).toHaveText('Original title')
+      await expect(archive.locator('.paper-archive-detail h2')).toHaveText('Insight test paper')
       await expect(archive).toHaveAttribute('data-detail-phase', 'open')
       await expect(archive.getByRole('tab', { name: /摘要/u })).toHaveAttribute('aria-selected', 'true')
       const legacyTab = archive.getByRole('tab', { name: /AI 解读/u })

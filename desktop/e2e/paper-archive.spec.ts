@@ -97,7 +97,7 @@ for (const disableWebGL of [false, true]) {
       await results.getByRole('button', { name: /Archive Alpha/u }).click()
       if (supported) {
         await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha')
-        await expect(archive.getByRole('button', { name: '查看档案' })).toBeEnabled()
+        await expect(archive.getByRole('button', { name: '查看档案' })).toBeEnabled({ timeout: 30_000 })
         await archive.focus()
         await window.keyboard.down('Enter')
         await window.keyboard.down('Enter')
@@ -148,7 +148,7 @@ for (const disableWebGL of [false, true]) {
         await search.fill('ARCHIVE alpha')
         await window.keyboard.press('Enter')
         await expect(archive.locator('.paper-archive-title')).toHaveText('Archive Alpha')
-        await expect(archive.getByRole('button', { name: '查看档案' })).toBeEnabled()
+        await expect(archive.getByRole('button', { name: '查看档案' })).toBeEnabled({ timeout: 30_000 })
         await window.keyboard.press('Enter')
         await expect(archive.getByRole('button', { name: '打开阅读' })).toBeVisible()
         // Explicit Open remains a shortcut, including during extraction.

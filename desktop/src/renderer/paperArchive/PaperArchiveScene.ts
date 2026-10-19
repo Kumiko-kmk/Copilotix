@@ -1550,7 +1550,9 @@ export class PaperArchiveScene {
     canvas.addEventListener('pointermove', (event) => {
       const drag = this.drag
       if (!drag) {
-        if (event.pointerType === 'mouse' && this.loaded) {
+        // An extracted card has no hover pose; moving over it must not redraw
+        // its static, full-resolution glass. Pointer clicks still use release().
+        if (event.pointerType === 'mouse' && this.loaded && !this.detailOpen) {
           this.pendingHover = { x: event.clientX, y: event.clientY }
           this.wake()
         }
