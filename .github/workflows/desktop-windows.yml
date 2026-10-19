@@ -161,6 +161,11 @@ jobs:
           node-version: 24.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Electron downloads its binary on first require, not at install. In build the unit tests
+      # trigger that; here the Utility bundle smoke would otherwise find no electron.exe.
+      - name: Install the Electron binary
+        working-directory: desktop
+        run: node -e "require('electron')"
       - run: pnpm desktop:build:bundles
       - name: Electron regression shard
         run: pnpm --dir desktop exec playwright test --grep-invert "hardened packaged"
