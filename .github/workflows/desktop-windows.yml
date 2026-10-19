@@ -150,7 +150,6 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-    name: e2e (${{ matrix.shard }}/3)
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

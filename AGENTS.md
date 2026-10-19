@@ -92,7 +92,7 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 
 - 修改 → 本地 commit → 按需本地 build／交付；未授權不 push，未跑完整 CI 如實說明。授權上傳後檢查最新提交的 Actions，合併前 `build` 必須成功，PR 另須通過最新合併結果檢查；舊成功、跳過、取消皆不可替代。
 - `.github/workflows/desktop-windows.yml` 覆蓋所有分支 push、PR、`desktop-v*` tag 及手動觸發；新分支須包含最新工作流。只 commit 不會觸發 Actions。
-- 保留必需檢查名稱 `build`。完整驗證時 Electron E2E 在與 `build` 並行的 `e2e (n/3)` job 執行，`build` 打包後只跑 packaged smoke；publish 同時依賴兩者。一般 push／PR 執行 frozen-lockfile、lint、typecheck、快速核心回歸、四 bundle 和源碼啟動 smoke；不預設打包、跑全套 UI／覆蓋率或安裝。`desktop-v*` tag 或手動勾選 `full_validation` 才跑覆蓋率、全部 Electron E2E、打包／安裝生命週期及下載校驗；tag 的版本、許可、簽章與打包內建安全校驗仍必需。
+- 保留必需檢查名稱 `build`。完整驗證時 Electron E2E 在與 `build` 並行的三個 `e2e` 矩陣 job 執行，`build` 打包後只跑 packaged smoke；publish 同時依賴兩者。一般 push／PR 執行 frozen-lockfile、lint、typecheck、快速核心回歸、四 bundle 和源碼啟動 smoke；不預設打包、跑全套 UI／覆蓋率或安裝。`desktop-v*` tag 或手動勾選 `full_validation` 才跑覆蓋率、全部 Electron E2E、打包／安裝生命週期及下載校驗；tag 的版本、許可、簽章與打包內建安全校驗仍必需。
 - `Copilotix-Windows-x64-Bundle` 供安裝驗收；`Copilotix-Windows-verification-reports` 保存 JUnit、覆蓋率及 packaged smoke 證據，`Copilotix-Windows-e2e-reports-<n>` 保存各 E2E 分片失敗證據。CI 未過不可稱已驗證包；CI 無個人 API 憑據，付費模型、視覺及硬體差異仍須真人驗收。
 
 ## 9. CI 與夾具維護
