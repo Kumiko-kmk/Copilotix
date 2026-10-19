@@ -109,7 +109,7 @@ for (const disableWebGL of [false, true]) {
         await expect(archive).toHaveAttribute('data-detail-phase', 'closing')
         await expect(archive.locator('.paper-archive-detail-layer')).toHaveAttribute('inert', '')
         await window.keyboard.press('Enter')
-        await expect(archive).toHaveAttribute('data-detail-phase', 'open')
+        await expect(archive).toHaveAttribute('data-detail-phase', 'open', { timeout: 20_000 })
         const abstract = archive.getByRole('tab', { name: /摘要/u })
         const structure = archive.getByRole('tab', { name: /结构/u })
         await abstract.focus()

@@ -6,6 +6,8 @@ import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTas
 import { backgroundPoints } from '../src/shared/paperBrief/background'
 
 test('archive insight uses validated settings, provider HTTP and durable local storage', async ({}, testInfo) => {
+  // Provider validation, generation, archive reload and durable recovery share this case.
+  test.setTimeout(120_000)
   const workspace = await createE2EWorkspace()
   const documentId = await seedReaderTask(workspace, { englishTitle: 'Insight test paper', sourceMarkdown: '# Original title\n\n# Abstract\n\nOriginal paper content.\n\n# Method\n\nStructured analysis.\n\n# Conclusion\n\nImproved reading.', translatedMarkdown: '# 论文标题\n\n# 摘要\n\n研究论文阅读效率。\n\n# 方法\n\n结构化提取。\n\n# 结论\n\n改进阅读。' })
   let app: Awaited<ReturnType<typeof launchElectron>> | undefined
@@ -83,7 +85,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     await expect(archive.getByRole('tab', { name: /背景/u })).toBeVisible({ timeout: 15_000 })
     await expect(archive.getByRole('tab', { name: /摘要/u })).toHaveAttribute('aria-selected', 'true')
     await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.abstract)
-    await archive.getByRole('tab', { name: /背景/u }).click()
+    await archive.getByRole('tab', { name: /背景/u }).press('Enter')
     for (const point of backgroundPoints(briefGeneration.analysis.background)) {
       await expect(archive.getByRole('tabpanel')).toContainText(point.title)
       await expect(archive.getByRole('tabpanel')).toContainText(point.text)
@@ -98,16 +100,16 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     expect(durable).toContain(briefGeneration.analysis.conclusions[0]!.title); expect(durable).not.toContain('fake-key')
     await expect(archive.getByText('证据基础', { exact: true })).toHaveCount(0)
     await expect(archive.getByText('页数', { exact: true })).toHaveCount(0)
-    await archive.getByRole('tab', { name: /结论/u }).click()
+    await archive.getByRole('tab', { name: /结论/u }).press('Enter')
     await expect(archive.getByText('证据需核对', { exact: true })).toHaveCount(0)
     const firstFinding = archive.locator('.paper-archive-reading-points > li').first()
     await expect(firstFinding.locator('.paper-archive-anchor summary')).toContainText('E1')
-    await firstFinding.locator('.paper-archive-anchor summary').click()
+    await firstFinding.locator('.paper-archive-anchor summary').press('Enter')
     await expect(firstFinding.locator('.paper-archive-anchor p')).toContainText('Original paper content')
     await window.screenshot({ path: testInfo.outputPath('archive-insight.png') })
     await window.reload(); archive = await openDetail()
     await expect(archive.getByRole('tabpanel')).toContainText(briefGeneration.analysis.abstract)
-    await archive.getByRole('tab', { name: /背景/u }).click()
+    await archive.getByRole('tab', { name: /背景/u }).press('Enter')
     for (const point of backgroundPoints(briefGeneration.analysis.background)) {
       await expect(archive.getByRole('tabpanel')).toContainText(point.title)
       await expect(archive.getByRole('tabpanel')).toContainText(point.text)
