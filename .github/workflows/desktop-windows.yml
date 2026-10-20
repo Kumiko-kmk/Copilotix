@@ -2,7 +2,8 @@ name: Desktop Windows
 
 on:
   push:
-    branches: ['**']
+    # Feature branches are checked on the PR merge result; avoid duplicate push + PR runs.
+    branches: [master]
     tags: ['desktop-v*']
   pull_request:
     # The protected master branch requires build for every pull request.
@@ -66,9 +67,12 @@ jobs:
       - name: Fast core regression
         if: env.FULL_VALIDATION != 'true'
         run: pnpm desktop:test
-      - name: Full regression and coverage
+      # Full coverage runs in e2e shard 1, beside packaging instead of before it.
+      # Fast core tests normally install Electron as a side effect; full builds need it explicitly.
+      - name: Install the Electron binary
         if: env.FULL_VALIDATION == 'true'
-        run: pnpm desktop:test:coverage
+        working-directory: desktop
+        run: node -e "require('electron')"
       - run: pnpm desktop:build:bundles
       - name: Source application smoke
         if: env.FULL_VALIDATION != 'true'
@@ -135,11 +139,14 @@ jobs:
           retention-days: 7
           path: |
             desktop/test-results/
+            desktop/playwright-report/
+            desktop/test-artifacts/
             desktop/unit-test-results/
             desktop/coverage/coverage-summary.json
 
-  # Full validation runs Electron E2E beside build, split by measured duration in
-  # desktop/playwright.config.ts; each shard still uses one worker. The total must match that list.
+  # Full validation runs Electron E2E beside build. The shortest measured shard also runs
+  # full unit/UI/release regression and coverage, without adding another runner.
+  # Each E2E shard still uses one worker. The total must match desktop/playwright.config.ts.
   e2e:
     if: startsWith(github.ref, 'refs/tags/desktop-v') || (github.event_name == 'workflow_dispatch' && inputs.full_validation)
     runs-on: windows-2025
@@ -160,8 +167,11 @@ jobs:
           node-version: 24.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Electron downloads its binary on first require, not at install. In build the unit tests
-      # trigger that; here the Utility bundle smoke would otherwise find no electron.exe.
+      - name: Full regression and coverage
+        if: matrix.shard == 1
+        run: pnpm desktop:test:coverage
+      # Electron downloads its binary on first require, not at install. Shards without unit tests
+      # must install it explicitly before the Utility bundle smoke.
       - name: Install the Electron binary
         working-directory: desktop
         run: node -e "require('electron')"
@@ -177,7 +187,11 @@ jobs:
           name: Copilotix-Windows-e2e-reports-${{ matrix.shard }}
           if-no-files-found: ignore
           retention-days: 7
-          path: desktop/test-results/
+          path: |
+            desktop/test-results/
+            desktop/playwright-report/
+            desktop/unit-test-results/
+            desktop/coverage/coverage-summary.json
 
   publish:
     needs: [build, e2e]

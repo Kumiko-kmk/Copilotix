@@ -18,6 +18,11 @@ test('starts source navigation and PDF import controls', async () => {
   try {
     const window = await app.firstWindow()
     await expect(window.locator('.tutorial-page')).toBeVisible()
+    const settings = await window.evaluate(() => window.copilotix.getSettings())
+    expect(['missing', 'unknown', 'valid', 'invalid']).toContain(settings.credentials.parser.state)
+    expect(settings).not.toHaveProperty('hasParserToken')
+    expect(settings).not.toHaveProperty('qwenHasApiKey')
+    expect(settings).not.toHaveProperty('deepseekHasApiKey')
     const navigationTrigger = window.locator('[data-edge-dock="top"] .edge-dock-trigger')
     await navigationTrigger.focus()
     await expect(navigationTrigger).toHaveAttribute('aria-expanded', 'true')
