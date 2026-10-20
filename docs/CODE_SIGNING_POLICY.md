@@ -1,8 +1,13 @@
 # Code signing policy
 
 Status: SignPath Foundation application submission attempted; receipt and approval not yet confirmed.
-Copilotix currently provides local unsigned development builds. The locally generated
+Copilotix has published unsigned releases under the exact-tag exceptions below. The locally generated
 self-signed certificate is for testing only and is not used for public releases.
+
+The SignPath application was attempted on 2026-09-28 without a confirmed receipt.
+A public signing integration is not active; confirm the receipt, eligibility, MFA
+and signing roles before onboarding. Adding a token alone does not enable signing.
+The current file-certificate setup is documented in [signing configuration](LICENSE_AND_SIGNING_ZH.md).
 
 ## Proposed responsibilities
 

@@ -57,7 +57,7 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 
 - 自有代碼沿用根 `LICENSE.md` 的 MIT，不覆蓋第三方或歷史上游許可。
 - 打包生成第三方許可匯總（包括開發依賴），並複製 MIT 與聲明到 `resources/licenses`；缺少許可文本須如實列出。
-- 本機自簽僅供測試，不自動加入系統信任。正式政策與 SignPath 見 `docs/CODE_SIGNING_POLICY.md`、`docs/SIGNPATH_APPLICATION.md`。
+- 本機自簽僅供測試，不自動加入系統信任。正式政策與 SignPath 見 `docs/CODE_SIGNING_POLICY.md`、`docs/LICENSE_AND_SIGNING_ZH.md`。
 
 ## 6. Setup 交付契約
 
@@ -91,9 +91,9 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 ## 8. 遠端 CI 與驗證邊界
 
 - 修改 → 本地 commit → 按需本地 build／交付；未授權不 push，未跑完整 CI 如實說明。授權上傳後檢查最新提交的 Actions，合併前 `build` 必須成功，PR 另須通過最新合併結果檢查；舊成功、跳過、取消皆不可替代。
-- `.github/workflows/desktop-windows.yml` 覆蓋所有分支 push、PR、`desktop-v*` tag 及手動觸發；新分支須包含最新工作流。只 commit 不會觸發 Actions。
-- 保留必需檢查名稱 `build`。完整驗證時 Electron E2E 在與 `build` 並行的三個 `e2e` 矩陣 job 執行，`build` 打包後只跑 packaged smoke；publish 同時依賴兩者。一般 push／PR 執行 frozen-lockfile、lint、typecheck、快速核心回歸、四 bundle 和源碼啟動 smoke；不預設打包、跑全套 UI／覆蓋率或安裝。`desktop-v*` tag 或手動勾選 `full_validation` 才跑覆蓋率、全部 Electron E2E、打包／安裝生命週期及下載校驗；tag 的版本、許可、簽章與打包內建安全校驗仍必需。
-- `Copilotix-Windows-x64-Bundle` 供安裝驗收；`Copilotix-Windows-verification-reports` 保存 JUnit、覆蓋率及 packaged smoke 證據，`Copilotix-Windows-e2e-reports-<n>` 保存各 E2E 分片失敗證據。CI 未過不可稱已驗證包；CI 無個人 API 憑據，付費模型、視覺及硬體差異仍須真人驗收。
+- `.github/workflows/desktop-windows.yml` 覆蓋 master push、所有 PR、`desktop-v*` tag 及手動觸發；功能分支開 PR 後由合併結果檢查，避免同一提交重跑 push／PR。未開 PR 的分支可手動驗證；新分支須包含最新工作流。只 commit 不會觸發 Actions。
+- 保留必需檢查名稱 `build`。完整驗證時 Electron E2E 在與 `build` 並行的三個 `e2e` 矩陣 job 執行，最短的第 1 片先執行完整單元／UI／發布腳本回歸與覆蓋率；`build` 顯式安裝 Electron 後構建，打包後只跑 packaged smoke。publish 同時依賴 build 和全部 e2e（含覆蓋率），任一失敗不可發布。一般 master push／PR 執行 frozen-lockfile、lint、typecheck、快速核心回歸、四 bundle 和源碼啟動 smoke；不預設打包、跑全套 UI／覆蓋率或安裝。`desktop-v*` tag 或手動勾選 `full_validation` 才跑覆蓋率、全部 Electron E2E、打包／安裝生命週期及下載校驗；tag 的版本、許可、簽章與打包內建安全校驗仍必需。
+- `Copilotix-Windows-x64-Bundle` 供安裝驗收；`Copilotix-Windows-verification-reports` 保存 build 的 JUnit、Playwright HTML 與安裝驗收證據；`Copilotix-Windows-e2e-reports-<n>` 保存各片 Playwright HTML／失敗證據，第 1 片另存完整回歸 JUnit 與覆蓋率摘要。CI 未過不可稱已驗證包；CI 無個人 API 憑據，付費模型、視覺及硬體差異仍須真人驗收。
 
 ## 9. CI 與夾具維護
 
@@ -117,32 +117,10 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 
 ## 12. 當前狀態與入口
 
-- 當前開發入口為 `Copilotix-master-updated`／本地 `master`，包含文庫 UI 代碼與文檔。1.2.0 為本次發布目標；正式簽章與逐 tag 例外以 docs/CODE_SIGNING_POLICY.md 為準。
-- 首頁背景為「解密字陣」`homeCipher.ts`：字元網格按字標實測字寬／行高對齊，避開前景塊；波浪只由開頁、點擊或 75–120 秒一次的自動波觸發，單向擴散不反彈，經 `homeWave.ts` 與字標逐字解碼同步；波後只浮現文庫論文的原文或譯文標題，不加編號（譯文標題閒時讀最近 10 篇，僅保留標題）；新波出發時上一波的標題 0.45 秒內淡出。待機字陣較密並持續閃爍、增減及零星紫色火花，避免被當成靜態背景。其餘六個背景方案原型（`gallery.html`）與舊等高線實作保存在 `docs/design/home-backdrops/`，不參與構建。
+- 預設開發分支為 `master`，包含文庫 UI 代碼與文檔。1.2.0 已於 2026-10-19 發布；正式簽章與逐 tag 例外以 docs/CODE_SIGNING_POLICY.md 為準。
+- 首頁背景使用 `homeCipher.ts`／`homeWave.ts`；已選定方案與文庫渲染契約見 [介面規範](docs/UI_PREFERENCES_ZH.md)。舊原型與候選方案由 Git 歷史保留。
 - README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
 
 ## 13. 文庫頁與 AI 解讀
 
-### 資訊與資料
-
-- 圖片 AI 解讀提供 `window.copilotix.figureInsight.get/generate/cancel/onChanged`，模型只返回 `displayWeight`（唯一綜合展示分數）、`overview`、`takeaway`；不加封面評分／理由／supports。每張結果存 `<文獻目錄>/insight/figures/<SHA256(figureId)>.v1.json`，位置、圖片雜湊和來源版本由程序附加；封面依現有結果讀取排序，不觸發生成，尚無獨立解析窗口或自動批次上傳。2026-10-11 已授權 DeepSeek 六篇共 39 張整圖，39/39 返回並保存，逐圖結果／示例在 `../investigation/figure-insight-live-20261011/`。原 PNG 定位與傳輸 JPEG98 身份須區分；接口、兼容、傳輸及驗證邊界只在 [圖片 AI 解讀](docs/FIGURE_INSIGHT_ZH.md) 維護。
-- `LibraryPage` 懶載入 Three.js；從文庫進 Reader 用 `returnTo: 'library'` 返回並恢復論文，從教程進入返回教程，其他入口返回首頁。重試與刪除論文在閱讀器頂欄（`DocumentLifecycleActions`）。RhineLabUI 來源與 MIT 許可見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`；GLB 僅五個外殼網格，沿用 inline／parseAsync 和原 CSP。
-- 每分類一列，列／行循環並記住論文 ID；右下角列數等於分類數，分類名十二字固定寬度居中，箭頭位置固定。分類算法、分頁與緩存只在 [內容分類](docs/LIBRARY_CATEGORIES_ZH.md) 維護。
-- 瀏覽標題移除末尾 `.pdf`，固定兩行高度、單行垂直居中、超出省略；譯文標題固定一行，沒有譯文留空。停留選中論文 180ms 後讀取，與詳情共用 query cache；不另調模型。
-- 選中頁元信息只含單行關鍵詞（空格分隔，按寬度縮至 11px，仍超出省略）及下方總結（v2 `tldr`／v1 `summary`）；不顯示類型、日期、生成狀態。詳情標題下同樣顯示譯文標題，不重複類型／學科／總結；證據基礎與檢驗方式在新舊檔案展示均不顯示，舊字段只作存儲兼容。
-- 詳情 v2 依「摘要／背景／結論／討論」顯示；正文統一 16px、首行縮排兩字，背景每點顯示短標題。新舊檔案均不顯示證據基礎／檢驗方式。選區提供共用高亮、下劃線及筆記，不提供加入對話；archive 區塊鍵與原文隔離，保存與重定位邊界見 [Paper Brief](docs/PAPER_BRIEF_ZH.md)。新摘要由全文生成，舊檔仍回退譯文，缺失明示；ABSTRACT 不參與遮擋，正文仍沿用解密動畫。詳情延伸至頁面底部，「打开阅读」靠下，隱藏捲動條並保留滾輪／鍵盤捲動。生成操作在閱讀器「AI 问答」頁籤工具列的「档案卡」點擊選單。HTTP(S) 連結保留目標、下劃線且可換行。無 v2 時保留結構／舊解讀頁；v2 分頁與生成欄位以 [Paper Brief](docs/PAPER_BRIEF_ZH.md) 為準。
-- 生成授權、取消、併發、存儲與兼容只在 [AI 檔案卡](docs/PAPER_INSIGHT_ZH.md) 維護。解析完成後與翻譯並行生成，翻譯完成事件補足恢復；自動生成已恆為開啟、不提供開關；使用程序即同意發送所需內容，不再獨立確認；發送前仍核對啟用服務、模型與憑據。既有 15 篇真實生成結果已保存，批次證據在 `../investigation/paper-brief-bulk-20261010/SUMMARY.md`，不代表人工品質驗收。
-- 發布時間戳由 `runtime-file-times.mjs` 只更新 staging runtime，避免 Electron 資源顯示 1980 年；不修改依賴、內容、簽章或用戶文庫。
-
-### 互動與渲染
-
-- 不改 `archiveMotion.ts` 已校準曲線。單一 rAF、約 60fps，牆鐘待機，失焦／隱藏停渲染；reduced-motion 直接完成動畫（含漣漪增益），卸載時釋放 GPU。每幀動畫步長上限 `MAX_STEP_SECONDS` 0.25 秒：舊 0.05 秒上限在軟體渲染下把過場拉長數十倍並以多秒重幀阻塞輸入（1.2.0 CI 點擊卡死的實測主因），不得改回。選中論文停留 400ms 後才準備圖片／封面（`useArchivePreparation`），快速翻閱不渲染 PDF；本次會話已確認的整圖不再逐圖查詢 Main。封面首頁按 PDF 內容雜湊存於 renderer IndexedDB `copilotix-archive-pages`（≤160 頁，WebP，失敗回退重繪），關鍵圖頁仍按當前整圖與解讀合成；pdf.js 全應用共用單一 worker（傳入 `worker`，不用會隨文獻銷毀的 `workerPort`）。不得恢復「流暢模式」或材質降檔；未採用效果只在 [動畫候選](docs/LIBRARY_MOTION_IDEAS_ZH.md) 記錄。
-- 瀏覽 DPR ≤1.25／≤3.3M 像素，透射半解析度、陰影 1024；6 幀超時降解析度 15%（下限 0.55），穩定 240 幀且 8 秒未降再升 8%。保留解析拾取、剔除、共享 instanceMatrix、compileAsync 暖機；途經選中卡漣漪最多 6，升起 4.2／回落 4.5。
-- 抽出沿用單一 hero、4.05 升起與 detail 鏡頭；鏡頭 >0.6、升起 >3 才解密。標記以 4.8 倍速、玻璃清除以 2.4 倍速，清除前緣羽化 0.12；`onDecryptReveal` 啟動文字揭開。首頁 1600px／LRU 6，按需載入 PDF／資料／解讀；換篇或卸載取消晚到結果與訂閱。
-- `lineRedaction.ts` 等文字與檔案卡載入後揭開；遮擋期間正文以 `data-redacted` 不繪製（面板淡入時不可透出），墨條開始右滑時才恢復。ResizeObserver 首次回報不算版面變化；ResizeObserver／MutationObserver 忽略遮擋層，重新量測所有可見文字（含部分末行），滑出途中版面改變就移除遮擋。逐行退場 0.95 秒，閱讀順序曲線與卡片解密時間不變；reduced-motion 不畫墨條。詳情標題與譯名不遮擋：opening 時捕捉瀏覽面板標題位置與字級，先平移縮放進詳情標題區（延遲 120ms、440ms），其餘內容與遮擋層 460ms 後一起淡入上移（300ms），標題不會穿過墨條；closing 時內容 120ms 淡出、標題 180ms 退回。瀏覽面板的關鍵詞／總結按論文快取且總結固定三行高，返回時面板整體淡入、不重播標題滾動；`returning` 標記跟隨論文 ID 直到換篇，不可用計時器移除（會重播動畫）。標題左對齊。文庫全區文字兩端對齊（居中標籤除外），遮擋條隨之齊整。
-- Enter 忽略 repeat，抽出／解密中不進 Reader，完全展開後再次 Enter 或「打开阅读」進入；點擊已展開封面、Enter 與「打开阅读」共用可取消的閱讀器入口：先預載閱讀器（10 秒超時），主場景封面推進／放大 4%（280ms）後切頁，閱讀器淡入 180ms；Esc 取消待完成跳轉，減少動態效果直接切換。預載失敗留在文庫並可重試，不掛載第二個閱讀器或 3D 場景。抽出卡片封面為「首頁＋關鍵圖片」跨頁，選圖與排版見 [圖片 AI 解讀](docs/FIGURE_INSIGHT_ZH.md)「文庫封面」。移動 ≥8px、pointercancel／lostpointercapture 不觸發點擊。詳情分頁左右／Home／End 移焦，正文方向鍵保留捲動，僅瀏覽區方向鍵換卡。
-- 搜尋按標題／原檔名分詞，最多 40 項；`/` 聚焦，Enter 選首項，Tab 選結果，IME 不誤觸並取消慣性。瀏覽 Esc 先收搜尋；抽出期間檢索收合且 inert、結果關閉，Esc 關詳情並移焦回文庫。收合 0.24 秒內完成，詳情拉伸延遲 120ms 才到達頂部，兩者不交疊；返回時詳情先淡出，橫線 0.2 秒後展開、文字 0.38 秒後展開。搜尋結果與選中頁關鍵詞／總結載入時淡入；詳情分頁以單一滑動指示線切換。WebGL 失敗仍可搜尋進 Reader。
-- `closing` 保留舊文獻／封面／模型：面板 180ms 淡出且 inert，模型／鏡頭 320ms 收回後卸載。僅一個待選目標，方向輸入累積、搜尋覆蓋；目標移除即取消，收回中重開同篇接續姿態並清掉待選；reduced-motion 直接收回。
-- `entryScanTime` 把入場掃描平段壓至約 0.25 秒；肩部在滑入結束時升起。`ARRAY_SCREEN_SHIFT` 將選中卡移向左下（-4%／10% 視口）；瀏覽／詳情共用 `--archive-panel-left` 與 `--archive-detail-width`。
-- `onDetailFrame` 寫入 `--archive-detail-top/height` 供 floor veil 遮蓋陣列；詳情頂端與品牌對齊、底端保留 26px 頁面邊距，分頁高度固定，僅正文捲動。不加裝飾框線；返回按鈕在卡片下方。標題位置必須在 opening 時從仍掛載的瀏覽面板捕捉；reduced-motion 跳過。
-- 展開後 ≤8.3M 像素，用 2 倍顯示器 DPR，放不下回原生 DPR（≤2），透射全解析度；靜止不重繪，收回恢復瀏覽上限。`applyResolution` 只標記，下一幀開頭 `flushResolution` 後立即渲染，禁止在幀間直接改緩衝區尺寸造成空白幀；首頁貼圖按展開後設備像素高度重採樣。
+文庫資訊、互動、動畫與渲染契約統一見 [介面規範](docs/UI_PREFERENCES_ZH.md#文庫頁與-ai-解讀)。生成、存儲、兼容與恢復仍以各專項文檔為準；修改時先讀相關契約，不在本入口重複參數與歷史驗收紀錄。

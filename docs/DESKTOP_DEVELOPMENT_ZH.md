@@ -53,7 +53,7 @@ pnpm desktop:dev
 | `pnpm desktop:test:e2e:full` | 全部 Electron 回归，需要发布产物的用例也包含在内 |
 | `pnpm desktop:test:coverage` | 完整回归与覆盖率，仅用于完整验收 |
 
-普通 push／PR 的 `build` 检查执行 lint、typecheck、核心回归、四 bundle 和启动 smoke。版本 tag 或手动 `full_validation` 才增加完整覆盖率、Electron 回归、打包、安装／升级／卸载及下载校验。发布签章、资料保留和打包内建完整性检查仍保留。
+普通 master push／PR 的 `build` 检查执行 lint、typecheck、核心回归、四 bundle 和启动 smoke。功能分支通过 PR 合并结果验证，不再同时执行相同提交的 push 检查；未开 PR 的分支可手动运行。版本 tag 或手动 `full_validation` 才增加完整覆盖率、Electron 回归、打包、安装／升级／卸载及下载校验。完整回归与覆盖率先在 E2E 第 1 分片运行，与 build 打包并行；发布仍须 build 和三个分片全部成功。发布签章、资料保留和打包内建完整性检查仍保留。
 
 覆盖率阈值仍为 lines/statements/functions `80%`、branches `75%`，仅在显式完整检查中执行。真实 API、真实翻译及个人 GUI 配置仍需单独授权和实际验证。
 
