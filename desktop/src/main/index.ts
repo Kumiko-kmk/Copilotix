@@ -7,6 +7,7 @@ import { FigureInsightService } from './chat/figureInsightService'
 import { registerFigureInsightHandlers } from './chat/figureInsightIpc'
 import { figureInsightChangedSchema } from '@shared/figureInsight'
 import { registerPaperInsightHandlers } from './chat/paperInsightIpc'
+import { createZoteroImportService, registerZoteroHandlers } from './zotero/zoteroIpc'
 import { paperInsightChangedSchema } from '@shared/paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { ChatProvider } from './chat/chatProvider'
@@ -417,6 +418,7 @@ function registerIpc(
 
   registerPaperInsightHandlers(paperInsight!, validationOptions)
   registerFigureInsightHandlers(figureInsight!, validationOptions)
+  registerZoteroHandlers(createZoteroImportService({ tasks, repository: repository!, tempRoot: app.getPath('temp') }), validationOptions)
   registerValidatedHandler('library:categories', libraryCategoriesRequestSchema, libraryCategoriesPageSchema,
     (_event, request) => utilitySupervisor!.request('compute:library-categories', request, { timeoutMs: 120_000 }), validationOptions)
   registerPaperChatHandlers(paperChat!, async (documentId) => {

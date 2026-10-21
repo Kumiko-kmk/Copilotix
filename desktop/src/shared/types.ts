@@ -243,6 +243,8 @@ export interface CopilotixDesktopApi {
     cancel(request: { documentId: string }): Promise<{ cancelled: boolean }>
     onChanged(listener: (event: { documentId: string; state: import('./paperInsight').PaperInsightState }) => void): () => void
   }
+  /** Read-only Zotero library browsing and import (see shared/zotero.ts). */
+  zotero: import('./zotero').ZoteroDesktopApi
   readerNotes: {
     list(request: { documentId: string }): Promise<ReaderNotes>
     upsert(request: { documentId: string; note: ReaderNote }): Promise<ReaderNotes>

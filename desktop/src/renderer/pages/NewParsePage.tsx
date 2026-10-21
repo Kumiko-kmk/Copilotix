@@ -7,6 +7,7 @@ import type { DocumentSummary } from '@shared/ipcSchemas'
 import CopilotixWordmark from '../components/CopilotixWordmark'
 import { HomeBackdrop, UploadGlyph } from '../components/HomeScene'
 import { HomeGreeting } from '../components/HomeWidgets'
+import ZoteroImportDialog from '../components/ZoteroImportDialog'
 
 interface PendingPdf {
   file: File
@@ -29,6 +30,7 @@ export default function NewParsePage(props: {
   const [skipDuplicates, setSkipDuplicates] = React.useState(true)
   const [submitting, setSubmitting] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
+  const [zoteroOpen, setZoteroOpen] = React.useState(false)
   const pageRef = React.useRef<HTMLElement>(null)
   const uploadRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -156,7 +158,7 @@ export default function NewParsePage(props: {
             onChange={(event) => setPdfFiles([...event.target.files ?? []])}
           />
         </div>
-
+        <button type="button" className="zotero-entry" onClick={() => setZoteroOpen(true)}>从 Zotero 导入</button>
         </div>
         {!tutorialEntryUsed ? <button type="button" className="tutorial-entry" onClick={() => {
           window.localStorage.setItem(TUTORIAL_ENTRY_USED_KEY, '1')
@@ -221,6 +223,13 @@ export default function NewParsePage(props: {
         </div>
         {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="解析 API 不接受超过 200MB 的单个文件" /> : null}
       </Modal>
+      <ZoteroImportDialog
+        open={zoteroOpen}
+        settings={props.settings}
+        onClose={() => setZoteroOpen(false)}
+        onImported={props.onCreated}
+        onOpenSettings={props.onOpenSettings}
+      />
     </section>
   )
 }
