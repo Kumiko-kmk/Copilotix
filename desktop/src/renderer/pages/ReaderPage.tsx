@@ -1,5 +1,10 @@
 import React from 'react'
 import { usePaperChat } from '../usePaperChat'
+import { usePaperChatRouting } from '../usePaperChatRouting'
+import { captionFigureKey } from '@shared/figureMentions'
+import { paperChatFigureImagePathSchema } from '@shared/paperChatFigures'
+import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
+import type { ReaderFigureChat } from '../components/MarkdownPane'
 import { useReaderNotes } from '../useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
@@ -104,6 +109,21 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       else messageApi.success({ content: '已加入 Chat 选区', key: 'paper-chat-pin', duration: 1.5 })
     })
   }, [addSelection, messageApi])
+  // Figures follow the same rule; a text-only model blocks them with a visible reason.
+  const routing = usePaperChatRouting(chat.selectedModel, { inspect: false })
+  const { addFigure } = chat
+  const figureChat = React.useMemo<ReaderFigureChat>(() => ({
+    blocked: routing.imageBlocked,
+    onAdd: (group: ReaderFigureGroup) => {
+      if (routing.imageBlocked) { messageApi.warning({ content: routing.imageBlocked, key: 'paper-chat-pin' }); return }
+      const label = captionFigureKey(group.captionMarkdown || group.fallbackLegendText)?.label ?? null
+      const preview = group.assetSources.map(asset => 'images/' + (asset.replace(/\\/gu, '/').split('/').pop() ?? '')).find(path => paperChatFigureImagePathSchema.safeParse(path).success)
+      void addFigure({ figureId: group.id, label, pageIndex: group.pageIndex, ...(preview ? { preview } : {}) }).then((failure) => {
+        if (failure) messageApi.warning({ content: failure, key: 'paper-chat-pin' })
+        else messageApi.success({ content: label ? `已将 ${label} 加入 Chat` : '已将图片加入 Chat', key: 'paper-chat-pin', duration: 1.5 })
+      })
+    }
+  }), [addFigure, messageApi, routing.imageBlocked])
   // A citation scrolls the reading views to its block; if none is on screen, the workbench shows one.
   const openCitation = React.useCallback((next: BlockSelection) => {
     selectBlock(next)
@@ -199,6 +219,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           onSelect: selectBlock,
           onOpenFigurePdf: openFigurePdf,
           onAddToChat: addToChat,
+          figureChat,
           notes: readerNotes.notes,
           onSaveNote: readerNotes.saveNote,
           onDeleteNote: readerNotes.deleteNote,

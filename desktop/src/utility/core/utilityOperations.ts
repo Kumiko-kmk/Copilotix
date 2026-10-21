@@ -1,6 +1,8 @@
 import { paperBriefSaveSchema } from '@shared/paperBrief/contracts'
 import { PaperInsightStore } from './persistence/paperInsightStore'
 import { FigureInsightStore } from './persistence/figureInsightStore'
+import { PaperChatFigureStore } from './persistence/paperChatFigureStore'
+import { paperChatFigureRequestSchema } from '@shared/paperChatFigures'
 import { figureInsightRequestSchema, figureInsightSaveSchema } from '@shared/figureInsight'
 import { paperInsightRequestSchema } from '@shared/paperInsight'
 import { libraryCategoriesRequestSchema } from '@shared/libraryCategories'
@@ -170,6 +172,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       return { state: k?.localState ?? 'unindexed', progress: k?.localProgress ?? 0, contentRevisionId: k?.activeContentRevisionId ?? null }
     },
     'chat:build-context': (request, signal) => new PaperContextBuilder(requireRagRepository()).build(paperContextRequestSchema.parse(request.payload), signal),
+    'compute:paper-chat-figure': (request, signal) => new PaperChatFigureStore(requireRepository(), figureInsightStore()).source(paperChatFigureRequestSchema.parse(request.payload), signal),
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {
       if (!state.databasePath) throw new Error('文档库尚未初始化')

@@ -649,6 +649,8 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .reader-figure-snapshot[data-failed="true"] .reader-figure-snapshot-canvas { display: none; }
 .reader-figure-action { display: inline-block; margin: 4px 0 8px; padding: 2px 6px; border: 1px solid var(--rule); border-radius: 2px; color: var(--primary); background: transparent; cursor: pointer; font: inherit; font-size: 12px; }
 .reader-figure-action:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.reader-figure-action + .reader-figure-action { margin-left: 6px; }
+.reader-figure-action[aria-disabled="true"] { color: var(--muted); border-style: dashed; cursor: not-allowed; }
 .reader-figure-caption { clear: both; width: 100%; margin: 0 auto 7px; }
 .reader-figure-caption > :first-child { margin-top: 0; }
 .markdown-body sub, .markdown-body sup { position: relative; vertical-align: baseline; font-size: .75em; line-height: 0; }

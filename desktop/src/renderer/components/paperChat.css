@@ -37,6 +37,9 @@
 .paper-chat-pin button { display: grid; width: 20px; height: 20px; padding: 0; place-items: center; border: 0; border-radius: 2px; color: var(--muted); background: transparent; cursor: pointer; font-size: 10px; }
 .paper-chat-pin button:hover:not(:disabled), .paper-chat-pin button:focus-visible { color: var(--text); background: color-mix(in srgb, var(--primary) 14%, transparent); outline: 0; }
 .paper-chat-pin button:disabled { cursor: not-allowed; opacity: .45; }
+.paper-chat-figure-pin { height: 40px; padding-left: 4px; }
+/* Inside the conversation the pin sits in .markdown-body, whose img rule would show the figure full size. */
+.paper-chat-pin img.paper-chat-figure-thumb { display: block; flex: 0 0 auto; width: auto; max-width: 56px; height: 32px; margin: 0; object-fit: contain; background: var(--sheet); }
 .paper-chat-input { display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 6px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet); box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--shadow-ink) 45%, transparent); transition: border-color .15s ease, box-shadow .15s ease; }
 .paper-chat-input:focus-within { border-color: var(--rule-strong); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent); }
 .paper-chat-input-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }

@@ -3,10 +3,13 @@ import { canTransitionRagStreamEvent, type Citation, type RagStreamEventType, ty
 import { paperChatPinnedSchema, supportedChatModelSchema, type PaperChatPinned, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ReaderChatSelection } from '@shared/types'
 import { emptyPaperChatSession, paperChatTurnSelections, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
+import { PAPER_CHAT_MAX_FIGURES, paperChatFigurePinSchema, type PaperChatFigurePin } from '@shared/paperChatFigures'
 
-export interface PaperChatTurn extends Partial<Pick<StoredPaperChatTurn, 'id' | 'model' | 'provider' | 'createdAt' | 'completedAt' | 'durationMs' | 'usage' | 'selections'>> {
+export interface PaperChatTurn extends Partial<Pick<StoredPaperChatTurn, 'id' | 'model' | 'provider' | 'createdAt' | 'completedAt' | 'durationMs' | 'usage' | 'selections' | 'figures'>> {
   /** The selections sent with this question, kept in memory so a retry asks about them again. */
   pinned?: PaperChatPinned[]
+  /** Figures sent with a question asked in this session; stored turns carry `figures` instead. */
+  figurePins?: PaperChatFigurePin[]
   question: string; answer: string; citations: Record<string, Citation>; status: 'pending' | 'completed' | 'failed' | 'cancelled' }
 
 export function usePaperChat(documentId: string) {
@@ -15,6 +18,7 @@ export function usePaperChat(documentId: string) {
   sessionRef.current = sessionState
   const session = sessionState.documentId === documentId ? sessionState.session : emptyPaperChatSession()
   const { pinned, draft, selectedModel } = session
+  const figures = session.figures ?? NO_FIGURES
   const updateSession = React.useCallback((patch: Partial<PaperChatSession>) => {
     setSessionState((state) => state.documentId === documentId ? { ...state, session: { ...state.session, ...patch } } : state)
   }, [documentId])
@@ -136,27 +140,43 @@ export function usePaperChat(documentId: string) {
     } catch { return fail('选区无法加入问答，请缩小范围后重试') }
   }, [documentId])
 
-  /** Sends the composer's selections unless `pins` is given (a retry); they move into the turn. */
-  const ask = React.useCallback(async (question: string, model?: string, provider?: PaperChatProvider, pins?: readonly PaperChatPinned[]) => {
+  /** Resolves to null once the figure waits in the composer, otherwise to the reason it was not added. */
+  const addFigure = React.useCallback(async (raw: PaperChatFigurePin): Promise<string | null> => {
+    const generation = documentEpoch.current
+    await hydration.current
+    if (documentEpoch.current !== generation || sessionRef.current.documentId !== documentId) return '论文已切换'
+    const pin = paperChatFigurePinSchema.parse(raw)
+    const current = sessionRef.current.session.figures ?? []
+    if (current.some((figure) => figure.figureId === pin.figureId)) return '这张图已在 Chat 中'
+    if (current.length >= PAPER_CHAT_MAX_FIGURES) return `每次提问最多附带 ${PAPER_CHAT_MAX_FIGURES} 张图`
+    setSessionState((state) => state.documentId === documentId ? { ...state, session: { ...state.session, figures: [...(state.session.figures ?? []), pin] } } : state)
+    return null
+  }, [documentId])
+
+  /** Sends the composer's selections and figures unless given (a retry); they move into the turn. */
+  const ask = React.useCallback(async (question: string, model?: string, provider?: PaperChatProvider, pins?: readonly PaperChatPinned[], figurePins?: readonly PaperChatFigurePin[]) => {
     const generation = documentEpoch.current
     await hydration.current
     if (documentEpoch.current !== generation) return
     if (!sessionRef.current.ready || sessionRef.current.documentId !== documentId) return
     if (active.current.pending || !question.trim()) return
     const sent = [...(pins ?? pinned)]
+    const sentFigures = [...(figurePins ?? figures)]
     if (!pins && sent.length) updateSession({ pinned: [] })
+    if (!figurePins && sentFigures.length) updateSession({ figures: [] })
     const state = active.current
     const epoch = ++state.epoch
     state.pending = true; state.requestId = null; state.buffered = []; state.sequence = -1; state.type = null
     setBusy(true); setError('')
     const localCreatedAt = new Date().toISOString()
-    setTurns((items) => [...items, { question, model, provider, createdAt: localCreatedAt, ...(sent.length ? { pinned: sent, selections: paperChatTurnSelections(sent) } : {}), answer: '', citations: {}, status: 'pending' }])
+    setTurns((items) => [...items, { question, model, provider, createdAt: localCreatedAt, ...(sent.length ? { pinned: sent, selections: paperChatTurnSelections(sent) } : {}), ...(sentFigures.length ? { figurePins: sentFigures } : {}), answer: '', citations: {}, status: 'pending' }])
     const history = turns.filter((t) => t.status === 'completed').slice(-6).flatMap((t) => [
-      { role: 'user' as const, content: t.question.slice(0, 2_000) },
+      // Earlier images are not resent; the label tells the model which figure that turn was about.
+      { role: 'user' as const, content: (figureNote(t) + t.question).slice(0, 2_000) },
       { role: 'assistant' as const, content: t.answer.slice(0, 2_000) }
     ])
     try {
-      const { requestId, createdAt } = await window.copilotix.paperChat.ask({ documentId, question, pinned: sent, history, ...(model ? { model: supportedChatModelSchema.parse(model) } : {}), ...(provider ? { provider } : {}) })
+      const { requestId, createdAt } = await window.copilotix.paperChat.ask({ documentId, question, pinned: sent, history, ...(model ? { model: supportedChatModelSchema.parse(model) } : {}), ...(provider ? { provider } : {}), ...(sentFigures.length ? { figures: sentFigures } : {}) })
       if (documentEpoch.current === generation) setTurns(items => items.map(turn => turn.createdAt === localCreatedAt && turn.question === question ? { ...turn, id: requestId, createdAt: createdAt ?? localCreatedAt } : turn))
       if (epoch !== state.epoch) { void window.copilotix.paperChat.cancel({ requestId }).catch(() => undefined); return }
       if (state.pending) {
@@ -170,7 +190,7 @@ export function usePaperChat(documentId: string) {
       setError(e instanceof Error ? e.message : '问答失败，请重试')
       setTurns((items) => items.map((t, i) => i === items.length - 1 ? { ...t, status: 'failed' } : t))
     }
-  }, [documentId, pinned, turns, updateSession])
+  }, [documentId, figures, pinned, turns, updateSession])
 
   const deleteTurn = React.useCallback(async (turn: PaperChatTurn): Promise<void> => {
     if (active.current.pending || loadingOlder) throw new Error('请等待当前操作完成后再删除')
@@ -193,9 +213,22 @@ export function usePaperChat(documentId: string) {
   }, [documentId, stop])
 
   return {
-    pinned, turns, busy, error, loaded: sessionState.ready && sessionState.documentId === documentId, loading, next, loadingOlder, loadOlder, selectedModel, setSelectedModel, draft, setDraft, ask, stop, clear, deleteTurn, addSelection,
-    removePin: (index: number) => updateSession({ pinned: pinned.filter((_, i) => i !== index) })
+    pinned, figures, addFigure, turns, busy, error, loaded: sessionState.ready && sessionState.documentId === documentId, loading, next, loadingOlder, loadOlder, selectedModel, setSelectedModel, draft, setDraft, ask, stop, clear, deleteTurn, addSelection,
+    removePin: (index: number) => updateSession({ pinned: pinned.filter((_, i) => i !== index) }),
+    removeFigure: (index: number) => updateSession({ figures: figures.filter((_, i) => i !== index) })
   }
+}
+
+const NO_FIGURES: PaperChatFigurePin[] = []
+
+/** The figures a turn asked about, as pins that can be sent again. */
+export function turnFigurePins(turn: PaperChatTurn): PaperChatFigurePin[] {
+  return turn.figurePins ?? turn.figures?.map(({ figureId, label, pageIndex }) => ({ figureId, label, pageIndex })) ?? []
+}
+
+function figureNote(turn: PaperChatTurn): string {
+  const labels = turnFigurePins(turn).map((figure) => figure.label ?? (figure.pageIndex !== null ? `第 ${figure.pageIndex + 1} 页的图` : '一张图'))
+  return labels.length ? `[附图：${labels.join('、')}] ` : ''
 }
 
 export type PaperChatController = ReturnType<typeof usePaperChat>

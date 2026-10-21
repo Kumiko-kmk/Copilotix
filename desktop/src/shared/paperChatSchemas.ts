@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { citationLocatorSchema, ragQuerySchema, ragUuidSchema, ragWireByteLength, selectionFragmentSchema, scoreProvenanceSchema } from './ragSchemas'
 import type { AppSettings } from './types'
+import { PAPER_CHAT_MAX_FIGURES, paperChatFigurePinSchema, paperContextFigureResultSchema, paperContextFigureSchema } from './paperChatFigures'
 
 export const CHAT_CONSENT_VERSION = 2
 export const PAPER_CHAT_DEFAULT_BUDGET = 48_000
@@ -43,8 +44,10 @@ export const paperChatAskRequestSchema = z.object({
   pinned: z.array(paperChatPinnedSchema).max(8),
   history: paperChatHistorySchema,
   model: supportedChatModelSchema.optional(),
-  provider: paperChatProviderSchema.optional()
-}).strict().refine(value => value.provider === 'codex' || !value.model || [...PAPER_CHAT_MODELS.qwen, ...PAPER_CHAT_MODELS.deepseek].includes(value.model), 'Unsupported cloud model').refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES, 'Request exceeds byte budget')
+  provider: paperChatProviderSchema.optional(),
+  // Added with figure questions; older renderers omit it.
+  figures: z.array(paperChatFigurePinSchema).max(PAPER_CHAT_MAX_FIGURES).optional()
+}).strict().refine(value => new Set(value.figures?.map(figure => figure.figureId)).size === (value.figures?.length ?? 0), 'Duplicate figure').refine(value => value.provider === 'codex' || !value.model || [...PAPER_CHAT_MODELS.qwen, ...PAPER_CHAT_MODELS.deepseek].includes(value.model), 'Unsupported cloud model').refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES, 'Request exceeds byte budget')
 export const paperChatAskResultSchema = z.object({ requestId: ragUuidSchema, createdAt: z.string().datetime().optional() }).strict()
 export const paperChatCancelRequestSchema = z.object({ requestId: ragUuidSchema }).strict()
 export const paperChatCancelResultSchema = z.object({ cancelled: z.boolean() }).strict()
@@ -58,6 +61,7 @@ export const paperContextRequestSchema = z.object({
   documentId: paperChatAskRequestSchema.shape.documentId,
   question: paperChatAskRequestSchema.shape.question,
   pinned: paperChatAskRequestSchema.shape.pinned,
+  figures: z.array(paperContextFigureSchema).max(PAPER_CHAT_MAX_FIGURES).optional(),
   budgetChars: z.number().int().min(1_024).max(96_000).default(PAPER_CHAT_DEFAULT_BUDGET)
 }).strict().refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES, 'Request exceeds byte budget')
 export const paperEvidenceSchema = z.object({
@@ -75,7 +79,8 @@ export const paperContextResultSchema = z.object({
   contentRevisionId: contentIdentitySchema,
   evidence: z.array(paperEvidenceSchema).max(9_999),
   outline: z.array(z.string().max(512)).max(128),
-  truncated: z.boolean()
+  truncated: z.boolean(),
+  figures: z.array(paperContextFigureResultSchema).max(PAPER_CHAT_MAX_FIGURES).optional()
 }).strict().superRefine((value, ctx) => {
   if (ragWireByteLength(value) > PAPER_CHAT_MAX_BYTES) ctx.addIssue({ code: 'custom', message: 'Evidence exceeds byte budget' })
   const ids = new Set<string>()

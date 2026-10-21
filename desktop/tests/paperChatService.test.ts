@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { CHAT_CONSENT_VERSION, type PaperChatAskRequest, type PaperContext } from '@shared/paperChatSchemas'
@@ -31,7 +32,38 @@ function setup() {
   return { settings, deps, service, events, send, terminal }
 }
 
+const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
+const figurePin = { figureId: 'reader-figure-7-block-a:0', label: 'Fig. 1', pageIndex: 7 }
+const figureSource = { documentId: doc, figureId: figurePin.figureId, label: 'Fig. 1', key: '1', pageIndex: 7, caption: 'Fig. 1. Comparison.', captionMappingIds: ['m1'], mappingIds: ['m0', 'm1'], whole: true,
+  images: [{ path: 'images/figures/figure-p8-' + 'a'.repeat(24) + '.png', absolutePath: 'C:/paper/images/figures/x.png', bytes: png.length, sha256: createHash('sha256').update(png).digest('hex'), mimeType: 'image/png' as const }] }
+
 describe('PaperChatService', () => {
+  it('sends attached figures as images with their context and keeps only references in the turn', async () => {
+    const f = setup()
+    Object.assign(f.deps, { figure: vi.fn(async () => figureSource), imageInput: vi.fn(async () => true), readImage: vi.fn(async () => png) })
+    f.deps.buildContext.mockResolvedValueOnce({ ...context, figures: [{ figureId: figurePin.figureId, sectionPath: ['Results'], captionEvidenceIds: ['E1'], mentionEvidenceIds: [], nearbyEvidenceIds: [], omittedMentions: 0 }] })
+    await f.service.ask({ ...request, figures: [figurePin] }, f.send); await f.terminal()
+    expect(f.events.at(-1)?.type).toBe('completed')
+    expect(f.deps.buildContext).toHaveBeenCalledWith(expect.objectContaining({ figures: [{ figureId: figurePin.figureId, key: '1', captionMappingIds: ['m1'], mappingIds: ['m0', 'm1'] }] }), expect.anything())
+    const messages = f.deps.stream.mock.calls[0]![0].messages
+    expect(messages[0]!.content).toContain('every sub-figure or panel')
+    const parts = messages.at(-1)!.content as Array<{ type: string; text?: string; image_url?: { url: string } }>
+    expect(parts.at(-1)!.image_url!.url).toBe('data:image/png;base64,' + png.toString('base64'))
+    expect(JSON.parse(parts[0]!.text!.split('\n')[1]!).userFigures).toEqual([expect.objectContaining({ id: 'F1', label: 'Fig. 1', page: 8, imageKind: 'whole', captionEvidence: ['E1'], section: ['Results'] })])
+    const saved = f.deps.saveTurn.mock.calls.map((call) => call[1])
+    expect(saved.at(-1)).toMatchObject({ status: 'completed', figures: [{ figureId: figurePin.figureId, label: 'Fig. 1', pageIndex: 7, images: [{ path: figureSource.images[0]!.path, sha256: figureSource.images[0]!.sha256 }] }] })
+    expect(JSON.stringify(saved)).not.toContain(png.toString('base64'))
+  })
+  it('refuses figures on a text-only model before saving and fails when the image changed', async () => {
+    const f = setup()
+    Object.assign(f.deps, { figure: vi.fn(async () => figureSource), imageInput: vi.fn(async () => false), readImage: vi.fn(async () => Buffer.from('changed')) })
+    await expect(f.service.ask({ ...request, figures: [figurePin] }, f.send)).rejects.toMatchObject({ code: 'FIGURE_UNSUPPORTED', message: expect.stringContaining('qwen-plus') })
+    expect(f.deps.saveTurn).not.toHaveBeenCalled()
+    Object.assign(f.deps, { imageInput: vi.fn(async () => true) })
+    await f.service.ask({ ...request, figures: [figurePin] }, f.send); await f.terminal()
+    expect(f.events.at(-1)).toMatchObject({ type: 'failed', error: { code: 'FIGURE_UNAVAILABLE' } })
+    expect(f.deps.stream).not.toHaveBeenCalled()
+  })
   it('orders events with increasing sequences, filters unknown citations and preserves trusted provenance', async () => {
     const f = setup()
     await f.service.ask(request, f.send); await f.terminal()

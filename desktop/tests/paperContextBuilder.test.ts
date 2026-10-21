@@ -4,6 +4,7 @@ import type { RagChunk } from '@core/types'
 import { PAPER_CHAT_MAX_BYTES, paperContextResultSchema, type PaperContextRequest } from '@shared/paperChatSchemas'
 import { ragWireByteLength } from '@shared/ragSchemas'
 import { PaperContextBuilder, rankPaperChunks, tokenizePaperQuery } from '../src/utility/core/paperContextBuilder'
+import { captionFigureKey, figureMentions, mentionsFigure } from '@shared/figureMentions'
 import type { RagContentRevisionRecord, RagDocumentKnowledge } from '../src/utility/core/persistence/sqliteRagRepository'
 
 const doc = '10000000-0000-4000-8000-000000000001'
@@ -24,6 +25,31 @@ function fixture(texts: string[]) {
 }
 
 describe('PaperContextBuilder', () => {
+  it('parses figure references with panels, lists and ranges, but not other numbers or words', () => {
+    expect(figureMentions('Figs. 2a and 3(b), Fig. S1, 图 4（c） and Figures 6–8').map((m) => m.key)).toEqual(['2', '3', 'S1', '4', '6', '7', '8'])
+    expect(figureMentions('Fig. 1(a, b)')[0]!.panels).toEqual(['a', 'b'])
+    expect(mentionsFigure('Fig. 10 and configure 1 and table 1', '1')).toBe(false)
+    expect(captionFigureKey('Fig. 1. Comparison between models')).toEqual({ key: '1', label: 'Fig. 1' })
+    expect(captionFigureKey('Supplementary Figure S2 | Ablations')).toEqual({ key: 'supplementary:S2', label: 'Supplementary Figure S2' })
+    expect(captionFigureKey('The model is shown in Fig. 1.')).toBeNull()
+  })
+  it('attaches a figure: its caption, every paragraph that mentions it, and their neighbours', () => {
+    const texts = Array.from({ length: 30 }, (_, i) => `paragraph ${i} ` + 'x '.repeat(150))
+    texts[5] = 'Fig. 1. Comparison between the phase-field model and the network.'
+    texts[12] = 'As Fig. 1(b) shows, the network matches the reference.'
+    texts[20] = 'Figs. 1–3 summarise the benchmarks.'
+    texts[25] = 'Fig. 10 is unrelated.'
+    const f = fixture(texts)
+    f.input.budgetChars = 4_000
+    f.input.figures = [{ figureId: 'figure-1', key: null, captionMappingIds: ['m5'], mappingIds: ['m4', 'm5'] }]
+    const context = f.builder.build(f.input)
+    const id = new Map(context.evidence.map((e) => [e.chunkId, e.evidenceId]))
+    const chunk = (n: number): string | undefined => id.get(`chunk-${n}`)
+    expect(context.figures).toEqual([{ figureId: 'figure-1', sectionPath: ['Section 5'], captionEvidenceIds: [chunk(5)], mentionEvidenceIds: [chunk(12), chunk(20)],
+      nearbyEvidenceIds: [6, 11, 13, 19, 21].map(chunk), omittedMentions: 0 }])
+    expect(context.evidence.find((e) => e.chunkId === 'chunk-12')!.scoreProvenance[0]!.source).toBe('selection')
+    expect(paperContextResultSchema.safeParse(context).success).toBe(true)
+  })
   it('sends a short paper in source order, retaining UTF-16 locations and full-text provenance', () => {
     const f = fixture(['摘要😀贡献', 'A contribution using attention.'])
     const context = f.builder.build(f.input)

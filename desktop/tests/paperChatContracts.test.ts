@@ -30,6 +30,20 @@ describe('paper chat wire contracts', () => {
     const { chatProvider: _provider, qwenChatModel: _qwen, deepseekChatModel: _deepseek, chatConsentVersion: _consent, ...old } = DEFAULT_SETTINGS
     expect(appSettingsSchema.parse({ ...old, outputRoot: 'C:/papers' })).toMatchObject({ chatProvider: null, qwenChatModel: 'qwen-plus', chatConsentVersion: null })
   })
+  it('accepts figure questions as optional, bounded references and keeps older files readable', () => {
+    const figure = { figureId: 'reader-figure-7-block-a:0', label: 'Fig. 1', pageIndex: 7 }
+    expect(paperChatAskRequestSchema.parse({ ...request, figures: [figure] }).figures).toEqual([figure])
+    for (const figures of [[figure, figure], Array.from({ length: 5 }, (_, i) => ({ ...figure, figureId: `f${i}` })), [{ ...figure, figureId: '../x' }], [{ ...figure, preview: 'images/../x.png' }]]) {
+      expect(() => paperChatAskRequestSchema.parse({ ...request, figures })).toThrow()
+    }
+    const turn = { id: doc, createdAt: '2026-10-21T00:00:00.000Z', provider: 'codex', model: 'gpt', question: 'q', answer: 'a', citations: {}, status: 'completed' }
+    expect(paperChatTurnSchema.parse(turn).figures).toBeUndefined()
+    const image = { path: 'images/figures/figure-p8-' + 'a'.repeat(24) + '.png', sha256: 'b'.repeat(64) }
+    expect(paperChatTurnSchema.parse({ ...turn, figures: [{ ...figure, images: [image] }] }).figures![0]!.images).toEqual([image])
+    expect(() => paperChatTurnSchema.parse({ ...turn, figures: [{ ...figure, images: [{ ...image, path: 'C:/outside.png' }] }] })).toThrow()
+    expect(paperChatSessionSchema.parse({ draft: '', pinned: [], selectedModel: null }).figures).toBeUndefined()
+    expect(paperChatSessionSchema.parse({ draft: '', pinned: [], figures: [figure], selectedModel: null }).figures).toEqual([figure])
+  })
   it('recovers legacy custom selections while preserving old conversation metadata', () => {
     const restored = paperChatSessionSchema.parse({ draft: 'keep draft', pinned: [], selectedModel: { provider: 'deepseek', model: 'custom-chat', custom: true } })
     expect(restored).toEqual({ draft: 'keep draft', pinned: [], selectedModel: { provider: 'deepseek', model: 'deepseek-flash' } })

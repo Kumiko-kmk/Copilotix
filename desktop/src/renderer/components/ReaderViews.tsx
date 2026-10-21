@@ -14,7 +14,7 @@ import type {
 } from '@shared/types'
 import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
 import type { PaperInsightSource } from '@shared/paperInsight'
-import MarkdownPane from './MarkdownPane'
+import MarkdownPane, { type ReaderFigureChat } from './MarkdownPane'
 import PdfPane, { type PdfViewState } from './PdfPane'
 import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
 import PaperInsightActions from './PaperInsightActions'
@@ -79,6 +79,7 @@ export interface ReaderViewsInput {
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
   onOpenFigurePdf?(selection: BlockSelection): void
+  figureChat?: ReaderFigureChat
   chat?: ReaderChatOptions
   /** Reading views currently on screen with scroll sync on; they lead and follow each other. */
   scrollSyncViews?: readonly ReaderViewId[]
@@ -152,6 +153,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           pdfUrl={props.pdfUrl}
           figureGroups={originalFigureGroups}
           onOpenFigurePdf={props.onOpenFigurePdf}
+          figureChat={props.figureChat}
           taskId={props.taskId}
           view="original"
           annotations={originalAnnotations}
@@ -182,6 +184,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
             pdfUrl={props.pdfUrl}
             figureGroups={translatedFigureGroups}
             onOpenFigurePdf={props.onOpenFigurePdf}
+            figureChat={props.figureChat}
             taskId={props.taskId}
             view="translated"
             annotations={translatedAnnotations}
@@ -239,6 +242,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           <ReaderChatPanel
             documentId={props.taskId}
             chat={chat.controller}
+            assetBaseUrl={props.assetBaseUrl}
             active={active}
             onSelect={chat.onCitation}
             onOpenSettings={chat.onOpenSettings}
@@ -249,7 +253,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     return specs
   }, [
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
-    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.onOpenFigurePdf, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
+    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.onOpenFigurePdf, props.figureChat, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
     props.taskStatus, props.taskError, props.onRetry, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
     rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups

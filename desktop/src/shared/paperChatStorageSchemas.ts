@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { chatUsageSchema } from './chatResultMetadata'
 import { citationSchema, ragUuidSchema, ragWireByteLength } from './ragSchemas'
+import { PAPER_CHAT_MAX_FIGURES, paperChatFigurePinSchema, paperChatTurnFigureSchema } from './paperChatFigures'
 import { chatModelSchema, paperChatPinnedSchema, paperChatProviderSchema, resolvePaperChatModel, PAPER_CHAT_MAX_BYTES } from './paperChatSchemas'
 
 /** What the question was asked about, kept with the turn for display (text is shortened). */
@@ -36,6 +37,8 @@ export const paperChatTurnSchema = z.object({
   question: z.string().min(1).max(2_000),
   // Added with turn selections; files without it stay valid.
   selections: z.array(paperChatTurnSelectionSchema).max(8).optional(),
+  // Added with figure questions: image references and hashes, never image bytes.
+  figures: z.array(paperChatTurnFigureSchema).max(PAPER_CHAT_MAX_FIGURES).optional(),
   answer: z.string().max(32_768),
   citations: z.record(z.string().regex(/^E[1-9]\d{0,3}$/u), citationSchema).refine((items) => Object.keys(items).length <= 50),
   status: z.enum(['pending', 'completed', 'failed', 'cancelled'])
@@ -43,6 +46,8 @@ export const paperChatTurnSchema = z.object({
 export const paperChatSessionSchema = z.object({
   draft: z.string().max(2_000),
   pinned: z.array(paperChatPinnedSchema).max(8),
+  // Figures waiting in the composer; sessions saved before figure questions omit it.
+  figures: z.array(paperChatFigurePinSchema).max(PAPER_CHAT_MAX_FIGURES).optional(),
   selectedModel: z.object({ provider: paperChatProviderSchema, model: z.string().max(128), custom: z.boolean().optional() }).strict()
     .transform(({ provider, model }) => ({ provider, model: resolvePaperChatModel(provider, model) })).nullable()
 }).strict().refine((value) => ragWireByteLength(value) <= PAPER_CHAT_MAX_BYTES - 1024, 'Session exceeds byte budget')
