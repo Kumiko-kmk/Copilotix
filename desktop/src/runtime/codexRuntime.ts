@@ -2,6 +2,7 @@ import { access, mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join, delimiter, isAbsolute } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { z } from 'zod'
 import type { MultimodalChatMessage } from '../shared/chatMessages'
 import { type CodexSettings, type CodexStatus, codexModelSchema, codexStatusSchema } from '../shared/codex'
@@ -17,15 +18,69 @@ export const CODEX_OVERRIDES: Record<string, unknown> = {
   project_doc_max_bytes: 0, 'history.persistence': 'none', 'analytics.enabled': false
 }
 type Usage = { promptTokens: number; completionTokens: number; totalTokens: number }
+/** `category` is a log-safe label (CodexErrorInfo variant and HTTP status), never provider text. */
 export class CodexGenerationError extends Error {
-  constructor(message: string, readonly code = 'PROVIDER_UNAVAILABLE') { super(message) }
+  constructor(message: string, readonly code = 'PROVIDER_UNAVAILABLE', readonly category = 'other', readonly retryable = false, readonly rateLimited = false) { super(message) }
 }
-function turnError(info: unknown): CodexGenerationError {
-  if (info === 'serverOverloaded' || info === 'rateLimitExceeded') return new CodexGenerationError('Codex 模型繁忙或限流，请稍后重试或手动选择其他模型', 'EMBEDDING_RATE_LIMITED')
-  if (info === 'usageLimitExceeded' || info === 'sessionBudgetExceeded') return new CodexGenerationError('Codex 使用额度已用尽，请检查本机账户额度')
-  if (info === 'unauthorized') return new CodexGenerationError('Codex 登录已失效，请在本机重新登录', 'CHAT_CREDENTIALS_REQUIRED')
-  if (info === 'contextWindowExceeded') return new CodexGenerationError('Codex 输入超过模型上下文限制，请减少选区', 'RAG_LIMIT_EXCEEDED')
-  return new CodexGenerationError('Codex 生成失败，请检查连接、登录或模型权限')
+const STREAM_FAILURES = new Set(['httpConnectionFailed', 'responseStreamConnectionFailed', 'responseStreamDisconnected', 'responseTooManyFailedAttempts', 'internalServerError'])
+/** CodexErrorInfo is a unit string or `{ variant: { httpStatusCode } }`; ChatGPT 429s arrive as responseTooManyFailedAttempts. */
+export function turnError(info: unknown): CodexGenerationError {
+  const [variant, detail] = typeof info === 'string' ? [info, undefined] : info && typeof info === 'object' ? Object.entries(info)[0] ?? ['other', undefined] : ['other', undefined]
+  const kind = /^[a-zA-Z]{1,48}$/u.test(variant) ? variant : 'unknown'
+  const status = (detail as { httpStatusCode?: unknown } | undefined)?.httpStatusCode
+  const http = typeof status === 'number' && Number.isInteger(status) ? status : undefined
+  const category = http === undefined ? kind : `${kind}:${http}`
+  if (http === 429 || kind === 'serverOverloaded' || kind === 'rateLimitExceeded') return new CodexGenerationError('Codex 模型繁忙或限流，请稍后重试或手动选择其他模型', 'EMBEDDING_RATE_LIMITED', category, true, true)
+  if (kind === 'usageLimitExceeded' || kind === 'sessionBudgetExceeded') return new CodexGenerationError('Codex 使用额度已用尽，请检查本机账户额度', 'PROVIDER_UNAVAILABLE', category)
+  if (kind === 'unauthorized' || http === 401) return new CodexGenerationError('Codex 登录已失效，请在本机重新登录', 'CHAT_CREDENTIALS_REQUIRED', category)
+  if (kind === 'contextWindowExceeded') return new CodexGenerationError('Codex 输入超过模型上下文限制，请减少选区', 'RAG_LIMIT_EXCEEDED', category)
+  if (STREAM_FAILURES.has(kind) && (http === undefined || http === 408 || http >= 500)) return new CodexGenerationError('Codex 连接中断或服务暂时不可用，请稍后重试', 'PROVIDER_UNAVAILABLE', category, true)
+  return new CodexGenerationError('Codex 生成失败，请检查连接、登录或模型权限', 'PROVIDER_UNAVAILABLE', category)
+}
+/** Runtime and connection errors carry fixed app text; classify them without forwarding it. */
+export function codexFailure(error: unknown): Pick<CodexGenerationError, 'category' | 'retryable' | 'rateLimited'> {
+  if (error instanceof CodexGenerationError) return error
+  const message = error instanceof Error ? error.message : ''
+  if (/^Codex .*超时$/u.test(message)) return { category: 'timeout', retryable: true, rateLimited: false }
+  if (/^Codex (?:进程已退出|连接已关闭|通信中断|输入管道已关闭)/u.test(message)) return { category: 'connection-closed', retryable: true, rateLimited: false }
+  if (message.startsWith('Codex 请求失败')) return { category: 'rpc-error', retryable: false, rateLimited: false }
+  const name = error instanceof Error && error.name !== 'Error' && /^[a-zA-Z]{1,48}$/u.test(error.name) ? error.name : 'other'
+  return { category: name, retryable: false, rateLimited: false }
+}
+export type CodexLog = (event: string, details: Record<string, unknown>) => void
+export const CODEX_RETRY = { attempts: 6, rateLimitMs: 5_000, transientMs: 1_000, maxMs: 60_000 }
+/**
+ * Account-wide limiter for the background lane. A rate limit halves concurrency and starts a
+ * jittered cooldown; failures of requests already in flight share that window instead of
+ * narrowing it again. Sustained success restores one slot at a time.
+ */
+export class CodexBackoff {
+  limit: number
+  epoch = 0
+  private until = 0
+  private strikes = 0
+  private streak = 0
+  constructor(private readonly max: number, private readonly retry = CODEX_RETRY, private readonly now = Date.now, private readonly random = Math.random) { this.limit = max }
+  failed(rateLimited: boolean, epoch: number): number {
+    this.streak = 0
+    if (epoch === this.epoch) {
+      this.epoch++
+      this.strikes++
+      if (rateLimited) this.limit = Math.max(1, Math.floor(this.limit / 2))
+      const delay = Math.min(this.retry.maxMs, (rateLimited ? this.retry.rateLimitMs : this.retry.transientMs) * 2 ** (this.strikes - 1))
+      this.until = Math.max(this.until, this.now() + delay * (0.75 + this.random() * 0.5))
+    }
+    return Math.max(0, this.until - this.now())
+  }
+  succeeded(): void {
+    if (++this.streak < this.limit * 2) return
+    this.streak = 0
+    this.strikes = Math.max(0, this.strikes - 1)
+    if (this.limit < this.max) { this.limit++; this.epoch++ }
+  }
+  async wait(signal: AbortSignal): Promise<void> {
+    for (let remaining = this.until - this.now(); remaining > 0; remaining = this.until - this.now()) await sleep(remaining, undefined, { signal })
+  }
 }
 export interface CodexGeneration {
   model: string
@@ -65,7 +120,11 @@ export class CodexRuntime {
   private hydration?: Promise<void>
   private writes = Promise.resolve()
   private destroyed = false
-  constructor(private readonly cwd: string, private readonly settings: () => Promise<CodexSettings>) {}
+  private backoff: CodexBackoff
+  constructor(private readonly cwd: string, private readonly settings: () => Promise<CodexSettings>,
+    private readonly log: CodexLog = () => undefined, private readonly retry = CODEX_RETRY) {
+    this.backoff = new CodexBackoff(CODEX_BACKGROUND_CONCURRENCY, retry)
+  }
 
   private snapshotKey(settings: CodexSettings): string { return JSON.stringify([settings.executable, settings.effort]) }
   async cached(settings: CodexSettings): Promise<CodexStatus | null> {
@@ -113,40 +172,76 @@ export class CodexRuntime {
 
   generate(input: CodexGeneration): Promise<Usage | null> {
     const lane = input.lane ?? 'background'
-    const run = this.queues[lane].add(async () => {
-      input.signal.throwIfAborted()
-      if (this.destroyed) throw new Error('Codex 已关闭')
-      let slot = 0
-      while (this.busy[lane].has(slot)) slot++
-      this.busy[lane].add(slot)
-      try {
-        const settings = { ...await this.settings(), ...(input.effort ? { effort: input.effort } : {}) }
-        const key = `${lane}:${slot}`
-        let entry = this.pooled.get(key)
-        if (entry && entry.executable !== settings.executable) { entry.ready.connection.close(); entry = undefined }
-        if (!entry) {
-          const ready = await this.open(settings)
-          entry = { ready, executable: settings.executable }
-          this.pooled.set(key, entry)
-          ready.connection.once('closed', () => { if (this.pooled.get(key)?.ready === ready) this.pooled.delete(key) })
-        }
-        if (entry.idle) clearTimeout(entry.idle)
+    const run = (async () => {
+      for (let attempt = 1; ; attempt++) {
+        const epoch = this.backoff.epoch, started = Date.now()
+        let delivered = false
         try {
-          input.signal.throwIfAborted()
-          const result = await this.generateOn(entry.ready, settings, input)
-          entry.idle = setTimeout(() => entry!.ready.connection.close(), 30_000)
-          entry.idle.unref()
-          return result
-        } catch (error) { entry.ready.connection.close(); throw error }
-      } finally { this.busy[lane].delete(slot) }
-    })
+          if (lane === 'background') await this.backoff.wait(input.signal)
+          const usage = await this.queues[lane].add(() => this.attempt(lane, { ...input, onDelta: text => { delivered = true; return input.onDelta(text) } }))
+          if (lane === 'background') { this.backoff.succeeded(); this.applyLimit() }
+          return usage ?? null
+        } catch (error) {
+          if (input.signal.aborted || this.destroyed) throw error
+          const failure = codexFailure(error)
+          // Retrying after partial output would duplicate deltas already delivered to the caller.
+          const willRetry = lane === 'background' && failure.retryable && !delivered && attempt < this.retry.attempts
+          const cooldownMs = lane === 'background' && failure.retryable ? Math.round(this.backoff.failed(failure.rateLimited, epoch)) : 0
+          if (lane === 'background') this.applyLimit()
+          this.log('codex.generation.failed', { lane, model: input.model, attempt, category: failure.category, retryable: failure.retryable,
+            partialOutput: delivered, willRetry, cooldownMs, concurrency: this.queues.background.concurrency, durationMs: Date.now() - started })
+          if (!willRetry) throw error
+        }
+      }
+    })()
     // Queued cancellations return immediately and are skipped when their slot arrives.
     return new Promise((resolve, reject) => {
       const abort = (): void => reject(input.signal.reason)
       input.signal.addEventListener('abort', abort, { once: true })
       if (input.signal.aborted) abort()
-      void run.then(result => resolve(result ?? null), reject).finally(() => input.signal.removeEventListener('abort', abort))
+      void run.then(resolve, reject).finally(() => input.signal.removeEventListener('abort', abort))
     })
+  }
+
+  private applyLimit(): void {
+    const queue = this.queues.background
+    if (queue.concurrency === this.backoff.limit) return
+    queue.concurrency = this.backoff.limit
+    this.log('codex.concurrency', { lane: 'background', concurrency: queue.concurrency })
+  }
+
+  private async attempt(lane: 'interactive' | 'background', input: CodexGeneration): Promise<Usage | null> {
+    input.signal.throwIfAborted()
+    if (this.destroyed) throw new Error('Codex 已关闭')
+    // A cooldown may have started while this request waited for a slot.
+    if (lane === 'background') await this.backoff.wait(input.signal)
+    let slot = 0
+    while (this.busy[lane].has(slot)) slot++
+    this.busy[lane].add(slot)
+    try {
+      const settings = { ...await this.settings(), ...(input.effort ? { effort: input.effort } : {}) }
+      const key = `${lane}:${slot}`
+      let entry = this.pooled.get(key)
+      if (entry && entry.executable !== settings.executable) { entry.ready.connection.close(); entry = undefined }
+      if (!entry) {
+        const ready = await this.open(settings)
+        entry = { ready, executable: settings.executable }
+        this.pooled.set(key, entry)
+        ready.connection.once('closed', () => { if (this.pooled.get(key)?.ready === ready) this.pooled.delete(key) })
+      }
+      if (entry.idle) clearTimeout(entry.idle)
+      try {
+        input.signal.throwIfAborted()
+        return await this.generateOn(entry.ready, settings, input)
+      } catch (error) {
+        // A turn that completed as failed leaves the app-server healthy; reuse avoids a respawn and model refresh per retry.
+        if (!(error instanceof CodexGenerationError)) entry.ready.connection.close()
+        throw error
+      } finally {
+        entry.idle = setTimeout(() => entry!.ready.connection.close(), 30_000)
+        entry.idle.unref()
+      }
+    } finally { this.busy[lane].delete(slot) }
   }
 
   close(): void {
@@ -287,7 +382,8 @@ export class CodexRuntime {
         }
         if (method === 'turn/completed') {
           const turn = params.turn as { status: string; error?: { codexErrorInfo?: unknown } }
-          if (turn.status !== 'completed') { fail(turn.status === 'interrupted' ? new Error('Codex 任务已取消') : turnError(turn.error?.codexErrorInfo)); return }
+          if (turn.status === 'interrupted') { fail(new Error('Codex 任务已取消')); return }
+          if (turn.status !== 'completed') { settled = true; cleanup(); reject(turnError(turn.error?.codexErrorInfo)); return }
           void delivery.then(() => {
             if (settled) return
             if (!output.trim()) { fail(new Error('Codex 未返回最终回答')); return }

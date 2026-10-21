@@ -1,9 +1,9 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CodexRuntime, CODEX_OVERRIDES, CODEX_BACKGROUND_CONCURRENCY } from '../src/runtime/codexRuntime'
+import { CodexBackoff, CodexRuntime, CODEX_OVERRIDES, CODEX_BACKGROUND_CONCURRENCY, turnError } from '../src/runtime/codexRuntime'
 import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
 
-const state = vi.hoisted(() => ({ scenario: 'success', starts: [] as unknown[], turns: [] as unknown[], connections: [] as EventEmitter[], snapshot: '' }))
+const state = vi.hoisted(() => ({ scenario: 'success', starts: [] as unknown[], turns: [] as unknown[], connections: [] as EventEmitter[], snapshot: '', failTurns: 0, errorInfo: null as unknown }))
 vi.mock('node:fs/promises', () => ({ access: vi.fn().mockResolvedValue(undefined), mkdir: vi.fn().mockResolvedValue(undefined), readFile: vi.fn(async () => { if (!state.snapshot) throw new Error('missing'); return state.snapshot }), writeFile: vi.fn(async (_path, data) => { state.snapshot = data }), rename: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('node:child_process', () => ({ execFile: Object.assign(() => undefined, { [Symbol.for('nodejs.util.promisify.custom')]: async () => ({ stdout: 'codex-cli 0.159.2' }) }) }))
 vi.mock('../src/runtime/codexConnection', () => ({ CodexConnection: class extends EventEmitter {
@@ -24,6 +24,13 @@ vi.mock('../src/runtime/codexConnection', () => ({ CodexConnection: class extend
         if (state.scenario === 'hang' || (state.scenario === 'first-hangs' && turnNumber === 1)) return
         if (state.scenario === 'crash') { this.close(); return }
         if (state.scenario === 'tool') { emit('item/started', { item: { id: 'tool', type: 'commandExecution' } }); return }
+        if (turnNumber <= state.failTurns) {
+          const failed = () => emit('turn/completed', { turn: { status: 'failed', error: { message: 'upstream text', codexErrorInfo: state.errorInfo } } })
+          if (state.scenario !== 'partial-fail') { failed(); return }
+          emit('item/started', { item: { id: 'answer', type: 'agentMessage', phase: 'final_answer' } })
+          emit('item/agentMessage/delta', { itemId: 'answer', delta: '半' })
+          setTimeout(failed, 1); return
+        }
         emit('item/started', { item: { id: 'comment', type: 'agentMessage', phase: 'commentary' } })
         emit('item/agentMessage/delta', { itemId: 'comment', delta: 'private commentary' })
         emit('item/completed', { item: { id: 'comment', type: 'agentMessage', phase: 'commentary', text: 'private commentary' } })
@@ -39,12 +46,14 @@ vi.mock('../src/runtime/codexConnection', () => ({ CodexConnection: class extend
     return {}
   }
 } }))
-afterEach(() => { state.snapshot = ''; state.scenario = 'success'; state.starts = []; state.turns = []; state.connections = []; vi.useRealTimers() })
+afterEach(() => { state.snapshot = ''; state.scenario = 'success'; state.starts = []; state.turns = []; state.connections = []; state.failTurns = 0; state.errorInfo = null; vi.useRealTimers() })
+const RATE_LIMITED = { responseTooManyFailedAttempts: { httpStatusCode: 429 } }
 function fixture() {
-  const runtime = new CodexRuntime('C:/work', async () => ({ ...DEFAULT_CODEX_SETTINGS, executable: 'C:/Codex/codex.exe' }))
+  const log = vi.fn()
+  const runtime = new CodexRuntime('C:/work', async () => ({ ...DEFAULT_CODEX_SETTINGS, executable: 'C:/Codex/codex.exe' }), log, { attempts: 3, rateLimitMs: 1, transientMs: 1, maxMs: 4 })
   const delta = vi.fn(), controller = new AbortController()
   const input = { model: 'test-model', messages: [{ role: 'user' as const, content: 'question' }], signal: controller.signal, onDelta: delta }
-  return { runtime, delta, controller, input }
+  return { runtime, delta, controller, input, log }
 }
 describe('Codex generation lifecycle', () => {
   it('lets an available process take queued work while another process is slow', async () => {
@@ -104,6 +113,53 @@ describe('Codex generation lifecycle', () => {
     queued.abort(new Error('queued cancellation')); f.controller.abort(new Error('active cancellation'))
     await Promise.all([one, two]); expect(f.delta).not.toHaveBeenCalled()
     f.runtime.close()
+  })
+  it('retries a rate-limited background turn on the same process after narrowing concurrency', async () => {
+    state.failTurns = 2; state.errorInfo = RATE_LIMITED
+    const f = fixture()
+    await expect(f.runtime.generate(f.input)).resolves.toEqual({ promptTokens: 2, completionTokens: 2, totalTokens: 4 })
+    expect(state.turns).toHaveLength(3); expect(state.connections).toHaveLength(1)
+    expect(f.delta.mock.calls.flat().join('')).toBe('答案')
+    expect(f.log).toHaveBeenCalledWith('codex.generation.failed', expect.objectContaining({ lane: 'background', attempt: 1, category: 'responseTooManyFailedAttempts:429', willRetry: true, concurrency: 4 }))
+    expect(f.log).toHaveBeenCalledWith('codex.concurrency', { lane: 'background', concurrency: 2 })
+    expect(JSON.stringify(f.log.mock.calls)).not.toMatch(/upstream text|question/u)
+    f.runtime.close()
+  })
+  it('fails without retrying interactive, partial-output, non-retryable or exhausted turns', async () => {
+    state.failTurns = 99; state.errorInfo = RATE_LIMITED
+    const f = fixture()
+    await expect(f.runtime.generate({ ...f.input, lane: 'interactive' })).rejects.toMatchObject({ code: 'EMBEDDING_RATE_LIMITED', retryable: true })
+    expect(state.turns).toHaveLength(1)
+    state.errorInfo = 'usageLimitExceeded'
+    await expect(f.runtime.generate(f.input)).rejects.toThrow('额度'); expect(state.turns).toHaveLength(2)
+    state.scenario = 'partial-fail'; state.errorInfo = { responseStreamDisconnected: { httpStatusCode: null } }
+    await expect(f.runtime.generate(f.input)).rejects.toThrow('连接中断'); expect(state.turns).toHaveLength(3)
+    expect(f.log).toHaveBeenCalledWith('codex.generation.failed', expect.objectContaining({ category: 'responseStreamDisconnected', partialOutput: true, willRetry: false }))
+    state.scenario = 'success'; state.errorInfo = RATE_LIMITED
+    await expect(f.runtime.generate(f.input)).rejects.toThrow('限流'); expect(state.turns).toHaveLength(6)
+    f.runtime.close()
+  })
+  it('narrows once per cooldown window and restores slots after sustained success', () => {
+    let now = 0
+    const backoff = new CodexBackoff(8, { attempts: 6, rateLimitMs: 1000, transientMs: 100, maxMs: 4000 }, () => now, () => 0.5)
+    const inFlight = backoff.epoch
+    expect(backoff.failed(true, inFlight)).toBe(1000); expect(backoff.limit).toBe(4)
+    now = 500; expect(backoff.failed(true, inFlight)).toBe(500); expect(backoff.limit).toBe(4)
+    now = 1000; expect(backoff.failed(true, backoff.epoch)).toBe(2000); expect(backoff.limit).toBe(2)
+    for (let i = 0; i < 4; i++) backoff.succeeded()
+    expect(backoff.limit).toBe(3)
+    backoff.failed(false, backoff.epoch); expect(backoff.limit).toBe(3)
+  })
+  it.each([
+    ['rateLimitExceeded', 'EMBEDDING_RATE_LIMITED', true, 'rateLimitExceeded'],
+    [RATE_LIMITED, 'EMBEDDING_RATE_LIMITED', true, 'responseTooManyFailedAttempts:429'],
+    [{ httpConnectionFailed: { httpStatusCode: 503 } }, 'PROVIDER_UNAVAILABLE', true, 'httpConnectionFailed:503'],
+    [{ responseStreamConnectionFailed: { httpStatusCode: 400 } }, 'PROVIDER_UNAVAILABLE', false, 'responseStreamConnectionFailed:400'],
+    ['unauthorized', 'CHAT_CREDENTIALS_REQUIRED', false, 'unauthorized'],
+    [{ 'not safe <x>': {} }, 'PROVIDER_UNAVAILABLE', false, 'unknown'],
+    [null, 'PROVIDER_UNAVAILABLE', false, 'other']
+  ])('classifies CodexErrorInfo %j', (info, code, retryable, category) => {
+    expect(turnError(info)).toMatchObject({ code, retryable, category })
   })
   it('rejects a model missing from the current catalog before starting a turn', async () => {
     const f = fixture()

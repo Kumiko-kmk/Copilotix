@@ -10,6 +10,7 @@ import { DEFAULT_SETTINGS } from '@shared/constants'
 import { paperInsightContentSchema, paperInsightRecordSchema, paperInsightRequestSchema, paperInsightSchema, paperInsightStateSchema, type PaperInsight, type PaperInsightState } from '@shared/paperInsight'
 import { PaperInsightService, loadFullBriefContext, type PaperInsightDependencies } from '../src/main/chat/paperInsightService'
 import { PaperInsightStore } from '../src/utility/core/persistence/paperInsightStore'
+import { turnError } from '../src/runtime/codexRuntime'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const fs = await importOriginal<typeof import('node:fs/promises')>()
@@ -33,7 +34,7 @@ function fixture() {
     context: vi.fn(async (documentId: string): Promise<BriefContextResult> => ({ documentId, sourceRevision: 'revision-1', context: buildBriefContext('# Title\n\n## Abstract\n\nPaper content.\n\n## Method\n\nStructured analysis.', '') })),
     save: vi.fn(async (documentId, brief, anchors) => { stored.set(documentId, { status: 'ready', brief, anchors, stale: false, promptOutdated: false }) }),
     stream: vi.fn(async ({ onDelta }) => { await onDelta(JSON.stringify(briefGeneration)); return null }),
-    recordUsage: vi.fn(async () => undefined), changed: vi.fn((_id, state) => states.push(state)), canStart: () => true
+    recordUsage: vi.fn(async () => undefined), changed: vi.fn((_id, state) => states.push(state)), canStart: () => true, log: vi.fn()
   }
   return { id, deps, settings, states, stored, service: new PaperInsightService(deps) }
 }
@@ -79,6 +80,18 @@ describe('structured paper insight', () => {
     await f.service.generate(f.id); await idle(f)
     expect(f.deps.stream).toHaveBeenCalledTimes(2); expect(f.deps.save).not.toHaveBeenCalled()
     expect(f.states.at(-1)?.status).toBe('failed'); expect(JSON.stringify(f.states)).not.toContain('never-persist')
+    expect(f.deps.log).toHaveBeenCalledWith(expect.objectContaining({ documentId: f.id, status: 'failed', stage: 'parse', attempts: 2, category: 'invalid-structured-response' }))
+    expect(JSON.stringify(vi.mocked(f.deps.log!).mock.calls)).not.toContain('never-persist')
+    await f.service.dispose()
+  })
+  it('logs the classified Codex failure and shows its fixed message instead of the generic one', async () => {
+    const f = fixture()
+    vi.mocked(f.deps.stream).mockRejectedValue(turnError({ responseStreamDisconnected: { httpStatusCode: null } }))
+    await f.service.generate(f.id); await idle(f)
+    expect(f.states.at(-1)).toEqual({ status: 'failed', error: 'Codex 连接中断或服务暂时不可用，请稍后重试' })
+    expect(f.deps.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', stage: 'generate', category: 'codex:responseStreamDisconnected' }))
+    vi.mocked(f.deps.stream).mockRejectedValue(turnError({ responseTooManyFailedAttempts: { httpStatusCode: 429 } }))
+    await f.service.generate(f.id); await vi.waitFor(() => expect(f.states.at(-1)).toEqual({ status: 'failed', error: '服务商限流，请稍后重试。' }))
     await f.service.dispose()
   })
   it('single-flights each paper, limits two pipelines and drains queued work on cancellation', async () => {

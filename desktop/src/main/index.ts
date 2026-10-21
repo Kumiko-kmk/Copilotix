@@ -170,7 +170,7 @@ async function bootstrap(): Promise<void> {
   await settings.initialize()
   const logger = new JsonLineLogger(join(userData, 'copilotix-desktop.log'))
   const usageAnalytics = new UsageAnalyticsService(join(userData, 'usage-analytics-v1.json'))
-  codex = new CodexRuntime(join(userData, 'codex-runtime'), async () => (await settings.get()).codex ?? DEFAULT_CODEX_SETTINGS)
+  codex = new CodexRuntime(join(userData, 'codex-runtime'), async () => (await settings.get()).codex ?? DEFAULT_CODEX_SETTINGS, (event, details) => logger.info(event, details))
   const chatProvider = new ChatProvider(fetcher, { invalidate: (provider) => settings.invalidateCredential(provider) })
   const modelGateway = new ModelGateway(chatProvider, codex)
   figureInsight = new FigureInsightService({
@@ -216,6 +216,7 @@ async function bootstrap(): Promise<void> {
     stream: (input) => modelGateway.stream(input),
     recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
     canStart: () => !libraryGate.busy && !libraryGate.restarting && !isQuitting,
+    log: (details) => logger.info('paper-insight', details),
     changed: (documentId, state) => {
       if (mainWindow && !mainWindow.webContents.isDestroyed()) sendValidatedEvent(mainWindow.webContents, 'paperInsight:changed', paperInsightChangedSchema, { documentId, state })
     }

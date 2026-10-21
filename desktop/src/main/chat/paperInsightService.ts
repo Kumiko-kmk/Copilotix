@@ -13,6 +13,7 @@ import type { AppSettings } from '@shared/types'
 import type { Job } from '@core/types'
 import { ChatProviderError } from './chatProvider'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
+import { CodexGenerationError, codexFailure } from '@runtime/codexRuntime'
 
 export async function loadFullBriefContext(documentId: string, signal: AbortSignal,
   source: () => Promise<BriefSource>): Promise<BriefContextResult> {
@@ -51,6 +52,8 @@ export interface PaperInsightDependencies {
   recordUsage(provider: PaperChatProvider, usage: ProviderTokenUsage): Promise<void>
   changed(documentId: string, state: PaperInsightState): void
   canStart(): boolean
+  /** Receives only classified, log-safe failure details; never prompts, paper text or keys. */
+  log?(details: Record<string, unknown>): void
 }
 type Run = { documentId: string; automatic: boolean; controller: AbortController; done: Promise<void>; finish(): void }
 
@@ -128,6 +131,8 @@ export class PaperInsightService {
     const signal = controller.signal
     // The detailed brief streams up to ~6000 output tokens; allow for slow provider periods.
     const timer = setTimeout(() => controller.abort(new Error('timeout')), 600_000)
+    const started = Date.now()
+    let stage = 'prepare', provider: PaperChatProvider | undefined, attempts = 0
     try {
       signal.throwIfAborted()
       const stored = await this.deps.get(documentId)
@@ -136,6 +141,7 @@ export class PaperInsightService {
       let auth = await this.authorization()
       signal.throwIfAborted()
       if (auth.reason !== undefined) { this.emit(documentId, { status: 'unavailable', reason: auth.reason }); return }
+      stage = 'context'
       const context = await this.deps.context(documentId, signal)
       if (context.documentId !== documentId) throw new Error('scope mismatch')
       const messages = buildBriefMessages(context.context)
@@ -144,6 +150,7 @@ export class PaperInsightService {
         auth = await this.authorization()
         signal.throwIfAborted()
         if (auth.reason !== undefined) { this.emit(documentId, { status: 'unavailable', reason: auth.reason }); return }
+        stage = 'generate'; provider = auth.provider; attempts = attempt + 1
         let answer = ''
         const usage = await this.deps.stream({
           provider: auth.provider, model: auth.model, key: auth.key,
@@ -157,6 +164,7 @@ export class PaperInsightService {
         })
         if (usage) await this.deps.recordUsage(auth.provider, usage).catch(() => undefined)
         signal.throwIfAborted()
+        stage = 'parse'
         const parsed = parseBriefResponse(answer, { lengths: attempt === 0, requireAnalysis: true })
         if (!parsed.ok) {
           if (attempt === 0) {
@@ -173,11 +181,15 @@ export class PaperInsightService {
         const anchors = context.context.excerpts.filter((excerpt) => cited.has(excerpt.id)).map(({ id, section, text }) => ({ id, section, text }))
         signal.throwIfAborted()
         // Await atomic write even when cancellation arrives during commit, then report actual disk state.
+        stage = 'save'
         await this.deps.save(documentId, brief, anchors)
         this.emit(documentId, await this.deps.get(documentId))
         return
       }
     } catch (error) {
+      const reason: unknown = signal.reason
+      this.deps.log?.({ documentId, status: signal.aborted ? 'cancelled' : 'failed', stage, provider, attempts, durationMs: Date.now() - started,
+        category: signal.aborted ? (reason instanceof Error && reason.message === 'timeout' ? 'timeout' : 'cancelled') : failureCategory(error) })
       if (signal.aborted) {
         const stored = await this.deps.get(documentId).catch((): PaperInsightState => ({ status: 'missing' }))
         this.emit(documentId, stored.status === 'ready' ? stored : { status: 'failed', error: '生成已取消或超时，可重新生成。' })
@@ -186,8 +198,10 @@ export class PaperInsightService {
         this.emit(documentId, { status: 'failed', error: error instanceof PaperBriefInputError ? error.message
           : error instanceof Error && 'code' in error && error.code === 'RAG_LIMIT_EXCEEDED'
             ? '论文全文超过所选模型或请求容量；未截断内容，请选择更大上下文的模型。'
-            : error instanceof ChatProviderError && error.code === 'EMBEDDING_RATE_LIMITED'
-              ? '服务商限流，请稍后重试。' : '生成或保存 AI 解读失败，请检查模型服务与论文内容后重试。' })
+            : error instanceof Error && 'code' in error && error.code === 'EMBEDDING_RATE_LIMITED'
+              ? '服务商限流，请稍后重试。'
+              // Codex messages are fixed application text, never provider bodies.
+              : error instanceof CodexGenerationError ? error.message : '生成或保存 AI 解读失败，请检查模型服务与论文内容后重试。' })
       }
     } finally { clearTimeout(timer) }
   }
@@ -222,4 +236,16 @@ export class PaperInsightService {
     if (job.kind === 'parse' || job.kind === 'translate') await this.generate(job.documentId, true)
     else this.emit(job.documentId, await this.get(job.documentId))
   }
+}
+
+/** Log-safe failure label: error classes and fixed internal messages only. */
+function failureCategory(error: unknown): string {
+  if (error instanceof CodexGenerationError) return `codex:${error.category}`
+  if (error instanceof ChatProviderError) return `provider:${error.code}`
+  if (error instanceof PaperBriefInputError) return 'input'
+  const message = error instanceof Error ? error.message : ''
+  if (message === 'invalid structured response') return 'invalid-structured-response'
+  if (message === 'output budget exceeded') return 'output-budget'
+  if (message === 'scope mismatch') return 'scope-mismatch'
+  return codexFailure(error).category
 }
