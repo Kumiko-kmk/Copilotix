@@ -77,15 +77,23 @@ export class PaperInsightService {
     try { this.deps.changed(documentId, valid) } catch { /* A closed renderer must not interrupt durable generation. */ }
   }
 
-  private async authorization() {
+  private async authorization(selected?: PaperChatProvider) {
     const settings = await this.deps.settings()
-    const provider = resolvePaperChatProvider(settings)
+    const provider = resolvePaperChatProvider(settings, selected)
     if (!provider) return { reason: '请在设置中将已启用的 Qwen、DeepSeek 或 Codex 设为首选服务商。' } as const
     const key = provider === 'codex' ? null : await this.deps.key(provider)
     if (provider !== 'codex' && !key) return { reason: '请先在服务连接中保存模型 API Key。' } as const
     if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') return { reason: '请先在服务连接中验证模型 API Key。' } as const
     const model = resolvePaperChatModel(provider, provider === 'codex' ? settings.codex?.chatModel : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
     return { settings, provider, key, model } as const
+  }
+
+  /** Next enabled Qwen/DeepSeek in the translation order with a saved, valid key; used after Codex exhausts its retries. */
+  private async fallbackProvider(): Promise<PaperChatProvider | undefined> {
+    for (const id of (await this.deps.settings()).translationProviderOrder) {
+      if ((id === 'qwen' || id === 'deepseek') && (await this.authorization(id)).reason === undefined) return id
+    }
+    return undefined
   }
 
   async get(documentId: string): Promise<PaperInsightState> {
@@ -145,14 +153,16 @@ export class PaperInsightService {
       const context = await this.deps.context(documentId, signal)
       if (context.documentId !== documentId) throw new Error('scope mismatch')
       const messages = buildBriefMessages(context.context)
+      let selected: PaperChatProvider | undefined
       for (let attempt = 0; attempt < 2; attempt++) {
         // Recheck credentials and configuration after queue/context work and before retries.
-        auth = await this.authorization()
+        auth = await this.authorization(selected)
         signal.throwIfAborted()
         if (auth.reason !== undefined) { this.emit(documentId, { status: 'unavailable', reason: auth.reason }); return }
         stage = 'generate'; provider = auth.provider; attempts = attempt + 1
         let answer = ''
-        const usage = await this.deps.stream({
+        let usage: Awaited<ReturnType<PaperInsightDependencies['stream']>>
+        try { usage = await this.deps.stream({
           provider: auth.provider, model: auth.model, key: auth.key,
           baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
           signal, messages, ...(auth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
@@ -161,7 +171,15 @@ export class PaperInsightService {
             if (answer.length + delta.length > 32_768) throw new Error('output budget exceeded')
             answer += delta
           }
-        })
+        }) } catch (error) {
+          // Codex already backed off and retried; an oversized paper would not fit a smaller model either.
+          const next = auth.provider === 'codex' && !signal.aborted && !(error instanceof CodexGenerationError && error.code === 'RAG_LIMIT_EXCEEDED') &&
+            (error instanceof CodexGenerationError || codexFailure(error).retryable) ? await this.fallbackProvider() : undefined
+          if (!next) throw error
+          this.deps.log?.({ documentId, status: 'fallback', from: 'codex', to: next, category: failureCategory(error) })
+          selected = next; attempt--
+          continue
+        }
         if (usage) await this.deps.recordUsage(auth.provider, usage).catch(() => undefined)
         signal.throwIfAborted()
         stage = 'parse'

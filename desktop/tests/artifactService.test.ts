@@ -54,15 +54,17 @@ describe('reader translation artifact recovery', () => {
         tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
         mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
         blockMappingVersion: BLOCK_MAPPING_VERSION,
+        preferredProvider: 'codex',
         blocks: [
-          { sourceIndex: 0, markdown: '# 正确标题', mappingIds: [] },
-          { sourceIndex: 1, markdown: '正确正文', mappingIds: [] }
+          { sourceIndex: 0, markdown: '# 正确标题', mappingIds: [], provider: 'codex', status: 'completed' },
+          { sourceIndex: 1, markdown: '正确正文', mappingIds: [], provider: 'deepseek', status: 'completed' }
         ]
       }), 'utf8')
 
-      await expect(service.getDocument(task.id)).resolves.toMatchObject({
-        translatedMarkdown: '# 正确标题\n\n正确正文\n'
-      })
+      const document = await service.getDocument(task.id)
+      expect(document).toMatchObject({ translatedMarkdown: '# 正确标题\n\n正确正文\n' })
+      // Only blocks translated by a provider other than the preferred one carry a fallback mark.
+      expect(document.translatedBlocks?.map(block => block.fallbackProvider)).toEqual([undefined, 'deepseek'])
       await writeFile(join(outputDir, 'full.zh-CN.md'), '# 其他论文的陈旧内容\n', 'utf8')
       await expect(service.getDocument(task.id)).resolves.toMatchObject({
         translatedMarkdown: '# 正确标题\n\n正确正文\n'

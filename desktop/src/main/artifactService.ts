@@ -3,7 +3,8 @@ import { createWriteStream } from 'node:fs'
 import { copyFile, lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import archiver from 'archiver'
-import type { BlockMapping, DocumentPayload, CopilotixTask, TranslatedMarkdownBlock } from '@shared/types'
+import type { BlockMapping, DocumentPayload, CopilotixTask, TranslatedMarkdownBlock, TranslationProviderId } from '@shared/types'
+import { TRANSLATION_PROVIDER_IDS } from '@shared/providerPolicy'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
 import { normalizeMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdown'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
@@ -256,10 +257,13 @@ export class ArtifactService {
         const mappingIds = Array.isArray(block.mappingIds) && block.mappingIds.every((id) => typeof id === 'string')
           ? [...block.mappingIds] as string[]
           : null
-        return { sourceIndex: block.sourceIndex as number, markdown: block.markdown, mappingIds }
+        // Older manifests may lack provider fields; those blocks simply carry no fallback mark.
+        const fallbackProvider = block.status === 'completed' && isTranslationProvider(block.provider) &&
+          isTranslationProvider(manifest.preferredProvider) && block.provider !== manifest.preferredProvider ? block.provider : undefined
+        return { sourceIndex: block.sourceIndex as number, markdown: block.markdown, mappingIds, fallbackProvider }
       })
       if (blocks.some((block) => block === null)) return null
-      const validBlocks = blocks as Array<{ sourceIndex: number; markdown: string; mappingIds: string[] | null }>
+      const validBlocks = blocks as Array<{ sourceIndex: number; markdown: string; mappingIds: string[] | null; fallbackProvider?: TranslationProviderId }>
       const sourceIndexes = validBlocks.map((block) => block.sourceIndex)
       const validSourceOrder = new Set(sourceIndexes).size === sourceIndexes.length &&
         [...sourceIndexes].sort((left, right) => left - right).every((sourceIndex, index) => sourceIndex === index)
@@ -269,10 +273,11 @@ export class ArtifactService {
       const trustMappings = validSourceOrder && manifest.mappingAlgorithmVersion === MARKDOWN_MAPPING_ALGORITHM_VERSION &&
         manifest.blockMappingVersion === BLOCK_MAPPING_VERSION &&
         ordered.every((block) => Array.isArray(block.mappingIds))
-      return ordered.map(({ sourceIndex, markdown, mappingIds }) => ({
+      return ordered.map(({ sourceIndex, markdown, mappingIds, fallbackProvider }) => ({
         sourceIndex,
         markdown,
-        mappingIds: trustMappings ? mappingIds ?? [] : []
+        mappingIds: trustMappings ? mappingIds ?? [] : [],
+        ...(fallbackProvider ? { fallbackProvider } : {})
       }))
     } catch {
       return null
@@ -299,6 +304,10 @@ function readMappings(path: string): Promise<BlockMapping[]> {
     const parsed = JSON.parse(value) as { mappings?: unknown }
     return Array.isArray(parsed.mappings) ? parsed.mappings as BlockMapping[] : []
   })
+}
+
+function isTranslationProvider(value: unknown): value is TranslationProviderId {
+  return TRANSLATION_PROVIDER_IDS.includes(value as TranslationProviderId)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

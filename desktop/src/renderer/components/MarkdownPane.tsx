@@ -34,6 +34,7 @@ import { readerReferenceSections } from '../readerReferenceSections'
 import { useReaderNoteLayer } from './ReaderNotes'
 import ReaderAnnotationToolbar from './ReaderAnnotationToolbar'
 import type { ReaderNote } from '@shared/readerNotes'
+import { TRANSLATION_PROVIDER_LABELS } from '@shared/providerPolicy'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 /**
@@ -705,6 +706,7 @@ function readerBlocksEqual(left: ReaderBlock[], right: ReaderBlock[]): boolean {
       block.text === candidate.text &&
       block.pageIndex === candidate.pageIndex &&
       block.order === candidate.order &&
+      block.fallbackProvider === candidate.fallbackProvider &&
       stringArraysEqual(block.mappingIds, candidate.mappingIds)
   })
 }
@@ -767,6 +769,8 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
       data-mapping-ids={props.block.mappingIds.join(' ')}
       data-annotation-block-key={props.block.annotationKey}
       data-reader-role={props.block.role}
+      data-fallback-provider={props.block.fallbackProvider}
+      data-fallback-label={props.block.fallbackProvider ? `${TRANSLATION_PROVIDER_LABELS[props.block.fallbackProvider]} 回退翻译` : undefined}
       className={'markdown-block' + (props.active ? ' active' : '') + (props.referenceSection ? ' reader-references' : '')}
       onClick={() => {
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return

@@ -102,13 +102,13 @@ describe('reader document model', () => {
       '# 文档标题\n\n正文段落',
       [
         { sourceIndex: 0, markdown: '# 文档标题', mappingIds: ['title'] },
-        { sourceIndex: 0, markdown: '正文段落', mappingIds: ['body'] }
+        { sourceIndex: 0, markdown: '正文段落', mappingIds: ['body'], fallbackProvider: 'deepseek' }
       ],
       mappings
     )
 
-    expect(result.translated.filter((block) => block.role === 'content').map((block) => block.mappingIds))
-      .toEqual([[], []])
+    expect(result.translated.filter((block) => block.role === 'content').map((block) => [block.mappingIds, block.fallbackProvider]))
+      .toEqual([[[], undefined], [[], 'deepseek']])
   })
 
   it('preserves content order and omits unknown discarded blocks', () => {

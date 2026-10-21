@@ -84,6 +84,23 @@ describe('structured paper insight', () => {
     expect(JSON.stringify(vi.mocked(f.deps.log!).mock.calls)).not.toContain('never-persist')
     await f.service.dispose()
   })
+  it('falls back from Codex to the next enabled provider with a valid key, but not for oversized papers', async () => {
+    const f = fixture()
+    Object.assign(f.settings, { translationProvider: 'codex', enabledTranslationProviders: ['codex', 'qwen'], translationProviderOrder: ['codex', 'deepseek', 'qwen', 'bing', 'transmart'] })
+    vi.mocked(f.deps.stream).mockImplementation(async ({ provider, onDelta }) => {
+      if (provider === 'codex') throw turnError({ responseTooManyFailedAttempts: { httpStatusCode: 429 } })
+      await onDelta(JSON.stringify(briefGeneration)); return null
+    })
+    await f.service.generate(f.id); await idle(f)
+    expect(f.states.at(-1)?.status).toBe('ready')
+    expect(vi.mocked(f.deps.stream).mock.calls.map(([input]) => input.provider)).toEqual(['codex', 'qwen'])
+    expect(f.deps.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'fallback', from: 'codex', to: 'qwen', category: 'codex:responseTooManyFailedAttempts:429' }))
+    vi.mocked(f.deps.stream).mockClear()
+    vi.mocked(f.deps.stream).mockRejectedValue(turnError('contextWindowExceeded'))
+    await f.service.generate(f.id); await vi.waitFor(() => expect(f.states.at(-1)?.status).toBe('failed'))
+    expect(vi.mocked(f.deps.stream).mock.calls.map(([input]) => input.provider)).toEqual(['codex'])
+    await f.service.dispose()
+  })
   it('logs the classified Codex failure and shows its fixed message instead of the generic one', async () => {
     const f = fixture()
     vi.mocked(f.deps.stream).mockRejectedValue(turnError({ responseStreamDisconnected: { httpStatusCode: null } }))

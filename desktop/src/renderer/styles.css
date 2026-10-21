@@ -580,6 +580,9 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-block { position: relative; margin: 0 -12px; padding: 1px 12px; border: 1px solid transparent; border-radius: 2px; content-visibility: auto; contain-intrinsic-block-size: auto 48px; transition: background .15s ease; }
 .markdown-block:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
 .markdown-block.active { background: color-mix(in srgb, var(--primary-soft) 62%, transparent); box-shadow: inset 2px 0 0 var(--primary); }
+/* Provenance mark for blocks translated by a fallback provider; pseudo content stays out of selections and annotation offsets. */
+.markdown-block[data-fallback-provider] { box-shadow: inset 2px 0 0 var(--rule-strong); }
+.markdown-block[data-fallback-provider]::before { content: attr(data-fallback-label); display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.5; user-select: none; }
 ::highlight(copilotix-highlight-yellow) { color: inherit; background-color: color-mix(in srgb, #f4c542 52%, transparent); }
 ::highlight(copilotix-highlight-green) { color: inherit; background-color: color-mix(in srgb, #67c587 48%, transparent); }
 ::highlight(copilotix-highlight-blue) { color: inherit; background-color: color-mix(in srgb, #64a8e8 45%, transparent); }

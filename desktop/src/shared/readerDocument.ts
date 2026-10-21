@@ -1,5 +1,5 @@
 import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from './markdownBlocks'
-import type { BlockMapping, TranslatedMarkdownBlock } from './types'
+import type { BlockMapping, TranslatedMarkdownBlock, TranslationProviderId } from './types'
 import { prepareReaderMarkdown } from './standardMarkdown'
 
 export type ReaderBlockRole =
@@ -18,6 +18,7 @@ export interface ReaderBlock {
   mappingIds: string[]
   pageIndex?: number
   order: number
+  fallbackProvider?: TranslationProviderId
 }
 
 export interface ReaderDocumentBlocks {
@@ -83,7 +84,8 @@ export function mergeReaderBlocks(
     markdown: prepareReaderMarkdown(block.markdown),
     annotationKey: `content:${sequence}`,
     mappingIds: block.mappingIds,
-    order: sequence
+    order: sequence,
+    ...(block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {})
   }))
   const pagesByContentIndex = contentBlocks.map((block) => contentBlockPages(block, mappingById))
   const firstContentByPage = new Map<number, number>()
@@ -188,14 +190,19 @@ function remapTranslatedContent(
       .every((sourceIndex, index) => sourceIndex === index)
 
   if (!validSourceIndexes) {
-    return translatedBlocks.map((block) => ({ markdown: block.markdown, mappingIds: [] }))
+    return translatedBlocks.map((block) => ({ markdown: block.markdown, mappingIds: [], ...withFallback(block) }))
   }
   return [...translatedBlocks]
     .sort((left, right) => left.sourceIndex! - right.sourceIndex!)
     .map((block) => ({
       markdown: block.markdown,
-      mappingIds: [...(originalContent[block.sourceIndex!]?.mappingIds ?? [])]
+      mappingIds: [...(originalContent[block.sourceIndex!]?.mappingIds ?? [])],
+      ...withFallback(block)
     }))
+}
+
+function withFallback(block: TranslatedMarkdownBlock): Pick<AlignedMarkdownBlock, 'fallbackProvider'> {
+  return block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {}
 }
 
 function reuseOriginalMapping(markdown: string): AlignedMarkdownBlock[] {

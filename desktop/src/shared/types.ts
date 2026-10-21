@@ -203,6 +203,8 @@ export interface TranslatedMarkdownBlock {
   sourceIndex?: number
   markdown: string
   mappingIds: string[]
+  /** Provider that translated this block when it differs from the job's preferred provider. */
+  fallbackProvider?: TranslationProviderId
 }
 
 export interface TranslationBlockRecord {

@@ -26,12 +26,13 @@ export function executableProviderOrder(
   credentialStates: { qwen: { state: string }; deepseek: { state: string } }
 ): TranslationProviderId[] {
   const enabledSet = new Set(enabled)
-  const result = order.filter((provider) => {
+  // Blocks that still fail on Codex after its own backoff fall through to the next enabled
+  // provider; disabling the others is the switch for Codex-only translation.
+  return order.filter((provider) => {
     if (!enabledSet.has(provider)) return false
     if (provider === 'qwen' || provider === 'deepseek') return credentialStates[provider].state === 'valid'
     return true
   })
-  // Codex is an explicit privacy boundary: do not fall through to another provider.
-  const codexIndex = result.indexOf('codex')
-  return codexIndex < 0 ? result : result.slice(0, codexIndex + 1)
 }
+
+export const TRANSLATION_PROVIDER_LABELS: Record<TranslationProviderId, string> = { codex: 'Codex', deepseek: 'DeepSeek', qwen: 'Qwen', transmart: 'Transmart', bing: 'Bing' }
