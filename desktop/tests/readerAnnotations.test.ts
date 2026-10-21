@@ -4,6 +4,7 @@ import { type HighlightColor, type ReaderAnnotation, type ReaderAnnotationKind }
 import { type DocumentAnnotation } from '../src/shared/ipcSchemas'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../src/renderer/annotationMutations'
 import { readerReferenceSections } from '../src/renderer/readerReferenceSections'
+import { buildCitationIndex, counterpartEntry, findCitations, looksLikeAuthorLine, superscriptCitation } from '../src/renderer/readerCitations'
 import { type ReaderBlock } from '../src/shared/readerDocument'
 
 describe("readerAnnotations", () => {
@@ -171,5 +172,59 @@ describe("readerReferenceSections", () => {
     it('recognizes Chinese headings without shrinking ordinary mentions of references', () => {
       expect([...readerReferenceSections([block('References are discussed here.'), block('## 參考文獻'), block('文献条目。')])]).toEqual([1, 2])
     })
+  })
+})
+
+describe('readerCitations', () => {
+  const block = (markdown: string): ReaderBlock => ({ role: 'content', markdown, mappingIds: [], order: 0 })
+  const ids = (text: string, blocks: ReaderBlock[]) => findCitations(text, buildCitationIndex(blocks)).map(match => [text.slice(match.start, match.end), match.entries.map(entry => entry.id), match.missing])
+
+  it('resolves bracket citations, ranges and lists against a numbered list, split or merged by the parser', () => {
+    const blocks = [block('Body text.'), block('## References'), block('\\[1] Liu WK. Eighty years of FEM. 2022.'),
+      block('[2] Peng GC. Multiscale modelling. 2021. [3] Bishara D. A review. 2023.'), block('[4] Karniadakis GE. Physics-informed'),
+      block('machine learning. 2021.'), block('[6] Cuomo S. PINNs. 2022.')]
+    const index = buildCitationIndex(blocks)
+    expect(index.entries.map(entry => [entry.id, entry.text])).toEqual([['n1', 'Liu WK. Eighty years of FEM. 2022.'], ['n2', 'Peng GC. Multiscale modelling. 2021.'],
+      ['n3', 'Bishara D. A review. 2023.'], ['n4', 'Karniadakis GE. Physics-informed machine learning. 2021.'], ['n6', 'Cuomo S. PINNs. 2022.']])
+    expect(ids('FEA [1], networks [2–4] and [1, 3] or ［6］.', blocks)).toEqual([['[1]', ['n1'], []], ['[2–4]', ['n2', 'n3', 'n4'], []], ['[1, 3]', ['n1', 'n3'], []], ['［6］', ['n6'], []]])
+    // A gap in the list is reported, numbers past its end are no citation, and intervals stay text.
+    expect(ids('[4-6] [7] [0, 1] x ∈ [1, 2]', blocks)).toEqual([['[4-6]', ['n4', 'n6'], [5]]])
+    expect(index.referenceBlocks).toEqual(new Set([1, 2, 3, 4, 5, 6]))
+  })
+
+  it('finds a headless superscript-cited list and keeps affiliation numbers out', () => {
+    const blocks = [block('# Deep learning'), block('Yann LeCun<sup>1,2</sup>, Yoshua Bengio<sup>3</sup> & Geoffrey Hinton<sup>4,5</sup>'),
+      block('Deep learning improved image recognition<sup>1–3</sup> and the interval [1, 2].'), block('## Received 25 February 2015'),
+      block('1. Krizhevsky, A., Sutskever, I. & Hinton, G. ImageNet classification. In Proc. NIPS (2012).\n\n2. Farabet, C. & LeCun, Y. Scene labeling. IEEE Trans. 35, 1915–1929 (2013).'),
+      block('3. Tompson, J., Jain, A. & Bregler, C. Joint training of a convolutional network'), block('and a graphical model. In Proc. NIPS (2014).'),
+      block('5. Mikolov, T. & Burget, L. Language models. In Proc. ASRU 196–201 (2011).\n\n4. Szegedy, C. et al. Going deeper. Preprint (2014).'),
+      block('Methods text that is not a reference.')]
+    const index = buildCitationIndex(blocks)
+    expect(index.style).toBe('numeric')
+    expect(index.superscripts).toBe(true)
+    // Two-column pages may list entries out of order.
+    expect(index.entries.map(entry => entry.number)).toEqual([1, 2, 3, 5, 4])
+    expect(index.entries[2]!.text).toBe('Tompson, J., Jain, A. & Bregler, C. Joint training of a convolutional network and a graphical model. In Proc. NIPS (2014).')
+    expect(superscriptCitation('1–3', index)?.entries.map(entry => entry.id)).toEqual(['n1', 'n2', 'n3'])
+    expect(findCitations('the interval [1, 2]', index)).toEqual([])
+    expect(looksLikeAuthorLine('Yann LeCun, Yoshua Bengio & Geoffrey Hinton')).toBe(true)
+    expect(looksLikeAuthorLine('Deep learning improved image recognition')).toBe(false)
+  })
+
+  it('resolves author-year citations only when exactly one entry matches, in English and Chinese', () => {
+    const blocks = [block('## References'), block('Ba, J. L., Kiros, J. R., and Hinton, G. E. Layer normalization. arXiv:1607.06450, 2016.'),
+      block('Zongyi Li, Nikola Kovachki. Fourier neural operator. In ICLR, 2021a.'), block('Zongyi Li, Nikola Kovachki. Graph kernel network. 2021b.'),
+      block('Bender, J. and Koschier, D. Divergence-free SPH. ACM, 2015.'), block('De Lorenzis, L. and Gerasimov, T. Phase-field. 2020.')]
+    expect(ids('normalization (Ba et al., 2016; Li et al., 2021a), see Bender and Koschier (2015).', blocks))
+      .toEqual([['Ba et al., 2016', ['a0'], []], ['Li et al., 2021a', ['a1'], []], ['Bender and Koschier (2015)', ['a3'], []]])
+    // Ambiguous years, wrong co-authors and unknown names are left alone; particles stay in the marker.
+    expect(ids('(Li et al., 2021) Bender and Smith (2015) Smith (2015) De Lorenzis et al. (2020)', blocks)).toEqual([['De Lorenzis et al. (2020)', ['a4'], []]])
+    expect(ids('图网络（Ba等，2016；Li等人，2021b）以及 Bender 和 Koschier（2015）', blocks)).toEqual([['Ba等，2016', ['a0'], []], ['Li等人，2021b', ['a2'], []], ['Bender 和 Koschier（2015）', ['a3'], []]])
+  })
+
+  it('pairs an entry with the other view only when its text differs', () => {
+    const original = buildCitationIndex([block('## References'), block('[1] Liu WK. Eighty years. 2022.'), block('[2] Peng GC. Multiscale. 2021.'), block('[3] Bishara D. Review. 2023.')])
+    const translated = buildCitationIndex([block('## 参考文献'), block('[1] Liu WK. Eighty years. 2022.'), block('[2] Peng GC。多尺度建模。2021。'), block('[3] Bishara D. Review. 2023.')])
+    expect(original.entries.map(entry => counterpartEntry(entry, original, translated)?.text ?? null)).toEqual([null, 'Peng GC。多尺度建模。2021。', null])
   })
 })

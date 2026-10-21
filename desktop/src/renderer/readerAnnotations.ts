@@ -12,7 +12,8 @@ export interface ReaderTextSelection {
   rect: { top: number; right: number; bottom: number; left: number; width: number; height: number }
 }
 
-export type HighlightBucket = `copilotix-highlight-${HighlightColor}` | 'copilotix-underline' | 'copilotix-note'
+export type HighlightBucket = `copilotix-highlight-${HighlightColor}` | 'copilotix-underline' | 'copilotix-note' |
+  'copilotix-citation' | 'copilotix-citation-target'
 export type HighlightRanges = Map<HighlightBucket, Range[]>
 
 const highlightOwners = new Map<string, HighlightRanges>()
@@ -165,7 +166,9 @@ function rebuildHighlightRegistry(): void {
     'copilotix-highlight-pink',
     'copilotix-highlight-purple',
     'copilotix-underline',
-    'copilotix-note'
+    'copilotix-note',
+    'copilotix-citation',
+    'copilotix-citation-target'
   ]
   for (const name of names) {
     const ranges = buckets.get(name) ?? []

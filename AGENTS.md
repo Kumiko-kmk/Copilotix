@@ -7,7 +7,7 @@
 - 動手前與交付前執行 `git status --short --branch`，確認 worktree、分支及未提交內容；不得修改、清理、stash 或重置其他 Agent 的 worktree。
 - Worktree 不共享未提交文件；跨分支傳遞須先 commit，再 merge、rebase 或 cherry-pick。
 - 不要寫無意義的文檔。維護文檔主要供其他 agent 接手，使用者不會逐份閱讀；只保留當前契約、必要決策、限制、未完成需求與證據入口。不要每次改動都新建總結／審計／交付報告，不記對話、操作流水或重複貼測試輸出；優先更新既有入口，同一事實只留一處，過時內容直接清理。使用者要求的指南與法定許可資料按其用途保留。
-- 使用者不喜歡滑鼠懸停時出現文字提示／浮層，包括原生 `title`、Tooltip、Popover 預覽與以全文補充截斷文字的彈窗。全應用不再添加這類說明；圖示仍保留 `aria-label`，必要資訊在頁面內或明確點擊後顯示。清單與實作邊界見 [介面偏好](docs/UI_PREFERENCES_ZH.md)。
+- 使用者不喜歡滑鼠懸停時出現文字提示／浮層，包括原生 `title`、Tooltip、Popover 預覽與以全文補充截斷文字的彈窗。全應用不再添加這類說明；圖示仍保留 `aria-label`，必要資訊在頁面內或明確點擊後顯示。僅閱讀器筆記與正文引用的參考文獻卡兩處為使用者要求的例外。清單與實作邊界見 [介面偏好](docs/UI_PREFERENCES_ZH.md)。
 - 共享 schema、migration、IPC、Core RPC、JobRepository、Artifact/PathPolicy 或發布腳本的修改，須記錄兼容策略、測試證據與恢復語義。
 - 每次功能修改，只有使用者明確要求打包、EXE、安裝包或發布產物時才執行打包；未要求打包時，提供對應改動的實際介面截圖供使用者確認。截圖不代表完整測試驗收，不以示意圖或舊版本截圖代替。截圖與預覽須避開其他修改進程，優先使用隔離資料目錄／預覽，不重建或覆蓋其他進程正在使用的共享 out、不終止其他進程；無法隔離時如實說明。使用者明確要求不截圖時遵從，不追溯補拍先前改動。
 - 預設不跑本地 lint、typecheck、單元／覆蓋率及 E2E。使用者要求驗證時，先跑受影響用例或 `desktop:test:changed`，需要核心回歸再跑 `desktop:test`；不要每個功能都重跑完整 UI、覆蓋率、打包和安裝驗收。2026-10-14 使用者已授權精簡測試：同類小用例合併，重複外觀／源碼字串檢查和過時流程可刪除；資料安全、持久化、IPC 來源與取消恢復等行為回歸保留。未明確授權不得 push、上傳產物或觸發遠端發布。
@@ -82,7 +82,8 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 - 工作台分組最小 240×140；拆分、移動、關閉／重開、拖曳（5px 起拖、Esc 取消；邊緣四分之一拆分，中間合併）不得破壞唯一視圖。拖曳預覽走獨立 DragContext；分隔器拖動僅本地更新、放開提交。最大化純 CSS、其他分組保持掛載、不持久化；split pane 不设 position，分隔線用 ::after。
 - Markdown 僅選中時掛載並恢復 `initialScrollTop`；PDF／問答首次顯示後保持掛載。工具列 portal 到所在分組；PdfPane 的 `toolbarHost`、`initialViewState`／`onViewStateChange` 保持移動／重開錨點。頂欄不再提供複製；另存作用於聚焦分組。
 - 圖片分組（`readerFigureGroups.ts`）：MinerU 常把子圖拆成獨立圖塊、把 `(a) …` 子圖說誤標為 table_caption 或掛在別的圖下；子圖說按幾何視為圖內文字，不作屏障；`Figure N |`（Nature 式）視為圖說。仍無法確認 PDF 裁圖（無圖說／歧義／裁圖失敗）且子圖左右並排時，`ReaderFigureMosaic` 用解析出的子圖按 PDF 相對位置拼排並隱藏逐段原圖，不再逐行堆疊。改動須用真實文庫逐篇核對並排子圖歸屬。
-- 選區工具列：高亮、下劃線、羽毛筆「写笔记」、加入問答。筆記存文獻目錄 `notes/notes.v1.json`（Core RPC `notes:list/upsert/delete`，IPC `reader-notes:*`），錨點同標註以 quote／前後文重定位；虛線底紋＋頁邊羽毛筆，懸停顯示並可直接編輯（使用者明確要求的唯一懸停例外，見介面偏好），點外部自動保存、Esc 放棄。問答選區發送後移入該輪並以 `userSelections` 告知模型，見問答入口文檔。
+- 選區工具列：高亮、下劃線、羽毛筆「写笔记」、加入問答。筆記存文獻目錄 `notes/notes.v1.json`（Core RPC `notes:list/upsert/delete`，IPC `reader-notes:*`），錨點同標註以 quote／前後文重定位；虛線底紋＋頁邊羽毛筆，懸停顯示並可直接編輯（使用者明確要求的懸停例外之一，見介面偏好），點外部自動保存、Esc 放棄。問答選區發送後移入該輪並以 `userSelections` 告知模型，見問答入口文檔。
+- 正文引用（第二個懸停例外）：`readerCitations.ts` 從論文自身的 References 區塊（標題範圍，或無標題時從 1 起、像參考文獻的編號段落；容許雙欄亂序、跨頁續行與合併段）建立「標記 → 條目」索引，識別方括號數字（含區間／列表、全形括號）、上標數字（僅在正文不用方括號引用時，作者行的單位上標排除）與作者年份（敘述式／括號式，中文「等人」、全形標點）；完全本地，對不上不標記。`ReaderCitations.tsx` 以 CSS Highlight 標色、caret 命中測試懸停顯示條目（另一視圖文字不同時並列），點擊經選區同步跳到條目並閃爍高亮。PDF 視圖未做（無鏈接注釋層）。邊界見介面偏好。
 - 快捷鍵：Ctrl+1–4 顯示四視圖，Ctrl+反斜線右拆，Ctrl+Alt+←/→ 移組，Ctrl+W 關閉，Ctrl+Shift+T 重開，Ctrl+Shift+M／雙擊最大化，Esc 還原。
 - `readerScrollSync.ts` 以 mappingId＋塊內比例對齊視口 35% 閱讀線；僅人工捲動領先，120ms 程式回聲不回報，每幀最多一次。參與者為分組選中且在 layout.synced 的視圖（預設原文＋中文、PDF 關閉、問答不參與）；PDF 用 `pdfSyncPosition`。引用無可見閱讀視圖時，`ensureReadingView` 在問答旁拆開／重開原文或中文／PDF，先還原最大化，不能取代問答。共用少量 mappingId 的合成夾具有歧義，同步／選段聯動須用真實解析資料驗收。
 

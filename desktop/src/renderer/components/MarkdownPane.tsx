@@ -32,6 +32,7 @@ import { recordReaderDuration } from '../readerPerformance'
 import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
 import { readerReferenceSections } from '../readerReferenceSections'
 import { useReaderNoteLayer } from './ReaderNotes'
+import { useReaderCitationLayer } from './ReaderCitations'
 import ReaderAnnotationToolbar from './ReaderAnnotationToolbar'
 import type { ReaderNote } from '@shared/readerNotes'
 import { TRANSLATION_PROVIDER_LABELS } from '@shared/providerPolicy'
@@ -61,6 +62,8 @@ interface BlockPosition {
 export default function MarkdownPane(props: {
   active: boolean
   blocks: ReaderBlock[]
+  /** The other reading view's blocks: a cited entry also shows its text there when it differs. */
+  counterpartBlocks?: ReaderBlock[]
   assetBaseUrl: string
   pdfUrl?: string
   figureGroups?: ReaderFigureGroup[]
@@ -459,6 +462,19 @@ export default function MarkdownPane(props: {
     releaseScrollSelectionSuppression()
   }, [props.onSelect, releaseScrollSelectionSuppression])
 
+  const citationContentKey = React.useMemo(() => ({}), [props.blocks, renderAttempt, figureStates])
+  const citationLayer = useReaderCitationLayer({
+    active: props.active,
+    ready: resourcesReady && figuresSettled,
+    view: props.view,
+    blocks: props.blocks,
+    counterpartBlocks: props.counterpartBlocks,
+    containerRef,
+    articleRef,
+    contentKey: citationContentKey,
+    onNavigate: selectFromMarkdown
+  })
+
   const syncScrollSelection = React.useCallback(() => {
     if (suppressScrollSelectionRef.current || minimapDraggingRef.current) return
     const container = containerRef.current
@@ -677,6 +693,7 @@ export default function MarkdownPane(props: {
           document.body
         ) : null}
         {noteLayer.layer}
+        {citationLayer}
       </div>
       <MarkdownMinimap
         active={props.active}
@@ -766,6 +783,7 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   return (
     <div
       data-block-ids={navigationMappingIds.join(' ')}
+      data-reader-block-index={props.blockIndex}
       data-mapping-ids={props.block.mappingIds.join(' ')}
       data-annotation-block-key={props.block.annotationKey}
       data-reader-role={props.block.role}

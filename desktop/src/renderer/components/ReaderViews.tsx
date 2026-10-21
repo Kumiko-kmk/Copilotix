@@ -148,6 +148,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
         render: ({ active }) => !props.originalBlocks.some(block => block.role === 'content' && block.markdown.trim()) ? <ReaderDocumentState view="original" status={props.taskStatus} error={props.taskError} onRetry={props.onRetry} /> : active ? <MarkdownPane
           active
           blocks={props.originalBlocks}
+          counterpartBlocks={props.translatedReady ? props.translatedBlocks : undefined}
           assetBaseUrl={props.assetBaseUrl}
           pdfUrl={props.pdfUrl}
           figureGroups={originalFigureGroups}
@@ -178,6 +179,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           {props.translatedReady ? (active ? <MarkdownPane
             active
             blocks={props.translatedBlocks}
+            counterpartBlocks={props.originalBlocks}
             assetBaseUrl={props.assetBaseUrl}
             pdfUrl={props.pdfUrl}
             figureGroups={translatedFigureGroups}

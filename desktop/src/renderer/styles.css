@@ -597,6 +597,21 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 /* Reader sticky notes: paper tinted from the yellow highlight so it reads in light and dark themes. */
 ::highlight(copilotix-note) { color: inherit; background-color: color-mix(in srgb, #f4c542 16%, transparent); text-decoration: underline dotted 1.5px color-mix(in srgb, #c9962a 85%, var(--text)); text-underline-offset: 4px; }
 .reader-quill-icon { display: block; }
+/* In-text citations: marked in the accent colour; hovering shows the cited entries (ReaderCitations.tsx). */
+::highlight(copilotix-citation) { color: color-mix(in srgb, var(--primary) 80%, var(--text)); }
+::highlight(copilotix-citation-target) { color: inherit; background-color: color-mix(in srgb, var(--primary) 20%, transparent); }
+.markdown-scroll.reader-citation-pointer { cursor: pointer; }
+.reader-citation-card { position: fixed; z-index: 1210; display: grid; gap: 2px; overflow-y: auto; padding: 6px; border-radius: 4px; color: var(--text); background: var(--sheet); box-shadow: 0 16px 34px -16px color-mix(in srgb, var(--shadow-ink) 55%, transparent), 0 0 0 1px var(--rule); overscroll-behavior: contain; }
+.reader-citation-card.above { transform: translateY(-100%); }
+.reader-citation-entry { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 4px; width: 100%; padding: 7px 8px; border: 0; border-radius: 2px; color: inherit; background: transparent; cursor: pointer; font: inherit; font-size: 13px; line-height: 1.55; text-align: left; }
+.reader-citation-entry:hover, .reader-citation-entry:focus-visible { background: var(--muted-surface); outline: none; }
+.reader-citation-number { grid-column: 1; color: var(--primary); font-variant-numeric: tabular-nums; font-weight: 600; }
+.reader-citation-text, .reader-citation-other { grid-column: 2; overflow-wrap: anywhere; }
+.reader-citation-entry > :first-child.reader-citation-text { grid-column: 1 / -1; }
+.reader-citation-other { color: var(--muted); }
+.reader-citation-entry > :first-child.reader-citation-text ~ .reader-citation-other { grid-column: 1 / -1; }
+.reader-citation-other em { margin-right: 6px; font-style: normal; font-size: 11px; }
+.reader-citation-missing { margin: 0; padding: 6px 8px; color: var(--muted); font-size: 12px; }
 .reader-note-markers { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; }
 .reader-note-marker { position: absolute; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 2px; color: color-mix(in srgb, #b8862a 80%, var(--text)); background: transparent; cursor: pointer; font-size: 14px; opacity: .72; transition: opacity .15s, background-color .15s; }
 .reader-note-marker:hover, .reader-note-marker:focus-visible, .reader-note-marker.active { opacity: 1; background: color-mix(in srgb, #f4c542 24%, transparent); outline: none; }
