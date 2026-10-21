@@ -1,4 +1,5 @@
 import { briefSourceSchema, paperBriefSaveSchema } from '@shared/paperBrief/contracts'
+import { paperChatFigureRequestSchema, paperChatFigureSourceSchema } from './paperChatFigures'
 import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightDescriptorSchema, figureInsightSaveSchema } from './figureInsight'
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightSavedSchema } from './paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from './libraryCategories'
@@ -144,7 +145,7 @@ const coreOperationNames = [
   'documents:list', 'documents:get-summary', 'documents:update-metadata', 'artifacts:record-revision',
   'insight:get', 'insight:save-brief', 'insight:brief-source',
   'figureInsight:get', 'figureInsight:save', 'compute:figure-insight-descriptor',
-  'chat:ensure-index', 'chat:build-context',
+  'chat:ensure-index', 'chat:build-context', 'compute:paper-chat-figure',
   'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear', 'chat:delete-turn',
   'notes:list', 'notes:upsert', 'notes:delete',
   'annotations:list-snapshot', 'annotations:mutate',
@@ -421,6 +422,7 @@ export const coreOperationRegistry = {
   'chat:clear': { payload: paperChatDocumentRequestSchema, result: paperChatClearedSchema },
   'chat:ensure-index': { payload: paperChatStatusRequestSchema, result: paperChatStatusSchema },
   'chat:build-context': { payload: paperContextRequestSchema, result: paperContextResultSchema },
+  'compute:paper-chat-figure': { payload: paperChatFigureRequestSchema, result: paperChatFigureSourceSchema },
   'library:check': { payload: emptyPayloadSchema, result: z.object({ idle: z.literal(true) }).strict() },
   'library:manage': { payload: libraryCoreRequestSchema, result: libraryResultSchema },
   ping: { payload: corePingPayloadSchema, result: corePingResultSchema },

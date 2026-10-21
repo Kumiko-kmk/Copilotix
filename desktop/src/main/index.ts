@@ -1,6 +1,7 @@
 import { CodexRuntime } from '@runtime/codexRuntime'
 import { ModelGateway } from './chat/modelGateway'
 import { codexProbeSchema, codexStatusSchema, DEFAULT_CODEX_SETTINGS } from '@shared/codex'
+import { paperChatImageInput } from '@shared/paperChatFigures'
 import { PaperInsightService, loadFullBriefContext } from './chat/paperInsightService'
 import { FigureInsightService } from './chat/figureInsightService'
 import { registerFigureInsightHandlers } from './chat/figureInsightIpc'
@@ -205,7 +206,17 @@ async function bootstrap(): Promise<void> {
     buildContext: (request, signal) => utilitySupervisor!.request('chat:build-context', request, { signal, timeoutMs: 10_000 }),
     stream: (input) => modelGateway.stream(input),
     recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
-    log: (details) => logger.info('paper-chat', details)
+    log: (details) => logger.info('paper-chat', details),
+    figure: (request, signal) => utilitySupervisor!.request('compute:paper-chat-figure', request, { signal, timeoutMs: 30_000 }),
+    imageInput: async (provider, model) => provider === 'codex'
+      ? paperChatImageInput('codex', model, (await codex!.cached((await settings.get()).codex ?? DEFAULT_CODEX_SETTINGS))?.models)
+      : paperChatImageInput(provider, model),
+    // Same transport encoding as figure insight: large PNG crops travel as JPEG 98, the file is untouched.
+    encodeImage: async (bytes, mimeType) => {
+      if (mimeType !== 'image/png' || bytes.length <= 2 * 1024 * 1024) return { bytes, mimeType }
+      const jpeg = nativeImage.createFromBuffer(bytes).toJPEG(98)
+      return jpeg.length && jpeg.length < bytes.length ? { bytes: jpeg, mimeType: 'image/jpeg' } : { bytes, mimeType }
+    }
   })
   paperInsight = new PaperInsightService({
     settings: () => settings.get(),

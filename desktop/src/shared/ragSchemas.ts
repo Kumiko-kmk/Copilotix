@@ -144,7 +144,8 @@ export const ragErrorCodeSchema = z.enum([
   'SELECTION_STALE',
   'RAG_CANCELLED',
   'RAG_TIMEOUT',
-  'RAG_SERIALIZATION_LIMIT'
+  'RAG_SERIALIZATION_LIMIT',
+  'FIGURE_UNAVAILABLE'
 ])
 export type RagErrorCode = z.infer<typeof ragErrorCodeSchema>
 

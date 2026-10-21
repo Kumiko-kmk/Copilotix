@@ -3,6 +3,7 @@ import { PAPER_CHAT_MAX_BYTES, paperContextRequestSchema, paperContextResultSche
 import { ragWireByteLength } from '@shared/ragSchemas'
 import type { SqliteRagRepository } from './persistence/sqliteRagRepository'
 import { paperSelectionText } from './paperSelectionText'
+import { captionFigureKey, mentionsFigure } from '@shared/figureMentions'
 
 export class PaperContextError extends Error {
   constructor(readonly code: string, message: string, readonly retryable = false) { super(message) }
@@ -42,6 +43,8 @@ export function rankPaperChunks(chunks: readonly RagChunk[], question: string): 
 }
 
 const compact = (text: string): string => text.replace(/\s/gu, '')
+/** Mentions per figure that may claim budget ahead of the general ranking; more are reported as omitted. */
+const FIGURE_MENTION_LIMIT = 24
 
 export class PaperContextBuilder {
   constructor(private readonly rag: Pick<SqliteRagRepository, 'getDocumentKnowledge' | 'getContentRevision' | 'listChunks'>) {}
@@ -101,6 +104,20 @@ export class PaperContextBuilder {
         }
       }
     }
+    // Attached figures: caption chunks, every paragraph that mentions the figure, and their neighbours.
+    const figures = (input.figures ?? []).map((figure) => {
+      const own = [...new Set(figure.mappingIds.flatMap((id) => mappingIndex.get(id) ?? []))].sort((a, b) => a - b)
+      const captions = [...new Set(figure.captionMappingIds.flatMap((id) => mappingIndex.get(id) ?? []))].sort((a, b) => a - b)
+      const caption = captions.length ? captions : own
+      const key = figure.key ?? captionFigureKey(caption.map((i) => chunks[i]!.sourceText).join('\n'))?.key ?? null
+      const ownSet = new Set([...own, ...caption])
+      const mentions = key ? chunks.flatMap((chunk, i) => !ownSet.has(i) && mentionsFigure(chunk.sourceText, key) ? [i] : []) : []
+      const nearby = new Set<number>()
+      for (const i of [...caption, ...mentions.slice(0, FIGURE_MENTION_LIMIT)]) for (const n of [i - 1, i + 1]) if (n >= 0 && n < chunks.length && !ownSet.has(n)) nearby.add(n)
+      for (const i of mentions) nearby.delete(i)
+      return { figureId: figure.figureId, caption, mentions, nearby: [...nearby].sort((a, b) => a - b) }
+    })
+    const attached = new Set([...pinnedIndices, ...figures.flatMap((f) => [...f.caption, ...f.mentions.slice(0, FIGURE_MENTION_LIMIT)])])
     signal?.throwIfAborted()
     const totalChars = chunks.reduce((n, c) => n + c.sourceText.length, 0)
     const fullText = totalChars <= input.budgetChars
@@ -122,7 +139,7 @@ export class PaperContextBuilder {
         locator: { documentId: input.documentId, artifactId: revision.artifactId, contentRevisionId: revision.contentRevisionId, contentHash: chunk.contentHash, mappingIds: [...chunk.mappingIds], pageStart: chunk.pageStart, pageEnd: chunk.pageEnd, sourceStartOffset: chunk.sourceStartOffset, sourceEndOffset: chunk.sourceEndOffset, offsetUnit: 'utf16' },
         sectionPath: [...chunk.sectionPath], text: chunk.sourceText, translatedSelections,
         mappingConfidence: translatedSelections.length ? 'translated' : 'source',
-        scoreProvenance: [{ source: pinnedIndices.has(index) ? 'selection' : fullText || !rank?.score ? 'full-text' : 'lexical', rank: rank?.rank ?? index + 1, score: pinnedIndices.has(index) || fullText ? 1 : rank?.score ?? 0, ...(!fullText && !pinnedIndices.has(index) && rank?.score ? { algorithm: 'bm25' as const } : {}) }]
+        scoreProvenance: [{ source: attached.has(index) ? 'selection' : fullText || !rank?.score ? 'full-text' : 'lexical', rank: rank?.rank ?? index + 1, score: attached.has(index) || fullText ? 1 : rank?.score ?? 0, ...(!fullText && !attached.has(index) && rank?.score ? { algorithm: 'bm25' as const } : {}) }]
       }
       const evidenceBytes = ragWireByteLength(evidence) + (chosen.size ? 1 : 0)
       if (chars + length > input.budgetChars || chosen.size >= 9_999 || bytes + evidenceBytes > PAPER_CHAT_MAX_BYTES) {
@@ -135,6 +152,9 @@ export class PaperContextBuilder {
       bytes += evidenceBytes
     }
     for (const index of pinnedIndices) add(index, true)
+    for (const figure of figures) for (const index of figure.caption) add(index, true)
+    for (const figure of figures) for (const index of figure.mentions.slice(0, FIGURE_MENTION_LIMIT)) add(index)
+    for (const figure of figures) for (const index of figure.nearby) add(index)
     if (fullText) for (let i = 0; i < chunks.length; i++) add(i)
     else {
       // Give short-paper summaries priority even when the question is Chinese.
@@ -144,7 +164,20 @@ export class PaperContextBuilder {
       // No cross-language match: supply a bounded sample following the outline.
       for (let i = 0; i < chunks.length; i++) add(i)
     }
-    pack.evidence = [...chosen.entries()].sort(([a], [b]) => a - b).map(([, e], i) => ({ ...e, evidenceId: `E${i + 1}` }))
+    const ordered = [...chosen.keys()].sort((a, b) => a - b)
+    pack.evidence = ordered.map((index, i) => ({ ...chosen.get(index)!, evidenceId: `E${i + 1}` }))
+    if (figures.length) {
+      const ids = new Map(ordered.map((index, i) => [index, `E${i + 1}`]))
+      const issued = (indices: readonly number[], max: number): string[] => indices.flatMap((i) => ids.has(i) ? [ids.get(i)!] : []).slice(0, max)
+      pack.figures = figures.map((figure) => ({
+        figureId: figure.figureId,
+        sectionPath: [...(chunks[figure.caption[0] ?? -1]?.sectionPath ?? [])].slice(0, 16).map((s) => s.slice(0, 512)),
+        captionEvidenceIds: issued(figure.caption, 32),
+        mentionEvidenceIds: issued(figure.mentions, 64),
+        nearbyEvidenceIds: issued(figure.nearby, 128),
+        omittedMentions: figure.mentions.filter((i) => !ids.has(i)).length
+      }))
+    }
     pack.truncated ||= pack.evidence.length < chunks.length
     if (!pack.evidence.length) throw new PaperContextError('RAG_LIMIT_EXCEEDED', '论文段落超过上下文预算')
     signal?.throwIfAborted()

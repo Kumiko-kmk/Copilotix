@@ -1,31 +1,21 @@
 import React from 'react'
-import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
 import { Button, Dropdown, Empty, Input, Modal, Progress, Select } from 'antd'
 import { ArrowUpOutlined, BorderOutlined, CloseOutlined, MoreOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
-import { PAPER_CHAT_MODELS, resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
+import { resolvePaperChatModel, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { Citation } from '@shared/ragSchemas'
-import type { AppSettings, BlockSelection } from '@shared/types'
-import type { PaperChatController, PaperChatTurn } from '../usePaperChat'
-import SafeMarkdown from './SafeMarkdown'
+import type { BlockSelection } from '@shared/types'
+import type { PaperChatFigurePin, PaperChatTurnFigure } from '@shared/paperChatFigures'
+import { turnFigurePins, type PaperChatController, type PaperChatTurn } from '../usePaperChat'
+import { usePaperChatRouting, type PaperChatRouting } from '../usePaperChatRouting'
+import SafeMarkdown, { resolveAsset } from './SafeMarkdown'
 import './paperChat.css'
 
 const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek', codex: 'Codex' }
 const SUGGESTIONS = ['总结这篇论文的主要贡献', '解释论文的核心方法', '实验得出了哪些结论？']
-
-/** Provider, model and readiness derived from the shared translation settings. */
-function useChatRouting(chat: PaperChatController) {
-  const settingsQuery = useQuery<AppSettings>({ queryKey: ['settings'], queryFn: () => window.copilotix.getSettings() })
-  const settings = settingsQuery.data
-  const provider = settings ? resolvePaperChatProvider(settings, chat.selectedModel?.provider) : null
-  const codexQuery = useQuery({ queryKey: ['codex', settings?.codex], queryFn: () => window.copilotix.codex.inspect({ settings: settings?.codex ?? DEFAULT_CODEX_SETTINGS }), enabled: provider === 'codex', staleTime: 60_000, retry: false })
-  const configured = Boolean(settings && provider && (provider === 'codex' ? codexQuery.data?.state === 'ready' : settings.credentials[provider].state === 'valid'))
-  const defaultModel = provider === 'codex' ? settings?.codex?.chatModel ?? 'default' : provider === 'qwen' ? settings?.qwenChatModel ?? 'qwen-plus' : settings?.deepseekChatModel ?? 'deepseek-flash'
-  const selectedModel = chat.selectedModel?.provider === provider ? chat.selectedModel.model : defaultModel
-  const model = provider ? resolvePaperChatModel(provider, selectedModel) : ''
-  const models = provider === 'codex' ? codexQuery.data?.models.map(model => model.id) ?? [] : provider ? PAPER_CHAT_MODELS[provider] : []
-  const validModel = Boolean(provider && models.includes(model))
-  return { settings, provider, configured, model, models, validModel }
+/** Sent when the user attaches figures and presses send without typing a question. */
+export function defaultFigureQuestion(count: number): string {
+  return count > 1 ? '结合上下文，逐个子图详细解读这几张图' : '结合上下文，逐个子图详细解读这张图'
 }
 
 /** Lives in the reader's shared tab toolbar while the chat tab is active. */
@@ -50,7 +40,7 @@ export function ReaderChatToolbar(props: { chat: PaperChatController; children?:
 }
 
 /** Sits in the composer footer so it fits however narrow the reader pane is. */
-function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType<typeof useChatRouting>; locked: boolean }): React.JSX.Element | null {
+function ChatModelPicker(props: { chat: PaperChatController; routing: PaperChatRouting; locked: boolean }): React.JSX.Element | null {
   const { chat, routing } = props
   const provider = routing.provider
   return (
@@ -82,12 +72,14 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: ReturnType
 export default function ReaderChatPanel(props: {
   documentId: string
   chat: PaperChatController
+  /** Resolves figure thumbnails; without it figure chips show text only. */
+  assetBaseUrl?: string
   active?: boolean
   onSelect(selection: BlockSelection): void
   onOpenSettings(): void
 }): React.JSX.Element {
   const { chat } = props
-  const routing = useChatRouting(chat)
+  const routing = usePaperChatRouting(chat.selectedModel, { inspect: true })
   const [localError, setLocalError] = React.useState('')
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -98,8 +90,10 @@ export default function ReaderChatPanel(props: {
     staleTime: 0
   })
   const ready = indexQuery.data?.state === 'ready'
-  const question = chat.draft.trim()
-  const canSend = routing.configured && ready && routing.validModel && !chat.busy && !chat.loading && chat.loaded && question.length > 0
+  const question = chat.draft.trim() || (chat.figures.length ? defaultFigureQuestion(chat.figures.length) : '')
+  // Attached figures are never dropped: a text-only model blocks sending until the user switches or removes them.
+  const figureBlocked = chat.figures.length > 0 ? routing.imageBlocked : null
+  const canSend = routing.configured && ready && routing.validModel && !figureBlocked && !chat.busy && !chat.loading && chat.loaded && question.length > 0
 
 
   // Follow streaming output only while the reader is already at the bottom.
@@ -180,8 +174,9 @@ export default function ReaderChatPanel(props: {
                 deleteDisabled={chat.busy || chat.loadingOlder}
                 onDelete={() => chat.deleteTurn(turn)}
                 retryable={!chat.busy && index === chat.turns.length - 1}
-                onRetry={() => void chat.ask(turn.question, routing.model.trim(), routing.provider ?? undefined, turn.pinned ?? [])}
+                onRetry={() => void chat.ask(turn.question, routing.model.trim(), routing.provider ?? undefined, turn.pinned ?? [], turnFigurePins(turn))}
                 onCitation={cite}
+                assetBaseUrl={props.assetBaseUrl}
               />
             ))}
           </div>
@@ -189,6 +184,17 @@ export default function ReaderChatPanel(props: {
       </div>
       <div className="paper-chat-composer">
         {error ? <div className="paper-chat-error" role="alert">{error}</div> : null}
+        {figureBlocked ? <div className="paper-chat-error" role="alert">{figureBlocked}</div> : null}
+        {chat.figures.length > 0 ? (
+          <div className="paper-chat-pins" aria-label="附带的图片">
+            {chat.figures.map((figure, index) => (
+              <span className="paper-chat-pin paper-chat-figure-pin" key={figure.figureId}>
+                <FigureLabel label={figure.label} pageIndex={figure.pageIndex} preview={figure.preview} assetBaseUrl={props.assetBaseUrl} />
+                <button type="button" aria-label={`移除图片 ${figure.label ?? index + 1}`} disabled={chat.busy} onClick={() => chat.removeFigure(index)}><CloseOutlined /></button>
+              </span>
+            ))}
+          </div>
+        ) : null}
         {chat.pinned.length > 0 ? (
           <div className="paper-chat-pins" aria-label="固定选区">
             {chat.pinned.map((pin, index) => {
@@ -205,7 +211,7 @@ export default function ReaderChatPanel(props: {
           <Input.TextArea
             ref={(instance) => { inputRef.current = instance?.resizableTextArea?.textArea ?? null }}
             aria-label="向当前论文提问"
-            placeholder={routing.configured ? '向当前论文提问（Enter 发送，Shift+Enter 换行）' : '配置翻译服务后即可提问'}
+            placeholder={!routing.configured ? '配置翻译服务后即可提问' : chat.figures.length ? `直接发送将${defaultFigureQuestion(chat.figures.length)}，也可输入具体问题` : '向当前论文提问（Enter 发送，Shift+Enter 换行）'}
             value={chat.draft}
             variant="borderless"
             maxLength={2000}
@@ -276,8 +282,10 @@ function ChatTurn(props: {
   retryable: boolean
   onRetry(): void
   onCitation(citation: Citation): void
+  assetBaseUrl?: string
 }): React.JSX.Element {
   const { turn } = props
+  const figures: Array<PaperChatFigurePin & { images?: PaperChatTurnFigure['images'] }> = turn.figures ?? turn.figurePins ?? []
   const [collapsed, setCollapsed] = React.useState(false)
   const [confirming, setConfirming] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
@@ -296,6 +304,15 @@ function ChatTurn(props: {
         <div className="paper-chat-turn-selections" aria-label="提问附带的选区">
           {turn.selections.map((selection, index) => (
             <span className="paper-chat-pin" key={index}><SelectionLabel {...selection} /></span>
+          ))}
+        </div>
+      ) : null}
+      {figures.length ? (
+        <div className="paper-chat-turn-selections" aria-label="提问附带的图片">
+          {figures.map((figure) => (
+            <span className="paper-chat-pin paper-chat-figure-pin" key={figure.figureId}>
+              <FigureLabel label={figure.label} pageIndex={figure.pageIndex} preview={figure.images?.[0]?.path ?? figure.preview} assetBaseUrl={props.assetBaseUrl} />
+            </span>
           ))}
         </div>
       ) : null}
@@ -343,6 +360,15 @@ function SelectionLabel(props: { view: 'original' | 'translated'; text: string; 
   return <>
     <span className="paper-chat-pin-source">{props.view === 'original' ? '原文' : '译文'}{page !== undefined && page !== null ? ` · 第 ${page + 1} 页` : ''}</span>
     <span className="paper-chat-pin-text">{props.text.slice(0, 40)}{props.text.length > 40 ? '…' : ''}</span>
+  </>
+}
+
+function FigureLabel(props: { label: string | null; pageIndex: number | null; preview?: string; assetBaseUrl?: string }): React.JSX.Element {
+  const src = props.preview && props.assetBaseUrl ? resolveAsset(props.preview, props.assetBaseUrl) : undefined
+  return <>
+    {src ? <img className="paper-chat-figure-thumb" src={src} alt="" loading="lazy" decoding="async" /> : null}
+    <span className="paper-chat-pin-source">图片{props.pageIndex !== null ? ` · 第 ${props.pageIndex + 1} 页` : ''}</span>
+    <span className="paper-chat-pin-text">{props.label ?? '未编号的图'}</span>
   </>
 }
 

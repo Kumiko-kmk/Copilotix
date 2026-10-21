@@ -68,6 +68,8 @@ export default function MarkdownPane(props: {
   pdfUrl?: string
   figureGroups?: ReaderFigureGroup[]
   onOpenFigurePdf?(selection: BlockSelection): void
+  /** "加入问答" on each figure; omitted where figures cannot be asked about. */
+  figureChat?: ReaderFigureChat
   taskId: string
   view: ReaderAnnotationView
   annotations: ReaderAnnotation[]
@@ -662,6 +664,7 @@ export default function MarkdownPane(props: {
                 figureMosaics={figureGroups ? figureMosaics : NO_MOSAICS}
                 onFigureStateChange={setFigureState}
                 onOpenFigurePdf={props.onOpenFigurePdf}
+                figureChat={figureGroups ? props.figureChat : undefined}
                 blockIndex={index}
                 onFigureRendered={markFigureRendered}
                 onSelect={selectFromMarkdown}
@@ -732,6 +735,12 @@ function stringArraysEqual(left: string[], right: string[]): boolean {
   return left === right || (left.length === right.length && left.every((value, index) => value === right[index]))
 }
 
+/** Adds a figure to the chat composer. `blocked` explains why the current model cannot take images. */
+export interface ReaderFigureChat {
+  blocked: string | null
+  onAdd(group: ReaderFigureGroup): void
+}
+
 const NO_READY_FIGURES: ReadonlySet<string> = new Set()
 const NO_NOTES: readonly ReaderNote[] = []
 const NO_MOSAICS: ReadonlyMap<string, FigureMosaic> = new Map()
@@ -746,6 +755,7 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   figureMosaics: ReadonlyMap<string, FigureMosaic>
   onFigureStateChange(id: string, state: FigureRenderState): void
   onOpenFigurePdf?(selection: BlockSelection): void
+  figureChat?: ReaderFigureChat
   blockIndex: number
   onFigureRendered(): void
   onSelect(selection: BlockSelection): void
@@ -808,6 +818,7 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
           mosaics={props.figureMosaics}
           onStateChange={props.onFigureStateChange}
           onOpenPdf={props.onOpenFigurePdf}
+          figureChat={props.figureChat}
         />
       ) : (
         <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} />
@@ -827,6 +838,7 @@ function FigureBlockPresentation(props: {
   mosaics: ReadonlyMap<string, FigureMosaic>
   onStateChange(id: string, state: FigureRenderState): void
   onOpenPdf?(selection: BlockSelection): void
+  figureChat?: ReaderFigureChat
 }): React.JSX.Element {
   const owners = props.groups.filter(group => group.ownerBlockIndex === props.blockIndex)
   const isCaption = props.groups.some(group => props.blockIndex === group.captionBlockIndex)
@@ -862,9 +874,9 @@ function FigureBlockPresentation(props: {
         return mosaic ? <ReaderFigureMosaic key={'mosaic|' + group.id} mosaic={mosaic} assetBaseUrl={props.assetBaseUrl} /> : null
       })}
       {isCaption ? <div className="reader-figure-caption">{source}</div> : source}
-      {props.onOpenPdf ? owners.map(group => {
+      {owners.map(group => {
         const mappingId = group.captionMappingId || group.mappingIds[0]
-        return mappingId ? (
+        const pdf = props.onOpenPdf && mappingId ? (
         <button key={group.id} type="button" className="reader-figure-action" data-reader-annotation-ignore="true"
           onClick={event => {
             event.stopPropagation()
@@ -876,7 +888,17 @@ function FigureBlockPresentation(props: {
           查看 PDF
         </button>
         ) : null
-      }) : null}
+        const chat = props.figureChat ? (
+        // Stays clickable when blocked so the reason can be shown without a hover tooltip.
+        <button key={'chat|' + group.id} type="button" className="reader-figure-action reader-figure-chat" data-reader-annotation-ignore="true"
+          aria-disabled={props.figureChat.blocked ? true : undefined}
+          onClick={event => { event.stopPropagation(); props.figureChat?.onAdd(group) }}
+          aria-label={'将第 ' + (group.pageIndex + 1) + ' 页的图加入问答'}>
+          加入问答
+        </button>
+        ) : null
+        return pdf || chat ? <React.Fragment key={group.id}>{pdf}{chat}</React.Fragment> : null
+      })}
     </>
   )
 }

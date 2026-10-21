@@ -7,6 +7,7 @@ import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
 import type { BlockMapping, CopilotixTask } from '@shared/types'
 import { FigureInsightStore } from '../src/utility/core/persistence/figureInsightStore'
+import { PaperChatFigureStore } from '../src/utility/core/persistence/paperChatFigureStore'
 
 const roots: string[] = []
 const hash = (v: string | Buffer): string => createHash('sha256').update(v).digest('hex')
@@ -38,10 +39,11 @@ async function fixture() {
   await writeFile(join(root, 'block_list.json'), JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings }))
   await writeFile(join(root, 'layout.json'), '{}')
   await writeFile(join(root, 'full.md'), '# Paper\n\n## Abstract\n\nWe propose a core mechanism.\n\n## Method\n\nThe method has inputs and outputs.\n\n## Conclusion\n\nThe mechanism improves predictions.')
-  const store = new FigureInsightStore({ getTask: () => ({ id, sourceHash, outputDir: root } as CopilotixTask) })
+  const task = { id, sourceHash, outputDir: root } as CopilotixTask
+  const store = new FigureInsightStore({ getTask: () => task })
   const request = { documentId: id, figureId: geometry.id }
   const content = { displayWeight: 90, overview: '核心方法图。', takeaway: '关注输入输出。' }
-  return { root, store, request, figure, content }
+  return { root, store, request, figure, content, task }
 }
 
 describe('figure insight persistence', () => {
@@ -67,6 +69,21 @@ describe('figure insight persistence', () => {
     await rm(join(f.root, f.figure.imagePath))
     await expect(f.store.descriptor(f.request)).rejects.toThrow()
     expect(await f.store.get(f.request)).toEqual({ status: 'missing' })
+  })
+
+  it('gives chat the verified crop, else the parsed panels, as paths and hashes only', async () => {
+    const f = await fixture()
+    const chat = new PaperChatFigureStore({ getTask: () => f.task }, f.store)
+    const whole = await chat.source(f.request)
+    expect(whole).toMatchObject({ label: 'Figure 1', key: '1', whole: true, captionMappingIds: ['caption'], images: [{ path: f.figure.imagePath, sha256: f.figure.pngSha256, mimeType: 'image/png' }] })
+    expect(JSON.stringify(whole)).not.toContain('iVBOR')
+    // Until the reader saves a crop (or when it no longer verifies), the panels stand in.
+    await rm(join(f.root, 'figures.json'))
+    await writeFile(join(f.root, 'images', 'a.jpg'), Buffer.from('ffd8ffe000', 'hex'))
+    expect(await chat.source(f.request)).toMatchObject({ whole: false, images: [{ path: 'images/a.jpg', mimeType: 'image/jpeg', bytes: 5, sha256: hash(Buffer.from('ffd8ffe000', 'hex')) }] })
+    await writeFile(join(f.root, 'images', 'a.jpg'), 'not an image')
+    await expect(chat.source(f.request)).rejects.toThrow('格式')
+    await expect(chat.source({ ...f.request, figureId: 'reader-figure-missing' })).rejects.toThrow('不在当前解析版本')
   })
 
   it('rejects traversal in a manifest path', async () => {
