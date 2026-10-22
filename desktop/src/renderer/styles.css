@@ -439,7 +439,6 @@ button, input, select { font: inherit; }
 .reader-header .ant-btn { width: 28px; min-width: 28px; height: 28px; }
 .reader-header .ant-space { gap: 4px !important; }
 .reader-chat-toolbar .reader-insight-action { width: auto; height: 28px; padding-inline: 8px; font-size: 12px; }
-.reader-header .reader-text-layer-action { width: auto; padding-inline: 8px; font-size: 12px; }
 .reader-insight-status { display: block; max-width: 300px; white-space: normal; overflow-wrap: anywhere; font-size: 12px; font-variant-numeric: tabular-nums; }
 .reader-title.ant-typography { color: var(--ink); font-size: 13px; font-weight: 700; letter-spacing: .04em; }
 .reader-header-heading { display: flex; flex: 1; min-width: 0; align-items: center; gap: 4px; }

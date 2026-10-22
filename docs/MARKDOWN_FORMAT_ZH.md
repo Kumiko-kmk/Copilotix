@@ -26,10 +26,10 @@
 MinerU 偶尔用只罩住字母上半截的框识别整行，结果只剩 `d h f ld` 这类带上伸笔画的字母（2026-10-21 文献 6d215e7c 共 23 行，含摘要与参考文献 [60]）。`shared/textLayerRepair.ts` 只检查 `type: 'text'` 的 span：至少 6 个词、过半为单个字母且四成以上是小写单字母时才算候选；再按页码和 bbox 从 PDF 文字层（Utility 内 `pdfTextLayer.ts`，pdf.js 假 worker，仅在有候选时懒加载）取同一行文字，只有文字层可读（无 U+FFFD／私用区／控制符、多数为正常单词）且原 span 的字母按顺序 ≥85% 出现在其中、文字层长度 ≥1.5 倍时才替换。公式、表格、图片 span 不参与；无文字层（扫描件）或旋转页保持原样。MinerU 跨页合并段落时，下一页的行留在上一页的块中，此时按下一页 `lines_deleted` 块判定页码。
 
 - 新解析：`compute:normalize-parser` 在 `prepareReaderMarkdown` 之前同时修补 `layout.json` 与原始 Markdown，Markdown 中无法唯一定位的修复整条放弃，两者不会不一致。替换文字转义 Markdown 语法（`\ * _ $ <`、行首列表/标题记号、`](`），连字号行尾按解析器规则并词。读取失败不影响解析，只把候选记为未解决。
-- 旧论文：不自动重解析或重翻译。阅读器顶栏在布局仍有候选时显示「修复乱码（N 行）」，确认后经 IPC `documents:repair-text-layer` → Core RPC `compute:repair-text-layer` 执行；有解析或翻译作业在途时拒绝。依次原子发布 `full.md`、`block_list.json`、`layout.json`（中断后重跑可补完，已替换的 Markdown 视为已应用），再由 `recordTextLayerRepair` 在同一事务中以最新 parse 作业写入三个新 revision（metadata `{ textLayerRepair: 1, repairs }`），并把原文视图标注集迁到新的 Markdown revision（标注按 quote／前后文重定位）。映射 ID 只由位置决定，不变。
+- 旧论文：不重解析、不重翻译，也不加按钮（使用者要求页面简洁）。阅读器打开时 `useTextLayerRepair` 若在布局中发现候选，后台调用 IPC `documents:repair-text-layer` → Core RPC `compute:repair-text-layer`，修复成功只弹一次「已用 PDF 文字层修复 N 行解析乱码」提示；每个布局每次会话只尝试一次，有解析或翻译作业在途、或读取失败时静默放弃，下次打开再试。依次原子发布 `full.md`、`block_list.json`、`layout.json`（中断后重跑可补完，已替换的 Markdown 视为已应用），再由 `recordTextLayerRepair` 在同一事务中以最新 parse 作业写入三个新 revision（metadata `{ textLayerRepair: 1, repairs }`），并把原文视图标注集迁到新的 Markdown revision（标注按 quote／前后文重定位）。映射 ID 只由位置决定，不变。
 - Electron utility 进程对 pdf.js 既非 Node 也非浏览器，模块加载时需要 `DOMMatrix`；仅取文字不渲染，缺失时装单位矩阵占位。
 - 影响：受影响段落的现有译文仍基于修复前文字（manifest 逐块 `sourceHash` 不再匹配，下次重试翻译只重译这些块；已完成的翻译目前无法从界面重译）；整图裁切因 layout 变化重新生成，图片 AI 解读与档案卡显示「论文内容已更新」。`text-layer-repair.json` 记录每处原文与替换文字，仅供追溯，不是 artifact revision。
-- 验证：真实文库 18 篇唯读试算，仅该篇 23 行被替换，其余 17 篇无改动（仅 1 处公式行成为候选，被文字层否决）；隔离数据副本在应用内修复 23/23 行，另 3 篇无按钮、文件不变。
+- 验证：真实文库 18 篇唯读试算，仅该篇 23 行被替换，其余 17 篇无改动（仅 1 处公式行成为候选，被文字层否决）；隔离数据副本中打开该篇即自动修复 23/23 行，另 3 篇无提示、文件不变。
 
 ### 阅读器整图呈现
 
