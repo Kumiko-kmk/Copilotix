@@ -21,6 +21,7 @@ import { IpcClientError } from '@shared/ipc'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutations'
 import ReaderWorkbench from '../components/ReaderWorkbench'
 import DocumentLifecycleActions from '../components/DocumentLifecycleActions'
+import ZoteroExportButton from '../components/ZoteroExportButton'
 import type { PaperInsightSource } from '@shared/paperInsight'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
@@ -190,6 +191,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
           </Dropdown>
+          <ZoteroExportButton documentId={document.summary.id} messageApi={messageApi} />
           <DocumentLifecycleActions summary={document.summary} messageApi={messageApi} onDeleted={props.onBack} />
         </Space>
       </header>

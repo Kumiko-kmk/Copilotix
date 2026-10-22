@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { readLocalApiSnapshot, readSqliteSnapshot, ZoteroUnavailableError, type ZoteroSnapshot } from '../src/main/zotero/zoteroCatalog'
 import { ZoteroImportService } from '../src/main/zotero/zoteroImportService'
-import { readZoteroLinks, zoteroLinkPath } from '../src/main/zotero/zoteroLinks'
+import { addZoteroLink, readZoteroExports, readZoteroLinks, zoteroLinkPath } from '../src/main/zotero/zoteroLinks'
+import { createZoteroConnector, type ZoteroConnector, type ZoteroConnectorItem } from '../src/main/zotero/zoteroConnector'
+import { ZoteroExportService, type ZoteroExportContent } from '../src/main/zotero/zoteroExportService'
 import { locateZoteroProfile, type ZoteroProfile } from '../src/main/zotero/zoteroProfile'
 
 let root: string
@@ -185,5 +187,95 @@ describe('Zotero import', () => {
     const second = await service.catalog(true)
     expect(() => service.items({ snapshotId: first.snapshotId, collectionKey: null })).toThrow('已过期')
     expect(second.snapshotId).not.toBe(first.snapshotId)
+  })
+})
+
+describe('Zotero export', () => {
+  const content: ZoteroExportContent = {
+    title: 'Attention <Is> All',
+    translatedTitle: '注意力就是全部',
+    abstract: 'Abstract text',
+    summary: 'AI & summary',
+    highlights: [{ view: 'original', quote: 'key sentence' }, { view: 'translated', quote: '关键句' }],
+    notes: [{ quote: 'quoted', body: 'line 1\nline 2' }]
+  }
+  function fakeConnector(options: { attachmentFails?: boolean } = {}) {
+    const calls: Array<{ items?: ZoteroConnectorItem[]; attachment?: { parentItemID: string; bytes: number } }> = []
+    const connector: ZoteroConnector = {
+      ping: async () => undefined,
+      saveItems: async (items) => { calls.push({ items }); return 'session-1' },
+      saveAttachment: async (_session, parentItemID, _title, pdf) => {
+        if (options.attachmentFails) throw new Error('Zotero 当前文库不接受附件文件')
+        calls.push({ attachment: { parentItemID, bytes: pdf.length } })
+      }
+    }
+    return { connector, calls }
+  }
+  async function serviceFor(connector: ZoteroConnector, outputDir: string) {
+    await mkdir(outputDir, { recursive: true })
+    return new ZoteroExportService({
+      connector: async () => connector,
+      getDocument: async (id) => ({ id, outputDir, sourcePath: join(outputDir, 'original.pdf'), displayName: 'paper.pdf' }),
+      gatherContent: async () => content,
+      readPdf: async () => Buffer.from('%PDF-1.4'),
+      now: () => new Date('2026-10-22T00:00:00.000Z')
+    })
+  }
+  const id = '33333333-3333-4333-8333-333333333333'
+
+  it('sends a linked paper as a standalone note pointing at its Zotero item, and asks before repeating', async () => {
+    const outputDir = join(root, 'linked')
+    const { connector, calls } = fakeConnector()
+    const service = await serviceFor(connector, outputDir)
+    await addZoteroLink(outputDir, { libraryID: 1, groupID: null, itemKey: 'ITEMAAAA', attachmentKey: 'PDFAAAAA', linkedAt: '2026-10-21T00:00:00.000Z' })
+
+    expect(await service.exportDocuments({ documentIds: [id] })).toEqual({ notes: 1, items: 0, skipped: [], failed: [] })
+    const note = calls[0]!.items![0]!
+    expect(note.itemType).toBe('note')
+    expect(note.note).toContain('zotero://select/library/items/ITEMAAAA')
+    expect(note.note).toContain('Copilotix：Attention &lt;Is&gt; All')
+    expect(note.note).toContain('AI &amp; summary')
+    expect(note.note).toContain('［译文］关键句')
+    expect(note.note).toContain('line 1<br>line 2')
+    expect(await readZoteroExports(outputDir)).toEqual([{ kind: 'note', exportedAt: '2026-10-22T00:00:00.000Z' }])
+
+    expect(await service.exportDocuments({ documentIds: [id] })).toEqual({ notes: 0, items: 0, skipped: [id], failed: [] })
+    expect(calls).toHaveLength(1)
+    expect((await service.exportDocuments({ documentIds: [id], repeat: true })).notes).toBe(1)
+  })
+
+  it('sends other papers as a new item with the PDF and records a half-finished export', async () => {
+    const outputDir = join(root, 'plain')
+    const { connector, calls } = fakeConnector()
+    const service = await serviceFor(connector, outputDir)
+    expect(await service.exportDocuments({ documentIds: [id] })).toEqual({ notes: 0, items: 1, skipped: [], failed: [] })
+    expect(calls[0]!.items![0]).toMatchObject({ itemType: 'document', title: 'Attention <Is> All', abstractNote: 'Abstract text' })
+    expect(calls[0]!.items![0]!.notes![0]!.note).not.toContain('zotero://select')
+    expect(calls[1]!.attachment).toEqual({ parentItemID: 'copilotix-item', bytes: 8 })
+
+    const failingDir = join(root, 'no-files')
+    const failing = await serviceFor(fakeConnector({ attachmentFails: true }).connector, failingDir)
+    const result = await failing.exportDocuments({ documentIds: [id] })
+    expect(result.failed[0]?.message).toContain('条目已在 Zotero 建立，但 PDF 未能附上')
+    // The item exists in Zotero, so the next export asks before creating another one.
+    expect(await readZoteroExports(failingDir)).toHaveLength(1)
+  })
+
+  it('talks to the connector with the header Zotero requires and explains when Zotero is closed', async () => {
+    const seen: Array<{ url: string; headers: Record<string, string> }> = []
+    const fetchOk = (async (url: string, init: RequestInit) => {
+      seen.push({ url, headers: init.headers as Record<string, string> })
+      return new Response(null, { status: url.endsWith('/ping') ? 200 : 201 })
+    }) as typeof fetch
+    const connector = createZoteroConnector(23119, fetchOk)
+    await connector.ping()
+    const session = await connector.saveItems([{ id: 'a', itemType: 'note', note: '<p>x</p>' }])
+    await connector.saveAttachment(session, 'a', 'PDF', Buffer.from('%PDF'))
+    expect(seen.map((call) => new URL(call.url).pathname)).toEqual(['/connector/ping', '/connector/saveItems', '/connector/saveAttachment'])
+    expect(seen.every((call) => call.headers['Zotero-Allowed-Request'] === '1')).toBe(true)
+    expect(JSON.parse(seen[2]!.headers['X-Metadata']!)).toMatchObject({ sessionID: session, parentItemID: 'a' })
+
+    const closed = createZoteroConnector(23119, (async () => { throw new TypeError('fetch failed') }) as typeof fetch)
+    await expect(closed.ping()).rejects.toThrow('请先打开 Zotero')
   })
 })

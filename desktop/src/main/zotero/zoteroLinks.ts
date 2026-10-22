@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { zoteroLinkFileSchema, type ZoteroLink, type ZoteroLinkFile } from '@shared/zotero'
+import { zoteroExportRecordSchema, zoteroLinkFileSchema, type ZoteroExportRecord, type ZoteroLink, type ZoteroLinkFile } from '@shared/zotero'
 
 /**
  * `<document>/zotero/link.v1.json` records which Zotero items a paper came from. It lives in the
@@ -29,11 +29,29 @@ export async function addZoteroLink(outputDir: string, link: ZoteroLink): Promis
     link
   ].slice(-64)
   const file: ZoteroLinkFile = zoteroLinkFileSchema.parse({ version: 1, links })
-  const target = zoteroLinkPath(outputDir)
+  await writeJsonAtomic(zoteroLinkPath(outputDir), file)
+}
+
+/** `<document>/zotero/export.v1.json`: each time the paper was sent to Zotero (newest last). */
+export async function readZoteroExports(outputDir: string): Promise<ZoteroExportRecord['exports']> {
+  try {
+    const parsed = zoteroExportRecordSchema.safeParse(JSON.parse(await readFile(join(outputDir, 'zotero', 'export.v1.json'), 'utf8')))
+    return parsed.success ? parsed.data.exports : []
+  } catch {
+    return []
+  }
+}
+
+export async function addZoteroExport(outputDir: string, entry: ZoteroExportRecord['exports'][number]): Promise<void> {
+  const exports = [...await readZoteroExports(outputDir), entry].slice(-64)
+  await writeJsonAtomic(join(outputDir, 'zotero', 'export.v1.json'), zoteroExportRecordSchema.parse({ version: 1, exports }))
+}
+
+async function writeJsonAtomic(target: string, value: unknown): Promise<void> {
   const partial = `${target}.partial-${randomUUID()}`
   try {
     await mkdir(dirname(target), { recursive: true })
-    await writeFile(partial, `${JSON.stringify(file, null, 2)}\n`, 'utf8')
+    await writeFile(partial, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
     const handle = await open(partial, 'r+')
     try {
       await handle.sync()

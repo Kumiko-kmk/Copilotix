@@ -85,6 +85,32 @@ export const zoteroLinkFileSchema = z.object({
   links: z.array(zoteroLinkSchema).max(64)
 }).strict()
 
+export const ZOTERO_EXPORT_MAX = 50
+
+export const zoteroExportRequestSchema = z.object({
+  documentIds: z.array(z.string().uuid()).min(1).max(ZOTERO_EXPORT_MAX),
+  /** Export papers that were already exported once; otherwise they are reported in `skipped`. */
+  repeat: z.boolean().optional()
+}).strict()
+
+export const zoteroExportResultSchema = z.object({
+  /** Papers linked to a Zotero item: a standalone note with a link back to that item. */
+  notes: z.number().int().min(0),
+  /** Other papers: a new Zotero item with the PDF and a child note. */
+  items: z.number().int().min(0),
+  skipped: z.array(z.string().uuid()).max(ZOTERO_EXPORT_MAX),
+  failed: z.array(z.object({ name: z.string().max(2_000), message: z.string().max(2_000) }).strict()).max(ZOTERO_EXPORT_MAX)
+}).strict()
+
+/** `<document>/zotero/export.v1.json`: when this paper was sent to Zotero, so a repeat is a choice. */
+export const zoteroExportRecordSchema = z.object({
+  version: z.literal(1),
+  exports: z.array(z.object({
+    kind: z.enum(['note', 'item']),
+    exportedAt: z.string().datetime()
+  }).strict()).max(64)
+}).strict()
+
 export type ZoteroSource = z.infer<typeof zoteroSourceSchema>
 export type ZoteroCollection = z.infer<typeof zoteroCollectionSchema>
 export type ZoteroCatalog = z.infer<typeof zoteroCatalogSchema>
@@ -96,9 +122,13 @@ export type ZoteroImportRequest = z.infer<typeof zoteroImportRequestSchema>
 export type ZoteroImportResult = z.infer<typeof zoteroImportResultSchema>
 export type ZoteroLink = z.infer<typeof zoteroLinkSchema>
 export type ZoteroLinkFile = z.infer<typeof zoteroLinkFileSchema>
+export type ZoteroExportRequest = z.infer<typeof zoteroExportRequestSchema>
+export type ZoteroExportResult = z.infer<typeof zoteroExportResultSchema>
+export type ZoteroExportRecord = z.infer<typeof zoteroExportRecordSchema>
 
 export interface ZoteroDesktopApi {
   catalog(request: ZoteroCatalogRequest): Promise<ZoteroCatalog>
   items(request: ZoteroItemsRequest): Promise<ZoteroItemsPage>
   importItems(request: ZoteroImportRequest): Promise<ZoteroImportResult>
+  exportDocuments(request: ZoteroExportRequest): Promise<ZoteroExportResult>
 }

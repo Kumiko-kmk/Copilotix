@@ -4,7 +4,7 @@ import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightCanc
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
 import { paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
-import { zoteroCatalogRequestSchema, zoteroCatalogSchema, zoteroImportRequestSchema, zoteroImportResultSchema, zoteroItemsPageSchema, zoteroItemsRequestSchema } from '@shared/zotero'
+import { zoteroExportRequestSchema, zoteroExportResultSchema, zoteroCatalogRequestSchema, zoteroCatalogSchema, zoteroImportRequestSchema, zoteroImportResultSchema, zoteroItemsPageSchema, zoteroItemsRequestSchema } from '@shared/zotero'
 import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema } from '@shared/readerNotes'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
@@ -105,7 +105,8 @@ const api: CopilotixDesktopApi = {
   zotero: {
     catalog: (request) => invokeValidated('zotero:catalog', zoteroCatalogRequestSchema, zoteroCatalogSchema, request),
     items: (request) => invokeValidated('zotero:items', zoteroItemsRequestSchema, zoteroItemsPageSchema, request),
-    importItems: (request) => invokeValidated('zotero:import', zoteroImportRequestSchema, zoteroImportResultSchema, request)
+    importItems: (request) => invokeValidated('zotero:import', zoteroImportRequestSchema, zoteroImportResultSchema, request),
+    exportDocuments: (request) => invokeValidated('zotero:export', zoteroExportRequestSchema, zoteroExportResultSchema, request)
   },
   paperChat: {
     load: (request) => invokeValidated('paper-chat:load', paperChatLoadRequestSchema, paperChatPageSchema, request),

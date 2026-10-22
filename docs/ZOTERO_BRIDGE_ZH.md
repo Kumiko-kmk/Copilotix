@@ -19,19 +19,14 @@
 - IPC：`zotero:catalog`、`zotero:items`、`zotero:import`（schema 在 `shared/zotero.ts`），經 `registerValidatedHandler` 校驗來源，並受文庫維護鎖約束。
 - 測試：`desktop/tests/zoteroBridge.test.ts` 覆蓋以下行為：用最小 Zotero schema 的 sqlite 副本驗證回收站／路徑解析；mock 本機 API 的成功、403 與連不上；`prefs.js` 定位；導入時新建與既有論文的關聯、缺檔報錯、已導入標記、過期快照拒絕。2026-10-21 用使用者真實文庫的唯讀副本試讀：該文庫 3 個分類和 103 個父條目都在回收站，所以只列出 2 條活條目（其中 1 個 PDF 不在本機）。
 
-## Copilotix → Zotero 導出（未實作，待決定路線）
+## Copilotix → Zotero 導出（已實作）
 
-依據 Zotero 9.0.6 自帶的 `omni.ja` 原始碼（`server_connector.js`、`server_localAPI.js`、`saveSession.js`）唯讀核對，結論如下，尚未對真實文庫做寫入測試：
-
-- 本機 API 只支援 GET，不能寫入。
-- 連接器可以「新建條目＋附 PDF＋子筆記」：
-  1. `POST /connector/saveItems` 送出 translator JSON。條目可帶 `notes: [{ note: html }]`，由 ItemSaver 存成子筆記。
-  2. `POST /connector/saveAttachment?sessionID=…`：請求體為 PDF 位元組，`X-Metadata` 帶 `parentItemID`（第 1 步的連接器 id），把 PDF 掛到第 1 步建立的條目下。
-  3. 新條目會落在 Zotero 當前選中的分類；可再用 `POST /connector/updateSession` 的 `target`（`L<id>`／`C<id>`）移動。
-  - 限制：Zotero 必須在運行，且庫的檔案可編輯。
-- 連接器不能給既有條目加子筆記：`saveAttachment` 和 `updateSession` 只能操作同一 session 內新建的條目，沒有任何本機端點能指向已有 itemKey。
-- 「已從 Zotero 導入的論文回寫子筆記」因此只有三條路：
-  - Zotero Web API：需要 API Key，且會聯網同步，超出本機範圍；
-  - 寫一個 Zotero 插件；
-  - 改為新建帶筆記的條目，或建獨立筆記，並附 `zotero://select/library/items/<itemKey>` 連結。
-- `POST /connector/import` 接受 RIS／BibTeX 文字，可作為無 PDF 的退路。
+- 入口：閱讀器頂欄「导出到 Zotero」→ IPC `zotero:export`（`{ documentIds ≤50, repeat? }`）。走本機連接器（`zoteroConnector.ts`）；連接器在 Zotero 運行時恆開，與「允許其他應用通訊」無關。先 `ping`，連不上時提示先打開 Zotero。請求帶 `Zotero-Allowed-Request: 1`，否則類瀏覽器請求會被 Zotero 拒絕。
+- 內容（`zoteroExportService.ts` 的 `buildZoteroNoteHtml`）：標題、譯名、AI 總結（v2 `tldr`／v1 `summary`）、原文與譯文的高亮／下劃線（最多 500 條，每條 ≤2000 字）、筆記（錨定原文＋正文），全部 HTML 轉義。
+- 已從 Zotero 導入的論文（有 `link.v1.json`）：`saveItems` 一條 `itemType: 'note'` 的獨立筆記，內含 `zotero://select/library/items/<itemKey>` 連回原條目。連接器無法給既有條目加子項，2026-10-22 使用者選擇此方案。
+- 其他論文：`saveItems` 建立 `document` 條目（只用解析得到的標題與摘要，`extra` 註明來源），帶子筆記，再用 `saveAttachment` 附上 `original.pdf`。若條目已建立但 PDF 上傳失敗，仍記錄已導出並明確報錯，避免重試時再建一份。
+- 落點：Zotero 當前選中的分類；連接器 201 不回傳新條目 key，所以無法回寫關聯。
+- 導出記錄：`<文獻目錄>/zotero/export.v1.json`（`{ version: 1, exports: [{ kind, exportedAt }] }`），用於「再次導出」前的確認。兼容、備份與損壞語義同 `link.v1.json`。
+- 真實驗證（2026-10-22，經使用者同意，只建一條）：Zotero 9.0.6，`saveItems`、`saveAttachment` 均回 201；唯讀副本確認建出條目 `DKX43E9P`「Copilotix 连接器测试（可删除）」，含子筆記、PDF 附件 `M25DX55D`，位於「我的文獻庫」根目錄。該測試條目須由使用者在 Zotero 手動刪除。
+- 本機 API 只讀（GET）；`/connector/import` 接受 RIS／BibTeX，連接器可用，故未做 RIS 退路。
+- 測試：`zoteroBridge.test.ts` 的 export 段覆蓋連回原條目的筆記與 HTML 轉義、跳過已導出／`repeat`、新條目＋PDF、PDF 失敗半完成的記錄、連接器請求頭與 Zotero 未開的報錯。

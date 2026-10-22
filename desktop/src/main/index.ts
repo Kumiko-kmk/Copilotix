@@ -7,7 +7,7 @@ import { FigureInsightService } from './chat/figureInsightService'
 import { registerFigureInsightHandlers } from './chat/figureInsightIpc'
 import { figureInsightChangedSchema } from '@shared/figureInsight'
 import { registerPaperInsightHandlers } from './chat/paperInsightIpc'
-import { createZoteroImportService, registerZoteroHandlers } from './zotero/zoteroIpc'
+import { createZoteroExportService, createZoteroImportService, registerZoteroExportHandler, registerZoteroHandlers } from './zotero/zoteroIpc'
 import { paperInsightChangedSchema } from '@shared/paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
 import { ChatProvider } from './chat/chatProvider'
@@ -593,6 +593,12 @@ function registerIpc(
     if (!utilitySupervisor || !repository) throw new Error('数据库尚未初始化')
     return utilitySupervisor
   }
+  registerZoteroExportHandler(createZoteroExportService({
+    repository: repository!,
+    tasks,
+    insight: (documentId) => paperInsight!.get(documentId),
+    notes: (documentId) => requireNotesUtility().request('notes:list', { documentId })
+  }), validationOptions)
   registerValidatedHandler('reader-notes:list', readerNotesRequestSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:list', request), validationOptions)
   registerValidatedHandler('reader-notes:upsert', readerNoteUpsertSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:upsert', request), validationOptions)
   registerValidatedHandler('reader-notes:delete', readerNoteDeleteSchema, readerNotesSchema, (_event, request) => requireNotesUtility().request('notes:delete', request), validationOptions)
