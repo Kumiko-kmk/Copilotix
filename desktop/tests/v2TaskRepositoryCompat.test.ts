@@ -615,6 +615,33 @@ describe('temporary v2 task repository compatibility projection', () => {
     }
   })
 
+  it('records a text-layer repair under the same parse job and keeps original-view annotations', async () => {
+    const fixture = await createFixture()
+    try {
+      const markdownPath = join(fixture.task.outputDir, 'full.md')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', markdownPath, 'parsed-hash')
+      fixture.repository.replaceReaderAnnotations({ taskId: fixture.task.id, view: 'original', annotations: [makeAnnotation(fixture.task.id, 'original', 'annotation-1')] })
+      // A normal parse revision cannot be replaced under the same job.
+      expect(() => fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', markdownPath, 'repaired-hash')).toThrow('ARTIFACT_COMMIT_CONFLICT')
+
+      fixture.repository.recordTextLayerRepair(fixture.task.id, [
+        { kind: 'parsed_markdown', path: markdownPath, checksum: 'repaired-hash' },
+        { kind: 'layout', path: join(fixture.task.outputDir, 'layout.json'), checksum: 'layout-hash' }
+      ], { textLayerRepair: 1, repairs: 2 })
+
+      const latest = fixture.database.connection.prepare(
+        "SELECT id,revision,content_hash,metadata_json FROM artifacts WHERE document_id=? AND kind='parsed_markdown' ORDER BY revision DESC LIMIT 1"
+      ).get(fixture.task.id) as { id: string; revision: number; content_hash: string; metadata_json: string }
+      expect(latest).toMatchObject({ revision: 2, content_hash: 'repaired-hash' })
+      expect(JSON.parse(latest.metadata_json)).toEqual({ textLayerRepair: 1, repairs: 2 })
+      expect(fixture.repository.listReaderAnnotations(fixture.task.id)).toEqual([expect.objectContaining({ id: 'annotation-1', quote: 'alpha' })])
+      expect(fixture.database.connection.prepare('SELECT artifact_id FROM annotation_sets WHERE document_id=?').get(fixture.task.id)).toEqual({ artifact_id: latest.id })
+      expect(fixture.database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
   it('exposes pure document/job projection rules for renderer compatibility', () => {
     const document: CompatDocumentRow = {
       id: 'document-1',

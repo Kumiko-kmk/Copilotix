@@ -95,6 +95,14 @@ export class ArtifactService {
   }
   resumeFigureWrites(documentId: string): void { this.blockedFigureWrites.delete(documentId) }
 
+  /** Re-project the derived figure Markdown after the source text changed. */
+  async refreshFigureMarkdown(taskId: string): Promise<void> {
+    const document = await this.getDocument(taskId)
+    const revision = await figureSourceRevision(document.task.outputDir, document.task.sourceHash, document.layoutJson)
+    const figures = await readFigureArtifacts(document.task.outputDir, revision, buildReaderFigureGeometries(document.mappings, document.layoutJson))
+    await this.publishFigureMarkdown(document.task, document.markdown, document.translatedMarkdown, figures)
+  }
+
   private async publishFigureMarkdown(task: CopilotixTask, original: string, translated: string, figures: readonly FigureArtifact[]): Promise<void> {
     for (const [name, source] of [['full.figures.md', original], ['full.zh-CN.figures.md', translated]] as const) {
       if (!source) continue

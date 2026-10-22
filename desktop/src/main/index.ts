@@ -50,6 +50,7 @@ import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike }
 import {
   cacheDocumentFigureRequestSchema,
   cacheDocumentFigureResultSchema,
+  repairTextLayerResultSchema,
   appSettingsSchema,
   credentialValidationRequestSchema,
   credentialValidationResultSchema,
@@ -561,6 +562,9 @@ function registerIpc(
   }, validationOptions)
   registerValidatedHandler('documents:cache-figure', cacheDocumentFigureRequestSchema, cacheDocumentFigureResultSchema, (_event, request) => {
     return tasks.cacheFigure(request)
+  }, validationOptions)
+  registerValidatedHandler('documents:repair-text-layer', documentIdRequestSchema, repairTextLayerResultSchema, (_event, documentId) => {
+    return tasks.repairTextLayer(documentId)
   }, validationOptions)
   registerValidatedHandler('documents:save-as', saveDocumentAsRequestSchema, saveDocumentAsResultSchema, async (_event, request) => {
     const task = await repository?.getTask(request.documentId)

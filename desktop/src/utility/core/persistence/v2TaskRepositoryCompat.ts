@@ -727,6 +727,41 @@ export class V2TaskRepositoryCompat {
   }
 
   /**
+   * Record a text-layer correction of an already published parse. The new
+   * revisions belong to the latest parse job (a normal parse revision cannot be
+   * replaced under the same job), and original-view annotations move to the new
+   * Markdown revision, where the reader re-anchors them by quote and context.
+   */
+  recordTextLayerRepair(taskId: string, revisions: ReadonlyArray<{ kind: 'parsed_markdown' | 'layout' | 'block_mappings'; path: string; checksum: string }>, metadata: Record<string, unknown>): void {
+    this.database.transaction(() => {
+      const document = this.readDocument(taskId)
+      if (!document) throw new Error('任务不存在')
+      const job = this.latestJob(taskId, 'parse')
+      if (!job) throw new Error('产物对应的作业不存在')
+      const previousMarkdown = this.latestArtifact(taskId, 'parsed_markdown')
+      const now = new Date().toISOString()
+      for (const revision of revisions) {
+        const latest = this.latestArtifact(taskId, revision.kind)
+        this.database.connection.prepare(`
+          INSERT INTO artifacts(id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at)
+          VALUES(?,?,?,?,?,?,?,?,?)
+        `).run(randomUUID(), taskId, job.id, revision.kind, (latest?.revision ?? 0) + 1,
+          this.toRelativeArtifactPath(document.storage_path, revision.path), revision.checksum, JSON.stringify(metadata), now)
+      }
+      const nextMarkdown = this.latestArtifact(taskId, 'parsed_markdown')
+      if (previousMarkdown && nextMarkdown && previousMarkdown.id !== nextMarkdown.id) {
+        // The set and its rows reference each other through a composite key; check it at commit.
+        this.database.connection.exec('PRAGMA defer_foreign_keys = ON')
+        this.database.connection.prepare(`UPDATE annotation_sets SET artifact_id=?,updated_at=? WHERE document_id=? AND artifact_id=? AND view='original'`)
+          .run(nextMarkdown.id, now, taskId, previousMarkdown.id)
+        this.database.connection.prepare(`UPDATE reader_annotations SET artifact_id=? WHERE document_id=? AND artifact_id=? AND view='original'`)
+          .run(nextMarkdown.id, taskId, previousMarkdown.id)
+      }
+      this.maybeQueueParsedContentIndexUnsafe(taskId)
+    })
+  }
+
+  /**
    * Publish the canonical-content boundary only after both parser artifacts
    * exist.  The artifact ID is retained as provenance, while the identity is
    * the document plus the three content fingerprints.  All work is performed

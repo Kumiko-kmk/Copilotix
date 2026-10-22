@@ -41,6 +41,10 @@ export class RpcTaskCompute implements TaskComputePort {
     await this.supervisor.request('compute:rebuild-mappings', { taskId, outputDir }, { timeoutMs: COMPUTE_RPC_TIMEOUT_MS })
   }
 
+  async repairTextLayer(taskId: string): Promise<{ repaired: number; unresolved: number }> {
+    return this.supervisor.request('compute:repair-text-layer', { taskId }, { timeoutMs: COMPUTE_RPC_TIMEOUT_MS })
+  }
+
   async openTranslationPlan(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanOpenResult> {
     return this.supervisor.request('compute:translation-plan-open', { taskId, jobId }, { signal, timeoutMs: COMPUTE_RPC_TIMEOUT_MS })
   }

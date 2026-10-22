@@ -40,6 +40,7 @@ import {
   coreSettingsMigrationPayloadSchema,
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
+  coreRepairTextLayerPayloadSchema,
   coreRagContentIndexPayloadSchema,
   coreTranslationPlanOpenPayloadSchema,
   coreTranslationPlanListPayloadSchema,
@@ -53,6 +54,8 @@ import { appSettingsSchema } from '@shared/ipcSchemas'
 import { MAX_PDF_BYTES } from '@shared/constants'
 import { displayPaperTitle, extractPaperTitle } from '@shared/titleNaming'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '@core/blockMapping'
+import { applyTextLayerRepairs, findTextLayerCandidates, planTextLayerRepairs, TEXT_LAYER_REPAIR_VERSION, type TextLayerRepairReport } from '@shared/textLayerRepair'
+import { readPdfTextLayer } from './compute/pdfTextLayer'
 import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../coreUtilityRuntime'
 import { V2Database } from './persistence/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
@@ -288,9 +291,13 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const payload = coreImportPdfPayloadSchema.parse(request.payload)
       return importPdf(payload.sourcePath, payload.documentId, state, signal)
     },
-    'compute:normalize-parser': async (request) => {
+    'compute:normalize-parser': async (request, signal) => {
       const payload = request.payload as { task: CopilotixTask; extractedDir: string; jobId?: string }
-      return normalizeParserOutput(payload.task, payload.extractedDir, requireRepository(), payload.jobId)
+      return normalizeParserOutput(payload.task, payload.extractedDir, requireRepository(), payload.jobId, signal)
+    },
+    'compute:repair-text-layer': async (request, signal) => {
+      const payload = coreRepairTextLayerPayloadSchema.parse(request.payload)
+      return repairParsedTextLayer(payload.taskId, requireRepository(), signal)
     },
     'compute:rebuild-mappings': async (request) => {
       const payload = request.payload as { taskId: string; outputDir: string }
@@ -532,7 +539,8 @@ async function normalizeParserOutput(
   task: CopilotixTask,
   extractedDir: string,
   repository: V2TaskRepositoryCompat,
-  jobId?: string
+  jobId?: string,
+  signal?: AbortSignal
 ): Promise<{ normalized: true; displayTitle: string | null; pageCount: number }> {
   assertTaskPath(task.outputDir)
   assertTaskPath(extractedDir)
@@ -572,7 +580,19 @@ async function normalizeParserOutput(
       imageFiles.push({ stagedPath: await staged(file, rel), relativePath: rel })
     }
 
-    const layoutData = JSON.parse(await readFile(layoutStaged, 'utf8')) as unknown
+    let layoutData = JSON.parse(await readFile(layoutStaged, 'utf8')) as unknown
+    // Before Markdown preparation, so repaired spans match the parser's own text.
+    const repaired = await repairFromTextLayer(layoutData, await readFile(markdownStaged, 'utf8'), pathPolicy.resolveChild(task.outputDir, 'original.pdf'), signal)
+    let reportStaged: string | null = null
+    if (repaired) {
+      layoutData = repaired.layout
+      if (repaired.report.repairs.length > 0) {
+        await writeFile(layoutStaged, JSON.stringify(repaired.layout), 'utf8')
+        await writeFile(markdownStaged, repaired.markdown, 'utf8')
+      }
+      reportStaged = pathPolicy.resolveChild(stagingRoot, TEXT_LAYER_REPORT)
+      await writeFile(reportStaged, JSON.stringify(repaired.report, null, 2), 'utf8')
+    }
     const mappings = buildBlockMappings(task.id, layoutData)
     const pageCount = mappings.reduce((maximum, mapping) => Math.max(maximum, ...mapping.boxes.map((box) => box.pageIndex + 1), 0), 0)
     const markdownText = prepareReaderMarkdown(await readFile(markdownStaged, 'utf8'), (url) => {
@@ -597,8 +617,76 @@ async function normalizeParserOutput(
       const destination = pathPolicy.resolveChild(task.outputDir, image.relativePath)
       await publishStagedFile(image.stagedPath, destination, await hashFile(image.stagedPath))
     }
+    if (reportStaged) await publishStagedFile(reportStaged, pathPolicy.resolveChild(task.outputDir, TEXT_LAYER_REPORT), await hashFile(reportStaged))
     repository.recordArtifactRevisions(revisions)
     return { normalized: true, displayTitle, pageCount }
+  } finally {
+    await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+/** Provenance of text-layer repairs; not an artifact revision, readers never depend on it. */
+const TEXT_LAYER_REPORT = 'text-layer-repair.json'
+
+/**
+ * Replace fragmented parser lines with the PDF text layer. Returns null when
+ * the layout has no fragmented lines. A PDF that cannot be read leaves every
+ * candidate unresolved instead of failing the parse.
+ */
+async function repairFromTextLayer(layout: unknown, markdown: string, pdfPath: string, signal?: AbortSignal): Promise<{ layout: unknown; markdown: string; report: TextLayerRepairReport } | null> {
+  const candidates = findTextLayerCandidates(layout)
+  if (candidates.length === 0) return null
+  try {
+    const pages = [...new Map(candidates.map((candidate) => [candidate.pageIndex, { pageIndex: candidate.pageIndex, pageSize: candidate.pageSize }])).values()]
+    const layer = await readPdfTextLayer(pdfPath, pages, signal)
+    return applyTextLayerRepairs(layout, markdown, planTextLayerRepairs(candidates, layer))
+  } catch (error) {
+    if (signal?.aborted) throw error
+    return { layout, markdown, report: { version: TEXT_LAYER_REPAIR_VERSION, repairs: [], unresolved: candidates } }
+  }
+}
+
+/**
+ * Repair an already published parse in place (user-initiated; old papers are
+ * never re-parsed automatically). Markdown is published first and the layout
+ * last, so an interrupted run is completed by the next one.
+ */
+async function repairParsedTextLayer(taskId: string, repository: V2TaskRepositoryCompat, signal?: AbortSignal): Promise<{ repaired: number; unresolved: number }> {
+  const task = repository.getTask(taskId)
+  if (!task) throw new CoreUtilityOperationError('CORE_NOT_FOUND', 'Document not found', false)
+  assertTaskPath(task.outputDir)
+  const pathPolicy = new PathPolicy()
+  const path = (name: string): string => pathPolicy.resolveChild(task.outputDir, name)
+  const layout = JSON.parse(await readFile(path('layout.json'), 'utf8')) as unknown
+  const repaired = await repairFromTextLayer(layout, await readFile(path('full.md'), 'utf8'), path('original.pdf'), signal)
+  if (!repaired || repaired.report.repairs.length === 0) return { repaired: 0, unresolved: repaired?.report.unresolved.length ?? 0 }
+  signal?.throwIfAborted()
+  const stagingRoot = path(`.text-layer-repair.partial-${randomUUID()}`)
+  await mkdir(stagingRoot, { recursive: true })
+  try {
+    let previous: TextLayerRepairReport['repairs'] = []
+    try {
+      const existing = JSON.parse(await readFile(path(TEXT_LAYER_REPORT), 'utf8')) as Partial<TextLayerRepairReport>
+      if (existing.version === TEXT_LAYER_REPAIR_VERSION && Array.isArray(existing.repairs)) previous = existing.repairs
+    } catch {
+      // No earlier report.
+    }
+    const files: Array<{ kind: 'parsed_markdown' | 'layout' | 'block_mappings' | null; name: string; content: string }> = [
+      { kind: 'parsed_markdown', name: 'full.md', content: repaired.markdown },
+      { kind: 'block_mappings', name: 'block_list.json', content: JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: buildBlockMappings(taskId, repaired.layout) }, null, 2) },
+      { kind: 'layout', name: 'layout.json', content: JSON.stringify(repaired.layout) },
+      { kind: null, name: TEXT_LAYER_REPORT, content: JSON.stringify({ ...repaired.report, repairs: [...previous, ...repaired.report.repairs] }, null, 2) }
+    ]
+    const revisions: Array<{ kind: 'parsed_markdown' | 'layout' | 'block_mappings'; path: string; checksum: string }> = []
+    for (const file of files) {
+      const staged = pathPolicy.resolveChild(stagingRoot, file.name)
+      await writeFile(staged, file.content, 'utf8')
+      const checksum = await hashFile(staged)
+      await publishStagedFile(staged, path(file.name), checksum)
+      if (file.kind) revisions.push({ kind: file.kind, path: path(file.name), checksum })
+    }
+    repository.recordTextLayerRepair(taskId, revisions, { textLayerRepair: TEXT_LAYER_REPAIR_VERSION, repairs: repaired.report.repairs.length })
+    return { repaired: repaired.report.repairs.length, unresolved: repaired.report.unresolved.length }
   } finally {
     await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined)
   }
