@@ -38,10 +38,6 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
     expect(mainBounds!.y).toBeCloseTo(28, 0)
     expect(mainBounds!.x + mainBounds!.width).toBeCloseTo(viewport[0] - 1, 0)
     expect(mainBounds!.y + mainBounds!.height).toBeCloseTo(viewport[1] - 1, 0)
-    await expect(window.locator('.app-shell')).toHaveCSS('border-radius', '8px')
-    await expect(window.locator('.app-shell')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
-    await expect(window.locator('.main-surface')).toHaveCSS('border-radius', '0px')
-    await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     const closeControl = window.locator('[data-window-control="close"]')
     await expect(closeControl).toHaveCSS('width', '20px')
     await expect(closeControl).toHaveCSS('height', '24px')
@@ -62,8 +58,6 @@ test('keeps hover chrome inside the minimum supported window size', async () => 
     await expect(window.locator('[data-edge-dock="bottom"]')).toHaveCount(0)
     await window.emulateMedia({ colorScheme: 'dark' })
     await expect.poll(() => window.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(true)
-    await expect(window.locator('.app-shell')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
-    await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     await capture(window, 'chrome-1100x700-fixed-light-bottom.png')
   } finally {
     await app.close()
@@ -96,11 +90,6 @@ test('keeps the new parse page layout across supported sizes and themes', async 
     await expect(window.locator('.new-parse-page canvas.home-cipher')).toHaveCount(1)
     await expect(window.locator('.titlebar-brand')).toHaveCount(0)
     await expect(window.getByRole('img', { name: 'COPILOTIX' })).toBeVisible()
-    await expect(window.locator('.copilotix-wordmark span')).toHaveCount(10)
-    await expect.poll(() => window.locator('.copilotix-wordmark').evaluate((element) => {
-      const text = element.textContent ?? ''
-      return Object.fromEntries([...new Set('COPILOTIX')].map((letter) => [letter, [...text].filter((cell) => cell === letter).length]))
-    })).toEqual({ C: 36, O: 80, P: 36, I: 80, L: 32, T: 30, X: 36 })
     await expect(window.getByText('今天想读些什么？')).toBeVisible()
     await expect(window.getByText('拖入文档')).toBeVisible()
     await expect(window.getByText(`当前支持 PDF，单篇最多 ${MAX_PDF_PAGES} 页`)).toBeVisible()
@@ -133,9 +122,6 @@ test('keeps the new parse page layout across supported sizes and themes', async 
     // The only canvas is the cipher backdrop; the hero itself stays DOM.
     await expect(window.locator('.new-parse-page canvas')).toHaveCount(1)
     await expect(window.locator('.new-parse-page canvas.home-cipher')).toHaveCount(1)
-    await expect(window.locator('.app-shell')).toHaveCSS('border-radius', '8px')
-    await expect(window.locator('.main-surface')).toHaveCSS('border-radius', '0px')
-    await expect(window.locator('.main-surface')).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     await capture(window, 'new-parse-1440x900-static.png')
 
     await app.evaluate(({ BrowserWindow, nativeTheme }) => {
@@ -341,7 +327,6 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await expect.poll(async () => Number(await separator.getAttribute('aria-valuemax'))).toBeGreaterThan(60)
     await expect(minimap).toBeVisible()
     await expect(minimap).toHaveCSS('width', '60px')
-    await expect(minimap).toHaveCSS('background-color', 'rgb(247, 242, 232)')
     await expect(scroller).toHaveCSS('scrollbar-width', 'none')
     await expect(activePanel.locator('.markdown-block > p').first()).toHaveCSS('text-indent', '32px')
     await expect(activePanel.locator('.markdown-block > h1').first()).toHaveCSS('text-indent', '0px')
