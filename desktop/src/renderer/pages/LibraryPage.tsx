@@ -13,7 +13,10 @@ import ArchiveProgressRing from '../paperArchive/ArchiveProgressRing'
 import { useArchivePreparation } from '../paperArchive/useArchivePreparation'
 import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from '@shared/paperProfile'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from '../paperArchive/archiveShelves'
-import { statusLabels } from '../documentStatus'
+import { workflowSummaryText } from '../documentStatus'
+import WorkflowSteps from '../components/WorkflowSteps'
+import { takeLibraryFocus } from '../paperArchive/libraryFocus'
+import type { ArchivePreparationStep } from '../paperArchive/useArchivePreparation'
 import '../paperArchive/paperArchive.css'
 
 // Survives page switches so returning from the reader lands on the same paper.
@@ -155,7 +158,7 @@ export default function LibraryPage(props: {
   React.useEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
-    const restoreId = !restoredRef.current ? lastPaperId : null
+    const restoreId = !restoredRef.current && shelves.length ? takeLibraryFocus() ?? lastPaperId : null
     scene.setShelves(shelves)
     if (!restoredRef.current && shelves.length) {
       restoredRef.current = true
@@ -291,7 +294,7 @@ export default function LibraryPage(props: {
                 {matches.slice(0, SEARCH_LIMIT).map(({ paper: result, category }) => (
                   <li key={result.id}><button type="button" data-document-id={result.id} onClick={() => chooseResult(result)}>
                     <span>{result.displayName}</span>
-                    <small>{category} · {statusLabels[result.workflow.status]}{unsupported ? ' · 打开阅读' : ''}</small>
+                    <small>{category} · {workflowSummaryText(result.workflow)}{unsupported ? ' · 打开阅读' : ''}</small>
                   </button></li>
                 ))}
               </ul>
@@ -325,7 +328,7 @@ export default function LibraryPage(props: {
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
           <h2 key={paper.id} className="paper-archive-title"><span><ArchiveText text={displayTitle} /></span></h2>
           <BrowseTranslatedTitle paper={paper} />
-          <div className="paper-archive-rule"><i /><ArchiveProgressRing key={paper.id} documentId={paper.id} progress={preparation.progress} ready={preparation.ready} /></div>
+          <div className="paper-archive-rule"><i /><ArchiveStatusLabel key={paper.id} paper={paper} waiting={preparation.waiting} /><ArchiveProgressRing key={paper.id} documentId={paper.id} progress={preparation.progress} ready={preparation.ready} /></div>
           <dl className="paper-archive-meta">
             <BrowsePaperNotes key={paper.id} paper={paper} source={props.insights} />
           </dl>
@@ -505,4 +508,15 @@ function readPalette(element: HTMLElement): ArchivePalette {
       empty: token('--archive-index-empty', '#e4d6c5')
     }
   }
+}
+
+/** Words for what the progress ring is waiting on; empty once the paper is ready. */
+function ArchiveStatusLabel(props: { paper: ArchivePaper; waiting: ArchivePreparationStep }): React.JSX.Element | null {
+  if (props.waiting === null) return null
+  return (
+    <span className="paper-archive-status" data-waiting={props.waiting}>
+      {props.waiting === 'workflow' ? <WorkflowSteps workflow={props.paper.workflow} />
+        : <span role="status">{props.waiting === 'analysis' ? '正在生成档案卡' : props.waiting === 'analysis-failed' ? '档案卡未生成' : '正在准备图片与封面'}</span>}
+    </span>
+  )
 }

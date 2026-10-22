@@ -29,9 +29,9 @@ it('waits for figures and saved analysis, and never treats a workflow 100% as ar
   expect(view.result.current.progress).toBeLessThan(100)
   act(() => f.emit({ status: 'generating' }))
   await act(async () => finish({ available: 1, failed: 0 }))
-  expect(view.result.current.ready).toBe(false)
+  expect(view.result.current).toMatchObject({ ready: false, waiting: 'analysis' })
   act(() => f.emit({ status: 'ready', stale: false } as PaperInsightState))
-  await waitFor(() => expect(view.result.current).toEqual({ ready: true, progress: 100 }))
+  await waitFor(() => expect(view.result.current).toEqual({ ready: true, progress: 100, waiting: null }))
 })
 it('keeps failed figures and partial translations locked', async () => {
   const f = fixture()

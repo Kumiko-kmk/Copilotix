@@ -62,6 +62,15 @@ describe("ipcContracts", () => {
       expect(appSettingsSchema.parse(settings)).toEqual(settings)
     })
 
+    it('pairs per-file import options with paths and keeps requests without them valid', () => {
+      expect(importDocumentsIpcRequestSchema.parse({ options: {}, paths: ['C:/papers/a.pdf'] })).toEqual({ options: {}, paths: ['C:/papers/a.pdf'] })
+      expect(importDocumentsIpcRequestSchema.parse({ options: {}, paths: ['C:/papers/a.pdf'], files: [{ skipFirstPage: true, metadataTitle: 'A Paper Title' }] }).files)
+        .toEqual([{ skipFirstPage: true, metadataTitle: 'A Paper Title' }])
+      expect(() => importDocumentsIpcRequestSchema.parse({ options: {}, paths: ['C:/papers/a.pdf', 'C:/papers/b.pdf'], files: [{}] })).toThrow()
+      expect(() => importDocumentsIpcRequestSchema.parse({ options: {}, files: [{}] })).toThrow()
+      expect(() => importDocumentsIpcRequestSchema.parse({ options: {}, paths: ['C:/papers/a.pdf'], files: [{ pages: 2 }] })).toThrow()
+    })
+
     it('rejects NUL characters in paths and path-derived names', () => {
       expect(() => importDocumentsIpcRequestSchema.parse({ options: {}, paths: ['C:/papers/bad\0.pdf'] })).toThrow()
       expect(() => settingsUpdateSchema.parse({

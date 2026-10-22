@@ -271,7 +271,9 @@ export class V2TaskRepositoryCompat {
 
   private projectSummary(task: CopilotixTask, job: CompatJobRow | undefined): DocumentSummary {
     const summary = projectDocumentSummary(task)
-    if (!job || (task.status !== 'translating' && task.status !== 'partial' && task.status !== 'completed')) return summary
+    // A failed translation keeps its counts, so the failure can be shown at the translation step.
+    const failedTranslation = task.status === 'failed' && (job?.status === 'failed' || job?.status === 'cancelled')
+    if (!job || (task.status !== 'translating' && task.status !== 'partial' && task.status !== 'completed' && !failedTranslation)) return summary
     const checkpoint = parseObject(job.checkpoint_json)
     if (task.status === 'translating' && (job.status === 'queued' || job.status === 'retry-wait')) summary.workflow.status = 'queued'
     const { totalBlocks, completedBlocks, failedBlocks } = checkpoint
@@ -1198,7 +1200,11 @@ export function projectTaskStatus(job: CompatJobRow): TaskStatus {
   }
   if (job.status === 'failed' || job.status === 'cancelled') return 'failed'
   if (job.status === 'succeeded') return 'completed'
-  return parseObject(job.checkpoint_json).phase === 'uploading' ? 'uploading' : 'parsing'
+  // The parse runner reports its step in `stage` (uploading → polling → downloading); `phase`
+  // is only the state the document was inserted with and stays "uploading" for the whole job.
+  const checkpoint = parseObject(job.checkpoint_json)
+  const stage = typeof checkpoint.stage === 'string' ? checkpoint.stage : checkpoint.phase
+  return stage === 'uploading' ? 'uploading' : 'parsing'
 }
 
 function checkpointForTask(task: CopilotixTask): Record<string, unknown> {
@@ -1206,7 +1212,9 @@ function checkpointForTask(task: CopilotixTask): Record<string, unknown> {
     phase: task.status,
     remoteBatchId: task.remoteBatchId,
     remoteDataId: task.remoteDataId,
-    remoteResultUrl: task.remoteResultUrl
+    remoteResultUrl: task.remoteResultUrl,
+    // Lets the parse job replace a title taken from PDF metadata with the parsed one.
+    ...(task.titleSource === 'pdf-metadata' && task.title ? { titleSource: task.titleSource, provisionalTitle: task.title } : {})
   }
 }
 

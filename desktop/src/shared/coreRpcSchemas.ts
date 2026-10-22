@@ -329,7 +329,8 @@ export const coreAnnotationsMutatePayloadSchema = z.object({ request: mutateRead
 export const coreAnnotationsMutateResultSchema = readerAnnotationSnapshotSchema
 export const coreHashFilePayloadSchema = z.object({ path: corePathSchema }).strict()
 export const coreHashFileResultSchema = z.object({ sha256: coreHashSchema }).strict()
-export const coreImportPdfPayloadSchema = z.object({ sourcePath: corePathSchema, documentId: coreIdSchema }).strict()
+// skipFirstPage (optional, 1.2.0): drop page 1 while publishing original.pdf; absent keeps the bytes unchanged.
+export const coreImportPdfPayloadSchema = z.object({ sourcePath: corePathSchema, documentId: coreIdSchema, skipFirstPage: z.boolean().optional() }).strict()
 export const coreImportPdfResultSchema = z.object({ sha256: coreHashSchema, size: z.number().int().min(0).max(200 * 1024 * 1024) }).strict()
 export const coreNormalizeParserPayloadSchema = z.object({ task: copilotixTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()
 export const coreNormalizeParserResultSchema = z.object({

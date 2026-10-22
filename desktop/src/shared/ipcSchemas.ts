@@ -151,6 +151,7 @@ export const copilotixTaskSchema: z.ZodType<CopilotixTask> = z.object({
   id: boundedId,
   originalName: safeName,
   title: z.string().max(32_768).refine(noNul, '标题不能包含 NUL 字符').nullable(),
+  titleSource: z.literal('pdf-metadata').optional(),
   name: safeName,
   sourcePath: boundedPath,
   sourceHash: z.string().min(1).max(512),
@@ -338,10 +339,19 @@ export const MAX_IMPORT_PATHS = 2_000
 
 // This request is used only between preload and main. `paths` is never part
 // of the renderer-visible API or any response DTO.
+// `files` (optional, added in 1.2.0) carries the confirmation's per-file choices in the order
+// of `paths`. Requests without it import every file unchanged, as before.
+export const importFileOptionsSchema = z.object({
+  skipFirstPage: z.boolean().optional(),
+  metadataTitle: z.string().max(4_096).refine(noNul, '标题不能包含 NUL 字符').optional()
+}).strict()
 export const importDocumentsIpcRequestSchema = z.object({
   options: importDocumentsRequestSchema,
-  paths: z.array(boundedPath).max(MAX_IMPORT_PATHS).optional()
-}).strict()
+  paths: z.array(boundedPath).max(MAX_IMPORT_PATHS).optional(),
+  files: z.array(importFileOptionsSchema).max(MAX_IMPORT_PATHS).optional()
+}).strict().refine((request) => request.files === undefined || request.files.length === request.paths?.length, {
+  message: '导入选项必须与文件一一对应', path: ['files']
+})
 
 /** One unreadable or oversized PDF no longer aborts the rest of a selection. */
 export const importDocumentsResultSchema = z.object({

@@ -220,12 +220,48 @@ button, input, select { font: inherit; }
   .new-parse-page *, .new-parse-page *::before, .new-parse-page *::after { animation: none !important; transition: none !important; }
 }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
-.import-options { display: flex; align-items: center; gap: 28px; margin: 0 0 14px; }
-.selected-files { max-height: 280px; margin-bottom: 18px; overflow: auto; }
-.selected-file { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--border); }
-.selected-file > .anticon { color: #ff6262; font-size: 20px; }
+.selected-files { max-height: 300px; margin-bottom: 18px; overflow: auto; }
+.selected-file { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; gap: 6px 10px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--border); }
+.selected-file > .anticon { align-self: start; margin-top: 2px; color: #ff6262; font-size: 20px; }
+.selected-file-main { display: grid; min-width: 0; gap: 3px; }
 .selected-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Two lines, so a long paper title is readable without a hover preview. */
+.selected-file-title { display: -webkit-box; overflow: hidden; color: var(--text); font-size: 13px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.selected-file-title > span { margin-right: 8px; color: var(--muted); font-size: 12px; }
 .selected-file small { color: var(--muted); }
+.selected-file-facts { align-self: start; margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.selected-file-cover { display: flex; grid-column: 2 / -1; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4px 14px; color: var(--muted); font-size: 13px; }
+.selected-file-cover.detected { padding: 8px 10px; border-radius: 4px; color: var(--text); background: color-mix(in srgb, #faad14 12%, var(--sheet)); }
+.import-plan { display: grid; gap: 12px; margin: 0; }
+.import-plan > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.import-plan dt { color: var(--muted); font-size: 13px; }
+.import-plan dd { display: flex; min-width: 0; margin: 0; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.import-plan-note { color: var(--muted); font-size: 13px; }
+.import-title-mode { display: grid; gap: 8px; }
+.import-title-mode .ant-radio-wrapper > span:last-child { display: grid; gap: 1px; }
+.import-title-mode small { color: var(--muted); font-size: 12px; }
+
+/* Home: papers being processed after an import. */
+.import-progress { margin-top: 14px; padding: 12px 16px 6px; border: 1px solid var(--rule); border-radius: 4px; background: color-mix(in srgb, var(--sheet) 92%, transparent); animation: home-rise .5s var(--ease-out) both; }
+.import-progress-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.import-progress-header small { color: var(--muted); font-size: 12px; }
+.import-progress ul { margin: 0; padding: 0; list-style: none; }
+.import-progress-row { display: flex; align-items: center; gap: 16px; padding: 10px 0; border-top: 1px solid var(--rule); }
+.import-progress-row:first-child { border-top: 0; }
+.import-progress-text { display: grid; min-width: 0; flex: 1; gap: 4px; }
+.import-progress-text strong { overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.import-progress-text .workflow-steps { font-size: 13px; }
+.import-progress-error { overflow: hidden; color: #d4380d; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.import-progress-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+.import-progress-action, .import-progress-dismiss { display: inline-flex; height: 30px; padding: 0 10px; align-items: center; gap: 6px; border: 0; border-radius: 3px; color: var(--ink); background: transparent; cursor: pointer; font-size: 13px; transition: background-color .18s ease, color .18s ease; }
+.import-progress-action:hover:not(:disabled), .import-progress-dismiss:hover { color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 80%, transparent); }
+.import-progress-action:disabled { color: var(--muted); cursor: default; opacity: .6; }
+.import-progress-dismiss { width: 30px; padding: 0; justify-content: center; color: var(--muted); }
+.import-progress :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .import-progress-row { align-items: stretch; flex-direction: column; gap: 8px; }
+  .import-progress-actions { justify-content: flex-end; }
+}
 
 .settings-page, .tutorial-page { animation: page-enter .45s var(--ease-out) both; }
 @keyframes page-enter { from { opacity: 0; } }
@@ -788,3 +824,13 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 /* Figures without a PDF crop keep side-by-side panels at their PDF positions (ReaderFigureMosaic.tsx). */
 .reader-figure-mosaic { position: relative; max-width: 100%; margin: 8px auto; }
 .reader-figure-mosaic img { position: absolute; display: block; max-width: none; margin: 0; object-fit: contain; }
+
+/* Processing steps: 上传 → 解析 → 翻译 n/总数 */
+.workflow-steps { display: inline-flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 2px 6px; font-variant-numeric: tabular-nums; }
+.workflow-step { color: var(--muted); white-space: nowrap; }
+.workflow-step[data-state="waiting"] { opacity: .55; }
+.workflow-step[data-state="active"] { color: var(--primary); font-weight: 650; }
+.workflow-step[data-state="failed"] { color: #d4380d; font-weight: 650; }
+.workflow-step[data-state="partial"] { color: #ad6800; font-weight: 650; }
+.workflow-step-check { margin-right: 2px; color: #25976d; }
+.workflow-step-arrow { color: var(--muted); opacity: .6; }

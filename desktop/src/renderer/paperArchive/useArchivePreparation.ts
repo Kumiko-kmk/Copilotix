@@ -10,8 +10,11 @@ import type { ArchivePaper } from './archiveShelves'
  */
 const PREPARE_DWELL_MS = 400
 
+/** What the archive still waits for: the paper's processing, its analysis, or figures and cover. */
+export type ArchivePreparationStep = 'workflow' | 'analysis' | 'analysis-failed' | 'figures' | null
+
 /** Readiness includes the saved analysis and complete figure files, not just translation. */
-export function useArchivePreparation(paper: ArchivePaper | null, source?: PaperInsightSource): { ready: boolean; progress: number } {
+export function useArchivePreparation(paper: ArchivePaper | null, source?: PaperInsightSource): { ready: boolean; progress: number; waiting: ArchivePreparationStep } {
   const id = paper?.id
   const status = paper?.workflow.status
   const [restingId, setRestingId] = React.useState<string | null>(null)
@@ -79,5 +82,8 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
   const ready = Boolean(id && workflowReady && analysisReady && imagesReady && preparedCover === coverKey)
   const progress = ready ? 100 : !workflowReady ? Math.min(94, Math.max(0, (paper?.workflow.progress ?? 0) * 0.94))
     : !analysisReady ? 96 : 98 + Math.min(1, figures?.key === figureKey ? figures.ratio : 0)
-  return { ready, progress }
+  const analysisFailed = state?.status === 'failed' || state?.status === 'unavailable'
+  const waiting: ArchivePreparationStep = ready ? null : !workflowReady ? 'workflow'
+    : !analysisReady ? (analysisFailed ? 'analysis-failed' : 'analysis') : 'figures'
+  return { ready, progress, waiting }
 }

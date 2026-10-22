@@ -7,6 +7,7 @@ import { paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentReq
 import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema } from '@shared/readerNotes'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
+import type { ImportFileOptions } from '@shared/pdfImport'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { z } from 'zod'
 import {
@@ -129,15 +130,20 @@ const api: CopilotixDesktopApi = {
   getStorageInfo: () => invokeValidated('storage:info', noRequestSchema, storageInfoSchema, undefined),
   getUsageAnalytics: () => invokeValidated('analytics:usage', noRequestSchema, usageAnalyticsSchema, undefined),
   openStorageLocation: () => invokeValidated('storage:open-location', noRequestSchema, voidResponseSchema, undefined),
-  importDocuments: (request: ImportDocumentsRequest, droppedFiles?: File[]) => {
+  importDocuments: (request: ImportDocumentsRequest, droppedFiles?: File[], fileOptions?: ImportFileOptions[]) => {
     const dropped = droppedFiles
-      ?.map((file) => webUtils.getPathForFile(file))
-      .filter((path) => path.length > 0)
+      ?.map((file, index) => ({ path: webUtils.getPathForFile(file), options: fileOptions?.[index] ?? {} }))
+      .filter(({ path }) => path.length > 0)
     // Main ignores non-PDF paths anyway; dropping them here keeps a mixed
     // folder drop inside the request limit. Without dropped files Main opens
-    // the native picker instead.
+    // the native picker instead. Per-file options stay paired with their path.
+    const pdfs = dropped?.filter(({ path }) => /\.pdf$/iu.test(path))
     const internalRequest = dropped && dropped.length > 0
-      ? { options: request, paths: dropped.filter((path) => /\.pdf$/iu.test(path)) }
+      ? {
+          options: request,
+          paths: pdfs!.map(({ path }) => path),
+          ...(fileOptions ? { files: pdfs!.map(({ options }) => options) } : {})
+        }
       : { options: request }
     return invokeValidated(
       'documents:import',

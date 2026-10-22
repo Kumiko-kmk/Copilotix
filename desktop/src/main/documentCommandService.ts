@@ -5,6 +5,7 @@ import type { Job, JobRepositoryPort } from '@core/jobs'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { CopilotixTask } from '@shared/types'
 import type { ImportDocumentsRequest } from '@shared/ipcSchemas'
+import { trustedPdfMetadataTitle, type ImportFileOptions } from '@shared/pdfImport'
 import type { SettingsService } from './settingsService'
 import type { TaskLogger } from './logger'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
@@ -53,8 +54,10 @@ export class DocumentCommandService {
    * Production import path: utility reads each source once, hashes it, and
    * publishes original.pdf atomically. A file that cannot be imported is
    * reported in `failed` while the rest of the selection continues.
+   * `fileOptions` is aligned with `paths`: it can drop page 1 and offer the
+   * PDF's metadata title, which is kept only until the parsed title arrives.
    */
-  async importPaths(paths: readonly string[], options: ImportDocumentsRequest): Promise<ImportPathsResult> {
+  async importPaths(paths: readonly string[], options: ImportDocumentsRequest, fileOptions: readonly ImportFileOptions[] = []): Promise<ImportPathsResult> {
     if (!this.compute.importPdf) throw new Error('核心导入服务尚未初始化')
     const settings = await this.settingsService.get()
     assertParserCredentialUsable(settings)
@@ -67,15 +70,16 @@ export class DocumentCommandService {
     const seenHashes = new Set<string>()
     const unpersistedOutputDirs = new Set<string>()
     try {
-      for (const sourcePath of paths) {
+      for (const [index, sourcePath] of paths.entries()) {
         if (extname(sourcePath).toLowerCase() !== '.pdf') continue
+        const fileOption = fileOptions[index] ?? {}
         const id = randomUUID()
         const outputDir = this.pathPolicy.resolveChild(documentsRoot, id)
         let imported: { sha256: string }
         try {
           await mkdir(outputDir, { recursive: true })
           unpersistedOutputDirs.add(outputDir)
-          imported = await this.compute.importPdf(sourcePath, id)
+          imported = await this.compute.importPdf(sourcePath, id, fileOption.skipFirstPage ? { skipFirstPage: true } : {})
         } catch (error) {
           await rm(outputDir, { recursive: true, force: true }).catch(() => undefined)
           unpersistedOutputDirs.delete(outputDir)
@@ -91,11 +95,13 @@ export class DocumentCommandService {
         seenHashes.add(imported.sha256)
         const now = new Date().toISOString()
         const name = basename(sourcePath)
+        const metadataTitle = options.useOriginalFilename ? null : trustedPdfMetadataTitle(fileOption.metadataTitle, name)
         created.push({
           id,
           originalName: name,
-          title: options.useOriginalFilename ? originalFilenameTitle(name) : null,
-          name,
+          title: options.useOriginalFilename ? originalFilenameTitle(name) : metadataTitle,
+          ...(metadataTitle ? { titleSource: 'pdf-metadata' as const } : {}),
+          name: metadataTitle ? `${metadataTitle}.pdf` : name,
           sourcePath: join(outputDir, 'original.pdf'),
           sourceHash: imported.sha256,
           outputDir,
@@ -173,6 +179,7 @@ function importFailureMessage(error: unknown): string {
   if (code === 'CORE_LIMIT_EXCEEDED') return '超过 200MB 或 600 页的解析限制'
   if (code === 'CORE_NOT_FOUND') return '文件不存在或无法读取'
   if (code === 'CORE_PROTOCOL_ERROR') return '不是可导入的 PDF 文件'
+  if (code === 'CORE_PDF_REWRITE_FAILED') return '无法跳过第 1 页（PDF 已加密、超过 64MB 或结构无法改写），请取消“跳过第 1 页”后重试'
   return '导入失败，请稍后重试'
 }
 

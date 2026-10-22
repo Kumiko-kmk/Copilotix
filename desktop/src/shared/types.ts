@@ -3,6 +3,7 @@ import type { PaperChatLoadRequest, PaperChatPage, PaperChatSession } from './pa
 import type { ReaderNote, ReaderNotes } from './readerNotes'
 import type { RagStreamEvent } from './ragSchemas'
 import type { LibraryRequest, LibraryResult } from './librarySchemas'
+import type { ImportFileOptions } from './pdfImport'
 import type {
   CacheDocumentFigureRequest,
   CacheDocumentFigureResult,
@@ -98,6 +99,11 @@ export interface CopilotixTask {
   originalName: string
   /** Sanitized English paper title without a file extension, when available. */
   title: string | null
+  /**
+   * Set only when a task is created with a title read from the PDF's own metadata. The parse job
+   * keeps it so the parsed title can replace that provisional title; reads never return it.
+   */
+  titleSource?: 'pdf-metadata'
   name: string
   sourcePath: string
   sourceHash: string
@@ -267,7 +273,7 @@ export interface CopilotixDesktopApi {
   getStorageInfo(): Promise<StorageInfo>
   getUsageAnalytics(): Promise<UsageAnalytics>
   openStorageLocation(): Promise<void>
-  importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[]): Promise<ImportDocumentsResult>
+  importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[], fileOptions?: ImportFileOptions[]): Promise<ImportDocumentsResult>
   importTutorialPaper(createDuplicate?: boolean): Promise<DocumentSummary | null>
   listDocuments(): Promise<DocumentSummary[]>
   retryDocument(documentId: string): Promise<void>

@@ -383,3 +383,11 @@
 @media (prefers-reduced-motion: reduce) {
   .paper-archive-detail-layer { transition: none; }
 }
+/* What the ring waits for, written on the rule to its left. */
+.paper-archive-status {
+  position: absolute; right: 34px; top: 50%; max-width: calc(100% - 44px); padding: 0 8px;
+  overflow: hidden; transform: translateY(-50%); background: var(--archive-bg);
+  color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: .04em; white-space: nowrap; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums; pointer-events: none;
+}
+.paper-archive-status .workflow-steps { flex-wrap: nowrap; }

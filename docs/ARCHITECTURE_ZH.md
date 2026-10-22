@@ -234,6 +234,13 @@ Scheduler 从 Utility-owned JobRepository claim 作业，以 lease owner/expiry 
 4. Utility normalize 只发布受 PathPolicy 保护的 `full.md`、`layout.json`、可选 content list、图片和 `block_list.json`；产物发布完成且 hash 可验证后才写 `artifacts` revision。
 5. 同作业恢复必须能识别已发布、hash 相同的文件，不重复破坏已有产物；解析成功后按依赖关系创建 translate job。
 
+**导入确认与首页封面（1.2.0）**：确认框由 Renderer 以共用 pdf.js worker 在本地读取页数、PDF 元数据标题与第 1 页文字（≤120MB），`shared/pdfImport.ts` 的 `trustedPdfMetadataTitle`／`detectRepositoryCoverPage` 判定标题可信度与机构库封面（City Research Online、White Rose、HAL、ResearchGate、JSTOR、Taylor & Francis 等，或两条以上通用版权／引用信号）；只提示，跳过与否由用户勾选。
+
+- IPC `documents:import` 内部请求新增可选 `files: { skipFirstPage?, metadataTitle? }[]`，必须与 `paths` 等长；preload 按路径配对过滤非 PDF。缺省即旧行为，旧 renderer 无需改动。Main 用同一函数重新校验标题，不信任 renderer 的判断。
+- Core RPC `compute:import-pdf` 新增可选 `skipFirstPage`。Utility 用 pdf-lib（打包进 bundle 的 devDependency）在内存中删除第 1 页，以 `wx` 写 partial、fsync 后 rename 为 `original.pdf`；`sourceHash` 与 artifact 记录的是裁剪后的字节，用户原文件不变。上限 `MAX_PDF_CROP_BYTES`（64MB）；加密、单页或无法改写时返回 `CORE_PDF_REWRITE_FAILED` 且不留文件。缺省即原流式复制。
+- 元数据标题写入 `display_title` 作为暂定标题；`CopilotixTask.titleSource='pdf-metadata'` 只在插入时把 `titleSource`／`provisionalTitle` 写进 parse job checkpoint，读取时不返回。解析完成时若标题仍等于暂定值即改用解析标题；用户选「原文件名」的标题不覆盖。无 schema／migration；旧 checkpoint 没有这两个键，行为不变。
+- 状态投影：parse job 的 `uploading`／`parsing` 改按 runner 写入的 `checkpoint.stage`（无 stage 时回退插入时的 `phase`），修正整个解析期间都显示「上传中」；失败的翻译保留 `translationProgress`，界面据此把失败落在翻译步骤。首页导入进度卡、文库浏览面板与阅读器都用 `renderer/documentStatus.ts` 显示「上传 → 解析 → 翻译 n/总数」。回归：`utilityOperations`、`v2TaskRepositoryCompat`、`parsePipelineConcurrency`、`ipcContracts`、`titleNaming` 测试。
+
 ### 7.3 Translate
 
 Utility-owned `MarkdownTranslationPlanManager` 读取受限的计划 descriptor，按 AST/表格逻辑单元列出工作，Main 只负责 provider 顺序、凭证、网络调用和小型 response JSON。翻译计划通过 jobId 绑定 block，cache 命中、apply/fail、checkpoint 和 finalize 都验证 document/job/unit 关系。

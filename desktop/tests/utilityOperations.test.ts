@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { PDFDocument } from 'pdf-lib'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { CopilotixTask } from '@shared/types'
 import { DEFAULT_SETTINGS } from '../src/shared/constants'
@@ -100,6 +101,39 @@ describe('utility persistence lifecycle', () => {
       expect(result).toEqual({ sha256: expectedHash, size: bytes.length })
       await expect(readFile(join(documentRoot, 'original.pdf'))).resolves.toEqual(bytes)
       await expect(readdir(documentRoot)).resolves.toEqual(['original.pdf'])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('drops page 1 when asked, records the stored bytes and leaves the source untouched', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-import-crop-'))
+    try {
+      const sourcePath = join(root, 'paper.pdf')
+      const bytes = createPdf(3)
+      await writeFile(sourcePath, bytes)
+      const outputRoot = join(root, 'output')
+      const documentId = '11111111-1111-4111-8111-111111111111'
+      const persistence = createUtilityOperationHandlers({ outputRoot })
+      const result = await persistence.handlers['compute:import-pdf']!({
+        payload: { sourcePath, documentId, skipFirstPage: true }
+      } as never, new AbortController().signal) as { sha256: string; size: number }
+      const documentRoot = join(outputRoot, 'documents-v2', documentId)
+      const stored = await readFile(join(documentRoot, 'original.pdf'))
+
+      expect((await PDFDocument.load(stored)).getPageCount()).toBe(2)
+      expect(result).toEqual({ sha256: createHash('sha256').update(stored).digest('hex'), size: stored.length })
+      await expect(readFile(sourcePath)).resolves.toEqual(bytes)
+      await expect(readdir(documentRoot)).resolves.toEqual(['original.pdf'])
+
+      // A single page has nothing to drop: the import fails without publishing anything.
+      const single = join(root, 'single.pdf')
+      await writeFile(single, createPdf(1))
+      const secondId = '22222222-2222-4222-8222-222222222222'
+      await expect(persistence.handlers['compute:import-pdf']!({
+        payload: { sourcePath: single, documentId: secondId, skipFirstPage: true }
+      } as never, new AbortController().signal)).rejects.toMatchObject({ code: 'CORE_PDF_REWRITE_FAILED' })
+      expect(await readdir(join(outputRoot, 'documents-v2', secondId)).catch(() => [])).toEqual([])
     } finally {
       await rm(root, { recursive: true, force: true })
     }

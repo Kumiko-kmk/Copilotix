@@ -22,7 +22,7 @@ const entries = new Map<string, CacheEntry>()
  * passed in is never destroyed with a document (unlike a shared GlobalWorkerOptions.workerPort).
  */
 let sharedWorker: pdfjs.PDFWorker | null = null
-function pdfWorker(): pdfjs.PDFWorker {
+export function pdfWorker(): pdfjs.PDFWorker {
   if (!sharedWorker || sharedWorker.destroyed) sharedWorker = new pdfjs.PDFWorker()
   return sharedWorker
 }

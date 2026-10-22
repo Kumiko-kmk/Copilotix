@@ -66,6 +66,8 @@ export interface ReaderViewsInput {
   translatedBlocks: ReaderBlock[]
   translatedReady: boolean
   taskStatus: DocumentWorkflowStatus
+  /** Translated blocks as "n/total" while translation is counted. */
+  translationCount?: string | null
   taskError?: string | null
   onRetry?(): Promise<void>
   assetBaseUrl: string
@@ -141,12 +143,13 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   }, [])
 
   return React.useMemo<ReaderViewSpecs>(() => {
+    const originalReady = props.originalBlocks.some(block => block.role === 'content' && block.markdown.trim())
     const specs: ReaderViewSpecs = {
       original: {
         label: '原文',
         icon: <FileTextOutlined />,
         panelClassName: 'reader-tab-panel',
-        render: ({ active }) => !props.originalBlocks.some(block => block.role === 'content' && block.markdown.trim()) ? <ReaderDocumentState view="original" status={props.taskStatus} error={props.taskError} onRetry={props.onRetry} /> : active ? <MarkdownPane
+        render: ({ active }) => !originalReady ? <ReaderDocumentState view="original" status={props.taskStatus} error={props.taskError} onRetry={props.onRetry} /> : active ? <MarkdownPane
           active
           blocks={props.originalBlocks}
           counterpartBlocks={props.translatedReady ? props.translatedBlocks : undefined}
@@ -177,7 +180,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
         icon: <TranslationOutlined />,
         panelClassName: 'reader-tab-panel',
         render: ({ active, actionsHost }) => <>
-          {actionsHost ? createPortal(<Tag color={translationColor(props.taskStatus)}>{translationLabel(props.taskStatus)}</Tag>, actionsHost) : null}
+          {actionsHost ? createPortal(<Tag color={translationColor(props.taskStatus)}>{translationLabel(props.taskStatus, originalReady, props.translationCount ?? null)}</Tag>, actionsHost) : null}
           {props.translatedReady ? (active ? <MarkdownPane
             active
             blocks={props.translatedBlocks}
@@ -256,7 +259,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   }, [
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
     props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.onOpenFigurePdf, props.figureChat, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
-    props.taskStatus, props.taskError, props.onRetry, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
+    props.taskStatus, props.translationCount, props.taskError, props.onRetry, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
     rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups
   ])
@@ -285,9 +288,16 @@ function ReaderDocumentState(props: {
     : props.error
   return <div className="reader-document-state" role={failed ? 'alert' : 'status'}>
     <strong>{title}</strong>
-    <p>{error || (pending ? '处理完成后内容会自动显示，你可以先查看 PDF。' : '你可以先查看 PDF，或重试文档处理。')}</p>
+    <p>{error || (pending ? `${pendingStep(props.status)}，完成后内容会自动显示，你可以先查看 PDF。` : '你可以先查看 PDF，或重试文档处理。')}</p>
     {canRetry(props.status) && props.onRetry ? <Button loading={retrying} onClick={() => void retry()}>重试文档处理</Button> : null}
   </div>
+}
+
+function pendingStep(status: DocumentWorkflowStatus): string {
+  if (status === 'uploading') return '正在上传 PDF'
+  if (status === 'parsing') return '正在解析'
+  if (status === 'queued') return '解析已完成，正在载入'
+  return '正在翻译'
 }
 
 function ChatTabLabel(props: { controller: PaperChatController }): React.JSX.Element {
@@ -301,13 +311,15 @@ function ChatTabLabel(props: { controller: PaperChatController }): React.JSX.Ele
   )
 }
 
-function translationLabel(status: DocumentWorkflowStatus): string {
+function translationLabel(status: DocumentWorkflowStatus, originalReady: boolean, count: string | null): string {
   if (status === 'completed') return '翻译完成'
   if (status === 'partial') return '部分翻译完成，可重试失败区块'
   if (status === 'failed') return '任务失败'
-  if (status === 'translating') return '正在翻译'
-  if (status === 'queued') return '等待翻译，当前可阅读原文'
-  return '等待解析完成'
+  if (status === 'translating') return count ? `正在翻译 ${count}` : '正在翻译'
+  // Parsing has finished, but the original appears only once the reader has loaded it.
+  if (status === 'queued') return originalReady ? '等待翻译，当前可阅读原文' : '解析完成，正在载入原文'
+  if (status === 'uploading') return '正在上传 PDF，解析后可阅读原文'
+  return '正在解析，完成后可阅读原文'
 }
 
 function translationColor(status: DocumentWorkflowStatus): string {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockMapping } from '@shared/types'
 import { displayPaperTitle, extractPaperTitle, MAX_TITLE_STEM_LENGTH, sanitizeTitleStem, titleFileName } from '@shared/titleNaming'
+import { detectRepositoryCoverPage, trustedPdfMetadataTitle } from '@shared/pdfImport'
 
 function mapping(
   sourceText: string,
@@ -64,5 +65,27 @@ describe('paper title naming', () => {
     const first = sanitizeTitleStem('Attention Is All You Need')
     expect(sanitizeTitleStem(first ?? '')).toBe(first)
     expect(titleFileName(first ?? '')).toBe('Attention Is All You Need.pdf')
+  })
+})
+
+describe('PDF import preview', () => {
+  it('uses a metadata title only when it reads like a paper title', () => {
+    expect(trustedPdfMetadataTitle('Machine learning for computational fracture and damage mechanics— Status and perspectives', 'x.pdf'))
+      .toBe('Machine learning for computational fracture and damage mechanics— Status and perspectives')
+    expect(trustedPdfMetadataTitle('Mask R-CNN')).toBe('Mask R-CNN')
+    expect(trustedPdfMetadataTitle('深度残差网络在图像识别中的应用')).toBe('深度残差网络在图像识别中的应用')
+    for (const rejected of [
+      'Microsoft Word - manuscript_v3.docx', 'paper_final_v2.pdf', 'Untitled', 'Accepted Manuscript', 'main',
+      'JMPS-D-24-01234', 'doi:10.1016/j.jmps.2024.105555', 'Paper Title (use style: paper title)', 'Layout 1', '', null
+    ]) expect(trustedPdfMetadataTitle(rejected)).toBeNull()
+    expect(trustedPdfMetadataTitle('1-s2.0-S0013794425009798-main', '1-s2.0-S0013794425009798-main.pdf')).toBeNull()
+  })
+
+  it('flags repository cover sheets on page 1 of multi-page PDFs only', () => {
+    const city = 'Copyright and Reuse: ... City Research Online: http://openaccess.city.ac.uk/ Citation: Ani, A. (2026). Permanent repository link: https://openaccess.city.ac.uk/id/eprint/36408/'
+    expect(detectRepositoryCoverPage(city, 36)).toEqual({ source: 'City Research Online' })
+    expect(detectRepositoryCoverPage(city, 1)).toBeNull()
+    expect(detectRepositoryCoverPage('Citation for published version (APA): Smith. General rights Copyright ... Take down policy', 12)).toEqual({ source: null })
+    expect(detectRepositoryCoverPage('Abstract. We study fracture. Please cite this article as the published version.', 12)).toBeNull()
   })
 })
