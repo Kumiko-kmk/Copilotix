@@ -505,7 +505,10 @@ function registerIpc(
       if (result.canceled) return { created: [], failed: [] }
       paths = result.filePaths
     }
-    const imported = await tasks.importPaths(paths.filter((path) => path.toLowerCase().endsWith('.pdf')), request.options)
+    const selected = paths
+      .map((path, index) => ({ path, file: request.files?.[index] ?? {} }))
+      .filter(({ path }) => path.toLowerCase().endsWith('.pdf'))
+    const imported = await tasks.importPaths(selected.map(({ path }) => path), request.options, selected.map(({ file }) => file))
     return { created: imported.created.map(projectDocumentSummary), failed: imported.failed }
   }, validationOptions)
   registerValidatedHandler('tutorial:import-paper', tutorialImportRequestSchema, documentSummarySchema.nullable(), async (_event, request) => {

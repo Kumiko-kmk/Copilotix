@@ -38,9 +38,9 @@ const FLICKER_SECONDS = 0.08
 const FLICKER_SHARE = 0.006
 const SPARK_CHANCE = 0.22
 /** Foreground blocks the field keeps clear of. */
-const HERO_SELECTORS = '.copilotix-wordmark, .new-parse-heading, .upload-entry, .tutorial-entry, .token-required, .import-options, .selected-files'
+const HERO_SELECTORS = '.copilotix-wordmark, .new-parse-heading, .upload-entry, .tutorial-entry, .token-required, .import-options, .selected-files, .import-progress'
 /** Clicks on these act on the page, not the backdrop. */
-const INTERACTIVE = 'button, a, input, label, textarea, select, [role="button"], .upload-entry, .copilotix-wordmark, .ant-alert, .selected-files, .import-options'
+const INTERACTIVE = 'button, a, input, label, textarea, select, [role="button"], .upload-entry, .copilotix-wordmark, .ant-alert, .selected-files, .import-options, .import-progress'
 const WIDE = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/u
 
 function hash(x: number, y: number): number {

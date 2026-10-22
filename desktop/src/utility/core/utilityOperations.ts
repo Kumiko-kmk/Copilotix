@@ -51,6 +51,7 @@ import {
 import type { CopilotixTask } from '@shared/types'
 import { appSettingsSchema } from '@shared/ipcSchemas'
 import { MAX_PDF_BYTES } from '@shared/constants'
+import { MAX_PDF_CROP_BYTES } from '@shared/pdfImport'
 import { displayPaperTitle, extractPaperTitle } from '@shared/titleNaming'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '@core/blockMapping'
 import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../coreUtilityRuntime'
@@ -60,6 +61,7 @@ import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sql
 import { SqliteRagRepository, SqliteRagRepositoryError } from './persistence/sqliteRagRepository'
 import { PathPolicy } from '@runtime/pathPolicy'
 import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
+import { withoutFirstPage } from './compute/pdfPageRemoval'
 import { RagContentIndexError, RagContentIndexService } from './compute/ragContentIndexService'
 
 type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
@@ -286,7 +288,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'compute:hash-file': async (request) => ({ sha256: await hashFile((request.payload as { path: string }).path) }),
     'compute:import-pdf': async (request, signal) => {
       const payload = coreImportPdfPayloadSchema.parse(request.payload)
-      return importPdf(payload.sourcePath, payload.documentId, state, signal)
+      return importPdf(payload.sourcePath, payload.documentId, state, signal, payload.skipFirstPage === true)
     },
     'compute:normalize-parser': async (request) => {
       const payload = request.payload as { task: CopilotixTask; extractedDir: string; jobId?: string }
@@ -436,7 +438,8 @@ async function importPdf(
   sourcePath: string,
   documentId: string,
   state: UtilityPersistenceState,
-  signal: AbortSignal
+  signal: AbortSignal,
+  skipFirstPage = false
 ): Promise<{ sha256: string; size: number }> {
   if (!isAbsolute(sourcePath) || sourcePath.length > 32_768 || sourcePath.includes('\0') || extname(sourcePath).toLowerCase() !== '.pdf') {
     throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Invalid PDF import request', false)
@@ -468,6 +471,28 @@ async function importPdf(
   const partial = `${destination}.partial-${documentId}`
   await removeIfPresent(partial)
   await rejectExisting(destination)
+
+  if (skipFirstPage) {
+    // The rewritten bytes are what the document keeps, so they are what gets hashed and recorded.
+    if (sourceInfo.size > MAX_PDF_CROP_BYTES) throw new CoreUtilityOperationError('CORE_PDF_REWRITE_FAILED', 'PDF is too large to rewrite', false)
+    let published = false
+    try {
+      const rewritten = await withoutFirstPage(await readFile(sourcePath, { signal }))
+      signal.throwIfAborted()
+      const handle = await open(partial, 'wx')
+      try {
+        await handle.writeFile(rewritten)
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
+      await rename(partial, destination)
+      published = true
+      return { sha256: createHash('sha256').update(rewritten).digest('hex'), size: rewritten.byteLength }
+    } finally {
+      if (!published) await removeIfPresent(partial)
+    }
+  }
 
   const hash = createHash('sha256')
   let size = 0

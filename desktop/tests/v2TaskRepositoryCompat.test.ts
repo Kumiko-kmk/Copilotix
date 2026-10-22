@@ -640,6 +640,39 @@ describe('temporary v2 task repository compatibility projection', () => {
       status: 'partial', progress: 100, remoteBatchId: 'batch-1', remoteDataId: 'data-1'
     })
   })
+
+  it('follows the parse runner stage, not the insertion phase, for uploading versus parsing', () => {
+    const document: CompatDocumentRow = {
+      id: 'document-1', original_filename: 'paper.pdf', display_title: null, storage_path: 'C:/output/documents-v2/document-1',
+      source_checksum: 'hash', translation_provider: 'qwen', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z'
+    }
+    const parse = (checkpoint: object): CompatJobRow => makeJob({ id: 'parse-1', status: 'running', checkpoint_json: JSON.stringify(checkpoint) })
+    expect(projectCompatTask(document, [parse({ phase: 'uploading' })]).status).toBe('uploading')
+    expect(projectCompatTask(document, [parse({ phase: 'uploading', stage: 'uploading' })]).status).toBe('uploading')
+    expect(projectCompatTask(document, [parse({ phase: 'uploading', stage: 'polling' })]).status).toBe('parsing')
+    expect(projectCompatTask(document, [parse({ phase: 'uploading', stage: 'downloading' })]).status).toBe('parsing')
+  })
+
+  it('keeps a PDF-metadata title provisional in the parse checkpoint only', async () => {
+    const fixture = await createFixture()
+    try {
+      const outputDir = join(fixture.root, 'documents-v2', 'document-2')
+      await mkdir(outputDir, { recursive: true })
+      const task: CopilotixTask = {
+        ...fixture.task, id: 'document-2', outputDir, sourcePath: join(outputDir, 'original.pdf'), sourceHash: 'other-hash',
+        title: 'Metadata Title Of The Paper', name: 'Metadata Title Of The Paper.pdf', titleSource: 'pdf-metadata'
+      }
+      fixture.repository.insertTask(task)
+      const checkpoint = (id: string): Record<string, unknown> => JSON.parse((fixture.database.connection
+        .prepare("SELECT checkpoint_json FROM jobs WHERE document_id=? AND kind='parse'").get(id) as { checkpoint_json: string }).checkpoint_json)
+      expect(checkpoint(task.id)).toMatchObject({ titleSource: 'pdf-metadata', provisionalTitle: 'Metadata Title Of The Paper' })
+      expect(checkpoint(fixture.task.id)).not.toHaveProperty('provisionalTitle')
+      expect(fixture.repository.getTask(task.id)).toMatchObject({ title: 'Metadata Title Of The Paper' })
+      expect(fixture.repository.getTask(task.id)).not.toHaveProperty('titleSource')
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
 })
 
 function makeAnnotation(taskId: string, view: 'original' | 'translated', id: string): ReaderAnnotation {

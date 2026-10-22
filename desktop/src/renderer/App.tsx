@@ -7,7 +7,7 @@ import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
 import type { AppSettings } from '@shared/types'
-import type { DocumentDetails } from '@shared/ipcSchemas'
+import type { DocumentDetails, DocumentSummary } from '@shared/ipcSchemas'
 import EdgeDock from './components/EdgeDock'
 import WindowControls from './components/WindowControls'
 import NewParsePage from './pages/NewParsePage'
@@ -20,6 +20,8 @@ import {
   type DocumentListCache
 } from './documentCache'
 import { loadLibraryCategories } from './paperArchive/libraryCategoriesClient'
+import { requestLibraryFocus } from './paperArchive/libraryFocus'
+import { ACTIVE_STATUSES } from './documentStatus'
 import type { SettingsNavigationGuard } from './settingsNavigation'
 
 const ReaderPage = React.lazy(loadReaderPage)
@@ -85,6 +87,22 @@ export default function App(): React.JSX.Element {
   })
   const settings = settingsQuery.data
   const documents = documentsQuery.data?.documents ?? []
+  // The home progress card: papers imported in this session plus any still processing, until dismissed.
+  const [recentImportIds, setRecentImportIds] = React.useState<readonly string[]>([])
+  const [dismissedProgressIds, setDismissedProgressIds] = React.useState<ReadonlySet<string>>(() => new Set())
+  const progressDocuments = React.useMemo(() => documents.filter((document) =>
+    !dismissedProgressIds.has(document.id) && (recentImportIds.includes(document.id) || ACTIVE_STATUSES.has(document.workflow.status))
+  ), [documents, recentImportIds, dismissedProgressIds])
+  const onImported = React.useCallback((created: DocumentSummary[]) => {
+    const ids = new Set(created.map((document) => document.id))
+    queryClient.setQueryData<DocumentListCache>(['documents'], (current) => ({
+      revision: current?.revision ?? 0,
+      documents: [...created, ...(current?.documents ?? []).filter((item) => !ids.has(item.id))]
+    }))
+    setRecentImportIds((current) => [...ids, ...current.filter((id) => !ids.has(id))])
+    // New papers join the library, and the home backdrop's titles, as soon as they are listed.
+    void queryClient.invalidateQueries({ queryKey: ['documents'] })
+  }, [queryClient])
   const codexStartupChecked = React.useRef(false)
   React.useEffect(() => {
     if (!settings || codexStartupChecked.current) return
@@ -170,8 +188,14 @@ export default function App(): React.JSX.Element {
           <NewParsePage
             settings={settings}
             documents={documents}
-            // New papers join the library, and the home backdrop's titles, as soon as they are listed.
-            onCreated={() => void queryClient.invalidateQueries({ queryKey: ['documents'] })}
+            progressDocuments={progressDocuments}
+            onCreated={onImported}
+            onOpenReader={(documentId) => requestViewChange({ name: 'reader', documentId, returnTo: 'new' })}
+            onShowInLibrary={(documentId) => {
+              requestLibraryFocus(documentId)
+              requestViewChange({ name: 'library' })
+            }}
+            onDismissProgress={(documentId) => setDismissedProgressIds((current) => new Set([...current, documentId]))}
             onOpenSettings={() => requestViewChange({ name: 'settings' })}
             onOpenTutorial={() => requestViewChange({ name: 'tutorial' })}
           />

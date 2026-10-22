@@ -154,7 +154,7 @@ test('keeps the new parse page layout across supported sizes and themes', async 
       mimeType: 'application/pdf',
       buffer: Buffer.from('%PDF-1.4 fixture')
     })
-    await expect(window.getByRole('dialog', { name: '确认解析任务' })).toBeVisible()
+    await expect(window.getByRole('dialog', { name: '确认导入' })).toBeVisible()
   } finally {
     await app.close()
     await workspace.cleanup()

@@ -18,7 +18,7 @@ export interface NormalizeParserOutputResult {
 
 export interface TaskComputePort {
   hashFile(path: string): Promise<string>
-  importPdf(sourcePath: string, documentId: string): Promise<{ sha256: string; size: number }>
+  importPdf(sourcePath: string, documentId: string, options?: { skipFirstPage?: boolean }): Promise<{ sha256: string; size: number }>
   normalizeParserOutput(task: CopilotixTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult>
   rebuildMappings(taskId: string, outputDir: string): Promise<void>
   openTranslationPlan(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanOpenResult>

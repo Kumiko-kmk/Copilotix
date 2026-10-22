@@ -3,6 +3,7 @@ import type { Job, JobRepositoryPort } from '@core/jobs'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import type { CopilotixTask } from '@shared/types'
 import type { ImportDocumentsRequest, CacheDocumentFigureRequest } from '@shared/ipcSchemas'
+import type { ImportFileOptions } from '@shared/pdfImport'
 import type { SettingsService } from './settingsService'
 import type { TaskLogger } from './logger'
 import { PathPolicy } from '@runtime/pathPolicy'
@@ -54,8 +55,8 @@ export class TaskService extends EventEmitter {
     return this.commands.list()
   }
 
-  async importPaths(paths: readonly string[], options: ImportDocumentsRequest): Promise<ImportPathsResult> {
-    const result = await this.commands.importPaths(paths, options)
+  async importPaths(paths: readonly string[], options: ImportDocumentsRequest, fileOptions?: readonly ImportFileOptions[]): Promise<ImportPathsResult> {
+    const result = await this.commands.importPaths(paths, options, fileOptions)
     if (result.created.length > 0) this.emit('changed')
     return result
   }

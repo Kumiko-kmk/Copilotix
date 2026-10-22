@@ -30,8 +30,11 @@ describe('parse artifact pipeline concurrency', () => {
       const outputDir = join(root, id)
       await mkdir(outputDir, { recursive: true })
       await writeFile(join(outputDir, 'original.pdf'), '%PDF-1.4 fixture')
-      tasks.set(id, { ...task(id, outputDir), title: index === 0 ? 'original-file-name' : null })
-      jobs.push(job(id, index))
+      // 0: the user kept the file name; 1: a PDF-metadata title the parsed title replaces.
+      tasks.set(id, { ...task(id, outputDir), title: index === 0 ? 'original-file-name' : index === 1 ? 'Metadata title' : null })
+      const parseJob = job(id, index)
+      if (index === 1) parseJob.checkpoint = { ...parseJob.checkpoint, titleSource: 'pdf-metadata', provisionalTitle: 'Metadata title' }
+      jobs.push(parseJob)
     }
 
     let activeDownloads = 0
@@ -102,6 +105,7 @@ describe('parse artifact pipeline concurrency', () => {
     expect(peakDownloads).toBe(1)
     expect(peakNormalizations).toBe(1)
     expect(metadataUpdates).not.toContain(jobs[0]!.documentId)
+    expect(metadataUpdates).toContain(jobs[1]!.documentId)
     expect(metadataUpdates).toHaveLength(3)
   })
 })

@@ -16,6 +16,7 @@ import { IpcClientError } from '@shared/ipc'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutations'
 import ReaderWorkbench from '../components/ReaderWorkbench'
 import DocumentLifecycleActions from '../components/DocumentLifecycleActions'
+import { translationCount } from '../documentStatus'
 import type { PaperInsightSource } from '@shared/paperInsight'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
@@ -189,6 +190,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           translatedBlocks,
           translatedReady,
           taskStatus: document.summary.workflow.status,
+          translationCount: translationCount(document.summary.workflow),
           taskError: document.summary.workflow.error,
           onRetry: retryDocument,
           assetBaseUrl: document.assetBaseUrl,

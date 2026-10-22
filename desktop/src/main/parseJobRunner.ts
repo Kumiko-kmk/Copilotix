@@ -317,7 +317,9 @@ export class ParseJobRunner implements BatchJobRunner {
         { signal: input.signal }
       )
       if (!normalized) throw new Error('Parser normalization queue returned no result')
-      if (normalized.displayTitle && originalTask.title === null) {
+      // A title taken from PDF metadata at import is provisional; a user-chosen one is kept.
+      const provisionalTitle = job.checkpoint.titleSource === 'pdf-metadata' ? stringValue(job.checkpoint.provisionalTitle) : null
+      if (normalized.displayTitle && (originalTask.title === null || (provisionalTitle !== null && originalTask.title === provisionalTitle))) {
         await this.options.repository.updateDocumentMetadata(originalTask.id, { displayTitle: normalized.displayTitle })
       }
       await this.options.usageAnalytics?.recordDocumentPages(originalTask.id, originalTask.createdAt, normalized.pageCount)

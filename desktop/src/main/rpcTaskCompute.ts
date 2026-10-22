@@ -25,8 +25,12 @@ export class RpcTaskCompute implements TaskComputePort {
     return result.sha256
   }
 
-  async importPdf(sourcePath: string, documentId: string): Promise<{ sha256: string; size: number }> {
-    return this.supervisor.request('compute:import-pdf', { sourcePath, documentId }, { timeoutMs: COMPUTE_RPC_TIMEOUT_MS })
+  async importPdf(sourcePath: string, documentId: string, options: { skipFirstPage?: boolean } = {}): Promise<{ sha256: string; size: number }> {
+    return this.supervisor.request('compute:import-pdf', {
+      sourcePath,
+      documentId,
+      ...(options.skipFirstPage ? { skipFirstPage: true } : {})
+    }, { timeoutMs: COMPUTE_RPC_TIMEOUT_MS })
   }
 
   async normalizeParserOutput(task: CopilotixTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult> {
