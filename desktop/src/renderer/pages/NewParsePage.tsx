@@ -11,6 +11,7 @@ import { HomeBackdrop, UploadGlyph } from '../components/HomeScene'
 import { HomeGreeting } from '../components/HomeWidgets'
 import ImportProgress from '../components/ImportProgress'
 import type { PdfFileInspection } from '../pdfInspection'
+import ZoteroImportDialog from '../components/ZoteroImportDialog'
 
 interface PendingPdf {
   key: string
@@ -44,6 +45,7 @@ export default function NewParsePage(props: {
   const [skipDuplicates, setSkipDuplicates] = React.useState(true)
   const [submitting, setSubmitting] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
+  const [zoteroOpen, setZoteroOpen] = React.useState(false)
   const pageRef = React.useRef<HTMLElement>(null)
   const uploadRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -205,6 +207,7 @@ export default function NewParsePage(props: {
             }}
           />
         </div>
+        <button type="button" className="zotero-entry" onClick={() => setZoteroOpen(true)}>从 Zotero 导入</button>
         {props.progressDocuments?.length ? (
           <ImportProgress
             documents={props.progressDocuments}
@@ -308,6 +311,13 @@ export default function NewParsePage(props: {
           </div>
         </dl>
       </Modal>
+      <ZoteroImportDialog
+        open={zoteroOpen}
+        settings={props.settings}
+        onClose={() => setZoteroOpen(false)}
+        onImported={() => props.onCreated([])}
+        onOpenSettings={props.onOpenSettings}
+      />
     </section>
   )
 }

@@ -120,6 +120,7 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 
 - 當前開發入口為 `Copilotix-master-updated`／本地 `master`，包含文庫 UI 代碼與文檔。1.2.0 為本次發布目標；正式簽章與逐 tag 例外以 docs/CODE_SIGNING_POLICY.md 為準。
 - 首頁背景為「解密字陣」`homeCipher.ts`：字元網格按字標實測字寬／行高對齊，避開前景塊；波浪只由開頁、點擊或 75–120 秒一次的自動波觸發，單向擴散不反彈，經 `homeWave.ts` 與字標逐字解碼同步；波後只浮現文庫論文的原文或譯文標題，不加編號（譯文標題閒時讀最近 10 篇，僅保留標題）；新波出發時上一波的標題 0.45 秒內淡出。待機字陣較密並持續閃爍、增減及零星紫色火花，避免被當成靜態背景。其餘六個背景方案原型（`gallery.html`）與舊等高線實作保存在 `docs/design/home-backdrops/`，不參與構建。
+- Zotero 橋接（只在本機）：首頁「从 Zotero 导入」先讀本機只讀 API，失敗則讀 `zotero.sqlite` 唯讀副本；renderer 只傳條目 key，PDF 走既有 importPaths 按雜湊去重；條目關聯存文獻目錄 `zotero/link.v1.json`（無 migration）。閱讀器「导出到 Zotero」經本機連接器：Zotero 來源的論文建帶 `zotero://select` 連結的獨立筆記（連接器不能寫既有條目），其他論文建條目＋PDF＋子筆記，記錄存 `zotero/export.v1.json`。契約與驗證見 [Zotero 橋接](docs/ZOTERO_BRIDGE_ZH.md)。
 - README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
 
 ## 13. 文庫頁與 AI 解讀
