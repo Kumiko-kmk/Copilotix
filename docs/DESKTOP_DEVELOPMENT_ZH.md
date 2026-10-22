@@ -45,15 +45,17 @@ pnpm desktop:dev
 
 | 命令 | 范围 |
 | --- | --- |
-| `pnpm desktop:test:changed` | 与 Git 未提交修改有关的核心测试 |
-| `pnpm desktop:test` | 快速核心回归，不加载大型 React 页面和发布脚本 |
+| `pnpm desktop:test` | 只跑受改动影响的单元测试（`.test.ts`／`.test.tsx`／`.test.mjs` 按 import 图）＋每次必跑的安全集；`desktop:test:changed` 为同一命令 |
+| `pnpm desktop:test:e2e:affected` | smoke＋按改动路径映射的 E2E spec |
 | `pnpm desktop:test:ui` | 显式运行 DOM／React 回归 |
 | `pnpm desktop:test:full` | 所有保留的单元与集成测试 |
 | `pnpm desktop:test:e2e` | 源码启动和窗口操作 smoke，无需安装包 |
 | `pnpm desktop:test:e2e:full` | 全部 Electron 回归，需要发布产物的用例也包含在内 |
 | `pnpm desktop:test:coverage` | 完整回归与覆盖率，仅用于完整验收 |
 
-普通 master push／PR 的 `build` 检查执行 lint、typecheck、核心回归、四 bundle 和启动 smoke。功能分支通过 PR 合并结果验证，不再同时执行相同提交的 push 检查；未开 PR 的分支可手动运行。版本 tag 或手动 `full_validation` 才增加完整覆盖率、Electron 回归、打包、安装／升级／卸载及下载校验。完整回归与覆盖率先在 E2E 第 1 分片运行，与 build 打包并行；发布仍须 build 和三个分片全部成功。发布签章、资料保留和打包内建完整性检查仍保留。
+`scripts/affected-tests.mjs` 以 `--base`、`COPILOTIX_TEST_BASE` 或 merge-base(HEAD, master) 为基准，已提交、暂存、未暂存与未追踪文件都计入；`--list` 只列出选择。每次必跑的安全集为 ipcContracts、v2Database、sqliteJobRepository、jobScheduler、pathPolicy、libraryMaintenance、uninstallCleanup（数据安全、持久化、IPC 来源、取消恢复）。package.json、lockfile、vitest／vite／playwright 配置、tsconfig、工作流或脚本本身改变，或基准无法解析（新分支 push 的全零 SHA）时改跑全量。E2E 不 import 源码，因此按路径映射；preload、main/index.ts、App、e2e helpers 改动跑全部 spec，映射外的源码改动只跑 smoke。
+
+普通 master push／PR 的 `build` 检查执行 lint、typecheck、受影响单元测试（相对 PR 目标或上一个 master 提交）、四 bundle 和 smoke＋受影响 E2E。功能分支通过 PR 合并结果验证，不再同时执行相同提交的 push 检查；未开 PR 的分支可手动运行。版本 tag 或手动 `full_validation` 才增加完整覆盖率、Electron 回归、打包、安装／升级／卸载及下载校验。完整回归与覆盖率先在 E2E 第 1 分片运行，与 build 打包并行；发布仍须 build 和三个分片全部成功。发布签章、资料保留和打包内建完整性检查仍保留。
 
 覆盖率阈值仍为 lines/statements/functions `80%`、branches `75%`，仅在显式完整检查中执行。真实 API、真实翻译及个人 GUI 配置仍需单独授权和实际验证。
 

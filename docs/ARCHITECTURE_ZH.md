@@ -315,7 +315,7 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 | functions | 80% |
 | branches | 75% |
 
-覆盖统计 `src/main/**`、`src/core/**`、`src/shared/**`，范围与阈值由 `vitest.config.ts` 维护。一般 push／PR 执行 lint、typecheck、快速核心回归、四 bundle 和源码启动 smoke；版本 tag 或手动 `full_validation` 才执行完整覆盖率、全量 Electron、打包和安装验收。发布门禁失败不能称为发布通过；日常核心回归也不代表完整发布验收。
+覆盖统计 `src/main/**`、`src/core/**`、`src/shared/**`，范围与阈值由 `vitest.config.ts` 维护。一般 push／PR 执行 lint、typecheck、受影响单元测试＋必跑安全集、四 bundle 和 smoke＋受影响 E2E（见开发文档）；版本 tag 或手动 `full_validation` 才执行完整覆盖率、全量 Electron、打包和安装验收。发布门禁失败不能称为发布通过；日常核心回归也不代表完整发布验收。
 
 单元/集成测试至少覆盖：Core RPC schema/1 MiB/超时/取消、sender/frame/URL、Utility ready/restart/drain、STRICT migration/checksum、Repository/lease/checkpoint/retry、PathPolicy/符号链接、流式导入与 atomic artifact、翻译 cache/表格协议、映射/标注以及 release transaction/manifest/fuse/packaged smoke。真实 API、真实翻译和真实 PDF 属于 opt-in fixture，不是所有 PR 的默认证据。
 
