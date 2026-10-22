@@ -229,6 +229,12 @@ describe('utility markdown translation plan manager', () => {
       await restartedRetry.fail(fixture.task.id, fixture.jobId, descriptor.unitId, 'new provider failure')
       const failedRetry = new MarkdownTranslationPlanManager(fixture.repository)
       await expect(failedRetry.open(fixture.task.id, fixture.jobId)).resolves.toMatchObject({ failed: 1 })
+      // A source rewrite before the next manual retry rebuilds the plan; the unchanged failed unit is still retried.
+      await writeFile(join(fixture.outputDir, 'full.md'), '# Retry me\n\nRepaired paragraph.\n', 'utf8')
+      fixture.database.connection.prepare('UPDATE jobs SET attempt=attempt+1 WHERE id=?').run(fixture.jobId)
+      const rebuilt = new MarkdownTranslationPlanManager(fixture.repository)
+      await expect(rebuilt.open(fixture.task.id, fixture.jobId)).resolves.toMatchObject({ reused: false, failed: 0 })
+      expect((await rebuilt.listWork(fixture.task.id, fixture.jobId)).items.map(item => item.status)).toEqual(['pending', 'pending'])
     } finally {
       closeFixture(fixture)
     }

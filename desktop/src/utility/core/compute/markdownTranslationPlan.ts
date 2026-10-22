@@ -207,7 +207,9 @@ export class MarkdownTranslationPlanManager {
     }
 
     const savedBlocks = this.repository.listTranslationBlocks(taskId, jobId)
-    const attemptChanged = planMatches && existingMetadata !== null && existingMetadata.attempt !== binding.attempt
+    // A manual retry must reach failed units even when the plan is rebuilt because the
+    // source changed in between (e.g. a text-layer repair rewrote full.md).
+    const attemptChanged = existingMetadata !== null && existingMetadata.attempt !== binding.attempt
     // A retry can restart after its pending plan is saved but before any
     // provider result replaces the previous attempt's failed DB records.
     const pendingUnits = new Set(planMatches ? candidate.units.filter((unit) => unit.status === 'pending').map((unit) => unit.descriptor.unitId) : [])
