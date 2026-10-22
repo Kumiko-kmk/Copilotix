@@ -198,7 +198,8 @@ export default function SettingsPage(props: {
   // Appearance previews at once and is saved or reverted with the rest of the page.
   const [appearance, setAppearance] = React.useState<Appearance>(storedAppearance)
   const [savedAppearance, setSavedAppearance] = React.useState<Appearance>(storedAppearance)
-  const appearanceChanged = appearance.themeId !== savedAppearance.themeId || appearance.readerFontSize !== savedAppearance.readerFontSize
+  const appearanceChanged = appearance.themeId !== savedAppearance.themeId || appearance.readerFontSize !== savedAppearance.readerFontSize ||
+    appearance.readerLineHeight !== savedAppearance.readerLineHeight
   const changeAppearance = React.useCallback((next: Appearance) => {
     setAppearance(next)
     previewAppearance(next)
@@ -341,7 +342,7 @@ export default function SettingsPage(props: {
           <button className={section === 'connections' ? 'active' : ''} onClick={() => setSection('connections')}><small aria-hidden="true">01</small>服务连接</button>
           <button className={section === 'models' ? 'active' : ''} onClick={() => setSection('models')}><small aria-hidden="true">02</small>模型设置</button>
           <button className={section === 'storage' ? 'active' : ''} onClick={() => setSection('storage')}><small aria-hidden="true">03</small>文件存储</button>
-          <button className={section === 'theme' ? 'active' : ''} onClick={() => setSection('theme')}><small aria-hidden="true">04</small>主题外观</button>
+          <button className={section === 'theme' ? 'active' : ''} onClick={() => setSection('theme')}><small aria-hidden="true">04</small>显示设置</button>
         </nav>
         <div className="settings-content">
           <div className="settings-content-body">

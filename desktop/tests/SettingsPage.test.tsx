@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 describe('SettingsPage appearance', () => {
-  it('previews themes and reader text size at once, saves them with the page and reverts them on discard', async () => {
+  it('previews themes, reader text size and line height at once, saves them with the page and reverts them on discard', async () => {
     const saveSettings = vi.fn()
     Object.defineProperty(window, 'copilotix', {
       configurable: true,
@@ -20,9 +20,11 @@ describe('SettingsPage appearance', () => {
     })
     window.localStorage.removeItem('copilotix.theme.v1')
     window.localStorage.removeItem('copilotix.reader.font-size.v1')
+    window.localStorage.removeItem('copilotix.reader.line-height.v1')
     const root = document.documentElement
     const view = render(<SettingsPage settings={configuredSettings()} onSaved={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /主题外观/u }))
+    fireEvent.click(screen.getByRole('button', { name: /显示设置/u }))
+    expect(screen.getByRole('region', { name: '显示设置' })).toBeTruthy()
     expect(document.querySelector('.settings-content-body > .settings-section.theme-settings')).toBeTruthy()
     expect(within(screen.getByRole('radiogroup', { name: '浅色主题' })).getAllByRole('radio')).toHaveLength(3)
     expect(within(screen.getByRole('radiogroup', { name: '深色主题' })).getAllByRole('radio')).toHaveLength(3)
@@ -30,9 +32,11 @@ describe('SettingsPage appearance', () => {
     // A choice previews everywhere at once but is only a draft until saved.
     fireEvent.click(screen.getByRole('radio', { name: /朱砂/u }))
     fireEvent.click(screen.getByRole('button', { name: '增大阅读字号' }))
+    fireEvent.click(screen.getByRole('button', { name: '增大阅读行间距' }))
     expect(root.style.getPropertyValue('--primary')).toBe('#b8432f')
     expect(root.style.getPropertyValue('--theme-archive-tray')).toBe('#86553e')
     expect(root.style.getPropertyValue('--reader-font-size')).toBe('17px')
+    expect(root.style.getPropertyValue('--reader-line-height')).toBe('1.9')
     expect(window.localStorage.getItem('copilotix.theme.v1')).toBeNull()
     expect(screen.getByText('有未保存的更改')).toBeTruthy()
 
@@ -42,15 +46,19 @@ describe('SettingsPage appearance', () => {
     expect(saveSettings).not.toHaveBeenCalled()
     expect(window.localStorage.getItem('copilotix.theme.v1')).toBe('cinnabar')
     expect(window.localStorage.getItem('copilotix.reader.font-size.v1')).toBe('17')
+    expect(window.localStorage.getItem('copilotix.reader.line-height.v1')).toBe('1.9')
 
     // Night themes switch the whole palette; discarding returns to the saved choice.
     fireEvent.click(screen.getByRole('radio', { name: /深靛/u }))
+    fireEvent.change(screen.getByRole('slider', { name: '阅读行间距' }), { target: { value: '1.4' } })
+    expect(root.style.getPropertyValue('--reader-line-height')).toBe('1.4')
     expect(root.style.colorScheme).toBe('dark')
     expect(root.style.getPropertyValue('--on-ink')).toBe('#11151d')
     expect(root.style.getPropertyValue('--shadow-ink')).toBe('#000000')
     fireEvent.click(screen.getByRole('button', { name: /放弃更改/u }))
     expect(root.style.getPropertyValue('--primary')).toBe('#b8432f')
     expect(root.style.colorScheme).toBe('light')
+    expect(root.style.getPropertyValue('--reader-line-height')).toBe('1.9')
 
     // Leaving with an unsaved preview never keeps it.
     fireEvent.click(screen.getByRole('radio', { name: /深靛/u }))
@@ -58,7 +66,8 @@ describe('SettingsPage appearance', () => {
     expect(root.style.getPropertyValue('--primary')).toBe('#b8432f')
     window.localStorage.removeItem('copilotix.theme.v1')
     window.localStorage.removeItem('copilotix.reader.font-size.v1')
-  })
+    window.localStorage.removeItem('copilotix.reader.line-height.v1')
+  }, 30_000)
 })
 
 describe('SettingsPage credential editor', () => {
