@@ -328,7 +328,9 @@ export default function LibraryPage(props: {
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
           <h2 key={paper.id} className="paper-archive-title"><span><ArchiveText text={displayTitle} /></span></h2>
           <BrowseTranslatedTitle paper={paper} />
-          <div className="paper-archive-rule"><i /><ArchiveStatusLabel key={paper.id} paper={paper} waiting={preparation.waiting} /><ArchiveProgressRing key={paper.id} documentId={paper.id} progress={preparation.progress} ready={preparation.ready} /></div>
+          <div className="paper-archive-rule"><i /><ArchiveStatusLabel paper={paper} waiting={preparation.waiting} />
+            {/* A file card that failed will not finish on its own: no ring stuck short of 100%. */}
+            {preparation.waiting === 'analysis-failed' ? null : <ArchiveProgressRing key={paper.id} documentId={paper.id} progress={preparation.progress} ready={preparation.ready} />}</div>
           <dl className="paper-archive-meta">
             <BrowsePaperNotes key={paper.id} paper={paper} source={props.insights} />
           </dl>
@@ -510,13 +512,17 @@ function readPalette(element: HTMLElement): ArchivePalette {
   }
 }
 
-/** Words for what the progress ring is waiting on; empty once the paper is ready. */
+/**
+ * Words for what the progress ring is waiting on; empty once the paper is ready, and while the file
+ * card is generating (the ring alone shows that). Unkeyed: it shares the rule with the ring, which
+ * is keyed by paper, and a second element with the same key left old papers' labels behind.
+ */
 function ArchiveStatusLabel(props: { paper: ArchivePaper; waiting: ArchivePreparationStep }): React.JSX.Element | null {
-  if (props.waiting === null) return null
+  if (props.waiting === null || props.waiting === 'analysis') return null
   return (
     <span className="paper-archive-status" data-waiting={props.waiting}>
       {props.waiting === 'workflow' ? <WorkflowSteps workflow={props.paper.workflow} />
-        : <span role="status">{props.waiting === 'analysis' ? '正在生成档案卡' : props.waiting === 'analysis-failed' ? '档案卡未生成' : '正在准备图片与封面'}</span>}
+        : <span role="status">{props.waiting === 'analysis-failed' ? '档案卡未生成' : '正在准备图片与封面'}</span>}
     </span>
   )
 }
