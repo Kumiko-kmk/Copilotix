@@ -17,7 +17,7 @@ const loader = vi.hoisted(() => ({ loadReaderPage: vi.fn(async () => ({ default:
 vi.mock('../src/renderer/readerPageLoader', () => loader)
 // Exercise the real detail markup and keyboard handlers without document/PDF I/O.
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: true }), useQueryClient: () => ({}) }))
-vi.mock('../src/renderer/paperArchive/useArchivePreparation', () => ({ useArchivePreparation: (paper: DocumentSummary | null) => ({ ready: paper?.workflow.status === 'completed', progress: paper?.workflow.progress ?? 0 }) }))
+vi.mock('../src/renderer/paperArchive/useArchivePreparation', () => ({ useArchivePreparation: (paper: DocumentSummary | null) => ({ ready: paper?.workflow.status === 'completed', progress: paper?.workflow.progress ?? 0, waiting: paper?.workflow.status === 'completed' ? null : 'workflow' }) }))
 vi.mock('../src/renderer/paperArchive/PaperArchiveScene', () => ({
   PaperArchiveScene: class {
     private shelves: ArchiveShelf[] = []
@@ -95,6 +95,27 @@ describe('LibraryPage', () => {
     fireEvent.keyDown(region(), { key: 'Enter' })
     expect(scene.openDetail).not.toHaveBeenCalled()
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('80')
+  })
+
+  it('shows only the selected paper’s own progress and none once a paper is complete', () => {
+    const translating = (name: string, completedBlocks: number, totalBlocks: number): DocumentSummary => {
+      const document = paper(name)
+      document.workflow = { status: 'translating', progress: 60, activeJobKind: 'translate', error: null, translationProgress: { totalBlocks, completedBlocks, failedBlocks: 0 } }
+      return document
+    }
+    const papers = [translating('A', 12, 80), translating('B', 55, 156), paper('Done')]
+    render(<LibraryPage documents={papers} onOpen={vi.fn()} onCreate={vi.fn()} />)
+    const seen = new Map<string, string[]>()
+    for (let step = 0; step < papers.length; step += 1) {
+      const id = document.querySelector('.paper-archive-panel')?.getAttribute('data-document-id') ?? ''
+      seen.set(id, [...document.querySelectorAll('.paper-archive-status')].map((label) => label.textContent ?? ''))
+      fireEvent.click(screen.getByRole('button', { name: '下一篇' }))
+    }
+    expect(Object.fromEntries(seen)).toEqual({
+      [papers[0]!.id]: ['✓上传→✓解析→翻译 12/80'],
+      [papers[1]!.id]: ['✓上传→✓解析→翻译 55/156'],
+      [papers[2]!.id]: []
+    })
   })
   it('searches titles and filenames without steering the archive while typing, then focuses the result', () => {
     const alpha = paper('中文论文', 'Alpha Research.pdf')

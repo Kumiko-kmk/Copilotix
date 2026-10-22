@@ -391,3 +391,5 @@
   font-variant-numeric: tabular-nums; pointer-events: none;
 }
 .paper-archive-status .workflow-steps { flex-wrap: nowrap; }
+/* No ring after a failed file card, so the words take its place. */
+.paper-archive-status[data-waiting="analysis-failed"] { right: 0; padding-right: 0; }
