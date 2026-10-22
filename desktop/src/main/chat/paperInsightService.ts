@@ -141,6 +141,7 @@ export class PaperInsightService {
     const timer = setTimeout(() => controller.abort(new Error('timeout')), 600_000)
     const started = Date.now()
     let stage = 'prepare', provider: PaperChatProvider | undefined, attempts = 0
+    let problems: string[] | undefined
     try {
       signal.throwIfAborted()
       const stored = await this.deps.get(documentId)
@@ -154,6 +155,12 @@ export class PaperInsightService {
       if (context.documentId !== documentId) throw new Error('scope mismatch')
       const messages = buildBriefMessages(context.context)
       let selected: PaperChatProvider | undefined
+      // The fallback provider starts from a clean prompt with its own repair attempt.
+      const switchTo = (next: PaperChatProvider, category: string): void => {
+        this.deps.log?.({ documentId, status: 'fallback', from: 'codex', to: next, category, ...(problems ? { problems } : {}) })
+        selected = next
+        messages.splice(0, messages.length, ...buildBriefMessages(context.context))
+      }
       for (let attempt = 0; attempt < 2; attempt++) {
         // Recheck credentials and configuration after queue/context work and before retries.
         auth = await this.authorization(selected)
@@ -176,8 +183,7 @@ export class PaperInsightService {
           const next = auth.provider === 'codex' && !signal.aborted && !(error instanceof CodexGenerationError && error.code === 'RAG_LIMIT_EXCEEDED') &&
             (error instanceof CodexGenerationError || codexFailure(error).retryable) ? await this.fallbackProvider() : undefined
           if (!next) throw error
-          this.deps.log?.({ documentId, status: 'fallback', from: 'codex', to: next, category: failureCategory(error) })
-          selected = next; attempt--
+          switchTo(next, failureCategory(error)); attempt = -1
           continue
         }
         if (usage) await this.deps.recordUsage(auth.provider, usage).catch(() => undefined)
@@ -185,11 +191,16 @@ export class PaperInsightService {
         stage = 'parse'
         const parsed = parseBriefResponse(answer, { lengths: attempt === 0, requireAnalysis: true })
         if (!parsed.ok) {
+          problems = problemFields(parsed.problems)
           if (attempt === 0) {
             messages.push({ role: 'assistant', content: clipPreviousAnswer(answer) }, buildBriefRepairMessage(parsed.problems))
             continue
           }
-          throw new Error('invalid structured response')
+          // The strict length contract can defeat one model; another enabled provider gets a full try.
+          const next = auth.provider === 'codex' && !signal.aborted ? await this.fallbackProvider() : undefined
+          if (!next) throw new Error('invalid structured response')
+          switchTo(next, 'invalid-structured-response'); attempt = -1
+          continue
         }
         const brief = assembleBrief(parsed.content, context.context, {
           provider: auth.provider, model: auth.model, sourceRevision: context.sourceRevision
@@ -207,7 +218,8 @@ export class PaperInsightService {
     } catch (error) {
       const reason: unknown = signal.reason
       this.deps.log?.({ documentId, status: signal.aborted ? 'cancelled' : 'failed', stage, provider, attempts, durationMs: Date.now() - started,
-        category: signal.aborted ? (reason instanceof Error && reason.message === 'timeout' ? 'timeout' : 'cancelled') : failureCategory(error) })
+        category: signal.aborted ? (reason instanceof Error && reason.message === 'timeout' ? 'timeout' : 'cancelled') : failureCategory(error),
+        ...(stage === 'parse' && problems ? { problems } : {}) })
       if (signal.aborted) {
         const stored = await this.deps.get(documentId).catch((): PaperInsightState => ({ status: 'missing' }))
         this.emit(documentId, stored.status === 'ready' ? stored : { status: 'failed', error: '生成已取消或超时，可重新生成。' })
@@ -254,6 +266,16 @@ export class PaperInsightService {
     if (job.kind === 'parse' || job.kind === 'translate') await this.generate(job.documentId, true)
     else this.emit(job.documentId, await this.get(job.documentId))
   }
+}
+
+/** Field paths and display lengths from parser hints (e.g. "analysis.abstract:178"); never generated text. */
+function problemFields(problems: readonly string[]): string[] {
+  return problems.slice(0, 12).map((problem) => {
+    const [path = '', detail = ''] = problem.split('：', 2)
+    const field = /^[\w.]{1,80}$/u.test(path) ? path : 'other'
+    const length = /^(\d+) (?:字|项)/u.exec(detail)?.[1]
+    return length ? `${field}:${length}` : field
+  })
 }
 
 /** Log-safe failure label: error classes and fixed internal messages only. */

@@ -95,6 +95,17 @@ describe('structured paper insight', () => {
     expect(f.states.at(-1)?.status).toBe('ready')
     expect(vi.mocked(f.deps.stream).mock.calls.map(([input]) => input.provider)).toEqual(['codex', 'qwen'])
     expect(f.deps.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'fallback', from: 'codex', to: 'qwen', category: 'codex:responseTooManyFailedAttempts:429' }))
+    // Codex output that fails the brief contract twice also falls back, from a clean prompt.
+    vi.mocked(f.deps.stream).mockClear()
+    vi.mocked(f.deps.stream).mockImplementation(async ({ provider, messages, onDelta }) => {
+      if (provider === 'codex') await onDelta(JSON.stringify({ ...briefGeneration, tldr: '短' }))
+      else { expect(messages.some(message => message.role === 'assistant')).toBe(false); await onDelta(JSON.stringify(briefGeneration)) }
+      return null
+    })
+    await f.service.generate(f.id); await vi.waitFor(() => expect(vi.mocked(f.deps.stream).mock.calls).toHaveLength(3))
+    await vi.waitFor(() => expect(f.states.at(-1)?.status).toBe('ready'))
+    expect(vi.mocked(f.deps.stream).mock.calls.map(([input]) => input.provider)).toEqual(['codex', 'codex', 'qwen'])
+    expect(f.deps.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'fallback', to: 'qwen', category: 'invalid-structured-response', problems: [expect.stringMatching(/^tldr:\d+$/u)] }))
     vi.mocked(f.deps.stream).mockClear()
     vi.mocked(f.deps.stream).mockRejectedValue(turnError('contextWindowExceeded'))
     await f.service.generate(f.id); await vi.waitFor(() => expect(f.states.at(-1)?.status).toBe('failed'))
