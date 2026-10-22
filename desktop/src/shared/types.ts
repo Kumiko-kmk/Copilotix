@@ -212,6 +212,8 @@ export interface TranslatedMarkdownBlock {
   mappingIds: string[]
   /** Provider that translated this block when it differs from the job's preferred provider. */
   fallbackProvider?: TranslationProviderId
+  /** The source block changed after translation (e.g. a text-layer repair); a retry re-translates it. */
+  sourceChanged?: true
 }
 
 export interface TranslationBlockRecord {

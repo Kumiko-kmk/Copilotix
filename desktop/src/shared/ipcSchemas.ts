@@ -189,7 +189,8 @@ export const translatedMarkdownBlockSchema: z.ZodType<TranslatedMarkdownBlock> =
   sourceIndex: z.number().int().min(0).optional(),
   markdown: z.string().max(16_777_216),
   mappingIds: z.array(boundedId).max(100_000),
-  fallbackProvider: translationProviderIdSchema.optional()
+  fallbackProvider: translationProviderIdSchema.optional(),
+  sourceChanged: z.literal(true).optional()
 }).strict()
 
 export const windowActionSchema = z.enum(['minimize', 'toggle-maximize', 'close'])

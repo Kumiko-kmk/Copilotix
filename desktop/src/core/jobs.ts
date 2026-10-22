@@ -98,6 +98,12 @@ export interface JobManualRetryInput {
   now?: string
   availableAt?: string
   detail?: JsonObject
+  /**
+   * Also re-queue a succeeded translate job. Main sets it only when translated
+   * blocks no longer match their source (e.g. after a text-layer repair); the
+   * plan then keeps every block whose source is unchanged.
+   */
+  refreshTranslation?: true
 }
 
 export interface JobRecoverExpiredInput {

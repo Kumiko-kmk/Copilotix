@@ -4,6 +4,13 @@
  * ascender band, which keeps only letters such as `d h f l` and drops the
  * rest. The PDF text layer of the same box still holds the real words.
  *
+ * Some PDFs instead make MinerU mark ordinary letters as sub/superscripts
+ * (`Learnin<sub>g</sub>`) or drop descender letters (`o erator`). In a
+ * document that shows this, every text span is compared with the text layer;
+ * sub/superscripts are rebuilt from the layer's own geometry (smaller runs off
+ * the line's baseline), so real ones such as `x<sub>i</sub>` or `<sup>*</sup>`
+ * stay marked.
+ *
  * Only plain `text` spans are considered. Equations, tables and images are
  * never touched, and a span is replaced only when the text layer is readable
  * and the parser output is an in-order remnant of it. Scanned PDFs (no text
@@ -31,6 +38,8 @@ export interface TextLayerCandidate {
   pageSize: [number, number]
   bbox: TextLayerBbox
   content: string
+  /** `fragment`: only scattered letters left; `compare`: any span of a document with script noise. Absent in v1 reports. */
+  kind?: 'fragment' | 'compare'
 }
 
 export interface TextLayerRepair {
@@ -50,8 +59,8 @@ export interface TextLayerRepairReport {
 interface SpanRef {
   candidate: TextLayerCandidate
   span: Record<string, unknown>
-  /** Text of the previous text span in the same block, used to disambiguate Markdown matches. */
-  previous: string
+  /** Preceding span of the same block (any type, read at apply time so earlier repairs count). */
+  previous: Record<string, unknown> | null
 }
 
 /**
@@ -69,16 +78,75 @@ export function isFragmentedText(content: string): boolean {
   return single / words.length >= 0.4 && lengths.filter((length) => length === 1).length / words.length >= 0.5 && total / words.length <= 2
 }
 
-/** Fragmented `text` spans of a MinerU layout (`pdf_info[].para_blocks`, including nested blocks). */
-export function findTextLayerCandidates(layout: unknown): TextLayerCandidate[] {
-  return collectSpans(layout).map((ref) => ref.candidate)
+const SCRIPT_TAG = /<(sub|sup)>([^<]*)<\/\1>/gu
+
+/** Ordinary letters wrapped as scripts inside or right after a word, e.g. `Learnin<sub>g</sub>` or `<sub>an</sub>d`. */
+function spuriousScripts(content: string): number {
+  let count = 0
+  for (const match of content.matchAll(SCRIPT_TAG)) {
+    const before = content[match.index - 1] ?? ''
+    const after = content[match.index + match[0].length] ?? ''
+    if (/^[\p{Ll}\s.,-]+$/u.test(match[2]!) && /\p{Ll}/u.test(match[2]!) && (/\p{L}/u.test(before) || /\p{L}/u.test(after))) count += 1
+  }
+  return count
 }
+
+/**
+ * Candidate `text` spans of a MinerU layout (`pdf_info[].para_blocks`, including
+ * nested blocks): fragmented lines, plus every span when at least 8 spans carry
+ * two or more letter-only scripts glued to words.
+ */
+export function findTextLayerCandidates(layout: unknown): TextLayerCandidate[] {
+  const refs = collectSpans(layout)
+  const noisy = refs.filter((ref) => spuriousScripts(ref.candidate.content) >= 2).length >= 8
+  return refs.flatMap((ref): TextLayerCandidate[] => isFragmentedText(ref.candidate.content)
+    ? [{ ...ref.candidate, kind: 'fragment' as const }]
+    : noisy ? [{ ...ref.candidate, kind: 'compare' as const }] : [])
+}
+
+interface LinePiece { text: string; left: number; right: number; top: number; bottom: number }
 
 /** Text of the layer items that sit on the box's line, in left-to-right order. Null when the box spans several lines. */
 export function textInBox(items: readonly TextLayerItem[], bbox: TextLayerBbox): string | null {
+  const pieces = lineInBox(items, bbox)
+  return pieces && joinPieces(pieces, () => null)
+}
+
+/**
+ * Like `textInBox`, with `<sub>`/`<sup>` around runs that are smaller than the
+ * line's main run and sit off its baseline in the PDF.
+ */
+export function markedTextInBox(items: readonly TextLayerItem[], bbox: TextLayerBbox): string | null {
+  const pieces = lineInBox(items, bbox)
+  if (!pieces || pieces.length === 0) return pieces && ''
+  const main = pieces.reduce((widest, piece) => piece.right - piece.left > widest.right - widest.left ? piece : widest)
+  const height = main.bottom - main.top
+  const baseline = main.top + 0.8 * height
+  return joinPieces(pieces, (piece) => {
+    const pieceHeight = piece.bottom - piece.top
+    const shift = piece.top + 0.8 * pieceHeight - baseline
+    if (pieceHeight > 0.9 * height || Math.abs(shift) < 0.12 * height) return null
+    return shift < 0 ? 'sup' : 'sub'
+  })
+}
+
+function joinPieces(pieces: LinePiece[], script: (piece: LinePiece) => 'sub' | 'sup' | null): string {
+  let result = ''
+  let previous: LinePiece | undefined
+  for (const piece of pieces) {
+    const gap = previous ? piece.left - previous.right : 0
+    if (previous && gap > 0.15 * Math.min(previous.bottom - previous.top, piece.bottom - piece.top) && !/\s$/u.test(result) && !/^\s/u.test(piece.text)) result += ' '
+    const kind = script(piece)
+    result += kind ? `<${kind}>${piece.text.trim()}</${kind}>` : piece.text
+    previous = piece
+  }
+  return result.replace(/\s+/gu, ' ').trim()
+}
+
+function lineInBox(items: readonly TextLayerItem[], bbox: TextLayerBbox): LinePiece[] | null {
   const [x0, y0, x1, y1] = bbox
   const boxHeight = y1 - y0
-  const pieces: Array<{ text: string; left: number; right: number; top: number; bottom: number }> = []
+  const pieces: LinePiece[] = []
   for (const item of items) {
     const [ix0, iy0, ix1, iy1] = item.bbox
     const itemHeight = iy1 - iy0
@@ -104,20 +172,93 @@ export function textInBox(items: readonly TextLayerItem[], bbox: TextLayerBbox):
     if (first < 0) continue
     pieces.push({ text: chars.slice(first, last + 1).join(''), left: ix0 + step * first, right: ix0 + step * (last + 1), top: iy0, bottom: iy1 })
   }
-  if (pieces.length === 0) return ''
+  if (pieces.length === 0) return pieces
   const centres = pieces.map((piece) => (piece.top + piece.bottom) / 2)
   const tallest = Math.max(...pieces.map((piece) => piece.bottom - piece.top))
   if (Math.max(...centres) - Math.min(...centres) > 0.6 * tallest) return null
-  pieces.sort((left, right) => left.left - right.left)
-  let result = ''
-  let previous: (typeof pieces)[number] | undefined
-  for (const piece of pieces) {
-    const gap = previous ? piece.left - previous.right : 0
-    if (previous && gap > 0.15 * Math.min(previous.bottom - previous.top, piece.bottom - piece.top) && !/\s$/u.test(result) && !/^\s/u.test(piece.text)) result += ' '
-    result += piece.text
-    previous = piece
+  return pieces.sort((left, right) => left.left - right.left)
+}
+
+/**
+ * The layer line that replaces a span of a noisy document, or null to keep it.
+ * Replace when the letters equal the parser's but the scripts differ, or when
+ * the parser dropped a few letters (`o erator` for `operator`): every parser
+ * letter found in order, at most a quarter more in the layer. Layer text before
+ * or after the parser's first/last letter is kept only when it completes that
+ * word; a separate word or a script (e.g. an equation's own superscript caught
+ * by the box) is trimmed off.
+ */
+export function compareWithLayer(original: string, marked: string): string | null {
+  if (!marked || /[�\p{Co}\p{Cc}]/u.test(marked)) return null
+  const source = alphanumerics(stripScripts(original))
+  if (!source) return null
+  const lead = /^[^\p{L}\p{N}]*/u.exec(stripScripts(original).trimStart())![0].replace(/\s+/gu, '')
+  const trimmed = trimLayerExtras(marked, source, lead)
+  if (!trimmed) return null
+  const target = alphanumerics(stripScripts(trimmed))
+  if (target === source) return scriptSignature(original) !== scriptSignature(trimmed) ? trimmed : null
+  return target.length > source.length && target.length <= 1.25 * source.length + 4 ? trimmed : null
+}
+
+function trimLayerExtras(marked: string, source: string, lead: string): string | null {
+  const chars: Array<{ char: string; script: boolean; at: number }> = []
+  let script = false
+  for (let index = 0; index < marked.length;) {
+    const tag = /^<(\/?)su[bp]>/u.exec(marked.slice(index))
+    if (tag) { script = tag[1] !== '/'; index += tag[0].length; continue }
+    chars.push({ char: marked[index]!, script, at: index })
+    index += 1
   }
-  return result.replace(/\s+/gu, ' ').trim()
+  const alnum = chars.map((char, index) => ({ ...char, index })).filter((char) => /[\p{L}\p{N}]/u.test(char.char))
+  let cursor = 0
+  let first = -1
+  let last = -1
+  for (const char of source) {
+    while (cursor < alnum.length && alnum[cursor]!.char.toLowerCase() !== char) cursor += 1
+    if (cursor >= alnum.length) return null
+    if (first < 0) first = cursor
+    last = cursor
+    cursor += 1
+  }
+  // Extend over letters glued to the matched ones (same word, same script state).
+  const glued = (from: number, step: -1 | 1): number => {
+    let index = alnum[from]!.index
+    while (chars[index + step] && /[\p{L}\p{N}]/u.test(chars[index + step]!.char) && chars[index + step]!.script === chars[index]!.script) index += step
+    return index
+  }
+  const start = glued(first, -1)
+  const end = glued(last, 1)
+  if (alnum[first]!.index - start > 2 || end - alnum[last]!.index > 2) return null
+  let from = chars[start]!.at
+  let to = chars[end]!.at + 1
+  // Keep the tags around a matched script; drop leading/trailing words and scripts outside the match.
+  while (/<su[bp]>$/u.test(marked.slice(0, from))) from -= 5
+  // Leading punctuation that the parser's span also starts with, e.g. `(b)` or `. The`.
+  if (lead) {
+    let back = from
+    let punctuation = ''
+    while (back > 0 && punctuation.length < lead.length) {
+      const tag = /<\/?su[bp]>$/u.exec(marked.slice(0, back))
+      if (tag) { back -= tag[0].length; continue }
+      const char = marked[back - 1]!
+      if (/[\p{L}\p{N}]/u.test(char)) break
+      if (!/\s/u.test(char)) punctuation = char + punctuation
+      back -= 1
+    }
+    if (punctuation === lead) from = back
+  }
+  while (/^<\/su[bp]>/u.test(marked.slice(to))) to += 6
+  // Punctuation glued to the kept text stays (e.g. a closing period).
+  while (to < marked.length && /^[^\s<\p{L}\p{N}]/u.test(marked.slice(to))) to += 1
+  return marked.slice(from, to).trim()
+}
+
+function stripScripts(text: string): string {
+  return text.replace(SCRIPT_TAG, '$2')
+}
+
+function scriptSignature(text: string): string {
+  return JSON.stringify([...text.matchAll(SCRIPT_TAG)].map((match) => [match[1], alphanumerics(match[2]!)]))
 }
 
 /**
@@ -153,10 +294,14 @@ export function planTextLayerRepairs(candidates: readonly TextLayerCandidate[], 
   const unresolved: TextLayerCandidate[] = []
   for (const candidate of candidates) {
     const items = byPage.get(candidate.pageIndex)
-    const layerText = items ? textInBox(items, candidate.bbox) : null
-    if (layerText && confirmsFragment(candidate.content, layerText)) {
-      repairs.push({ pageIndex: candidate.pageIndex, bbox: candidate.bbox, original: candidate.content, replacement: layerText })
-    } else {
+    const marked = items ? markedTextInBox(items, candidate.bbox) : null
+    const replacement = marked === null ? null : candidate.kind === 'compare'
+      ? compareWithLayer(candidate.content, marked)
+      : confirmsFragment(candidate.content, stripScripts(marked)) ? marked : null
+    if (replacement) {
+      repairs.push({ pageIndex: candidate.pageIndex, bbox: candidate.bbox, original: candidate.content, replacement })
+    } else if (candidate.kind !== 'compare') {
+      // Compared spans that already match the layer are simply correct.
       unresolved.push(candidate)
     }
   }
@@ -193,21 +338,21 @@ export function applyTextLayerRepairs(
   return { layout: clone, markdown: nextMarkdown, report: { version: TEXT_LAYER_REPAIR_VERSION, repairs: applied, unresolved } }
 }
 
-function replaceInMarkdown(markdown: string, repair: TextLayerRepair, previous: string): string | null {
-  const positions = occurrences(markdown, repair.original)
+function replaceInMarkdown(markdown: string, repair: TextLayerRepair, previousSpan: Record<string, unknown> | null): string | null {
+  const previous = typeof previousSpan?.content === 'string' ? previousSpan.content : ''
+  // After a hyphenated line break the parser glues this span to the previous word.
+  const glued = previousSpan?.type === 'text' && /[-­‐]$/u.test(previous.trimEnd())
   // An interrupted earlier repair may have published the Markdown but not the layout.
-  if (positions.length === 0 && occurrences(markdown, escapeMarkdownText(repair.replacement, false)).length === 1) return markdown
-  let index = positions.length === 1 ? positions[0]! : -1
-  if (positions.length > 1 && previous) {
-    // Disambiguate with the end of the preceding span of the same block.
-    const tail = previous.slice(-24)
-    const narrowed = positions.filter((position) => markdown.slice(Math.max(0, position - tail.length - 2), position).includes(tail))
-    if (narrowed.length === 1) index = narrowed[0]!
-  }
-  if (index < 0) return null
-  const end = index + repair.original.length
+  if (spanForms(repair.original).every((form) => occurrences(markdown, form).length === 0) &&
+    occurrences(markdown, escapeMarkdownText(repair.replacement, false)).length === 1) return markdown
+  const found = locateSpan(markdown, repair.original, previous, glued)
+  if (!found) return null
+  const { index, length, joined } = found
   const lineStart = index === 0 || markdown[index - 1] === '\n'
   let replacement = escapeMarkdownText(repair.replacement, lineStart)
+  // The parser already joined this hyphenated line break.
+  if (joined) replacement = replacement.replace(/[-\u00ad\u2010]$/u, '')
+  const end = index + length
   let after = markdown.slice(end)
   // The parser joins a hyphenated line break; do the same for a repaired line ending in a hyphen.
   if (/[-­‐]$/u.test(replacement) && /^ \p{Ll}/u.test(after)) {
@@ -217,21 +362,47 @@ function replaceInMarkdown(markdown: string, repair: TextLayerRepair, previous: 
   return markdown.slice(0, index) + replacement + after
 }
 
-function occurrences(text: string, search: string): number[] {
+/** MinerU writes `*` and `_` escaped in Markdown, and joins a line that ends in a hyphen with the next one. */
+function spanForms(content: string): string[] {
+  return [...new Set([content, content.replace(/[*]/gu, '\\$&'), content.replace(/[*_]/gu, '\\$&')])]
+}
+
+function locateSpan(markdown: string, original: string, previous: string, glued: boolean): { index: number; length: number; joined: boolean } | null {
+  const tail = previous.replace(/[-­‐]$/u, '').slice(-12)
+  const pick = (positions: number[]): number => {
+    if (positions.length === 1) return positions[0]!
+    // Disambiguate with the end of the preceding span of the same block.
+    const narrowed = tail ? positions.filter((position) => markdown.slice(Math.max(0, position - tail.length - 6), position).includes(tail)) : []
+    return narrowed.length === 1 ? narrowed[0]! : -1
+  }
+  for (const form of spanForms(original)) {
+    const index = pick(occurrences(markdown, form, false, glued))
+    if (index >= 0) return { index, length: form.length, joined: false }
+    const stem = form.replace(/[-\u00ad\u2010]$/u, '')
+    if (stem === form || !stem) continue
+    const joined = pick(occurrences(markdown, stem, true, glued))
+    if (joined >= 0) return { index: joined, length: stem.length, joined: true }
+  }
+  return null
+}
+
+function occurrences(text: string, search: string, continued = false, glued = false): number[] {
   const result: number[] = []
   for (let index = text.indexOf(search); index >= 0; index = text.indexOf(search, index + 1)) {
     const before = text[index - 1]
     const after = text[index + search.length]
-    // Whole-span matches only: never splice into the middle of a word.
-    if ((!before || !/[\p{L}\p{N}]/u.test(before)) && (!after || !/[\p{L}\p{N}]/u.test(after))) result.push(index)
+    // Whole-span matches only: never splice into the middle of a word. A joined hyphenated span continues with a lowercase letter.
+    const endOk = continued ? Boolean(after && /\p{Ll}/u.test(after)) : !after || !/[\p{L}\p{N}]/u.test(after) || search.endsWith('>')
+    if ((!before || !/[\p{L}\p{N}]/u.test(before) || search.startsWith('<') || glued) && endOk) result.push(index)
   }
   return result
 }
 
-/** Layer text is plain prose; keep it from being read as Markdown, HTML or math. */
+/** Layer text is plain prose with optional `<sub>`/`<sup>`; keep the rest from being read as Markdown, HTML or math. */
 export function escapeMarkdownText(text: string, lineStart: boolean): string {
   // Brackets stay literal (citation markers such as `[60]`); only a link-forming `](`/`][` is broken up.
-  let escaped = text.replace(/[\\`*_$]/gu, (char) => `\\${char}`).replace(/\](?=[([])/gu, '\\]').replace(/</gu, '&lt;')
+  let escaped = text.split(/(<\/?su[bp]>)/u).map((part, index) => index % 2 === 1 ? part
+    : part.replace(/[\\`*_$]/gu, (char) => `\\${char}`).replace(/\](?=[([])/gu, '\\]').replace(/</gu, '&lt;')).join('')
   if (lineStart) escaped = escaped.replace(/^(\s*\d+)([.)])/u, '$1\\$2').replace(/^(\s*)([#>+=-])/u, '$1\\$2')
   return escaped
 }
@@ -252,7 +423,7 @@ function collectSpans(layout: unknown): SpanRef[] {
       if (Array.isArray(block.blocks)) block.blocks.forEach(visit)
       if (!Array.isArray(block.lines) || block.lines_deleted === true) return
       const blockBox = toBbox(block.bbox)
-      let previous = ''
+      let previous: Record<string, unknown> | null = null
       for (const lineValue of block.lines) {
         const line = asObject(lineValue)
         const spans = line?.spans
@@ -264,12 +435,10 @@ function collectSpans(layout: unknown): SpanRef[] {
           : continuationPage(pages, pageOrder, lineBox)
         for (const spanValue of spans) {
           const span = asObject(spanValue)
-          if (!span || span.type !== 'text' || typeof span.content !== 'string') continue
+          if (!span || typeof span.content !== 'string' || !span.content.trim()) continue
           const bbox = toBbox(span.bbox)
-          if (owner && bbox && isFragmentedText(span.content)) {
-            refs.push({ candidate: { ...owner, bbox, content: span.content }, span, previous })
-          }
-          if (span.content.trim()) previous = span.content
+          if (span.type === 'text' && owner && bbox) refs.push({ candidate: { ...owner, bbox, content: span.content }, span, previous })
+          previous = span
         }
       }
     }

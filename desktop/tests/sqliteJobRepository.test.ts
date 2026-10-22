@@ -228,6 +228,16 @@ describe('SqliteJobRepository', () => {
       const retried = repository.manualRetry({ jobId: 'translate-1', now: later })
       expect(retried).toMatchObject({ id: 'translate-1', status: 'queued', progress: 0, attempt: 2, checkpoint: { completedBlocks: 2 } })
       expect(retried.errorCode).toBeNull()
+
+      // A succeeded translation is re-queued only on an explicit refresh request.
+      repository.claimBatch({ now: later, leaseOwner: 'worker-a', leaseExpiresAt: expiry, kind: 'translate' })
+      repository.complete({ jobId: 'translate-1', leaseOwner: 'worker-a', status: 'succeeded', progress: 100, checkpoint: { completedBlocks: 3 }, now: later })
+      expect(() => repository.manualRetry({ jobId: 'translate-1', now: later })).toThrowError(/retried manually/u)
+      expect(repository.manualRetry({ jobId: 'translate-1', now: later, refreshTranslation: true })).toMatchObject({ status: 'queued', attempt: 4, checkpoint: { completedBlocks: 3 } })
+      repository.enqueue({ id: 'parse-9', documentId: 'document-1', kind: 'parse', now })
+      repository.claimBatch({ now: later, leaseOwner: 'worker-a', leaseExpiresAt: expiry, kind: 'parse' })
+      repository.complete({ jobId: 'parse-9', leaseOwner: 'worker-a', status: 'succeeded', progress: 100, checkpoint: {}, now: later })
+      expect(() => repository.manualRetry({ jobId: 'parse-9', now: later, refreshTranslation: true })).toThrowError(/retried manually/u)
     } finally {
       close(database)
     }

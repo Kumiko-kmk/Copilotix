@@ -434,9 +434,11 @@ export class SqliteJobRepository implements JobRepositoryPort {
     return this.database.transaction(() => {
       const current = this.requireJobUnsafe(jobId)
       const retryableStatus = current.status === 'partial' || current.status === 'failed' || current.status === 'cancelled' ? current.status : undefined
-      const toState = retryableStatus ? JOB_MANUAL_RETRY_TRANSITIONS[retryableStatus] : null
+      // A finished translation whose source was repaired is re-run on explicit request only.
+      const refresh = input.refreshTranslation === true && current.status === 'succeeded' && current.kind === 'translate'
+      const toState = retryableStatus ? JOB_MANUAL_RETRY_TRANSITIONS[retryableStatus] : refresh ? 'queued' : null
       if (!toState) throw new SqliteJobRepositoryError('JOB_RETRY_NOT_ALLOWED', 'Only partial, failed, or cancelled jobs can be retried manually')
-      assertTransition(current.status, toState, true)
+      if (!refresh) assertTransition(current.status, toState, true)
       this.updateTransition.run(
         'queued', 0, JSON.stringify(current.checkpoint), availableAt, null, null,
         null, null, null, null, now, jobId

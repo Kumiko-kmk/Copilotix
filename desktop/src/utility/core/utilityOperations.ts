@@ -667,7 +667,15 @@ async function repairFromTextLayer(layout: unknown, markdown: string, pdfPath: s
   try {
     const pages = [...new Map(candidates.map((candidate) => [candidate.pageIndex, { pageIndex: candidate.pageIndex, pageSize: candidate.pageSize }])).values()]
     const layer = await readPdfTextLayer(pdfPath, pages, signal)
-    return applyTextLayerRepairs(layout, markdown, planTextLayerRepairs(candidates, layer))
+    let result = applyTextLayerRepairs(layout, markdown, planTextLayerRepairs(candidates, layer))
+    // A repaired span can make its neighbour locatable in the Markdown; settle here
+    // instead of publishing (and re-preparing the reader) once per pass.
+    for (let pass = 0; pass < 3 && result.report.repairs.length > 0; pass += 1) {
+      const next = applyTextLayerRepairs(result.layout, result.markdown, planTextLayerRepairs(findTextLayerCandidates(result.layout), layer))
+      if (next.report.repairs.length === 0) break
+      result = { ...next, report: { ...next.report, repairs: [...result.report.repairs, ...next.report.repairs] } }
+    }
+    return result
   } catch (error) {
     if (signal?.aborted) throw error
     return { layout, markdown, report: { version: TEXT_LAYER_REPAIR_VERSION, repairs: [], unresolved: candidates } }

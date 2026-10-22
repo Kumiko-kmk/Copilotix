@@ -136,7 +136,8 @@ export class DocumentCommandService {
     }
   }
 
-  async retry(taskId: string): Promise<void> {
+  /** `refreshStaleTranslation`: re-run a finished translation whose source blocks changed since. */
+  async retry(taskId: string, options: { refreshStaleTranslation?: boolean } = {}): Promise<void> {
     if (!this.jobRepository) throw new Error('作业队列尚未初始化')
     if (!await this.repository.getTask(taskId)) throw new Error('任务不存在')
     const jobs = await this.jobRepository.list({ documentId: taskId })
@@ -154,8 +155,13 @@ export class DocumentCommandService {
         (candidate.status === 'partial' || candidate.status === 'failed' || candidate.status === 'cancelled'))
       .sort(compareJobs)
       .at(-1)
-    if (!job) throw new Error('任务当前不可重试')
-    await this.jobRepository.manualRetry({ jobId: job.id, now: new Date().toISOString() })
+    const finished = !job && options.refreshStaleTranslation
+      ? jobs.filter((candidate) => candidate.kind === 'translate' && candidate.status === 'succeeded').sort(compareJobs).at(-1)
+      : undefined
+    if (!job && !finished) throw new Error('任务当前不可重试')
+    await this.jobRepository.manualRetry(job
+      ? { jobId: job.id, now: new Date().toISOString() }
+      : { jobId: finished!.id, now: new Date().toISOString(), refreshTranslation: true })
     this.scheduler?.wake()
   }
 

@@ -62,7 +62,8 @@ export class TaskService extends EventEmitter {
   }
 
   async retry(taskId: string): Promise<void> {
-    await this.commands.retry(taskId)
+    const refreshStaleTranslation = await this.artifacts.hasStaleTranslation(taskId).catch(() => false)
+    await this.commands.retry(taskId, { refreshStaleTranslation })
     this.emit('changed')
   }
 

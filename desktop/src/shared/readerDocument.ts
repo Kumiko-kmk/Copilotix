@@ -19,6 +19,7 @@ export interface ReaderBlock {
   pageIndex?: number
   order: number
   fallbackProvider?: TranslationProviderId
+  sourceChanged?: true
 }
 
 export interface ReaderDocumentBlocks {
@@ -85,7 +86,8 @@ export function mergeReaderBlocks(
     annotationKey: `content:${sequence}`,
     mappingIds: block.mappingIds,
     order: sequence,
-    ...(block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {})
+    ...(block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {}),
+    ...(block.sourceChanged ? { sourceChanged: true as const } : {})
   }))
   const pagesByContentIndex = contentBlocks.map((block) => contentBlockPages(block, mappingById))
   const firstContentByPage = new Map<number, number>()
@@ -201,8 +203,8 @@ function remapTranslatedContent(
     }))
 }
 
-function withFallback(block: TranslatedMarkdownBlock): Pick<AlignedMarkdownBlock, 'fallbackProvider'> {
-  return block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {}
+function withFallback(block: TranslatedMarkdownBlock): Pick<AlignedMarkdownBlock, 'fallbackProvider' | 'sourceChanged'> {
+  return { ...(block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {}), ...(block.sourceChanged ? { sourceChanged: true as const } : {}) }
 }
 
 function reuseOriginalMapping(markdown: string): AlignedMarkdownBlock[] {
