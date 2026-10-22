@@ -30,7 +30,7 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 
 - 人工測試入口：`release-artifacts/<build-id>/program/Copilotix.exe`，不可單獨搬走 EXE；同目錄 DLL、PAK、resources 均必需。
 - 交付包：`release-artifacts/<build-id>/Copilotix-<version>-win-x64.zip`，Setup 規則見第 6 節。
-- Runtime 上限 **360 MiB**，Electron 約占 330 MiB。Renderer-only 套件放 `devDependencies`；Main 純 JS 優先由 electron-vite externalize `exclude` 打入 bundle；原生或刻意外部化套件才留 `dependencies`。
+- Runtime 上限 **360 MiB**，Electron 約占 330 MiB；2026-10-22 起依使用者要求暫列 `ADVISORY_RELEASE_LIMITS`（`release-policy.mjs`），超出只警告不失敗，app.asar／ZIP／Setup 上限仍為硬門禁，恢復時從清單移除即可。Renderer-only 套件放 `devDependencies`；Main 純 JS 優先由 electron-vite externalize `exclude` 打入 bundle；原生或刻意外部化套件才留 `dependencies`。
 
 ## 2. 文檔格式接口（PDF / Markdown）
 
