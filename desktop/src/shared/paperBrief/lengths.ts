@@ -57,8 +57,8 @@ export const BRIEF_COUNTS = {
   keywords: [4, 8]
 } as const satisfies Record<string, Range>
 
-/** Fresh output may miss a range by this much before a repair is requested. */
-const TOLERANCE = { below: 0.75, above: 1.15 }
+/** Fresh output (first try and repair alike) may miss a range by ±15% before a repair or fallback is requested (user decision 2026-10-22). */
+const TOLERANCE = { below: 0.85, above: 1.15 }
 const MISSING = /^原文未说明/u
 const WHITESPACE = /\s/u
 const FULL_WIDTH = /[\p{Script=Han}\u3000-\u303f\uff00-\uffef]/u
@@ -93,10 +93,10 @@ export function checkBriefLengths(content: PaperBriefContent): string[] {
   }
   if (content.analysis) {
     const analysis = content.analysis
-    // Four-part layout uses strict ranges for new output; legacy storage stays readable.
+    // Four-part ranges are prompt targets; acceptance allows the same ±15%. Legacy storage stays readable.
     const exact = (path: string, value: string, [min, max]: Range): void => {
       const length = displayLength(value)
-      if (!MISSING.test(value.trim()) && (length < min || length > max)) {
+      if (!MISSING.test(value.trim()) && (length < min * TOLERANCE.below || length > max * TOLERANCE.above)) {
         const target = Math.round((min + max) / 2)
         problems.push(`${path}：${length} 字，请调整为 ${min}–${max} 字；本轮目标 ${target} 字，需${length > max ? '删减' : '依据原文补充'}约 ${Math.abs(length - target)} 字`)
       }

@@ -221,6 +221,13 @@ describe('paper brief lengths', () => {
     expect(problems.some((problem) => problem.startsWith('findings：2 项'))).toBe(true)
   })
 
+  it('accepts four-part lengths within ±15% of the target range and asks to repair beyond it', () => {
+    const withAbstract = (length: number) => parseBriefResponse(JSON.stringify({ ...briefGeneration, analysis: { ...briefGeneration.analysis, abstract: '摘'.repeat(length) } }), { requireAnalysis: true })
+    expect(withAbstract(175).ok).toBe(true) // 200–300 字 target, 170 accepted
+    const short = withAbstract(165)
+    expect(short.ok ? [] : short.problems).toEqual([expect.stringMatching(/^analysis\.abstract：165 字/u)])
+  })
+
   it('checks lengths only when asked, so the second attempt is never discarded for them', () => {
     const raw = JSON.stringify(sampleContent('E1'))
     expect(parseBriefResponse(raw).ok).toBe(true)
