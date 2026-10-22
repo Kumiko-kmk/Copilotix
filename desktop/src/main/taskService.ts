@@ -72,6 +72,18 @@ export class TaskService extends EventEmitter {
     this.emit('changed')
   }
 
+  async repairTextLayer(taskId: string): Promise<{ repaired: number; unresolved: number }> {
+    // Figure Markdown projections are rebuilt from the repaired text afterwards.
+    await this.artifacts.freezeFigureWrites(taskId)
+    let result: { repaired: number; unresolved: number }
+    try { result = await this.commands.repairTextLayer(taskId) } finally { this.artifacts.resumeFigureWrites(taskId) }
+    if (result.repaired > 0) {
+      await this.artifacts.refreshFigureMarkdown(taskId).catch(() => undefined)
+      this.emit('changed')
+    }
+    return result
+  }
+
   async getDocument(taskId: string) {
     return this.artifacts.getDocument(taskId)
   }

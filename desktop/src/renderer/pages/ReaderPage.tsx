@@ -22,6 +22,7 @@ import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutation
 import ReaderWorkbench from '../components/ReaderWorkbench'
 import DocumentLifecycleActions from '../components/DocumentLifecycleActions'
 import { translationCount } from '../documentStatus'
+import { useTextLayerRepair } from '../useTextLayerRepair'
 import type { PaperInsightSource } from '@shared/paperInsight'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
@@ -62,6 +63,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   const originalAnnotations = useAnnotationQuery(props.documentId, 'original')
   const translatedAnnotations = useAnnotationQuery(props.documentId, 'translated')
   const document = documentQuery.data
+  useTextLayerRepair(props.documentId, document?.layoutJson, messageApi)
   const snapshots = React.useMemo(
     () => ({ original: originalAnnotations.data, translated: translatedAnnotations.data }),
     [originalAnnotations.data, translatedAnnotations.data]

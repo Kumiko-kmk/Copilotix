@@ -13,6 +13,7 @@ import { z } from 'zod'
 import {
   cacheDocumentFigureRequestSchema,
   cacheDocumentFigureResultSchema,
+  repairTextLayerResultSchema,
   appSettingsSchema,
   credentialValidationRequestSchema,
   credentialValidationResultSchema,
@@ -158,6 +159,7 @@ const api: CopilotixDesktopApi = {
   deleteDocument: (request: DeleteDocumentRequest) =>
     invokeValidated('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, request),
   getDocument: (documentId: string) => invokeValidated('documents:get', documentIdRequestSchema, documentDetailsSchema, documentId),
+  repairDocumentTextLayer: (documentId: string) => invokeValidated('documents:repair-text-layer', documentIdRequestSchema, repairTextLayerResultSchema, documentId),
   cacheDocumentFigure: (request) => invokeValidated('documents:cache-figure', cacheDocumentFigureRequestSchema, cacheDocumentFigureResultSchema, request),
   openDocumentOutput: (documentId: string) =>
     invokeValidated('documents:open-output', documentIdRequestSchema, voidResponseSchema, documentId),

@@ -149,7 +149,7 @@ const coreOperationNames = [
   'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear', 'chat:delete-turn',
   'notes:list', 'notes:upsert', 'notes:delete',
   'annotations:list-snapshot', 'annotations:mutate',
-  'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings',
+  'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings', 'compute:repair-text-layer',
   'compute:rag-content-index', 'compute:library-categories',
   'compute:translation-plan-open', 'compute:translation-plan-list', 'compute:translation-plan-cache',
   'compute:translation-plan-apply', 'compute:translation-plan-fail', 'compute:translation-plan-finalize'
@@ -340,6 +340,11 @@ export const coreNormalizeParserResultSchema = z.object({
 }).strict()
 export const coreRebuildMappingsPayloadSchema = z.object({ taskId: coreIdSchema, outputDir: corePathSchema }).strict()
 export const coreRebuildMappingsResultSchema = z.object({ rebuilt: z.literal(true) }).strict()
+export const coreRepairTextLayerPayloadSchema = z.object({ taskId: coreIdSchema }).strict()
+export const coreRepairTextLayerResultSchema = z.object({
+  repaired: z.number().int().min(0).max(1_000_000),
+  unresolved: z.number().int().min(0).max(1_000_000)
+}).strict()
 export const coreRagContentIndexPayloadSchema = z.object({
   documentId: coreIdSchema,
   contentRevisionId: coreIdSchema
@@ -464,6 +469,7 @@ export const coreOperationRegistry = {
   'compute:import-pdf': { payload: coreImportPdfPayloadSchema, result: coreImportPdfResultSchema },
   'compute:normalize-parser': { payload: coreNormalizeParserPayloadSchema, result: coreNormalizeParserResultSchema },
   'compute:rebuild-mappings': { payload: coreRebuildMappingsPayloadSchema, result: coreRebuildMappingsResultSchema },
+  'compute:repair-text-layer': { payload: coreRepairTextLayerPayloadSchema, result: coreRepairTextLayerResultSchema },
   'compute:rag-content-index': { payload: coreRagContentIndexPayloadSchema, result: coreRagContentIndexResultSchema },
   'compute:translation-plan-open': { payload: coreTranslationPlanOpenPayloadSchema, result: coreTranslationPlanOpenResultSchema },
   'compute:translation-plan-list': { payload: coreTranslationPlanListPayloadSchema, result: coreTranslationPlanListResultSchema },

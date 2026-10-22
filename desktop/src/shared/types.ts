@@ -7,6 +7,7 @@ import type { ImportFileOptions } from './pdfImport'
 import type {
   CacheDocumentFigureRequest,
   CacheDocumentFigureResult,
+  RepairTextLayerResult,
   DeleteDocumentRequest,
   DocumentChangeEvent,
   DocumentDetails,
@@ -280,6 +281,7 @@ export interface CopilotixDesktopApi {
   deleteDocument(request: DeleteDocumentRequest): Promise<void>
   getDocument(documentId: string): Promise<DocumentDetails>
   cacheDocumentFigure?(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult>
+  repairDocumentTextLayer(documentId: string): Promise<RepairTextLayerResult>
   openDocumentOutput(documentId: string): Promise<void>
   saveDocumentAs(request: SaveDocumentAsRequest): Promise<SaveDocumentAsResult>
   listReaderAnnotations(request: ListReaderAnnotationsRequest): Promise<ReaderAnnotationSnapshot>

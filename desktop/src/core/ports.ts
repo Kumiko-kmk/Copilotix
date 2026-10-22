@@ -21,6 +21,8 @@ export interface TaskComputePort {
   importPdf(sourcePath: string, documentId: string, options?: { skipFirstPage?: boolean }): Promise<{ sha256: string; size: number }>
   normalizeParserOutput(task: CopilotixTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult>
   rebuildMappings(taskId: string, outputDir: string): Promise<void>
+  /** Correct fragmented parser lines of a published parse from the PDF text layer. */
+  repairTextLayer?(taskId: string): Promise<{ repaired: number; unresolved: number }>
   openTranslationPlan(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanOpenResult>
   listTranslationWork(taskId: string, jobId: string, cursor?: number, limit?: number, signal?: AbortSignal): Promise<TranslationPlanListResult>
   tryTranslationCache(

@@ -386,6 +386,12 @@ export const cacheDocumentFigureRequestSchema = z.object({
 export type CacheDocumentFigureRequest = z.infer<typeof cacheDocumentFigureRequestSchema>
 export const cacheDocumentFigureResultSchema = z.object({ imagePath: z.string().nullable(), sourceRevision: z.string().length(64) }).strict()
 export type CacheDocumentFigureResult = z.infer<typeof cacheDocumentFigureResultSchema>
+/** Lines replaced from the PDF text layer, and fragmented lines it could not confirm. */
+export const repairTextLayerResultSchema = z.object({
+  repaired: z.number().int().min(0).max(1_000_000),
+  unresolved: z.number().int().min(0).max(1_000_000)
+}).strict()
+export type RepairTextLayerResult = z.infer<typeof repairTextLayerResultSchema>
 
 export const documentAnnotationViewSchema = z.enum(['original', 'translated'])
 export const documentAnnotationKindSchema = z.enum(['highlight', 'underline'])
