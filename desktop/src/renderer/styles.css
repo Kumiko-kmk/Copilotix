@@ -414,7 +414,8 @@ button, input, select { font: inherit; }
 .storage-growth-footer span:last-child { text-align: right; }
 .storage-note { display: block; margin: 0; font-size: 12px; }
 /* Colour themes (ThemeSettings.tsx): each card draws a miniature of the app in its own palette. */
-.theme-settings { display: grid; align-content: start; gap: 22px; overflow: auto; }
+.theme-settings { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 20px; overflow: auto; }
+.theme-groups { display: grid; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
 .theme-group { display: grid; min-height: 0; grid-template-columns: 54px minmax(0, 1fr); gap: 14px; }
 .theme-group-label { display: grid; align-content: start; gap: 4px; padding-top: 2px; color: var(--ink); font-size: 15px; font-weight: 750; letter-spacing: .1em; }
 .theme-group-label small { color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
@@ -439,15 +440,18 @@ button, input, select { font: inherit; }
 .theme-preview-floor i:nth-child(odd) { height: 74%; }
 .theme-preview-floor i.selected { height: 100%; border-top-color: var(--t-primary); }
 .theme-card-copy { display: grid; min-width: 0; gap: 6px; padding: 8px 10px 10px; }
-.theme-card-heading { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; }
+.theme-card { container-type: inline-size; }
+.theme-card-heading { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 8px; }
+@container (max-width: 150px) { .theme-card-heading small { display: none; } }
 .theme-card-heading strong { color: var(--ink); font-size: 14px; font-weight: 750; letter-spacing: .08em; white-space: nowrap; }
 .theme-card-heading small { overflow: hidden; color: var(--muted); font-size: 9.5px; font-weight: 600; letter-spacing: .12em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .theme-card-heading em { color: var(--primary); font-size: 11px; font-style: normal; font-weight: 650; letter-spacing: .1em; white-space: nowrap; }
 .theme-swatches { display: flex; gap: 3px; }
 .theme-swatches i { flex: 1; height: 10px; max-width: 18px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent); }
 /* Reader text size, below the themes. */
-.reader-font-setting { align-items: start; }
-.reader-font-control { display: grid; min-width: 0; gap: 12px; padding: 14px 18px 16px; border-radius: 4px; background: var(--lift); }
+.reader-font-setting { min-height: 180px; }
+.reader-font-control { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; padding: 14px 18px 16px; border-radius: 4px; background: var(--lift); }
+.reader-font-stepper-label { width: 48px; flex: none; color: var(--ink); font-size: 13px; font-weight: 700; letter-spacing: .1em; }
 .reader-font-stepper { display: flex; min-width: 0; align-items: center; gap: 12px; }
 .reader-font-stepper > button { height: 30px; min-width: 38px; padding: 0 8px; border: 1px solid var(--rule-strong); border-radius: 2px; color: var(--ink); background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; letter-spacing: .04em; transition: color .15s ease, border-color .15s ease; }
 .reader-font-stepper > button:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
@@ -457,7 +461,9 @@ button, input, select { font: inherit; }
 .reader-font-stepper output { min-width: 54px; color: var(--ink); font-size: 22px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .reader-font-stepper output small { margin-left: 3px; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
 .reader-font-stepper .reader-font-reset { border-color: transparent; color: var(--muted); font-weight: 600; }
-.reader-font-sample { margin: 0; overflow: hidden; color: var(--text); line-height: 1.78; text-align: justify; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.reader-font-stepper .reader-font-reset:disabled { visibility: hidden; }
+.reader-font-sample p { margin: 0 0 .6em; }
+.reader-font-sample { min-height: 0; margin: 4px 0 0; overflow: hidden; color: var(--text); text-align: justify; mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
 .settings-actions { position: relative; z-index: 2; display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 20px; padding: 10px 0 0; border-top: 1px solid var(--rule); background: var(--surface); }
 .settings-actions > .ant-typography { font-size: 12px; letter-spacing: .08em; }
 .settings-action-buttons { display: flex; gap: 12px; }
@@ -611,8 +617,8 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-render-status .ant-alert { width: min(560px, 90%); }
 .markdown-render-loading .markdown-body, .markdown-render-preparing .markdown-body, .markdown-render-error .markdown-body { visibility: hidden; pointer-events: none; }
 .markdown-pane[data-render-state="loading"] .markdown-minimap, .markdown-pane[data-render-state="preparing"] .markdown-minimap, .markdown-pane[data-render-state="error"] .markdown-minimap { visibility: hidden; pointer-events: none; }
-/* The reader's text size comes from Settings (theme.ts, --reader-font-size); everything below scales with it. */
-.markdown-body { max-width: 900px; margin: 0 auto; padding: 15px 42px 60px; color: var(--text); font-size: var(--reader-font-size, 16px); line-height: 1.78; }
+/* The reader's text size and line height come from Settings (theme.ts, --reader-font-size / --reader-line-height); everything below scales with them. */
+.markdown-body { max-width: 900px; margin: 0 auto; padding: 15px 42px 60px; color: var(--text); font-size: var(--reader-font-size, 16px); line-height: var(--reader-line-height, 1.8); }
 .markdown-block { position: relative; margin: 0 -12px; padding: 1px 12px; border: 1px solid transparent; border-radius: 2px; content-visibility: auto; contain-intrinsic-block-size: auto 48px; transition: background .15s ease; }
 .markdown-block:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
 .markdown-block.active { background: color-mix(in srgb, var(--primary-soft) 62%, transparent); box-shadow: inset 2px 0 0 var(--primary); }

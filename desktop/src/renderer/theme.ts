@@ -125,16 +125,20 @@ export function selectTheme(id: string): ThemeDefinition {
 }
 
 /**
- * Appearance: the colour theme and the reader's text size. Settings previews a choice at once,
+ * Appearance: the colour theme and the reader's text size and line height. Settings previews a choice at once,
  * and saves or reverts it with the page's own 保存全部更改 / 放弃更改.
  */
 export interface Appearance {
   themeId: string
   readerFontSize: number
+  readerLineHeight: number
 }
 
 const FONT_KEY = 'copilotix.reader.font-size.v1'
 export const READER_FONT_SIZES = { min: 13, max: 22, step: 1, default: 16 } as const
+const LINE_HEIGHT_KEY = 'copilotix.reader.line-height.v1'
+/** Multiples of the font size; the old fixed value was 1.78. */
+export const READER_LINE_HEIGHTS = { min: 1.4, max: 2.4, step: 0.1, default: 1.8 } as const
 
 function writeStored(key: string, value: string): void {
   try {
@@ -149,25 +153,40 @@ function clampFontSize(value: number): number {
   return Math.min(READER_FONT_SIZES.max, Math.max(READER_FONT_SIZES.min, Math.round(value)))
 }
 
-export function storedAppearance(): Appearance {
-  let size: string | null = null
+export function clampLineHeight(value: number): number {
+  if (!Number.isFinite(value)) return READER_LINE_HEIGHTS.default
+  return Math.min(READER_LINE_HEIGHTS.max, Math.max(READER_LINE_HEIGHTS.min, Math.round(value * 10) / 10))
+}
+
+function readStored(key: string): string | null {
   try {
-    size = window.localStorage.getItem(FONT_KEY)
+    return window.localStorage.getItem(key)
   } catch {
-    size = null
+    return null
   }
-  return { themeId: findTheme(storedThemeId()).id, readerFontSize: size === null ? READER_FONT_SIZES.default : clampFontSize(Number(size)) }
+}
+
+export function storedAppearance(): Appearance {
+  const size = readStored(FONT_KEY)
+  const lineHeight = readStored(LINE_HEIGHT_KEY)
+  return {
+    themeId: findTheme(storedThemeId()).id,
+    readerFontSize: size === null ? READER_FONT_SIZES.default : clampFontSize(Number(size)),
+    readerLineHeight: lineHeight === null ? READER_LINE_HEIGHTS.default : clampLineHeight(Number(lineHeight))
+  }
 }
 
 /** Applies an appearance without remembering it. */
 export function previewAppearance(appearance: Appearance, root: HTMLElement = document.documentElement): void {
   if (current.id !== appearance.themeId || root.dataset.colorTheme !== appearance.themeId) applyTheme(findTheme(appearance.themeId), root)
   root.style.setProperty('--reader-font-size', `${clampFontSize(appearance.readerFontSize)}px`)
+  root.style.setProperty('--reader-line-height', String(clampLineHeight(appearance.readerLineHeight)))
 }
 
 export function saveAppearance(appearance: Appearance): void {
   writeStored(STORAGE_KEY, findTheme(appearance.themeId).id)
   writeStored(FONT_KEY, String(clampFontSize(appearance.readerFontSize)))
+  writeStored(LINE_HEIGHT_KEY, String(clampLineHeight(appearance.readerLineHeight)))
   previewAppearance(appearance)
 }
 
