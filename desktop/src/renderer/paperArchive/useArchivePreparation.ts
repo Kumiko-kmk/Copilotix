@@ -10,7 +10,11 @@ import type { ArchivePaper } from './archiveShelves'
  */
 const PREPARE_DWELL_MS = 400
 
-/** What the archive still waits for: the paper's processing, its analysis, or figures and cover. */
+/**
+ * What the archive still waits for: the paper's processing, its analysis, or figures and cover. The
+ * figures step is reported only while something is actually rendered from the PDF; checking caches
+ * after each switch (and the selection dwell) stays silent, so prepared papers never flash it.
+ */
 export type ArchivePreparationStep = 'workflow' | 'analysis' | 'analysis-failed' | 'figures' | null
 
 /** Readiness includes the saved analysis and complete figure files, not just translation. */
@@ -43,6 +47,7 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
   const pdfUrl = data?.pdfUrl
   const figureKey = `${id ?? ''}:${pdfUrl ?? ''}:${geometryJson ?? ''}`
   const [figures, setFigures] = React.useState<{ key: string; done: boolean; ratio: number } | null>(null)
+  const [renderingKey, setRenderingKey] = React.useState<string | null>(null)
   React.useEffect(() => {
     if (!id || !pdfUrl || geometryJson === null) return
     const controller = new AbortController()
@@ -53,7 +58,8 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
     }
     const geometries = JSON.parse(geometryJson) as ReaderFigureGeometry[]
     void import('../useFigureArtifacts').then(({ ensureFigureArtifacts }) => ensureFigureArtifacts(id, pdfUrl, geometries, controller.signal,
-      (available, failed, total) => { if (!controller.signal.aborted) setFigures({ key: figureKey, done: false, ratio: total ? (available + failed) / total : 1 }) }))
+      (available, failed, total) => { if (!controller.signal.aborted) setFigures({ key: figureKey, done: false, ratio: total ? (available + failed) / total : 1 }) },
+      () => { if (!controller.signal.aborted) setRenderingKey(figureKey) }))
       .then(result => { if (!controller.signal.aborted) setFigures({ key: figureKey, done: result.failed === 0, ratio: result.failed ? 0.99 : 1 }) })
       .catch(() => { /* Incomplete work never unlocks the archive or produces a success check. */ })
     return () => controller.abort()
@@ -74,7 +80,7 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
     }
     void Promise.all([import('./detailPage'), import('./ArchiveDetail')])
       .then(([{ loadDetailPage, firstPageRenderer }, { renderSpread }]) => loadDetailPage(coverKey,
-        () => renderSpread(id, data, firstPageRenderer(data.summary.sourceHash), controller.signal, () => undefined), controller.signal))
+        () => renderSpread(id, data, firstPageRenderer(data.summary.sourceHash, () => { if (!controller.signal.aborted) setRenderingKey(coverKey) }), controller.signal, () => undefined), controller.signal))
       .then(() => { if (!controller.signal.aborted) setPreparedCover(coverKey) })
       .catch(() => { /* No completed state until the composed cover is usable. */ })
     return () => controller.abort()
@@ -84,6 +90,7 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
     : !analysisReady ? 96 : 98 + Math.min(1, figures?.key === figureKey ? figures.ratio : 0)
   const analysisFailed = state?.status === 'failed' || state?.status === 'unavailable'
   const waiting: ArchivePreparationStep = ready ? null : !workflowReady ? 'workflow'
-    : !analysisReady ? (analysisFailed ? 'analysis-failed' : 'analysis') : 'figures'
+    : !analysisReady ? (analysisFailed ? 'analysis-failed' : 'analysis')
+      : renderingKey !== null && (renderingKey === figureKey || renderingKey === coverKey) ? 'figures' : null
   return { ready, progress, waiting }
 }
