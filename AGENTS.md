@@ -10,7 +10,7 @@
 - 使用者不喜歡滑鼠懸停時出現文字提示／浮層，包括原生 `title`、Tooltip、Popover 預覽與以全文補充截斷文字的彈窗。全應用不再添加這類說明；圖示仍保留 `aria-label`，必要資訊在頁面內或明確點擊後顯示。僅閱讀器筆記與正文引用的參考文獻卡兩處為使用者要求的例外。清單與實作邊界見 [介面偏好](docs/UI_PREFERENCES_ZH.md)。
 - 共享 schema、migration、IPC、Core RPC、JobRepository、Artifact/PathPolicy 或發布腳本的修改，須記錄兼容策略、測試證據與恢復語義。
 - 每次功能修改，只有使用者明確要求打包、EXE、安裝包或發布產物時才執行打包；未要求打包時，提供對應改動的實際介面截圖供使用者確認。截圖不代表完整測試驗收，不以示意圖或舊版本截圖代替。截圖與預覽須避開其他修改進程，優先使用隔離資料目錄／預覽，不重建或覆蓋其他進程正在使用的共享 out、不終止其他進程；無法隔離時如實說明。使用者明確要求不截圖時遵從，不追溯補拍先前改動。
-- 預設不跑本地 lint、typecheck、單元／覆蓋率及 E2E。使用者要求驗證時，先跑受影響用例或 `desktop:test:changed`，需要核心回歸再跑 `desktop:test`；不要每個功能都重跑完整 UI、覆蓋率、打包和安裝驗收。2026-10-14 使用者已授權精簡測試：同類小用例合併，重複外觀／源碼字串檢查和過時流程可刪除；資料安全、持久化、IPC 來源與取消恢復等行為回歸保留。未明確授權不得 push、上傳產物或觸發遠端發布。
+- 預設不跑本地 lint、typecheck、單元／覆蓋率及 E2E。使用者要求驗證時跑 `desktop:test`（只跑受改動影響的用例＋必跑安全集），需要全量時才跑 `desktop:test:full`；不要每個功能都重跑完整 UI、覆蓋率、打包和安裝驗收。2026-10-14 使用者已授權精簡測試：同類小用例合併，重複外觀／源碼字串檢查和過時流程可刪除；資料安全、持久化、IPC 來源與取消恢復等行為回歸保留。未明確授權不得 push、上傳產物或觸發遠端發布。
 
 ## 1. 本地 Windows 構建與交付
 
@@ -93,12 +93,12 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 
 - 修改 → 本地 commit → 按需本地 build／交付；未授權不 push，未跑完整 CI 如實說明。授權上傳後檢查最新提交的 Actions，合併前 `build` 必須成功，PR 另須通過最新合併結果檢查；舊成功、跳過、取消皆不可替代。
 - `.github/workflows/desktop-windows.yml` 覆蓋 master push、所有 PR、`desktop-v*` tag 及手動觸發；功能分支開 PR 後由合併結果檢查，避免同一提交重跑 push／PR。未開 PR 的分支可手動驗證；新分支須包含最新工作流。只 commit 不會觸發 Actions。
-- 保留必需檢查名稱 `build`。完整驗證時 Electron E2E 在與 `build` 並行的三個 `e2e` 矩陣 job 執行，最短的第 1 片先執行完整單元／UI／發布腳本回歸與覆蓋率；`build` 顯式安裝 Electron 後構建，打包後只跑 packaged smoke。publish 同時依賴 build 和全部 e2e（含覆蓋率），任一失敗不可發布。一般 master push／PR 執行 frozen-lockfile、lint、typecheck、快速核心回歸、四 bundle 和源碼啟動 smoke；不預設打包、跑全套 UI／覆蓋率或安裝。`desktop-v*` tag 或手動勾選 `full_validation` 才跑覆蓋率、全部 Electron E2E、打包／安裝生命週期及下載校驗；tag 的版本、許可、簽章與打包內建安全校驗仍必需。
+- 保留必需檢查名稱 `build`。完整驗證時 Electron E2E 在與 `build` 並行的三個 `e2e` 矩陣 job 執行，最短的第 1 片先執行完整單元／UI／發布腳本回歸與覆蓋率；`build` 顯式安裝 Electron 後構建，打包後只跑 packaged smoke。publish 同時依賴 build 和全部 e2e（含覆蓋率），任一失敗不可發布。一般 master push／PR 執行 frozen-lockfile、lint、typecheck、受影響單元測試（相對 PR 目標或上一個 master 提交）＋必跑安全集、四 bundle 和 smoke＋按路徑映射的受影響 E2E（2026-10-22 使用者要求只測改動部分；CI 選擇邏輯尚未在遠端驗證）；不預設打包、跑全套 UI／覆蓋率或安裝。`desktop-v*` tag 或手動勾選 `full_validation` 才跑覆蓋率、全部 Electron E2E、打包／安裝生命週期及下載校驗；tag 的版本、許可、簽章與打包內建安全校驗仍必需。
 - `Copilotix-Windows-x64-Bundle` 供安裝驗收；`Copilotix-Windows-verification-reports` 保存 build 的 JUnit、Playwright HTML 與安裝驗收證據；`Copilotix-Windows-e2e-reports-<n>` 保存各片 Playwright HTML／失敗證據，第 1 片另存完整回歸 JUnit 與覆蓋率摘要。CI 未過不可稱已驗證包；CI 無個人 API 憑據，付費模型、視覺及硬體差異仍須真人驗收。
 
 ## 9. CI 與夾具維護
 
-- Vitest 預設 ≤2 workers，Windows Playwright 單 worker；JUnit 放 `desktop/unit-test-results`。`desktop:test` 只跑核心 `.test.ts`；DOM／React 測試用 `.test.tsx`，由 `desktop:test:ui` 或 `desktop:test:full` 執行；發布腳本 `.test.mjs` 同樣只進完整回歸。新測試按功能加入現有套件，不為簡單 getter、動畫常數、CSS 或資料形狀再建文件。
+- Vitest 預設 ≤2 workers，Windows Playwright 單 worker；JUnit 放 `desktop/unit-test-results`。`desktop:test`／`desktop:test:e2e:affected` 由 `scripts/affected-tests.mjs` 選擇受影響用例（三類測試檔都按 import 圖，E2E 按路徑映射），必跑安全集、全量觸發條件與映射見 [開發文檔](docs/DESKTOP_DEVELOPMENT_ZH.md#测试与实际门禁)；`desktop:test:full`、`desktop:test:e2e:full`、tag 與 `full_validation` 仍為全量，發布前必須全量通過。新增資料安全類測試檔時同步加入必跑集。新測試按功能加入現有套件，不為簡單 getter、動畫常數、CSS 或資料形狀再建文件。
 - Windows 原子 rename 對 EPERM／EACCES／EBUSY 最多約 6.3 秒有界重試；永久錯誤 exit 1，不用 copy／delete 替代。packaged smoke 前須有 Setup、uninstaller、release-manifest、ZIP；其餘 E2E 只需 bundle。
 - E2E 分片按 `desktop/playwright.config.ts` 的 `E2E_SHARDS` 實測時長分配（各單 worker），最後一片收下未列出的 spec；`COPILOTIX_E2E_SHARD` 為 `n/總數`，總數須與清單和工作流 matrix 一致，否則報錯。某片明顯變長時按 CI 日誌重新分配。
 - 僅「未打包＋NODE_ENV=test＋COPILOTIX_E2E_USER_DATA」用獨立 native vault service；夾具只清理自身六種 account，不碰真人憑據。問答 E2E 經真實設定 IPC 存假 Key，僅 mock provider HTTP。
