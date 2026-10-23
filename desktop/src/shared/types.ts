@@ -1,3 +1,4 @@
+import type { MarkdownEditRequest, ResolvedMarkdownEdits } from './markdownEdits'
 import type { PaperChatAskRequest, PaperChatStatus } from './paperChatSchemas'
 import type { PaperChatLoadRequest, PaperChatPage, PaperChatSession } from './paperChatStorageSchemas'
 import type { ReaderNote, ReaderNotes } from './readerNotes'
@@ -202,6 +203,8 @@ export interface DocumentPayload {
   translatedBlocks: TranslatedMarkdownBlock[] | null
   layoutJson: string
   mappings: BlockMapping[]
+  /** The user's edit layer resolved against this text; null when its file cannot be read. */
+  markdownEdits?: ResolvedMarkdownEdits | null
   pdfUrl: string
   assetBaseUrl: string
 }
@@ -212,6 +215,8 @@ export interface TranslatedMarkdownBlock {
   mappingIds: string[]
   /** Provider that translated this block when it differs from the job's preferred provider. */
   fallbackProvider?: TranslationProviderId
+  /** sha256 of the source block it was translated from (manifests since translation pipeline v6). */
+  sourceHash?: string
 }
 
 export interface TranslationBlockRecord {
@@ -284,6 +289,10 @@ export interface CopilotixDesktopApi {
   getDocument(documentId: string): Promise<DocumentDetails>
   cacheDocumentFigure?(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult>
   repairDocumentTextLayer(documentId: string): Promise<RepairTextLayerResult>
+  /** Writes the reader's edit layer (edit, revert, delete or restore one block). */
+  editDocumentMarkdown(request: MarkdownEditRequest): Promise<{ revision: number }>
+  /** Retranslates after original text was edited; unchanged blocks come from the translation cache. */
+  retranslateEditedDocument(documentId: string): Promise<void>
   openDocumentOutput(documentId: string): Promise<void>
   saveDocumentAs(request: SaveDocumentAsRequest): Promise<SaveDocumentAsResult>
   listReaderAnnotations(request: ListReaderAnnotationsRequest): Promise<ReaderAnnotationSnapshot>

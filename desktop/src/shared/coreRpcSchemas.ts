@@ -1,5 +1,6 @@
 import { briefSourceSchema, paperBriefSaveSchema } from '@shared/paperBrief/contracts'
 import { paperChatFigureRequestSchema, paperChatFigureSourceSchema } from './paperChatFigures'
+import { markdownEditRequestSchema, markdownEditResultSchema } from './markdownEdits'
 import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightDescriptorSchema, figureInsightSaveSchema } from './figureInsight'
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightSavedSchema } from './paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from './libraryCategories'
@@ -147,7 +148,7 @@ const coreOperationNames = [
   'figureInsight:get', 'figureInsight:save', 'compute:figure-insight-descriptor',
   'chat:ensure-index', 'chat:build-context', 'compute:paper-chat-figure',
   'chat:load', 'chat:save-turn', 'chat:session', 'chat:save-session', 'chat:clear', 'chat:delete-turn',
-  'notes:list', 'notes:upsert', 'notes:delete',
+  'notes:list', 'notes:upsert', 'notes:delete', 'markdown-edits:apply',
   'annotations:list-snapshot', 'annotations:mutate',
   'compute:hash-file', 'compute:import-pdf', 'compute:normalize-parser', 'compute:rebuild-mappings', 'compute:repair-text-layer',
   'compute:rag-content-index', 'compute:library-categories',
@@ -428,6 +429,7 @@ export const coreOperationRegistry = {
   'chat:clear': { payload: paperChatDocumentRequestSchema, result: paperChatClearedSchema },
   'chat:ensure-index': { payload: paperChatStatusRequestSchema, result: paperChatStatusSchema },
   'chat:build-context': { payload: paperContextRequestSchema, result: paperContextResultSchema },
+  'markdown-edits:apply': { payload: markdownEditRequestSchema, result: markdownEditResultSchema },
   'compute:paper-chat-figure': { payload: paperChatFigureRequestSchema, result: paperChatFigureSourceSchema },
   'library:check': { payload: emptyPayloadSchema, result: z.object({ idle: z.literal(true) }).strict() },
   'library:manage': { payload: libraryCoreRequestSchema, result: libraryResultSchema },

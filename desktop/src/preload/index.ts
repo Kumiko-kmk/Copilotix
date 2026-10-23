@@ -1,3 +1,4 @@
+import { markdownEditRequestSchema, markdownEditResultSchema } from '@shared/markdownEdits'
 import { codexProbeSchema, codexStatusSchema } from '@shared/codex'
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightCancelSchema, paperInsightChangedSchema } from '@shared/paperInsight'
 import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightCancelSchema, figureInsightChangedSchema } from '@shared/figureInsight'
@@ -166,6 +167,8 @@ const api: CopilotixDesktopApi = {
   deleteDocument: (request: DeleteDocumentRequest) =>
     invokeValidated('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, request),
   getDocument: (documentId: string) => invokeValidated('documents:get', documentIdRequestSchema, documentDetailsSchema, documentId),
+  editDocumentMarkdown: (request) => invokeValidated('documents:edit-markdown', markdownEditRequestSchema, markdownEditResultSchema, request),
+  retranslateEditedDocument: (documentId: string) => invokeValidated('documents:retranslate-edited', documentIdRequestSchema, voidResponseSchema, documentId),
   repairDocumentTextLayer: (documentId: string) => invokeValidated('documents:repair-text-layer', documentIdRequestSchema, repairTextLayerResultSchema, documentId),
   cacheDocumentFigure: (request) => invokeValidated('documents:cache-figure', cacheDocumentFigureRequestSchema, cacheDocumentFigureResultSchema, request),
   openDocumentOutput: (documentId: string) =>

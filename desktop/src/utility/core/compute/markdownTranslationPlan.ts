@@ -12,6 +12,9 @@ import type { TranslationBatchBlock, TranslationBatchCommit, TranslationCacheEnt
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { BlockMapping, TranslationBlockRecord, TranslationProviderId } from '@shared/types'
 import { blockMappingSchema } from '@shared/ipcSchemas'
+import { resolveMarkdownEdits, type MarkdownEditsFile } from '@shared/markdownEdits'
+import { readerContentMappings } from '@shared/readerDocument'
+import { readMarkdownEditsFile } from '@runtime/markdownEditsFile'
 import {
   alignMarkdownBlocks,
   type AlignedMarkdownBlock
@@ -190,12 +193,17 @@ export class MarkdownTranslationPlanManager {
     await mkdir(binding.outputDir, { recursive: true })
     const sourceMarkdown = await this.readOutputFile(binding.outputDir, 'full.md')
     const mappings = await this.readMappings(binding.outputDir)
-    const sourceHash = sha256(sourceMarkdown)
+    // The reader's edit layer: edited originals are translated as edited, deleted blocks not at all.
+    // Its fingerprint joins the source hash so an edit rebuilds the plan; unchanged units still hit the cache.
+    const edits = await readMarkdownEditsFile(binding.outputDir, taskId)
+    const editFingerprint = edits.blocks.filter((entry) => entry.original || entry.deletedAt)
+      .map((entry) => [entry.index, entry.baseHash, entry.original?.markdown ?? null, Boolean(entry.deletedAt)])
+    const sourceHash = editFingerprint.length ? sha256(`${sourceMarkdown}\u0000${JSON.stringify(editFingerprint)}`) : sha256(sourceMarkdown)
     const mappingHash = sha256(JSON.stringify({ version: this.blockMappingVersion, mappings }))
     const key = planKey(taskId, jobId)
     const planPath = this.resolveOutputPath(binding.outputDir, `.translation/${jobId}/plan.json`)
     const existingMetadata = await this.readMetadata(planPath)
-    const candidate = this.buildState(binding, sourceMarkdown, mappings, sourceHash, mappingHash, existingMetadata)
+    const candidate = this.buildState(binding, sourceMarkdown, mappings, sourceHash, mappingHash, existingMetadata, editFingerprint.length ? edits : null)
     const planMatches = existingMetadata !== null && this.metadataMatches(existingMetadata, candidate)
 
     if (!planMatches) {
@@ -445,9 +453,20 @@ export class MarkdownTranslationPlanManager {
     mappings: BlockMapping[],
     sourceHash: string,
     mappingHash: string,
-    existing: PlanMetadata | null
+    existing: PlanMetadata | null,
+    edits: MarkdownEditsFile | null = null
   ): PlanState {
     const sourceBlocks = alignMarkdownBlocks(sourceMarkdown, mappings)
+    const deleted = new Set<number>()
+    if (edits) {
+      // Positions are the reader's; both alignments split the Markdown identically.
+      const { byIndex } = resolveMarkdownEdits(alignMarkdownBlocks(sourceMarkdown, readerContentMappings(mappings)), edits, sha256)
+      for (const [index, entry] of byIndex) {
+        if (!sourceBlocks[index]) continue
+        if (entry.deletedAt) deleted.add(index)
+        else if (entry.original) sourceBlocks[index] = { ...sourceBlocks[index]!, markdown: entry.original.markdown }
+      }
+    }
     const referenceActions = buildReferenceActions(sourceBlocks, mappings)
     const tableUnits = buildTableTranslationUnits(sourceBlocks, mappings)
     const tableBySourceIndex = new Map<number, TableTranslationUnit>()
@@ -461,6 +480,11 @@ export class MarkdownTranslationPlanManager {
     const units: UnitState[] = []
     for (let sourceIndex = 0; sourceIndex < sourceBlocks.length; sourceIndex += 1) {
       const sourceBlock = sourceBlocks[sourceIndex]!
+      if (deleted.has(sourceIndex) && !tableBySourceIndex.has(sourceIndex)) {
+        const unitId = stableUuid(`plain|${binding.taskId}|${binding.jobId}|${sourceIndex}|deleted`)
+        units.push(this.makePlainUnit(binding, sourceBlock, sourceIndex, unitId, [], 'completed', ''))
+        continue
+      }
       const referenceMarkdown = referenceActions.get(sourceIndex)
       if (referenceMarkdown !== undefined) {
         const unitId = stableUuid(`plain|${binding.taskId}|${binding.jobId}|${sourceIndex}|reference`)

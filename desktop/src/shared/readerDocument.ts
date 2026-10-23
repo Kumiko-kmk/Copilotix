@@ -1,6 +1,7 @@
 import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from './markdownBlocks'
 import type { BlockMapping, TranslatedMarkdownBlock, TranslationProviderId } from './types'
 import { prepareReaderMarkdown } from './standardMarkdown'
+import type { ResolvedMarkdownEdits } from './markdownEdits'
 
 export type ReaderBlockRole =
   | 'content'
@@ -19,6 +20,12 @@ export interface ReaderBlock {
   pageIndex?: number
   order: number
   fallbackProvider?: TranslationProviderId
+  /** Content position in the parsed Markdown; the edit layer addresses blocks by it. */
+  contentIndex?: number
+  /** Unprepared block Markdown, as edited and saved. */
+  source?: string
+  /** The user's edit layer: `edited` for this view's text, `stale` when the translation predates the original. */
+  edit?: { edited: boolean; stale: boolean }
 }
 
 export interface ReaderDocumentBlocks {
@@ -48,20 +55,32 @@ export function buildReaderDocumentBlocks(
   return { original, translated }
 }
 
+/** Mappings that align to Markdown content; page furniture is shown from the layout instead. */
+export function readerContentMappings(mappings: readonly BlockMapping[]): BlockMapping[] {
+  return mappings.filter((mapping) => supplementalRole(mapping) === null)
+}
+
 export function buildOriginalReaderBlocks(
   markdown: string,
-  mappings: BlockMapping[]
+  mappings: BlockMapping[],
+  edits?: ResolvedMarkdownEdits | null
 ): ReaderBlock[] {
   const contentMappings = mappings.filter((mapping) => supplementalRole(mapping) === null)
   const originalContent = alignMarkdownBlocks(markdown, contentMappings)
-  return mergeReaderBlocks(originalContent, mappings)
+  const byIndex = editsByIndex(edits)
+  const content = byIndex ? originalContent.map((block, index) => {
+    const edited = byIndex.get(index)?.original
+    return edited === undefined ? block : { ...block, markdown: edited }
+  }) : originalContent
+  return applyReaderEdits(mergeReaderBlocks(content, mappings), edits, 'original')
 }
 
 export function buildTranslatedReaderBlocks(
   markdown: string,
   translatedMarkdown: string,
   translatedBlocks: TranslatedMarkdownBlock[] | null,
-  mappings: BlockMapping[]
+  mappings: BlockMapping[],
+  edits?: ResolvedMarkdownEdits | null
 ): ReaderBlock[] {
   if (!translatedMarkdown) return []
   const contentMappings = mappings.filter((mapping) => supplementalRole(mapping) === null)
@@ -71,7 +90,36 @@ export function buildTranslatedReaderBlocks(
       ? remapTranslatedContent(translatedBlocks, originalContent)
       : reuseOriginalMapping(translatedMarkdown)
     : []
-  return translatedContent.length > 0 ? mergeReaderBlocks(translatedContent, mappings) : []
+  if (translatedContent.length === 0) return []
+  // Edits address source positions; a translation that cannot be matched to them is shown as is.
+  if (translatedContent.length !== originalContent.length) return mergeReaderBlocks(translatedContent, mappings)
+  const byIndex = editsByIndex(edits)
+  const content = byIndex ? translatedContent.map((block, index) => {
+    const edited = byIndex.get(index)?.translated
+    return edited === undefined ? block : { ...block, markdown: edited }
+  }) : translatedContent
+  return applyReaderEdits(mergeReaderBlocks(content, mappings), edits, 'translated')
+}
+
+function editsByIndex(edits: ResolvedMarkdownEdits | null | undefined): Map<number, ResolvedMarkdownEdits['blocks'][number]> | null {
+  return edits && (edits.blocks.length || edits.supplementalDeleted.length) ? new Map(edits.blocks.map((entry) => [entry.index, entry])) : null
+}
+
+/** Marks edited and stale blocks and drops deleted ones after numbering, so annotation keys stay put. */
+function applyReaderEdits(blocks: ReaderBlock[], edits: ResolvedMarkdownEdits | null | undefined, view: 'original' | 'translated'): ReaderBlock[] {
+  const byIndex = editsByIndex(edits)
+  if (!byIndex) return blocks
+  const hidden = new Set(edits!.supplementalDeleted.map((item) => `supplemental:${item.mappingId}`))
+  const result: ReaderBlock[] = []
+  for (const block of blocks) {
+    if (block.annotationKey && hidden.has(block.annotationKey)) continue
+    const entry = block.contentIndex === undefined ? undefined : byIndex.get(block.contentIndex)
+    if (entry?.deleted) continue
+    const edited = view === 'original' ? entry?.original !== undefined : entry?.translated !== undefined
+    const stale = view === 'translated' && Boolean(entry?.stale)
+    result.push(edited || stale ? { ...block, edit: { edited, stale } } : block)
+  }
+  return result
 }
 
 export function mergeReaderBlocks(
@@ -85,6 +133,8 @@ export function mergeReaderBlocks(
     annotationKey: `content:${sequence}`,
     mappingIds: block.mappingIds,
     order: sequence,
+    contentIndex: sequence,
+    source: block.markdown,
     ...(block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {})
   }))
   const pagesByContentIndex = contentBlocks.map((block) => contentBlockPages(block, mappingById))

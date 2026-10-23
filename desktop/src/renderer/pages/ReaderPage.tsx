@@ -5,6 +5,9 @@ import { captionFigureKey } from '@shared/figureMentions'
 import { paperChatFigureImagePathSchema } from '@shared/paperChatFigures'
 import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
 import type { ReaderFigureChat } from '../components/MarkdownPane'
+import type { ReaderBlockEditing } from '../components/ReaderBlockEditing'
+import type { MarkdownEditRequest } from '@shared/markdownEdits'
+import type { ReaderBlock } from '@shared/readerDocument'
 import { useReaderNotes } from '../useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
@@ -90,13 +93,14 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   const translatedMarkdown = document?.translatedMarkdown ?? ''
   const translatedSourceBlocks = document?.translatedBlocks ?? null
   const mappings = document?.mappings ?? EMPTY_MAPPINGS
+  const markdownEdits = document?.markdownEdits ?? null
   const originalBlocks = React.useMemo(
-    () => buildOriginalReaderBlocks(markdown, mappings),
-    [markdown, mappings]
+    () => buildOriginalReaderBlocks(markdown, mappings, markdownEdits),
+    [markdown, mappings, markdownEdits]
   )
   const translatedBlocks = React.useMemo(
-    () => buildTranslatedReaderBlocks(markdown, translatedMarkdown, translatedSourceBlocks, mappings),
-    [markdown, mappings, translatedMarkdown, translatedSourceBlocks]
+    () => buildTranslatedReaderBlocks(markdown, translatedMarkdown, translatedSourceBlocks, mappings, markdownEdits),
+    [markdown, mappings, translatedMarkdown, translatedSourceBlocks, markdownEdits]
   )
   const selectBlock = React.useCallback((next: BlockSelection) => setSelection(next), [])
   const openFigurePdf = React.useCallback((next: BlockSelection) => {
@@ -128,6 +132,42 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       })
     }
   }), [addFigure, messageApi, routing.imageBlocked])
+  // The user's edit layer. Every change is saved by Utility and the document reloaded, so the
+  // reader, translation, chat and exports all see the same text.
+  const editsUnreadable = document !== undefined && document.markdownEdits === null
+  const editRevision = markdownEdits?.revision ?? 0
+  const applyEdit = React.useCallback(async (target: MarkdownEditRequest['target'], action: MarkdownEditRequest['action'], text?: string): Promise<void> => {
+    if (editsUnreadable) throw new Error('段落修改文件无法读取，请检查文献目录中的 edits 文件夹')
+    await window.copilotix.editDocumentMarkdown({ documentId: props.documentId, expectedRevision: editRevision, target, action, ...(text !== undefined ? { markdown: text } : {}) })
+    await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
+  }, [editRevision, editsUnreadable, props.documentId, queryClient])
+  const blockEditing = React.useMemo(() => {
+    const targetOf = (block: ReaderBlock): MarkdownEditRequest['target'] => block.role === 'content' && block.contentIndex !== undefined
+      ? { kind: 'content', index: block.contentIndex, mappingIds: block.mappingIds }
+      : { kind: 'supplemental', mappingId: (block.annotationKey ?? '').replace(/^supplemental:/u, '') }
+    const report = async (action: () => Promise<void>): Promise<void> => {
+      try { await action() } catch (error) { messageApi.error({ content: error instanceof Error ? error.message : '段落修改失败', key: 'reader-edit' }) }
+    }
+    const restore = (target: { index: number } | { mappingId: string }): Promise<void> => report(() => 'index' in target
+      ? applyEdit({ kind: 'content', index: target.index, mappingIds: markdownEdits?.blocks.find(block => block.index === target.index)?.mappingIds ?? [] }, 'restore')
+      : applyEdit({ kind: 'supplemental', mappingId: target.mappingId }, 'restore'))
+    const make = (view: 'original' | 'translated'): ReaderBlockEditing => ({
+      view, edits: markdownEdits, restore,
+      save: (block, text) => applyEdit(targetOf(block), view === 'original' ? 'set-original' : 'set-translated', text),
+      revert: block => report(() => applyEdit(targetOf(block), view === 'original' ? 'revert-original' : 'revert-translated')),
+      remove: block => report(async () => {
+        const target = targetOf(block)
+        await applyEdit(target, 'delete')
+        messageApi.success({ key: 'reader-edit', duration: 6, content: <span>已删除此段，两个视图均不再显示。<a onClick={() => { messageApi.destroy('reader-edit'); void restore(target.kind === 'content' ? { index: target.index } : { mappingId: target.mappingId }) }}>撤销</a></span> })
+      }),
+      retranslate: () => report(async () => {
+        await window.copilotix.retranslateEditedDocument(props.documentId)
+        messageApi.success({ key: 'reader-edit', content: '已开始重新翻译；未修改的段落沿用已有译文' })
+        await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
+      })
+    })
+    return { original: make('original'), translated: make('translated') }
+  }, [applyEdit, markdownEdits, messageApi, props.documentId, queryClient])
   // A citation scrolls the reading views to its block; if none is on screen, the workbench shows one.
   const openCitation = React.useCallback((next: BlockSelection) => {
     selectBlock(next)
@@ -226,6 +266,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           onOpenFigurePdf: openFigurePdf,
           onAddToChat: addToChat,
           figureChat,
+          blockEditing,
           notes: readerNotes.notes,
           onSaveNote: readerNotes.saveNote,
           onDeleteNote: readerNotes.deleteNote,

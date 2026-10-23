@@ -2,6 +2,8 @@ import { paperBriefSaveSchema } from '@shared/paperBrief/contracts'
 import { PaperInsightStore } from './persistence/paperInsightStore'
 import { FigureInsightStore } from './persistence/figureInsightStore'
 import { PaperChatFigureStore } from './persistence/paperChatFigureStore'
+import { MarkdownEditStore } from './persistence/markdownEditStore'
+import { markdownEditRequestSchema } from '@shared/markdownEdits'
 import { paperChatFigureRequestSchema } from '@shared/paperChatFigures'
 import { figureInsightRequestSchema, figureInsightSaveSchema } from '@shared/figureInsight'
 import { paperInsightRequestSchema } from '@shared/paperInsight'
@@ -147,6 +149,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
   }
   const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const noteStore = new ReaderNoteStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
+  const editStore = new MarkdownEditStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const insightStore = () => new PaperInsightStore(requireRepository())
   const figureInsightStore = () => new FigureInsightStore(requireRepository())
   const categories = new LibraryCategoryService(insightStore, requireRepository)
@@ -165,6 +168,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'chat:save-session': (request) => { const { documentId, session } = paperChatSaveSessionSchema.parse(request.payload); return chatStore.saveSession(documentId, session) },
     'chat:delete-turn': (request) => chatStore.deleteTurn(paperChatDeleteTurnSchema.parse(request.payload)),
     'chat:clear': (request) => chatStore.clear(paperChatDocumentRequestSchema.parse(request.payload).documentId),
+    'markdown-edits:apply': (request) => editStore.apply(markdownEditRequestSchema.parse(request.payload)),
     'notes:list': (request) => noteStore.list(readerNotesRequestSchema.parse(request.payload).documentId),
     'notes:upsert': (request) => { const { documentId, note } = readerNoteUpsertSchema.parse(request.payload); return noteStore.upsert(documentId, note) },
     'notes:delete': (request) => { const { documentId, noteId } = readerNoteDeleteSchema.parse(request.payload); return noteStore.delete(documentId, noteId) },
@@ -176,7 +180,12 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const k = rag.getDocumentKnowledge(documentId) ?? rag.ensureDocumentKnowledge(documentId)
       return { state: k?.localState ?? 'unindexed', progress: k?.localProgress ?? 0, contentRevisionId: k?.activeContentRevisionId ?? null }
     },
-    'chat:build-context': (request, signal) => new PaperContextBuilder(requireRagRepository()).build(paperContextRequestSchema.parse(request.payload), signal),
+    'chat:build-context': async (request, signal) => {
+      const input = paperContextRequestSchema.parse(request.payload)
+      // An unreadable edit layer falls back to the parsed text; saving an edit reports the problem.
+      const edits = await editStore.read(input.documentId).catch(() => null)
+      return new PaperContextBuilder(requireRagRepository()).build(input, signal, edits)
+    },
     'compute:paper-chat-figure': (request, signal) => new PaperChatFigureStore(requireRepository(), figureInsightStore()).source(paperChatFigureRequestSchema.parse(request.payload), signal),
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {

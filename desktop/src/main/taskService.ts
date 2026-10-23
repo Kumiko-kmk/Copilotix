@@ -72,6 +72,11 @@ export class TaskService extends EventEmitter {
     this.emit('changed')
   }
 
+  async retranslateEdited(taskId: string): Promise<void> {
+    await this.commands.retranslateEdited(taskId)
+    this.emit('changed')
+  }
+
   async repairTextLayer(taskId: string): Promise<{ repaired: number; unresolved: number }> {
     // Figure Markdown projections are rebuilt from the repaired text afterwards.
     await this.artifacts.freezeFigureWrites(taskId)

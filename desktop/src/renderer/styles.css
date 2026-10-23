@@ -711,6 +711,20 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .reader-figure-action:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .reader-figure-action + .reader-figure-action { margin-left: 6px; }
 .reader-figure-action[aria-disabled="true"] { color: var(--muted); border-style: dashed; cursor: not-allowed; }
+/* In-reader editing: actions appear on the clicked block only; the editor keeps the paragraph's own typography. */
+.markdown-block[data-edited] { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primary) 45%, transparent); }
+.markdown-block[data-editing] { background: transparent; box-shadow: none; outline: 1px dashed color-mix(in srgb, var(--primary) 55%, transparent); outline-offset: 2px; content-visibility: visible; }
+.reader-block-actions { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 8px; user-select: none; }
+.reader-block-actions button, .reader-block-stale button { padding: 1px 8px; border: 1px solid var(--rule); border-radius: 2px; color: var(--primary); background: var(--sheet); cursor: pointer; font: inherit; font-size: 12px; line-height: 1.6; text-indent: 0; }
+.reader-block-actions button.danger { color: var(--danger, #c0392b); }
+.reader-block-actions button:disabled, .reader-block-stale button:disabled { cursor: progress; opacity: .6; }
+.reader-block-editor textarea { display: block; box-sizing: border-box; width: 100%; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; }
+.reader-block-editor-footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 4px 0 8px; color: var(--muted); font-size: 12px; text-indent: 0; }
+.reader-block-editor-footer span { margin-right: auto; }
+.reader-block-editor-footer span[role="alert"] { color: var(--danger, #c0392b); }
+.reader-block-stale { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; color: var(--muted); font-size: 12px; line-height: 1.6; text-indent: 0; user-select: none; }
+.reader-block-stale span::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--warning, #d48806); vertical-align: middle; }
+.reader-deleted-item { display: inline-block; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .reader-figure-caption { clear: both; width: 100%; margin: 0 auto 7px; }
 .reader-figure-caption > :first-child { margin-top: 0; }
 .markdown-body sub, .markdown-body sup { position: relative; vertical-align: baseline; font-size: .75em; line-height: 0; }

@@ -23,6 +23,7 @@ export function projectDocumentDetails(payload: DocumentPayload): DocumentDetail
     translatedBlocks: payload.translatedBlocks,
     layoutJson: payload.layoutJson,
     mappings: payload.mappings,
+    ...(payload.markdownEdits !== undefined ? { markdownEdits: payload.markdownEdits } : {}),
     pdfUrl: payload.pdfUrl,
     assetBaseUrl: payload.assetBaseUrl
   }

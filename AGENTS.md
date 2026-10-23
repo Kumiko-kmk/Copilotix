@@ -110,6 +110,7 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 - `docs/MARKDOWN_FORMAT_ZH.md` 定義格式、版本兼容、映射、原子導出與真實論文驗證；`standardMarkdown.ts` 共享規範為 CommonMark＋GFM＋明確數學擴展，不得將公式降級代碼。
 - Markdown 導出攜帶相鄰圖片目錄及相對鏈接，圖片失敗不得覆蓋既有導出；原任務資料不可作導出目標。ZIP 同樣規範化兩份 Markdown。
 - 對比交付只保留使用者要求的两份 Markdown；瀏覽器／CI 不替代 Notion Desktop 驗收。
+- 閱讀器內編輯與整段刪除是獨立的使用者編輯層（`edits/markdown-edits.v1.json`），解析、修復與翻譯不得改寫或覆蓋它；閱讀、翻譯、問答與導出都須套用。契約見上述格式文檔「阅读器内编辑与整段删除」。
 
 ## 11. 豐富閱讀與標準導出分離
 
