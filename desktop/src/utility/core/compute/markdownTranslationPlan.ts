@@ -196,14 +196,16 @@ export class MarkdownTranslationPlanManager {
     // The reader's edit layer: edited originals are translated as edited, deleted blocks not at all.
     // Its fingerprint joins the source hash so an edit rebuilds the plan; unchanged units still hit the cache.
     const edits = await readMarkdownEditsFile(binding.outputDir, taskId)
-    const editFingerprint = edits.blocks.filter((entry) => entry.original || entry.deletedAt)
-      .map((entry) => [entry.index, entry.baseHash, entry.original?.markdown ?? null, Boolean(entry.deletedAt)])
+    const editFingerprint = edits.blocks.filter((entry) => entry.original || entry.deletedAt || entry.retranslateAt)
+      .map((entry) => [entry.index, entry.baseHash, entry.original?.markdown ?? null, Boolean(entry.deletedAt), entry.retranslateAt ?? null])
+    // A run started for edited or re-requested paragraphs keeps every other paragraph's finished translation.
+    const previous = binding.checkpoint.reason === 'edited' ? await this.readPreviousManifest(binding.outputDir, taskId, jobId) : null
     const sourceHash = editFingerprint.length ? sha256(`${sourceMarkdown}\u0000${JSON.stringify(editFingerprint)}`) : sha256(sourceMarkdown)
     const mappingHash = sha256(JSON.stringify({ version: this.blockMappingVersion, mappings }))
     const key = planKey(taskId, jobId)
     const planPath = this.resolveOutputPath(binding.outputDir, `.translation/${jobId}/plan.json`)
     const existingMetadata = await this.readMetadata(planPath)
-    const candidate = this.buildState(binding, sourceMarkdown, mappings, sourceHash, mappingHash, existingMetadata, editFingerprint.length ? edits : null)
+    const candidate = this.buildState(binding, sourceMarkdown, mappings, sourceHash, mappingHash, existingMetadata, editFingerprint.length ? edits : null, previous)
     const planMatches = existingMetadata !== null && this.metadataMatches(existingMetadata, candidate)
 
     if (!planMatches) {
@@ -380,6 +382,8 @@ export class MarkdownTranslationPlanManager {
       preferredProvider: state.binding.translationProvider,
       translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
       tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
+      // Lets a later run tell which retranslation requests this result already honoured.
+      generatedAt: new Date().toISOString(),
       failedBlockIds,
       // Units are constructed in source order and table attachments retain
       // their source indexes, so preserve that order without an O(n log n)
@@ -454,10 +458,13 @@ export class MarkdownTranslationPlanManager {
     sourceHash: string,
     mappingHash: string,
     existing: PlanMetadata | null,
-    edits: MarkdownEditsFile | null = null
+    edits: MarkdownEditsFile | null = null,
+    previous: PreviousManifest | null = null
   ): PlanState {
     const sourceBlocks = alignMarkdownBlocks(sourceMarkdown, mappings)
     const deleted = new Set<number>()
+    /** Blocks the user asked to translate again, with the time of the request. */
+    const requested = new Map<number, string>()
     if (edits) {
       // Positions are the reader's; both alignments split the Markdown identically.
       const { byIndex } = resolveMarkdownEdits(alignMarkdownBlocks(sourceMarkdown, readerContentMappings(mappings)), edits, sha256)
@@ -465,6 +472,7 @@ export class MarkdownTranslationPlanManager {
         if (!sourceBlocks[index]) continue
         if (entry.deletedAt) deleted.add(index)
         else if (entry.original) sourceBlocks[index] = { ...sourceBlocks[index]!, markdown: entry.original.markdown }
+        if (entry.retranslateAt && !entry.deletedAt) requested.set(index, entry.retranslateAt)
       }
     }
     const referenceActions = buildReferenceActions(sourceBlocks, mappings)
@@ -497,11 +505,29 @@ export class MarkdownTranslationPlanManager {
         continue
       }
       const unitId = stableUuid(`plain|${binding.taskId}|${binding.jobId}|${sourceIndex}|${sourceBlock.mappingIds.join('|')}`)
+      const requestedAt = requested.get(sourceIndex)
+      const prior = previous?.blocks.get(sourceIndex)
+      const carried = prior && prior.sourceHash === sha256(sourceBlock.markdown) && (!requestedAt || (previous!.generatedAt !== null && previous!.generatedAt > requestedAt)) ? prior : null
+      if (carried?.status === 'completed') {
+        const reused = this.makePlainUnit(binding, sourceBlock, sourceIndex, unitId, [], 'completed', carried.markdown)
+        reused.provider = carried.provider
+        reused.model = carried.model
+        units.push(reused)
+        continue
+      }
       const tree = processor.parse(sourceBlock.markdown) as any
       const plainBindings = collectPlainSegments(tree, unitId)
       const segments = plainBindings.map(({ id, source }) => ({ id, text: source }))
       const status = segments.length === 0 ? 'completed' : 'pending'
-      units.push(this.makePlainUnit(binding, sourceBlock, sourceIndex, unitId, segments, status))
+      // A requested retranslation must not be answered from the cache; the salted key is cached afresh.
+      const unit = this.makePlainUnit(binding, sourceBlock, sourceIndex, unitId, segments, status, undefined, requestedAt)
+      // A single-paragraph rerun leaves earlier failures failed (a normal retry still reaches them).
+      if (carried?.status === 'failed' && status === 'pending') {
+        unit.status = 'failed'
+        unit.descriptor.status = 'failed'
+        unit.error = carried.error ?? '翻译失败'
+      }
+      units.push(unit)
     }
 
     const expectedPlanId = stableUuid(`plan|${binding.taskId}|${binding.jobId}|${binding.translationProvider}`)
@@ -530,6 +556,21 @@ export class MarkdownTranslationPlanManager {
     return state
   }
 
+  /** Completed blocks of the paper's last translation run, by source position. */
+  private async readPreviousManifest(root: string, taskId: string, jobId: string): Promise<PreviousManifest | null> {
+    let value: any
+    try { value = JSON.parse(await this.readOutputFile(root, 'translation.manifest.json')) } catch { return null }
+    if (value?.version !== 2 || value.taskId !== taskId || value.jobId === jobId || value.translationPipelineVersion !== TRANSLATION_PIPELINE_VERSION ||
+      value.mappingAlgorithmVersion !== MARKDOWN_MAPPING_ALGORITHM_VERSION || value.blockMappingVersion !== this.blockMappingVersion || !Array.isArray(value.blocks)) return null
+    const blocks: PreviousManifest['blocks'] = new Map()
+    for (const block of value.blocks) {
+      if ((block?.status !== 'completed' && block?.status !== 'failed') || !Number.isInteger(block.sourceIndex) || typeof block.markdown !== 'string' || typeof block.sourceHash !== 'string') continue
+      blocks.set(block.sourceIndex, { status: block.status, markdown: block.markdown, sourceHash: block.sourceHash, error: typeof block.error === 'string' ? block.error : null,
+        provider: isTranslationProviderId(block.provider) ? block.provider : null, model: typeof block.model === 'string' ? block.model : null })
+    }
+    return { generatedAt: typeof value.generatedAt === 'string' ? value.generatedAt : null, blocks }
+  }
+
   private makePlainUnit(
     binding: TranslationJobBinding,
     sourceBlock: AlignedMarkdownBlock,
@@ -537,9 +578,10 @@ export class MarkdownTranslationPlanManager {
     unitId: string,
     segments: TableTextSegment[],
     status: TranslationPlanWorkDescriptor['status'],
-    completedMarkdown?: string
+    completedMarkdown?: string,
+    cacheSalt?: string
   ): UnitState {
-    const sourceHash = sha256(sourceBlock.markdown)
+    const sourceHash = cacheSalt ? sha256(`${sourceBlock.markdown}\u0000retranslate:${cacheSalt}`) : sha256(sourceBlock.markdown)
     const blockId = translationBlockId(binding.taskId, sourceIndex, sourceBlock.mappingIds)
     const prefix = `.translation/${binding.jobId}`
     const requestPath = `${prefix}/requests/${unitId}.json`
@@ -626,7 +668,7 @@ export class MarkdownTranslationPlanManager {
         await this.atomicPlanWrite(state, `.translation/${state.jobId}/blocks/${unit.blockIds[index]!}.md`, unit.sourceMarkdowns[index] ?? '')
       }
       await this.atomicPlanWrite(state, unit.descriptor.requestPath, `${JSON.stringify(unit.request, null, 2)}\n`)
-      if (unit.status === 'completed') {
+      if (unit.status !== 'pending') {
         const output = new Map(unit.blockIds.map((blockId, index) => [blockId, unit.initialResults[index] ?? unit.sourceMarkdowns[index] ?? '']))
         await this.writeUnitResults(state, unit, output)
       }
@@ -1285,6 +1327,11 @@ function isPlanMetadata(value: unknown): value is PlanMetadata {
     typeof unit.sourceHash === 'string' && Array.isArray(unit.blockIds) && Array.isArray(unit.resultBlockPaths) &&
     Array.isArray(unit.sourceIndexes) && Array.isArray(unit.mappingIds) && typeof unit.requestPath === 'string' &&
     typeof unit.responsePath === 'string' && typeof unit.resultPath === 'string' && typeof unit.status === 'string')
+}
+
+interface PreviousManifest {
+  generatedAt: string | null
+  blocks: Map<number, { status: 'completed' | 'failed'; markdown: string; sourceHash: string; error: string | null; provider: TranslationProviderId | null; model: string | null }>
 }
 
 function isTranslationProviderId(value: unknown): value is TranslationProviderId {

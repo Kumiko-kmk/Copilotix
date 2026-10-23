@@ -26,6 +26,8 @@ export interface ReaderBlock {
   source?: string
   /** The user's edit layer: `edited` for this view's text, `stale` when the translation predates the original. */
   edit?: { edited: boolean; stale: boolean }
+  /** Dashed whole-block frame the user set from the PDF view. */
+  boxed?: true
   sourceChanged?: true
 }
 
@@ -103,7 +105,7 @@ export function buildTranslatedReaderBlocks(
 }
 
 function editsByIndex(edits: ResolvedMarkdownEdits | null | undefined): Map<number, ResolvedMarkdownEdits['blocks'][number]> | null {
-  return edits && (edits.blocks.length || edits.supplementalDeleted.length) ? new Map(edits.blocks.map((entry) => [entry.index, entry])) : null
+  return edits && (edits.blocks.length || edits.supplementalDeleted.length || edits.boxMarks?.length) ? new Map(edits.blocks.map((entry) => [entry.index, entry])) : null
 }
 
 /** Marks edited and stale blocks and drops deleted ones after numbering, so annotation keys stay put. */
@@ -111,6 +113,7 @@ function applyReaderEdits(blocks: ReaderBlock[], edits: ResolvedMarkdownEdits | 
   const byIndex = editsByIndex(edits)
   if (!byIndex) return blocks
   const hidden = new Set(edits!.supplementalDeleted.map((item) => `supplemental:${item.mappingId}`))
+  const boxed = new Set(edits!.boxMarks ?? [])
   const result: ReaderBlock[] = []
   for (const block of blocks) {
     if (block.annotationKey && hidden.has(block.annotationKey)) continue
@@ -118,7 +121,9 @@ function applyReaderEdits(blocks: ReaderBlock[], edits: ResolvedMarkdownEdits | 
     if (entry?.deleted) continue
     const edited = view === 'original' ? entry?.original !== undefined : entry?.translated !== undefined
     const stale = view === 'translated' && Boolean(entry?.stale)
-    result.push(edited || stale ? { ...block, edit: { edited, stale } } : block)
+    const framed = boxed.size > 0 && (block.mappingIds.some((id) => boxed.has(id)) ||
+      Boolean(block.annotationKey?.startsWith('supplemental:') && boxed.has(block.annotationKey.slice('supplemental:'.length))))
+    result.push(edited || stale || framed ? { ...block, ...(edited || stale ? { edit: { edited, stale } } : {}), ...(framed ? { boxed: true as const } : {}) } : block)
   }
   return result
 }

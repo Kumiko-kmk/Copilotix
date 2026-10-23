@@ -16,7 +16,7 @@ import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
 import type { PaperInsightSource } from '@shared/paperInsight'
 import MarkdownPane, { type ReaderFigureChat } from './MarkdownPane'
 import { DeletedBlocksMenu, type ReaderBlockEditing } from './ReaderBlockEditing'
-import PdfPane, { type PdfViewState } from './PdfPane'
+import PdfPane, { type PdfBlockMenu, type PdfViewState } from './PdfPane'
 import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
 import PaperInsightActions from './PaperInsightActions'
 import type { PaperChatController } from '../usePaperChat'
@@ -85,6 +85,8 @@ export interface ReaderViewsInput {
   figureChat?: ReaderFigureChat
   /** The user's edit layer, one controller per reading view. */
   blockEditing?: { original: ReaderBlockEditing; translated: ReaderBlockEditing }
+  /** Right-click menu on PDF blocks. */
+  pdfBlockMenu?: PdfBlockMenu
   chat?: ReaderChatOptions
   /** Reading views currently on screen with scroll sync on; they lead and follow each other. */
   scrollSyncViews?: readonly ReaderViewId[]
@@ -236,6 +238,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           initialViewState={pdfStateRef.current}
           onViewStateChange={rememberPdfState}
           scrollSync={syncHub.channel('pdf')}
+          blockMenu={props.pdfBlockMenu}
         />
       }
     }
@@ -269,7 +272,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     return specs
   }, [
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
-    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.onOpenFigurePdf, props.figureChat, props.blockEditing, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
+    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.onOpenFigurePdf, props.figureChat, props.blockEditing, props.pdfBlockMenu, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
     props.taskStatus, props.translationCount, props.taskError, props.onRetry, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
     rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups

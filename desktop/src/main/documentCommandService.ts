@@ -166,8 +166,8 @@ export class DocumentCommandService {
   }
 
   /**
-   * After the user edited original text: an unfinished translation is retried, a finished one gets a
-   * new run. Either reads the edit layer, so only changed blocks miss the translation cache.
+   * After the user edited original text or asked for a paragraph again: a new run that keeps every
+   * other paragraph's last result (failures included), so only those paragraphs reach the model.
    */
   async retranslateEdited(taskId: string): Promise<void> {
     if (!this.jobRepository) throw new Error('作业队列尚未初始化')
@@ -176,15 +176,9 @@ export class DocumentCommandService {
     if (jobs.some((job) => (job.kind === 'parse' || job.kind === 'translate') && !['succeeded', 'partial', 'failed', 'cancelled'].includes(job.status))) {
       throw new Error('论文仍在解析或翻译，完成后再重新翻译')
     }
-    const translate = jobs.filter((job) => job.kind === 'translate').sort(compareJobs).at(-1)
-    const now = new Date().toISOString()
-    if (translate && translate.status !== 'succeeded') {
-      await this.jobRepository.manualRetry({ jobId: translate.id, now })
-    } else {
-      const parse = jobs.filter((job) => job.kind === 'parse' && job.status === 'succeeded').sort(compareJobs).at(-1)
-      if (!parse) throw new Error('论文尚未解析完成')
-      await this.jobRepository.enqueue({ documentId: taskId, kind: 'translate', dependsOnJobId: parse.id, checkpoint: { stage: 'queued', reason: 'edited' }, now })
-    }
+    const parse = jobs.filter((job) => job.kind === 'parse' && job.status === 'succeeded').sort(compareJobs).at(-1)
+    if (!parse) throw new Error('论文尚未解析完成')
+    await this.jobRepository.enqueue({ documentId: taskId, kind: 'translate', dependsOnJobId: parse.id, checkpoint: { stage: 'queued', reason: 'edited' }, now: new Date().toISOString() })
     this.scheduler?.wake()
   }
 
