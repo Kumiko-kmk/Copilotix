@@ -56,6 +56,37 @@ describe('reader figure groups', () => {
     expect(buildReaderFigureGeometries(maps)).toEqual([expect.objectContaining({ status: 'complete', captionMappingId: 'caption', assetSources: ['left.jpg', 'right.jpg'] })])
   })
 
+  it('closes stacked 2x4 grids at their bar captions even when the right column reaches past them (npj Fig. 5–7)', () => {
+    const grid = (top: number, prefix: string): BlockMapping[] => [
+      [57, top, 160, top + 89], [183, top, 287, top + 90], [299, top, 416, top + 89], [419, top, 543, top + 98],
+      [58, top + 97, 159, top + 183], [185, top + 97, 287, top + 184], [313, top + 97, 417, top + 184], [418, top + 97, 545, top + 197]
+    ].map((box, i) => mapping(`${prefix}-${i}`, i, i % 4 === 3 ? 'chart' : 'image', box as [number, number, number, number], `${prefix}-${i}.jpg`))
+    const maps = [
+      mapping('fig5-caption', 0, 'image_caption', [36, 46, 200, 97], undefined, 'Fig. 5 | Unsupervised training of SPiFOL in a 3D setting.'),
+      mapping('fig5', 1, 'image', [211, 46, 561, 206], 'fig5.jpg'),
+      ...grid(249, 'fig6'),
+      // The caption is left-aligned and stops short of the fourth column.
+      mapping('fig6-caption', 20, 'image_caption', [36, 449, 362, 460], undefined, 'Fig. 6 | Results of the FOL model. Case 1.'),
+      ...grid(486, 'fig7'),
+      mapping('fig7-caption', 40, 'image_caption', [36, 685, 362, 697], undefined, 'Fig. 7 | Results of the FOL model. Case 2.')
+    ]
+    // MinerU attached Fig. 6's caption to Fig. 7's first panel.
+    const layout = JSON.stringify({ pdf_info: [{ page_idx: 11, page_size: [612, 792], para_blocks: [{ type: 'image', bbox: [57, 486, 160, 575], blocks: [
+      { type: 'image_caption', bbox: [36, 449, 362, 460], lines: [{ spans: [{ content: 'Fig. 6 | Results of the FOL model. Case 1.' }] }] },
+      { type: 'image_body', bbox: [57, 486, 160, 575], lines: [{ spans: [{ image_path: 'fig7-0.jpg' }] }] }
+    ] }] }] })
+    const figures = buildReaderFigureGeometries(maps, layout)
+    const byCaption = (id: string) => figures.find(g => g.captionMappingId === id)
+    expect(byCaption('fig5-caption')).toMatchObject({ status: 'complete', assetSources: ['fig5.jpg'] })
+    for (const [id, prefix, top, bottom] of [['fig6-caption', 'fig6', 249, 446], ['fig7-caption', 'fig7', 486, 683]] as const) {
+      const figure = byCaption(id)!
+      expect(figure.status).toBe('complete')
+      expect([...figure.assetSources].sort()).toEqual(Array.from({ length: 8 }, (_, i) => `${prefix}-${i}.jpg`).sort())
+      expect(figure.cropBox[1]).toBeLessThanOrEqual(top)
+      expect(figure.cropBox[3]).toBeGreaterThanOrEqual(bottom)
+    }
+  })
+
   it('lays uncropped side-by-side panels out as a mosaic at their PDF positions', () => {
     const group = { pageSize: [595, 790] as [number, number], members: [
       { bbox: [279, 656, 339, 719] as [number, number, number, number], sourceAsset: 'a.jpg', sourceText: '', kind: 'asset' as const },

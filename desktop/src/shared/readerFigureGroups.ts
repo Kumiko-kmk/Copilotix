@@ -72,6 +72,19 @@ function isCaption(entry: Entry): boolean {
     /^[^:：]*\d+[A-Z]?\s*[.:：．、|｜]/iu.test(entry.mapping.sourceText))
 }
 function isAsset(entry: Entry): boolean { return ASSETS.has(type(entry)) }
+/** "Fig. 6 | Results…": Nature-style captions run the full figure width below (or beside) it. */
+const BAR_CAPTION = /^\s*(?:fig(?:ure)?\.?|[附補补]?圖|[附补]?图)\s*\d+[A-Z]?\s*[|｜]/iu
+/**
+ * Panels whose bottom edge sits right on top of a bar caption form the figure's last row. Such a
+ * caption is left-aligned and often shorter than the figure, so on its own it cannot separate a
+ * right-hand panel column from the next figure below. Widen it to the row it closes.
+ */
+function barCaptionRow(caption: Entry, assets: readonly Entry[]): Entry[] {
+  if (!BAR_CAPTION.test(caption.mapping.sourceText)) return []
+  const gap = Math.max(12, caption.pageSize[1] * 0.03)
+  const row = assets.filter(asset => asset.bbox[3] <= caption.bbox[1] + 2 && caption.bbox[1] - asset.bbox[3] <= gap)
+  return row.some(asset => Math.min(asset.bbox[2], caption.bbox[2]) > Math.max(asset.bbox[0], caption.bbox[0])) ? row : []
+}
 function overlap(a: FigureBox, b: FigureBox): boolean {
   return Math.min(a[2], b[2]) > Math.max(a[0], b[0]) && Math.min(a[3], b[3]) > Math.max(a[1], b[1])
 }
@@ -229,6 +242,17 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
     entries.sort((a, b) => a.mapping.order - b.mapping.order || a.key.localeCompare(b.key))
     const assets = entries.filter(isAsset)
     const captions = entries.filter(isCaption)
+    const closedRows = new Map<Entry, Entry[]>()
+    for (const caption of captions) {
+      const row = barCaptionRow(caption, assets)
+      if (!row.length) continue
+      const span = union([caption.bbox, ...row.map(asset => asset.bbox)])
+      const widened: FigureBox = [span[0], caption.bbox[1], span[2], caption.bbox[3]]
+      // A caption set in two text columns already meets other text; leave it as it is.
+      if (entries.some(entry => entry !== caption && !isAsset(entry) && !HEADERS.test(type(entry)) && overlap(widened, entry.bbox))) continue
+      closedRows.set(caption, row)
+      caption.bbox = widened
+    }
     const captionFamilies = new Map(captions.map(anchor => [anchor, captions.filter(entry =>
       (entry.mapping.id || entry.key) === (anchor.mapping.id || anchor.key))]))
     // Two-column captions may have a Figure prefix only in their first column.
@@ -286,10 +310,15 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
       const caption = [...captions.filter(entry => (entry.mapping.id || entry.key) === captionId)].sort((a, b) =>
         Math.min(...assets.map(asset => distance(asset, a))) - Math.min(...assets.map(asset => distance(asset, b))))[0]!
       const foreignBarriers = barriers.filter(entry => !captionBoxes.includes(entry))
-      const eligible = assets.filter(asset => captionBoxes.some(part => !blocked(asset, part, foreignBarriers)))
+      const closesRow = captionBoxes.some(part => closedRows.has(part))
+      const eligible = assets.filter(asset => captionBoxes.some(part => !blocked(asset, part, foreignBarriers)) &&
+        (!closesRow || captionSide(asset, anchor) === 'above'))
       // Remember every structural panel, including those behind a barrier. Losing one
       // must invalidate the whole figure rather than silently cropping its nearest row.
-      const structural = assets.filter(asset => captionBoxes.some(part => relatedParent(asset, part)))
+      // A bar caption that closes a row of panels owns the figure above it; a parser parent
+      // linking it to a panel below belongs to the next figure.
+      const structural = assets.filter(asset => captionBoxes.some(part => relatedParent(asset, part)) &&
+        (!closesRow || captionSide(asset, anchor) === 'above'))
       const reachableLinked = structural.filter(asset => eligible.includes(asset))
       const nearest = [...(reachableLinked.length ? reachableLinked : eligible)].sort((a, b) => distance(a, caption) - distance(b, caption))[0]
       // Parser parents are noisy: a caption can be attached to the next figure.
