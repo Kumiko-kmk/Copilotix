@@ -316,8 +316,11 @@ export function planTextLayerRepairs(candidates: readonly TextLayerCandidate[], 
 export function applyTextLayerRepairs(
   layout: unknown,
   markdown: string,
-  report: TextLayerRepairReport
+  report: TextLayerRepairReport,
+  /** Markdown of blocks the user edited or deleted; spans inside them keep the parser text. */
+  protectedBlocks: readonly string[] = []
 ): { layout: unknown; markdown: string; report: TextLayerRepairReport } {
+  const protectedKeys = protectedBlocks.map((block) => alphanumerics(stripScripts(block)))
   const clone = structuredClone(layout)
   const refs = collectSpans(clone)
   const applied: TextLayerRepair[] = []
@@ -326,7 +329,8 @@ export function applyTextLayerRepairs(
   for (const repair of report.repairs) {
     const ref = refs.find((candidate) => candidate.candidate.pageIndex === repair.pageIndex &&
       candidate.candidate.content === repair.original && sameBox(candidate.candidate.bbox, repair.bbox))
-    const patched = ref ? replaceInMarkdown(nextMarkdown, repair, ref.previous) : null
+    const key = alphanumerics(stripScripts(repair.original))
+    const patched = ref && !protectedKeys.some((block) => block.includes(key)) ? replaceInMarkdown(nextMarkdown, repair, ref.previous) : null
     if (!ref || patched === null) {
       unresolved.push(ref?.candidate ?? { pageIndex: repair.pageIndex, pageSize: [0, 0], bbox: repair.bbox, content: repair.original })
       continue

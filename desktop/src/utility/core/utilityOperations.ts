@@ -51,7 +51,8 @@ import {
   coreTranslationPlanFailPayloadSchema,
   coreTranslationPlanFinalizePayloadSchema
 } from '@shared/coreRpcSchemas'
-import type { CopilotixTask } from '@shared/types'
+import type { BlockMapping, CopilotixTask } from '@shared/types'
+import { alignMarkdownBlocks } from '@shared/markdownBlocks'
 import { appSettingsSchema } from '@shared/ipcSchemas'
 import { MAX_PDF_BYTES } from '@shared/constants'
 import { MAX_PDF_CROP_BYTES } from '@shared/pdfImport'
@@ -661,17 +662,17 @@ const TEXT_LAYER_REPORT = 'text-layer-repair.json'
  * the layout has no fragmented lines. A PDF that cannot be read leaves every
  * candidate unresolved instead of failing the parse.
  */
-async function repairFromTextLayer(layout: unknown, markdown: string, pdfPath: string, signal?: AbortSignal): Promise<{ layout: unknown; markdown: string; report: TextLayerRepairReport } | null> {
+async function repairFromTextLayer(layout: unknown, markdown: string, pdfPath: string, signal?: AbortSignal, protectedBlocks: readonly string[] = []): Promise<{ layout: unknown; markdown: string; report: TextLayerRepairReport } | null> {
   const candidates = findTextLayerCandidates(layout)
   if (candidates.length === 0) return null
   try {
     const pages = [...new Map(candidates.map((candidate) => [candidate.pageIndex, { pageIndex: candidate.pageIndex, pageSize: candidate.pageSize }])).values()]
     const layer = await readPdfTextLayer(pdfPath, pages, signal)
-    let result = applyTextLayerRepairs(layout, markdown, planTextLayerRepairs(candidates, layer))
+    let result = applyTextLayerRepairs(layout, markdown, planTextLayerRepairs(candidates, layer), protectedBlocks)
     // A repaired span can make its neighbour locatable in the Markdown; settle here
     // instead of publishing (and re-preparing the reader) once per pass.
     for (let pass = 0; pass < 3 && result.report.repairs.length > 0; pass += 1) {
-      const next = applyTextLayerRepairs(result.layout, result.markdown, planTextLayerRepairs(findTextLayerCandidates(result.layout), layer))
+      const next = applyTextLayerRepairs(result.layout, result.markdown, planTextLayerRepairs(findTextLayerCandidates(result.layout), layer), protectedBlocks)
       if (next.report.repairs.length === 0) break
       result = { ...next, report: { ...next.report, repairs: [...result.report.repairs, ...next.report.repairs] } }
     }
@@ -679,6 +680,47 @@ async function repairFromTextLayer(layout: unknown, markdown: string, pdfPath: s
   } catch (error) {
     if (signal?.aborted) throw error
     return { layout, markdown, report: { version: TEXT_LAYER_REPAIR_VERSION, repairs: [], unresolved: candidates } }
+  }
+}
+
+/**
+ * Parsed Markdown of blocks the user edited or deleted in the reader
+ * (`edits/markdown-edits.v1.json`). The user's text always wins, so the repair
+ * leaves these blocks alone. Each entry is located like the reader does: its
+ * recorded position when mappings or base hash still match, else the one block
+ * with the same mappings, else the one with the same base hash. Null when the
+ * file exists but cannot be read.
+ */
+async function userEditedBlocks(outputDir: string, documentId: string, markdown: string): Promise<string[] | null> {
+  const pathPolicy = new PathPolicy()
+  let raw: string
+  try {
+    raw = await readFile(pathPolicy.resolveChild(outputDir, 'edits/markdown-edits.v1.json'), 'utf8')
+  } catch (error) {
+    return isNotFound(error) ? [] : null
+  }
+  try {
+    const file = JSON.parse(raw) as { version?: unknown; documentId?: unknown; blocks?: unknown }
+    if (file.version !== 1 || file.documentId !== documentId || !Array.isArray(file.blocks)) return null
+    const mappings = (JSON.parse(await readFile(pathPolicy.resolveChild(outputDir, 'block_list.json'), 'utf8')) as { mappings?: unknown }).mappings
+    const blocks = alignMarkdownBlocks(markdown, Array.isArray(mappings) ? mappings as BlockMapping[] : [])
+    const hashes = blocks.map((block) => createHash('sha256').update(block.markdown).digest('hex'))
+    const sameIds = (left: readonly string[], right: readonly string[]): boolean => left.length > 0 && [...left].sort().join('\u0000') === [...right].sort().join('\u0000')
+    const result: string[] = []
+    for (const entry of file.blocks as Array<{ index?: number; mappingIds?: string[]; baseHash?: string; original?: unknown; deletedAt?: unknown }>) {
+      if (!entry.original && !entry.deletedAt) continue
+      const ids = Array.isArray(entry.mappingIds) ? entry.mappingIds : []
+      const at = typeof entry.index === 'number' ? blocks[entry.index] : undefined
+      const unique = (matches: number[]): number | undefined => matches.length === 1 ? matches[0] : undefined
+      const found = at && (sameIds(at.mappingIds, ids) || hashes[entry.index!] === entry.baseHash) ? entry.index!
+        : unique(blocks.flatMap((block, index) => sameIds(block.mappingIds, ids) ? [index] : []))
+          ?? unique(hashes.flatMap((hash, index) => hash === entry.baseHash ? [index] : []))
+      // An edit that cannot be placed protects nothing here, as in the reader (orphan).
+      if (found !== undefined) result.push(blocks[found]!.markdown)
+    }
+    return result
+  } catch {
+    return null
   }
 }
 
@@ -694,7 +736,11 @@ async function repairParsedTextLayer(taskId: string, repository: V2TaskRepositor
   const pathPolicy = new PathPolicy()
   const path = (name: string): string => pathPolicy.resolveChild(task.outputDir, name)
   const layout = JSON.parse(await readFile(path('layout.json'), 'utf8')) as unknown
-  const repaired = await repairFromTextLayer(layout, await readFile(path('full.md'), 'utf8'), path('original.pdf'), signal)
+  const markdown = await readFile(path('full.md'), 'utf8')
+  const protectedBlocks = await userEditedBlocks(task.outputDir, taskId, markdown)
+  // An edits file that cannot be read must not be overruled: leave the paper as it is.
+  if (protectedBlocks === null) return { repaired: 0, unresolved: 0 }
+  const repaired = await repairFromTextLayer(layout, markdown, path('original.pdf'), signal, protectedBlocks)
   if (!repaired || repaired.report.repairs.length === 0) return { repaired: 0, unresolved: repaired?.report.unresolved.length ?? 0 }
   signal?.throwIfAborted()
   const stagingRoot = path(`.text-layer-repair.partial-${randomUUID()}`)

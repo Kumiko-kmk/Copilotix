@@ -43,6 +43,16 @@ describe('text-layer repair of fragmented parser lines', () => {
     expect(findTextLayerCandidates(result.layout)).toEqual([])
   })
 
+  it('leaves spans inside blocks the user edited or deleted untouched', () => {
+    const layout = layoutWith([{ type: 'text', content: GARBLED, bbox: [196, 322, 504, 328] }])
+    const markdown = `Cohesive Zone Model ${GARBLED} engineers to conduct\n`
+    const report = planTextLayerRepairs(findTextLayerCandidates(layout), [{ pageIndex: 0, items: lineItems(REAL) }])
+    const result = applyTextLayerRepairs(layout, markdown, report, [markdown.trim()])
+    expect(result.markdown).toBe(markdown)
+    expect(result.report.repairs).toEqual([])
+    expect(JSON.stringify(result.layout)).toContain(GARBLED)
+  })
+
   it('keeps the parser text without a readable text layer (scanned page, unrelated or garbled layer)', () => {
     const layout = layoutWith([{ type: 'text', content: GARBLED, bbox: [196, 322, 504, 328] }])
     const markdown = `${GARBLED}\n`
