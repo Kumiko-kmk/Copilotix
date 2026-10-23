@@ -1,3 +1,6 @@
+import { paperSelectionText } from '@shared/paperSelectionText'
+import { readerContentMappings } from '@shared/readerDocument'
+import type { PdfBlockMenu, PdfBlockMenuItem } from '../components/PdfPane'
 import React from 'react'
 import { usePaperChat } from '../usePaperChat'
 import { usePaperChatRouting } from '../usePaperChatRouting'
@@ -154,20 +157,64 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
     const make = (view: 'original' | 'translated'): ReaderBlockEditing => ({
       view, edits: markdownEdits, restore,
       save: (block, text) => applyEdit(targetOf(block), view === 'original' ? 'set-original' : 'set-translated', text),
-      revert: block => report(() => applyEdit(targetOf(block), view === 'original' ? 'revert-original' : 'revert-translated')),
-      remove: block => report(async () => {
-        const target = targetOf(block)
-        await applyEdit(target, 'delete')
-        messageApi.success({ key: 'reader-edit', duration: 6, content: <span>已删除此段，两个视图均不再显示。<a onClick={() => { messageApi.destroy('reader-edit'); void restore(target.kind === 'content' ? { index: target.index } : { mappingId: target.mappingId }) }}>撤销</a></span> })
-      }),
-      retranslate: () => report(async () => {
-        await window.copilotix.retranslateEditedDocument(props.documentId)
-        messageApi.success({ key: 'reader-edit', content: '已开始重新翻译；未修改的段落沿用已有译文' })
-        await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
-      })
     })
     return { original: make('original'), translated: make('translated') }
-  }, [applyEdit, markdownEdits, messageApi, props.documentId, queryClient])
+  }, [applyEdit, markdownEdits, messageApi])
+  // Right click on a PDF block: retranslate, ask about, frame, delete or restore the whole paragraph.
+  const translationAvailable = Boolean(document?.translatedMarkdown)
+  const contentMappingIds = React.useMemo(() => new Set(readerContentMappings(mappings).map(mapping => mapping.id)), [mappings])
+  const pdfBlockMenu = React.useMemo<PdfBlockMenu>(() => {
+    const boxed = new Set(markdownEdits?.boxMarks ?? [])
+    const deletedContent = (id: string) => markdownEdits?.blocks.find(block => block.deleted && block.mappingIds.includes(id))
+    const deletedSupplemental = (id: string) => Boolean(markdownEdits?.supplementalDeleted.some(item => item.mappingId === id))
+    const deleted = new Set([...(markdownEdits?.blocks.filter(block => block.deleted).flatMap(block => block.mappingIds) ?? []),
+      ...(markdownEdits?.supplementalDeleted.map(item => item.mappingId) ?? [])])
+    const contentOf = (id: string) => originalBlocks.find(block => block.role === 'content' && block.contentIndex !== undefined && block.mappingIds.includes(id))
+    const report = async (action: () => Promise<void>): Promise<void> => {
+      try { await action() } catch (error) { messageApi.error({ content: error instanceof Error ? error.message : '段落操作失败', key: 'reader-edit' }) }
+    }
+    return {
+      boxed, deleted,
+      items: (id) => {
+        const content = contentOf(id)
+        const furniture = !contentMappingIds.has(id)
+        const items: PdfBlockMenuItem[] = []
+        if (content && translationAvailable) items.push({ key: 'retranslate', label: '重新翻译此段' })
+        if (content) items.push({ key: 'chat', label: '整段加入对话' })
+        items.push(boxed.has(id) ? { key: 'unbox', label: '取消边界框标记' } : { key: 'box', label: '整段加边界框标记' })
+        if (deletedContent(id) || deletedSupplemental(id)) items.push({ key: 'restore', label: '恢复此段' })
+        else if (content || furniture) items.push({ key: 'delete', label: '删除此段', danger: true })
+        return items
+      },
+      onSelect: (key, id) => {
+        const content = contentOf(id)
+        const contentTarget = content ? { kind: 'content' as const, index: content.contentIndex!, mappingIds: content.mappingIds } : null
+        if (key === 'box' || key === 'unbox') void report(() => applyEdit({ kind: 'block', mappingId: id }, key))
+        else if (key === 'retranslate' && contentTarget) void report(async () => {
+          await applyEdit(contentTarget, 'retranslate')
+          await window.copilotix.retranslateEditedDocument(props.documentId)
+          messageApi.success({ key: 'reader-edit', content: '已开始重新翻译此段，其他段落沿用已有译文' })
+          await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
+        })
+        else if (key === 'chat' && content) {
+          // The whole paragraph as an original-text selection, validated like a dragged one.
+          const text = paperSelectionText(content.source ?? content.markdown).trim().slice(0, 16_000)
+          if (!text) { messageApi.warning({ key: 'paper-chat-pin', content: '此段没有可加入对话的文字' }); return }
+          const quote = text.slice(0, 4_096).replace(/[\uD800-\uDBFF]$/u, '')
+          addToChat({ taskId: props.documentId, view: 'original', text, fragments: [{ blockKey: content.annotationKey!, startOffset: 0, endOffset: quote.length, quote, mappingIds: [...new Set(content.mappingIds)], ...(content.pageIndex !== undefined ? { pageIndex: content.pageIndex } : {}) }] })
+        } else if (key === 'delete') {
+          const target = contentTarget ?? { kind: 'supplemental' as const, mappingId: id }
+          void report(async () => {
+            await applyEdit(target, 'delete')
+            messageApi.success({ key: 'reader-edit', duration: 6, content: <span>已删除此段，原文与译文均不再显示。<a onClick={() => { messageApi.destroy('reader-edit'); void report(() => applyEdit(target, 'restore')) }}>撤销</a></span> })
+          })
+        } else if (key === 'restore') {
+          const entry = deletedContent(id)
+          void report(() => applyEdit(entry ? { kind: 'content', index: entry.index, mappingIds: entry.mappingIds } : { kind: 'supplemental', mappingId: id }, 'restore'))
+        }
+      }
+    }
+  }, [addToChat, applyEdit, contentMappingIds, markdownEdits, messageApi, originalBlocks, props.documentId, queryClient, translationAvailable])
   // A citation scrolls the reading views to its block; if none is on screen, the workbench shows one.
   const openCitation = React.useCallback((next: BlockSelection) => {
     selectBlock(next)
@@ -267,6 +314,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           onAddToChat: addToChat,
           figureChat,
           blockEditing,
+          pdfBlockMenu,
           notes: readerNotes.notes,
           onSaveNote: readerNotes.saveNote,
           onDeleteNote: readerNotes.deleteNote,

@@ -50,7 +50,10 @@ export class MarkdownEditStore {
     const now = new Date().toISOString()
     const next: MarkdownEditsFile = { ...file, revision: file.revision + 1, updatedAt: now, blocks: [...file.blocks], supplementalDeleted: [...file.supplementalDeleted] }
     const target = request.target
-    if (target.kind === 'supplemental') {
+    if (target.kind === 'block') {
+      next.boxMarks = next.boxMarks.filter(item => item.mappingId !== target.mappingId)
+      if (request.action === 'box') next.boxMarks.push({ mappingId: target.mappingId, markedAt: now })
+    } else if (target.kind === 'supplemental') {
       next.supplementalDeleted = next.supplementalDeleted.filter(item => item.mappingId !== target.mappingId)
       if (request.action === 'delete') next.supplementalDeleted.push({ mappingId: target.mappingId, deletedAt: now })
     } else {
@@ -74,9 +77,10 @@ export class MarkdownEditStore {
       else if (request.action === 'set-translated') entry.translated = { markdown: text, editedAt: now, sourceHash: sha256(entry.original?.markdown ?? block.markdown) }
       else if (request.action === 'revert-translated') delete entry.translated
       else if (request.action === 'delete') entry.deletedAt = now
+      else if (request.action === 'retranslate') entry.retranslateAt = now
       else delete entry.deletedAt
       const kept = [...byIndex.entries()].filter(([index]) => index !== target.index).map(([, value]) => (({ baseChanged: _changed, ...rest }) => rest)(value))
-      next.blocks = [...kept, ...(entry.original || entry.translated || entry.deletedAt ? [entry] : []), ...orphans].sort((a, b) => a.index - b.index)
+      next.blocks = [...kept, ...(entry.original || entry.translated || entry.deletedAt || entry.retranslateAt ? [entry] : []), ...orphans].sort((a, b) => a.index - b.index)
     }
     await writeMarkdownEditsFile(root, next)
     return { revision: next.revision }

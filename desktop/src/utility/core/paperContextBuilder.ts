@@ -2,7 +2,7 @@ import type { RagChunk } from '@core/types'
 import { PAPER_CHAT_MAX_BYTES, paperContextRequestSchema, paperContextResultSchema, type PaperContext, type PaperContextRequest, type PaperEvidence } from '@shared/paperChatSchemas'
 import { ragWireByteLength } from '@shared/ragSchemas'
 import type { SqliteRagRepository } from './persistence/sqliteRagRepository'
-import { paperSelectionText } from './paperSelectionText'
+import { paperSelectionText } from '@shared/paperSelectionText'
 import { captionFigureKey, mentionsFigure } from '@shared/figureMentions'
 import type { MarkdownEditsFile } from '@shared/markdownEdits'
 

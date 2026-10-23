@@ -389,7 +389,7 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 export function resolveReaderEdits(markdown: string, mappings: BlockMapping[], translatedBlocks: readonly TranslatedMarkdownBlock[] | null, file: MarkdownEditsFile): ResolvedMarkdownEdits {
   const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]))
   const supplementalDeleted = file.supplementalDeleted.map(({ mappingId }) => ({ mappingId, excerpt: editExcerpt(mappingById.get(mappingId)?.sourceText ?? '') }))
-  if (!file.blocks.length) return { revision: file.revision, blocks: [], supplementalDeleted, orphans: 0 }
+  if (!file.blocks.length) return { revision: file.revision, blocks: [], supplementalDeleted, boxMarks: file.boxMarks.map(item => item.mappingId), orphans: 0 }
   const base = alignMarkdownBlocks(markdown, readerContentMappings(mappings))
   const { byIndex, orphans } = resolveMarkdownEdits(base, file, sha256)
   const translatedBySource = new Map((translatedBlocks ?? []).map((block) => [block.sourceIndex, block]))
@@ -404,7 +404,7 @@ export function resolveReaderEdits(markdown: string, mappings: BlockMapping[], t
       ...(entry.translated ? { translated: entry.translated.markdown } : {})
     }
   })
-  return { revision: file.revision, blocks, supplementalDeleted, orphans: orphans.length }
+  return { revision: file.revision, blocks, supplementalDeleted, boxMarks: file.boxMarks.map(item => item.mappingId), orphans: orphans.length }
 }
 
 function joinTranslatedMarkdownBlocks(blocks: readonly TranslatedMarkdownBlock[]): string {

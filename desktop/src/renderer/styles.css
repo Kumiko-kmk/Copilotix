@@ -714,16 +714,18 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 /* In-reader editing: actions appear on the clicked block only; the editor keeps the paragraph's own typography. */
 .markdown-block[data-edited] { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primary) 45%, transparent); }
 .markdown-block[data-editing] { background: transparent; box-shadow: none; outline: 1px dashed color-mix(in srgb, var(--primary) 55%, transparent); outline-offset: 2px; content-visibility: visible; }
-.reader-block-actions { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 8px; user-select: none; }
-.reader-block-actions button, .reader-block-stale button { padding: 1px 8px; border: 1px solid var(--rule); border-radius: 2px; color: var(--primary); background: var(--sheet); cursor: pointer; font: inherit; font-size: 12px; line-height: 1.6; text-indent: 0; }
-.reader-block-actions button.danger { color: var(--danger, #c0392b); }
-.reader-block-actions button:disabled, .reader-block-stale button:disabled { cursor: progress; opacity: .6; }
+/* Whole-paragraph frame set from the PDF view: always dashed, never a hover effect. */
+.markdown-block[data-boxed], .markdown-supplemental[data-boxed] { outline: 1.5px dashed color-mix(in srgb, var(--ink) 55%, transparent); outline-offset: 3px; }
+.pdf-block.boxed { outline: 1.5px dashed rgba(32, 32, 32, .75); outline-offset: 1px; }
+.pdf-block.deleted { background: repeating-linear-gradient(135deg, rgba(120, 120, 120, .16) 0 6px, transparent 6px 12px); }
+.pdf-block-menu { position: fixed; z-index: 1100; display: flex; flex-direction: column; min-width: 168px; padding: 4px; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet); box-shadow: 0 10px 28px -12px color-mix(in srgb, var(--shadow-ink) 55%, transparent); }
+.pdf-block-menu button { padding: 6px 12px; border: 0; border-radius: 4px; color: var(--text); background: transparent; text-align: left; cursor: pointer; font: inherit; font-size: 13px; }
+.pdf-block-menu button:hover, .pdf-block-menu button:focus-visible, .pdf-block-menu button:active { background: color-mix(in srgb, var(--primary) 12%, transparent); outline: 0; }
+.pdf-block-menu button.danger { color: var(--danger, #c0392b); }
 .reader-block-editor textarea { display: block; box-sizing: border-box; width: 100%; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; }
 .reader-block-editor-footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 4px 0 8px; color: var(--muted); font-size: 12px; text-indent: 0; }
 .reader-block-editor-footer span { margin-right: auto; }
 .reader-block-editor-footer span[role="alert"] { color: var(--danger, #c0392b); }
-.reader-block-stale { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; color: var(--muted); font-size: 12px; line-height: 1.6; text-indent: 0; user-select: none; }
-.reader-block-stale span::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--warning, #d48806); vertical-align: middle; }
 .reader-deleted-item { display: inline-block; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .reader-figure-caption { clear: both; width: 100%; margin: 0 auto 7px; }
 .reader-figure-caption > :first-child { margin-top: 0; }

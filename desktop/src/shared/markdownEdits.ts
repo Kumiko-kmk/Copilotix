@@ -25,7 +25,9 @@ export const markdownEditEntrySchema = z.object({
   original: z.object({ markdown: blockText, editedAt: timeSchema }).strict().optional(),
   /** `sourceHash` is the original text the user translated against. */
   translated: z.object({ markdown: blockText, editedAt: timeSchema, sourceHash: hashSchema }).strict().optional(),
-  deletedAt: timeSchema.optional()
+  deletedAt: timeSchema.optional(),
+  /** The user asked to translate this block again; honoured by the first translation finished after it. */
+  retranslateAt: timeSchema.optional()
 }).strict()
 export type MarkdownEditEntry = z.infer<typeof markdownEditEntrySchema>
 
@@ -36,11 +38,13 @@ export const markdownEditsFileSchema = z.object({
   updatedAt: timeSchema,
   blocks: z.array(markdownEditEntrySchema).max(100_000),
   /** Page headers, footers and footnotes shown from the layout rather than the Markdown. */
-  supplementalDeleted: z.array(z.object({ mappingId: mappingIdSchema, deletedAt: timeSchema }).strict()).max(100_000)
+  supplementalDeleted: z.array(z.object({ mappingId: mappingIdSchema, deletedAt: timeSchema }).strict()).max(100_000),
+  /** Dashed whole-block frames set from the PDF view, by layout block ID (content or page furniture). */
+  boxMarks: z.array(z.object({ mappingId: mappingIdSchema, markedAt: timeSchema }).strict()).max(100_000).default([])
 }).strict()
 export type MarkdownEditsFile = z.infer<typeof markdownEditsFileSchema>
 export const emptyMarkdownEdits = (documentId: string): MarkdownEditsFile =>
-  ({ version: 1, documentId, revision: 0, updatedAt: new Date(0).toISOString(), blocks: [], supplementalDeleted: [] })
+  ({ version: 1, documentId, revision: 0, updatedAt: new Date(0).toISOString(), blocks: [], supplementalDeleted: [], boxMarks: [] })
 
 /** What the reader needs, resolved by Main against the current parsed text and translation. */
 export const resolvedMarkdownEditsSchema = z.object({
@@ -57,24 +61,28 @@ export const resolvedMarkdownEditsSchema = z.object({
     excerpt: z.string().max(200)
   }).strict()).max(100_000),
   supplementalDeleted: z.array(z.object({ mappingId: mappingIdSchema, excerpt: z.string().max(200) }).strict()).max(100_000),
+  boxMarks: z.array(mappingIdSchema).max(100_000),
   /** Edits whose block no longer exists in the parsed text; kept in the file, not shown. */
   orphans: z.number().int().min(0)
 }).strict()
 export type ResolvedMarkdownEdits = z.infer<typeof resolvedMarkdownEditsSchema>
 
-export const markdownEditActionSchema = z.enum(['set-original', 'set-translated', 'revert-original', 'revert-translated', 'delete', 'restore'])
+export const markdownEditActionSchema = z.enum(['set-original', 'set-translated', 'revert-original', 'revert-translated', 'delete', 'restore', 'retranslate', 'box', 'unbox'])
 export const markdownEditRequestSchema = z.object({
   documentId: z.string().uuid(),
   /** Optimistic concurrency: the revision the reader showed. */
   expectedRevision: z.number().int().min(0),
   target: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('content'), index: z.number().int().min(0).max(1_000_000), mappingIds: z.array(mappingIdSchema).max(512) }).strict(),
-    z.object({ kind: z.literal('supplemental'), mappingId: mappingIdSchema }).strict()
+    z.object({ kind: z.literal('supplemental'), mappingId: mappingIdSchema }).strict(),
+    /** Any layout block, for the dashed frame. */
+    z.object({ kind: z.literal('block'), mappingId: mappingIdSchema }).strict()
   ]),
   action: markdownEditActionSchema,
   markdown: blockText.optional()
 }).strict().refine(value => !value.action.startsWith('set-') || Boolean(value.markdown?.trim()), 'Edited text is required')
-  .refine(value => value.target.kind === 'content' || value.action === 'delete' || value.action === 'restore', 'Only deletion applies to page furniture')
+  .refine(value => value.target.kind !== 'supplemental' || value.action === 'delete' || value.action === 'restore', 'Only deletion applies to page furniture')
+  .refine(value => (value.target.kind === 'block') === (value.action === 'box' || value.action === 'unbox'), 'Frames address layout blocks')
 export type MarkdownEditRequest = z.infer<typeof markdownEditRequestSchema>
 export const markdownEditResultSchema = z.object({ revision: z.number().int().min(0) }).strict()
 

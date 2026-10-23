@@ -15,6 +15,7 @@ import { MarkdownEditStore } from '../src/utility/core/persistence/markdownEditS
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
 import { V2Database } from '../src/utility/core/persistence/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
+import { SqliteJobRepository } from '../src/utility/core/persistence/sqliteJobRepository'
 
 const DOC = '11111111-1111-4111-8111-111111111111'
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex')
@@ -118,7 +119,39 @@ describe('reader edit layer', () => {
       expect(manifest.blocks.map((block: { markdown: string }) => block.markdown)).toEqual(['译:First paragraph about cracks.', '译:Second paragraph, corrected.', ''])
       const blocks = manifest.blocks.map((block: { sourceIndex: number; markdown: string; sourceHash: string }) => ({ sourceIndex: block.sourceIndex, markdown: block.markdown, mappingIds: [], sourceHash: block.sourceHash }))
       expect(resolveReaderEdits(MARKDOWN, MAPPINGS, blocks, await readMarkdownEditsFile(outputDir, DOC)).blocks.find(block => block.index === 1)?.stale).toBe(false)
+      expect(manifest.generatedAt).toEqual(expect.any(String))
+
+      // 重新翻译此段: a new run translates only that block, past the cache; the others keep their translation.
+      database.connection.prepare("UPDATE jobs SET status='succeeded' WHERE id=?").run(jobId)
+      await store.apply({ documentId: DOC, expectedRevision: 2, target: target(0), action: 'retranslate' })
+      const rerun = new SqliteJobRepository(database).enqueue({ documentId: DOC, kind: 'translate', checkpoint: { stage: 'queued', reason: 'edited' }, now: '2026-10-22T00:01:00.000Z' })
+      const again = new MarkdownTranslationPlanManager(repository)
+      await again.open(DOC, rerun.id)
+      const rework = (await again.listWork(DOC, rerun.id)).items
+      expect(rework.map(item => item.status)).toEqual(['pending', 'completed', 'completed'])
+      await expect(again.tryCache(DOC, rerun.id, rework[0]!.unitId, 'qwen', 'fixture')).resolves.toMatchObject({ status: 'pending' })
+      const request = JSON.parse(await readFile(join(outputDir, ...rework[0]!.requestPath.split('/')), 'utf8'))
+      await writeFile(join(outputDir, ...rework[0]!.responsePath.split('/')), JSON.stringify({ protocol: request.protocol, unitId: request.unitId, sourceHash: request.sourceHash,
+        translations: request.segments.map((segment: { id: string }) => ({ id: segment.id, text: '重译的第一段' })) }))
+      await again.apply(DOC, rerun.id, rework[0]!.unitId, rework[0]!.responsePath, 'qwen', 'fixture')
+      await again.finalize(DOC, rerun.id)
+      const rerunManifest = JSON.parse(await readFile(join(outputDir, 'translation.manifest.json'), 'utf8'))
+      expect(rerunManifest.blocks.map((block: { markdown: string }) => block.markdown)).toEqual(['重译的第一段', '译:Second paragraph, corrected.', ''])
     } finally { repository.close() }
+  })
+
+  it('frames whole blocks from the PDF view, content or page furniture, and removes the frame again', async () => {
+    const root = await paperDir()
+    const store = new MarkdownEditStore(() => root)
+    await store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'block', mappingId: 'm1' }, action: 'box' })
+    await store.apply({ documentId: DOC, expectedRevision: 1, target: { kind: 'block', mappingId: 'h0' }, action: 'box' })
+    expect(() => store.apply({ documentId: DOC, expectedRevision: 2, target: target(1), action: 'box' })).toThrow('Frames')
+    const edits = resolveReaderEdits(MARKDOWN, MAPPINGS, null, await readMarkdownEditsFile(root, DOC))
+    expect(edits.boxMarks).toEqual(['m1', 'h0'])
+    const blocks = buildOriginalReaderBlocks(MARKDOWN, MAPPINGS, edits)
+    expect(blocks.filter(block => block.boxed).map(block => block.annotationKey)).toEqual(['content:1'])
+    await store.apply({ documentId: DOC, expectedRevision: 2, target: { kind: 'block', mappingId: 'm1' }, action: 'unbox' })
+    expect((await readMarkdownEditsFile(root, DOC)).boxMarks.map(item => item.mappingId)).toEqual(['h0'])
   })
 
   it('gives chat the edited text and drops deleted blocks without losing chunk locators', () => {
