@@ -217,6 +217,8 @@ export interface TranslatedMarkdownBlock {
   fallbackProvider?: TranslationProviderId
   /** sha256 of the source block it was translated from (manifests since translation pipeline v6). */
   sourceHash?: string
+  /** The source block changed after translation (e.g. a text-layer repair); a retry re-translates it. */
+  sourceChanged?: true
 }
 
 export interface TranslationBlockRecord {

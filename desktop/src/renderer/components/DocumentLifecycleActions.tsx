@@ -7,10 +7,12 @@ import { canRetry } from '../documentStatus'
 /** Retry and delete, which used to live in the task list: retry only while it can help, delete after confirmation. */
 export default function DocumentLifecycleActions(props: {
   summary: DocumentSummary
+  /** Some translated paragraphs predate a repair of their original text. */
+  staleTranslation?: boolean
   messageApi: ReturnType<typeof message.useMessage>[0]
   onDeleted(): void
 }): React.JSX.Element {
-  const { summary, messageApi, onDeleted } = props
+  const { summary, staleTranslation, messageApi, onDeleted } = props
   const [confirming, setConfirming] = React.useState(false)
   const [deleteFiles, setDeleteFiles] = React.useState(true)
   const [deleting, setDeleting] = React.useState(false)
@@ -37,7 +39,7 @@ export default function DocumentLifecycleActions(props: {
     }
   }
   return <>
-    {canRetry(summary.workflow.status) ? <Button type="text" icon={<RedoOutlined />} onClick={() => void retry()} aria-label="重试" /> : null}
+    {canRetry(summary.workflow.status) || staleTranslation ? <Button type="text" icon={<RedoOutlined />} onClick={() => void retry()} aria-label="重试" /> : null}
     <Button type="text" danger icon={<DeleteOutlined />} onClick={() => { setDeleteFiles(true); setConfirming(true) }} aria-label="删除论文" />
     <Modal title="删除论文" open={confirming} okText="删除" okButtonProps={{ danger: true }} confirmLoading={deleting}
       onOk={() => void remove()} onCancel={() => { if (!deleting) setConfirming(false) }}>

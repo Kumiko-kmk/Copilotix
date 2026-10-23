@@ -1,4 +1,5 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -7,7 +8,7 @@ import type { TaskComputePort } from '@core/ports'
 import { PathPolicy } from '@runtime/pathPolicy'
 import { ArtifactService, shouldIncludeResultZipEntry } from '../src/main/artifactService'
 import type { TaskRepositoryCompat } from '../src/main/taskRepositoryCompat'
-import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '../src/shared/markdownBlocks'
+import { alignMarkdownBlocks, MARKDOWN_MAPPING_ALGORITHM_VERSION } from '../src/shared/markdownBlocks'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/shared/translationPlanProtocol'
 import type { CopilotixTask } from '../src/shared/types'
 
@@ -65,6 +66,16 @@ describe('reader translation artifact recovery', () => {
       expect(document).toMatchObject({ translatedMarkdown: '# 正确标题\n\n正确正文\n' })
       // Only blocks translated by a provider other than the preferred one carry a fallback mark.
       expect(document.translatedBlocks?.map(block => block.fallbackProvider)).toEqual([undefined, 'deepseek'])
+      // A source block that changed after translation (e.g. a text-layer repair) is flagged; unchanged ones are not.
+      await writeFile(join(outputDir, 'full.md'), '# Title\n\nRepaired body\n', 'utf8')
+      await writeFile(join(outputDir, 'block_list.json'), JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: [] }), 'utf8')
+      const [title] = alignMarkdownBlocks('# Title\n\nRepaired body\n', [])
+      const manifest = JSON.parse(await readFile(join(outputDir, 'translation.manifest.json'), 'utf8'))
+      manifest.blocks[0].sourceHash = createHash('sha256').update(title!.markdown).digest('hex')
+      manifest.blocks[1].sourceHash = createHash('sha256').update('d h f ld body').digest('hex')
+      await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify(manifest), 'utf8')
+      expect((await service.getDocument(task.id)).translatedBlocks?.map(block => block.sourceChanged)).toEqual([undefined, true])
+      await expect(service.hasStaleTranslation(task.id)).resolves.toBe(true)
       await writeFile(join(outputDir, 'full.zh-CN.md'), '# 其他论文的陈旧内容\n', 'utf8')
       await expect(service.getDocument(task.id)).resolves.toMatchObject({
         translatedMarkdown: '# 正确标题\n\n正确正文\n'

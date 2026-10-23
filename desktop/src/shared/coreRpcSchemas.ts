@@ -308,7 +308,8 @@ export const coreJobManualRetryPayloadSchema = z.object({
   jobId: coreIdSchema,
   now: coreTimestampSchema.optional(),
   availableAt: coreTimestampSchema.optional(),
-  detail: coreJobJsonObjectSchema.optional()
+  detail: coreJobJsonObjectSchema.optional(),
+  refreshTranslation: z.literal(true).optional()
 }).strict()
 export const coreJobRecoverExpiredPayloadSchema = z.object({ now: coreTimestampSchema }).strict()
 export const coreJobEventsPayloadSchema = z.object({ jobId: coreIdSchema }).strict()

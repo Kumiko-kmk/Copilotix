@@ -26,6 +26,7 @@ export interface ReaderBlock {
   source?: string
   /** The user's edit layer: `edited` for this view's text, `stale` when the translation predates the original. */
   edit?: { edited: boolean; stale: boolean }
+  sourceChanged?: true
 }
 
 export interface ReaderDocumentBlocks {
@@ -135,7 +136,8 @@ export function mergeReaderBlocks(
     order: sequence,
     contentIndex: sequence,
     source: block.markdown,
-    ...(block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {})
+    ...(block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {}),
+    ...(block.sourceChanged ? { sourceChanged: true as const } : {})
   }))
   const pagesByContentIndex = contentBlocks.map((block) => contentBlockPages(block, mappingById))
   const firstContentByPage = new Map<number, number>()
@@ -251,8 +253,8 @@ function remapTranslatedContent(
     }))
 }
 
-function withFallback(block: TranslatedMarkdownBlock): Pick<AlignedMarkdownBlock, 'fallbackProvider'> {
-  return block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {}
+function withFallback(block: TranslatedMarkdownBlock): Pick<AlignedMarkdownBlock, 'fallbackProvider' | 'sourceChanged'> {
+  return { ...(block.fallbackProvider ? { fallbackProvider: block.fallbackProvider } : {}), ...(block.sourceChanged ? { sourceChanged: true as const } : {}) }
 }
 
 function reuseOriginalMapping(markdown: string): AlignedMarkdownBlock[] {

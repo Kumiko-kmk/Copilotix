@@ -29,6 +29,7 @@ export interface AlignedMarkdownBlock {
   markdown: string
   mappingIds: string[]
   fallbackProvider?: TranslationProviderId
+  sourceChanged?: true
 }
 
 interface ParsedMarkdownBlock {

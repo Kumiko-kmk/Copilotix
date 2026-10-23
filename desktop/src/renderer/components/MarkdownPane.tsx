@@ -758,6 +758,7 @@ function readerBlocksEqual(left: ReaderBlock[], right: ReaderBlock[]): boolean {
       block.fallbackProvider === candidate.fallbackProvider &&
       block.edit?.edited === candidate.edit?.edited &&
       block.edit?.stale === candidate.edit?.stale &&
+      block.sourceChanged === candidate.sourceChanged &&
       stringArraysEqual(block.mappingIds, candidate.mappingIds)
   })
 }
@@ -836,7 +837,8 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
       data-annotation-block-key={props.block.annotationKey}
       data-reader-role={props.block.role}
       data-fallback-provider={props.block.fallbackProvider}
-      data-fallback-label={props.block.fallbackProvider ? `${TRANSLATION_PROVIDER_LABELS[props.block.fallbackProvider]} 回退翻译` : undefined}
+      data-source-changed={props.block.sourceChanged ? '' : undefined}
+      data-fallback-label={blockNoteLabel(props.block)}
       data-edited={props.block.edit?.edited || undefined}
       data-editing={props.editor ? true : undefined}
       className={'markdown-block' + (props.active ? ' active' : '') + (props.referenceSection ? ' reader-references' : '')}
@@ -1015,6 +1017,15 @@ function waitForAnimationFrames(count: number, signal: AbortSignal): Promise<voi
     }
     window.requestAnimationFrame(next)
   })
+}
+
+/** On-page note above a translated block: fallback provider and/or a source that changed after translation. */
+function blockNoteLabel(block: ReaderBlock): string | undefined {
+  const notes = [
+    block.fallbackProvider ? `${TRANSLATION_PROVIDER_LABELS[block.fallbackProvider]} 回退翻译` : null,
+    block.sourceChanged ? '原文已修复，译文待更新' : null
+  ].filter(Boolean)
+  return notes.length ? notes.join(' · ') : undefined
 }
 
 function readableRenderError(error: unknown): string {

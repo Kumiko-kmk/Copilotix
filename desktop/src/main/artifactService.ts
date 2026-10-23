@@ -266,6 +266,7 @@ export class ArtifactService {
         ![TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION].includes(manifest.translationPipelineVersion as typeof TRANSLATION_PIPELINE_VERSION) ||
         manifest.tableTranslationProtocol !== TABLE_TRANSLATION_PROTOCOL ||
         !Array.isArray(manifest.blocks)) return null
+      const changed = await this.changedSourceIndexes(task, manifest.blocks)
       const blocks = manifest.blocks.map((block) => {
         if (!isRecord(block) || !Number.isInteger(block.sourceIndex) || (block.sourceIndex as number) < 0 || typeof block.markdown !== 'string') return null
         const mappingIds = Array.isArray(block.mappingIds) && block.mappingIds.every((id) => typeof id === 'string')
@@ -275,10 +276,11 @@ export class ArtifactService {
         const fallbackProvider = block.status === 'completed' && isTranslationProvider(block.provider) &&
           isTranslationProvider(manifest.preferredProvider) && block.provider !== manifest.preferredProvider ? block.provider : undefined
         const sourceHash = typeof block.sourceHash === 'string' && /^[a-f0-9]{64}$/u.test(block.sourceHash) ? block.sourceHash : undefined
-        return { sourceIndex: block.sourceIndex as number, markdown: block.markdown, mappingIds, fallbackProvider, sourceHash }
+        const sourceChanged = changed.has(block.sourceIndex as number) ? true as const : undefined
+        return { sourceIndex: block.sourceIndex as number, markdown: block.markdown, mappingIds, fallbackProvider, sourceHash, sourceChanged }
       })
       if (blocks.some((block) => block === null)) return null
-      const validBlocks = blocks as Array<{ sourceIndex: number; markdown: string; mappingIds: string[] | null; fallbackProvider?: TranslationProviderId; sourceHash?: string }>
+      const validBlocks = blocks as Array<{ sourceIndex: number; markdown: string; mappingIds: string[] | null; fallbackProvider?: TranslationProviderId; sourceHash?: string; sourceChanged?: true }>
       const sourceIndexes = validBlocks.map((block) => block.sourceIndex)
       const validSourceOrder = new Set(sourceIndexes).size === sourceIndexes.length &&
         [...sourceIndexes].sort((left, right) => left - right).every((sourceIndex, index) => sourceIndex === index)
@@ -288,12 +290,13 @@ export class ArtifactService {
       const trustMappings = validSourceOrder && manifest.mappingAlgorithmVersion === MARKDOWN_MAPPING_ALGORITHM_VERSION &&
         manifest.blockMappingVersion === BLOCK_MAPPING_VERSION &&
         ordered.every((block) => Array.isArray(block.mappingIds))
-      return ordered.map(({ sourceIndex, markdown, mappingIds, fallbackProvider, sourceHash }) => ({
+      return ordered.map(({ sourceIndex, markdown, mappingIds, fallbackProvider, sourceHash, sourceChanged }) => ({
         sourceIndex,
         markdown,
         mappingIds: trustMappings ? mappingIds ?? [] : [],
         ...(fallbackProvider ? { fallbackProvider } : {}),
-        ...(sourceHash ? { sourceHash } : {})
+        ...(sourceHash ? { sourceHash } : {}),
+        ...(sourceChanged ? { sourceChanged } : {})
       }))
     } catch {
       return null
@@ -319,6 +322,30 @@ export class ArtifactService {
         const entry = byIndex.get(index)
         return { markdown: entry?.translated?.markdown ?? block.markdown, deleted: Boolean(entry?.deletedAt) }
       })) : translated
+    }
+  }
+
+  /** True when a translated block's source no longer matches the current original (e.g. after a text-layer repair). */
+  async hasStaleTranslation(taskId: string): Promise<boolean> {
+    const blocks = await this.loadTranslatedBlocks(await this.requireTask(taskId))
+    return Boolean(blocks?.some((block) => block.sourceChanged))
+  }
+
+  /**
+   * Source blocks whose Markdown no longer hashes to the manifest's `sourceHash`.
+   * Uses the translation plan's own alignment; when the block count changed the
+   * blocks cannot be paired, and nothing is marked.
+   */
+  private async changedSourceIndexes(task: CopilotixTask, manifestBlocks: unknown[]): Promise<Set<number>> {
+    const recorded = manifestBlocks.flatMap((block) => isRecord(block) && Number.isInteger(block.sourceIndex) && typeof block.sourceHash === 'string'
+      ? [[block.sourceIndex as number, block.sourceHash] as const] : [])
+    if (recorded.length === 0) return new Set()
+    try {
+      const source = alignMarkdownBlocks(await this.readOptional(join(task.outputDir, 'full.md')), await this.loadMappings(task))
+      if (source.length !== manifestBlocks.length) return new Set()
+      return new Set(recorded.filter(([index, hash]) => source[index] && createHash('sha256').update(source[index]!.markdown).digest('hex') !== hash).map(([index]) => index))
+    } catch {
+      return new Set()
     }
   }
 

@@ -67,7 +67,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   const originalAnnotations = useAnnotationQuery(props.documentId, 'original')
   const translatedAnnotations = useAnnotationQuery(props.documentId, 'translated')
   const document = documentQuery.data
-  useTextLayerRepair(props.documentId, document?.layoutJson, messageApi)
+  const repairRevision = useTextLayerRepair(props.documentId, document?.layoutJson, messageApi)
   const snapshots = React.useMemo(
     () => ({ original: originalAnnotations.data, translated: translatedAnnotations.data }),
     [originalAnnotations.data, translatedAnnotations.data]
@@ -235,11 +235,11 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
           </Dropdown>
           <ZoteroExportButton documentId={document.summary.id} messageApi={messageApi} />
-          <DocumentLifecycleActions summary={document.summary} messageApi={messageApi} onDeleted={props.onBack} />
+          <DocumentLifecycleActions summary={document.summary} staleTranslation={document.translatedBlocks?.some((block) => block.sourceChanged)} messageApi={messageApi} onDeleted={props.onBack} />
         </Space>
       </header>
       <ReaderWorkspace
-        key={document.summary.id}
+        key={`${document.summary.id}:${repairRevision}`}
         layout={layout}
         onLayoutChange={setLayout}
         focusedGroupId={focusedGroupId}
