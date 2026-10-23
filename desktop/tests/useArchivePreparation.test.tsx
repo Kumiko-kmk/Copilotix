@@ -54,6 +54,22 @@ it('waits for the laid-out cover even after analysis and crop files are ready', 
   await act(async () => finish({ canvas: {}, pages: 1 }))
   expect(view.result.current.ready).toBe(true)
 })
+it('reports the figures step only while crops are rendered, not while cached ones are checked', async () => {
+  const f = fixture()
+  let finish!: (value: { available: number; failed: number }) => void
+  let render!: () => void
+  mocks.crop.mockImplementation((_id, _url, _geometries, _signal, _progress, onRender: () => void) => {
+    render = onRender
+    return new Promise(resolve => { finish = resolve })
+  })
+  const view = renderHook(() => useArchivePreparation(f.paper, f.source))
+  await waitFor(() => expect(mocks.crop).toHaveBeenCalledOnce())
+  await waitFor(() => expect(view.result.current).toMatchObject({ ready: false, waiting: null }))
+  act(() => render())
+  expect(view.result.current.waiting).toBe('figures')
+  await act(async () => finish({ available: 1, failed: 0 }))
+  await waitFor(() => expect(view.result.current).toEqual({ ready: true, progress: 100, waiting: null }))
+})
 it('aborts old selection preparation and ignores its late completion', async () => {
   const f = fixture()
   let finish!: (value: { available: number; failed: number }) => void

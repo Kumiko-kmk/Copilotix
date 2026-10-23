@@ -30,7 +30,9 @@ function confirmCrop(key: string): void {
 /** Shared by the reader and archive: newly imported papers need crops before either view exists. */
 export async function ensureFigureArtifacts(documentId: string, pdfUrl: string,
   geometries: readonly ReaderFigureGeometry[], signal: AbortSignal,
-  onProgress?: (available: number, failed: number, total: number) => void): Promise<{ available: number; failed: number }> {
+  onProgress?: (available: number, failed: number, total: number) => void,
+  /** Called once, before the first crop that has to be rendered from the PDF (none were stored). */
+  onRender?: () => void): Promise<{ available: number; failed: number }> {
   const persist = window.copilotix?.cacheDocumentFigure
   const figures = geometries.filter(geometry => geometry.status === 'complete')
   const result = { available: 0, failed: 0 }
@@ -49,6 +51,7 @@ export async function ensureFigureArtifacts(documentId: string, pdfUrl: string,
         const existing = await persist(request)
         signal.throwIfAborted()
         if (existing.imagePath) { confirmCrop(confirmed); result.available++; onProgress?.(result.available, result.failed, figures.length); continue }
+        if (!handle) onRender?.()
         handle ??= acquirePdfDocument(pdfUrl)
         const document = await handle.promise
         signal.throwIfAborted()

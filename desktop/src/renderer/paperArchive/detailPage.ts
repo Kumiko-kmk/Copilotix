@@ -103,11 +103,13 @@ function storePage(key: string, page: DetailPage): void {
 }
 
 /** First-page renderer for one PDF content hash: reads the stored page, else renders and stores it. */
-export function firstPageRenderer(sourceHash: string): (url: string) => Promise<DetailPage> {
+/** `onRender` runs only when the stored page is missing and the PDF has to be rendered. */
+export function firstPageRenderer(sourceHash: string, onRender?: () => void): (url: string) => Promise<DetailPage> {
   const key = `${sourceHash}:${PAGE_PIXEL_HEIGHT}`
   return async (url) => {
     const stored = await readStoredPage(key)
     if (stored) return stored
+    onRender?.()
     const page = await renderPdfFirstPage(url)
     storePage(key, page)
     return page
