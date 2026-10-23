@@ -26,6 +26,7 @@ import {
 import MarkdownMinimap from './MarkdownMinimap'
 import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnapshot'
 import ReaderFigureMosaic from './ReaderFigureMosaic'
+import { ReaderBlockActions, ReaderBlockEditor, StaleTranslationNotice, type ReaderBlockEditing } from './ReaderBlockEditing'
 import { figureMosaic, type FigureMosaic } from '../readerFigureMosaic'
 import { figureAssetName, markdownAssetSources, type ReaderFigureGroup } from '@shared/readerFigureGroups'
 import { recordReaderDuration } from '../readerPerformance'
@@ -70,6 +71,8 @@ export default function MarkdownPane(props: {
   onOpenFigurePdf?(selection: BlockSelection): void
   /** "加入问答" on each figure; omitted where figures cannot be asked about. */
   figureChat?: ReaderFigureChat
+  /** In-place editing and deletion of blocks; omitted where the text cannot be edited. */
+  blockEditing?: ReaderBlockEditing
   taskId: string
   view: ReaderAnnotationView
   annotations: ReaderAnnotation[]
@@ -121,6 +124,10 @@ export default function MarkdownPane(props: {
   }
   const contentRevision = contentRevisionRef.current.revision
   const referenceSections = React.useMemo(() => readerReferenceSections(props.blocks), [props.blocks])
+  // The block whose edit actions are shown (set by clicking it) and the one being edited.
+  const [blockAction, setBlockAction] = React.useState<string | null>(null)
+  const [blockEditor, setBlockEditor] = React.useState<{ key: string; typography: React.CSSProperties } | null>(null)
+  const closeBlockEditor = React.useCallback(() => setBlockEditor(null), [])
   const [annotationOwner] = React.useState(() => `reader-annotations-${crypto.randomUUID()}`)
   const selectionFrameRef = React.useRef<number | null>(null)
   const paletteTimerRef = React.useRef<number | null>(null)
@@ -161,12 +168,23 @@ export default function MarkdownPane(props: {
     }
   }, [props.scrollSync])
   const mountKey = `${contentRevision}:${renderAttempt}`
+  // An in-place change of a fully shown paper (a saved edit, a deleted or restored paragraph) mounts
+  // at once: restarting the progressive mount would collapse the page and lose the reading position.
+  const completeMountRef = React.useRef<{ attempt: number; length: number } | null>(null)
+  // Decided once per revision; later renders of the same revision must not reconsider it.
+  const mountDecisionRef = React.useRef<{ key: string; full: boolean } | null>(null)
+  if (mountDecisionRef.current?.key !== mountKey) {
+    const complete = completeMountRef.current
+    mountDecisionRef.current = { key: mountKey, full: complete !== null && complete.attempt === renderAttempt && Math.abs(complete.length - props.blocks.length) <= 2 }
+  }
   const [mountProgress, setMountProgress] = React.useState({ key: mountKey, count: MARKDOWN_INITIAL_BLOCKS })
   const mountedCount = Math.min(
     props.blocks.length,
-    mountProgress.key === mountKey ? mountProgress.count : MARKDOWN_INITIAL_BLOCKS
+    mountProgress.key === mountKey ? mountProgress.count : mountDecisionRef.current.full ? props.blocks.length : MARKDOWN_INITIAL_BLOCKS
   )
   const allBlocksMounted = mountedCount >= props.blocks.length
+  if (allBlocksMounted) completeMountRef.current = { attempt: renderAttempt, length: props.blocks.length }
+
   const figureGroupByBlockIndex = React.useMemo(() => {
     const result = new Map<number, ReaderFigureGroup[]>()
     for (const group of props.figureGroups ?? []) {
@@ -174,7 +192,10 @@ export default function MarkdownPane(props: {
     }
     return result
   }, [props.figureGroups])
-  const figureRevision = contentRevision + '|' + props.pdfUrl
+  // Keyed by the figures themselves: editing or deleting a paragraph must not send every crop back to
+  // "pending" (their placeholders collapse and the page loses its reading position).
+  const figureRevision = React.useMemo(() => (props.figureGroups ?? [])
+    .map(group => group.id + ':' + group.cropBox.join(',')).join('|') + '|' + props.pdfUrl, [props.figureGroups, props.pdfUrl])
   const [figureStates, setFigureStates] = React.useState<{ revision: string; states: Record<string, FigureRenderState> }>({ revision: figureRevision, states: {} })
   const readyFigureKey = figureStates.revision === figureRevision
     ? Object.keys(figureStates.states).filter(id => figureStates.states[id] === 'ready').sort().join('\0') : ''
@@ -649,9 +670,12 @@ export default function MarkdownPane(props: {
           {props.blocks.slice(0, mountedCount).map((block, index) => {
             const blockId = block.mappingIds[0] ?? `markdown-${index}`
             const figureGroups = figureGroupByBlockIndex.get(index)
+            const editKey = props.blockEditing ? block.annotationKey : undefined
+            const editingThis = editKey !== undefined && blockEditor?.key === editKey
             return (
               <MarkdownBlockView
-                key={`${blockId}-${index}`}
+                // Stable keys: deleting or restoring a paragraph must not remount the blocks after it.
+                key={block.annotationKey ?? `${blockId}-${index}`}
                 block={block}
                 referenceSection={referenceSections.has(index)}
                 active={props.selection !== null && (figureGroups
@@ -665,6 +689,11 @@ export default function MarkdownPane(props: {
                 onFigureStateChange={setFigureState}
                 onOpenFigurePdf={props.onOpenFigurePdf}
                 figureChat={figureGroups ? props.figureChat : undefined}
+                onBlockAction={props.blockEditing ? setBlockAction : undefined}
+                editor={editingThis ? <ReaderBlockEditor block={block} editing={props.blockEditing!} typography={blockEditor!.typography} onClose={closeBlockEditor} /> : undefined}
+                actions={editKey && !editingThis && editKey === blockAction
+                  ? <ReaderBlockActions block={block} editing={props.blockEditing!} onEdit={typography => setBlockEditor({ key: editKey, typography })} /> : undefined}
+                notice={props.blockEditing && block.edit?.stale && !editingThis ? <StaleTranslationNotice editing={props.blockEditing} /> : undefined}
                 blockIndex={index}
                 onFigureRendered={markFigureRendered}
                 onSelect={selectFromMarkdown}
@@ -727,6 +756,8 @@ function readerBlocksEqual(left: ReaderBlock[], right: ReaderBlock[]): boolean {
       block.pageIndex === candidate.pageIndex &&
       block.order === candidate.order &&
       block.fallbackProvider === candidate.fallbackProvider &&
+      block.edit?.edited === candidate.edit?.edited &&
+      block.edit?.stale === candidate.edit?.stale &&
       stringArraysEqual(block.mappingIds, candidate.mappingIds)
   })
 }
@@ -756,6 +787,11 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   onFigureStateChange(id: string, state: FigureRenderState): void
   onOpenFigurePdf?(selection: BlockSelection): void
   figureChat?: ReaderFigureChat
+  onBlockAction?(annotationKey: string): void
+  /** Replaces the rendered text while the block is edited. */
+  editor?: React.ReactNode
+  actions?: React.ReactNode
+  notice?: React.ReactNode
   blockIndex: number
   onFigureRendered(): void
   onSelect(selection: BlockSelection): void
@@ -780,8 +816,10 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
         data-annotation-block-key={props.block.annotationKey}
         data-page-index={props.block.pageIndex}
         className={'markdown-supplemental markdown-supplemental-' + props.block.role}
+        onClick={() => { if (props.block.annotationKey) props.onBlockAction?.(props.block.annotationKey) }}
       >
         <SafeMarkdown markdown={props.block.text ?? ''} assetBaseUrl={props.assetBaseUrl} />
+        {props.actions}
       </div>
     )
   }
@@ -799,14 +837,18 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
       data-reader-role={props.block.role}
       data-fallback-provider={props.block.fallbackProvider}
       data-fallback-label={props.block.fallbackProvider ? `${TRANSLATION_PROVIDER_LABELS[props.block.fallbackProvider]} 回退翻译` : undefined}
+      data-edited={props.block.edit?.edited || undefined}
+      data-editing={props.editor ? true : undefined}
       className={'markdown-block' + (props.active ? ' active' : '') + (props.referenceSection ? ' reader-references' : '')}
       onClick={() => {
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return
+        if (props.block.annotationKey) props.onBlockAction?.(props.block.annotationKey)
         const mappingId = navigationMappingIds[0]
         if (mappingId) props.onSelect({ mappingId, origin: 'markdown' })
       }}
     >
-      {props.figureGroups && props.pdfUrl ? (
+      {props.notice}
+      {props.editor ?? (props.figureGroups && props.pdfUrl ? (
         <FigureBlockPresentation
           block={props.block}
           blockIndex={props.blockIndex}
@@ -822,7 +864,8 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
         />
       ) : (
         <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} />
-      )}
+      ))}
+      {props.actions}
     </div>
   )
 })

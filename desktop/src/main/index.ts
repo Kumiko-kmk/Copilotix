@@ -1,3 +1,4 @@
+import { markdownEditRequestSchema, markdownEditResultSchema } from '@shared/markdownEdits'
 import { CodexRuntime } from '@runtime/codexRuntime'
 import { ModelGateway } from './chat/modelGateway'
 import { codexProbeSchema, codexStatusSchema, DEFAULT_CODEX_SETTINGS } from '@shared/codex'
@@ -558,6 +559,13 @@ function registerIpc(
   }, validationOptions)
   registerValidatedHandler('documents:retry', documentIdRequestSchema, voidResponseSchema, (_event, documentId) => {
     return tasks.retry(documentId)
+  }, validationOptions)
+  // The edit layer is written by Utility; Main only forwards the validated request.
+  registerValidatedHandler('documents:edit-markdown', markdownEditRequestSchema, markdownEditResultSchema, (_event, request) => {
+    return utilitySupervisor!.request('markdown-edits:apply', request, { timeoutMs: 30_000 })
+  }, validationOptions)
+  registerValidatedHandler('documents:retranslate-edited', documentIdRequestSchema, voidResponseSchema, (_event, documentId) => {
+    return tasks.retranslateEdited(documentId)
   }, validationOptions)
   registerValidatedHandler('documents:delete', deleteDocumentRequestSchema, voidResponseSchema, async (_event, request) => {
     return figureInsight!.deleteDocument(request.documentId, () => paperInsight!.deleteDocument(request.documentId, async () => {

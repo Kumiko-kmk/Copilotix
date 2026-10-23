@@ -4,6 +4,7 @@ import { ragWireByteLength } from '@shared/ragSchemas'
 import type { SqliteRagRepository } from './persistence/sqliteRagRepository'
 import { paperSelectionText } from './paperSelectionText'
 import { captionFigureKey, mentionsFigure } from '@shared/figureMentions'
+import type { MarkdownEditsFile } from '@shared/markdownEdits'
 
 export class PaperContextError extends Error {
   constructor(readonly code: string, message: string, readonly retryable = false) { super(message) }
@@ -43,13 +44,34 @@ export function rankPaperChunks(chunks: readonly RagChunk[], question: string): 
 }
 
 const compact = (text: string): string => text.replace(/\s/gu, '')
+
+/**
+ * The reader's edit layer over indexed chunks, matched by mapping IDs: chunks of a deleted block
+ * are dropped and an edited block becomes one chunk with the user's text. Chunk identities and
+ * locators stay, so citations still navigate to the block.
+ */
+export function applyChunkEdits(chunks: readonly RagChunk[], edits: MarkdownEditsFile | null | undefined): RagChunk[] {
+  const entries = (edits?.blocks ?? []).filter((entry) => entry.mappingIds.length && (entry.original || entry.deletedAt))
+  if (!entries.length) return [...chunks]
+  const owner = (chunk: RagChunk) => chunk.mappingIds.length ? entries.find((entry) => chunk.mappingIds.every((id) => entry.mappingIds.includes(id))) : undefined
+  const replaced = new Set<(typeof entries)[number]>()
+  const result: RagChunk[] = []
+  for (const chunk of chunks) {
+    const entry = owner(chunk)
+    if (!entry) { result.push(chunk); continue }
+    if (entry.deletedAt || replaced.has(entry)) continue
+    replaced.add(entry)
+    result.push({ ...chunk, sourceText: entry.original!.markdown })
+  }
+  return result
+}
 /** Mentions per figure that may claim budget ahead of the general ranking; more are reported as omitted. */
 const FIGURE_MENTION_LIMIT = 24
 
 export class PaperContextBuilder {
   constructor(private readonly rag: Pick<SqliteRagRepository, 'getDocumentKnowledge' | 'getContentRevision' | 'listChunks'>) {}
 
-  build(raw: PaperContextRequest, signal?: AbortSignal): PaperContext {
+  build(raw: PaperContextRequest, signal?: AbortSignal, edits?: MarkdownEditsFile | null): PaperContext {
     signal?.throwIfAborted()
     const input = paperContextRequestSchema.parse(raw)
     const knowledge = this.rag.getDocumentKnowledge(input.documentId)
@@ -59,7 +81,7 @@ export class PaperContextBuilder {
       throw new PaperContextError('CONTENT_NOT_READY', indexing ? '论文正在索引，请稍后重试' : '论文尚未建立可用索引，请先完成解析', true)
     }
     if (revision.documentId !== input.documentId) throw new PaperContextError('QUERY_SCOPE_INVALID', '论文索引范围不一致')
-    const chunks = this.rag.listChunks(revision.contentRevisionId)
+    const chunks = applyChunkEdits(this.rag.listChunks(revision.contentRevisionId), edits)
     if (!chunks.length) throw new PaperContextError('INSUFFICIENT_EVIDENCE', '论文中没有找到依据')
     const mappingIndex = new Map<string, number[]>()
     chunks.forEach((chunk, index) => {

@@ -159,6 +159,29 @@ export class DocumentCommandService {
     this.scheduler?.wake()
   }
 
+  /**
+   * After the user edited original text: an unfinished translation is retried, a finished one gets a
+   * new run. Either reads the edit layer, so only changed blocks miss the translation cache.
+   */
+  async retranslateEdited(taskId: string): Promise<void> {
+    if (!this.jobRepository) throw new Error('作业队列尚未初始化')
+    if (!await this.repository.getTask(taskId)) throw new Error('任务不存在')
+    const jobs = await this.jobRepository.list({ documentId: taskId })
+    if (jobs.some((job) => (job.kind === 'parse' || job.kind === 'translate') && !['succeeded', 'partial', 'failed', 'cancelled'].includes(job.status))) {
+      throw new Error('论文仍在解析或翻译，完成后再重新翻译')
+    }
+    const translate = jobs.filter((job) => job.kind === 'translate').sort(compareJobs).at(-1)
+    const now = new Date().toISOString()
+    if (translate && translate.status !== 'succeeded') {
+      await this.jobRepository.manualRetry({ jobId: translate.id, now })
+    } else {
+      const parse = jobs.filter((job) => job.kind === 'parse' && job.status === 'succeeded').sort(compareJobs).at(-1)
+      if (!parse) throw new Error('论文尚未解析完成')
+      await this.jobRepository.enqueue({ documentId: taskId, kind: 'translate', dependsOnJobId: parse.id, checkpoint: { stage: 'queued', reason: 'edited' }, now })
+    }
+    this.scheduler?.wake()
+  }
+
   /** User-initiated; refused while a parse or translation of the paper could still read the old text. */
   async repairTextLayer(taskId: string): Promise<{ repaired: number; unresolved: number }> {
     if (!this.compute.repairTextLayer || !this.jobRepository) throw new Error('核心服务尚未初始化')

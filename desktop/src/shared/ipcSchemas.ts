@@ -1,3 +1,4 @@
+import { resolvedMarkdownEditsSchema } from './markdownEdits'
 import { codexSettingsSchema, DEFAULT_CODEX_SETTINGS } from './codex'
 import { paperChatProviderSchema, qwenChatModelSchema, deepseekChatModelSchema } from './paperChatSchemas'
 import { z } from 'zod'
@@ -189,7 +190,8 @@ export const translatedMarkdownBlockSchema: z.ZodType<TranslatedMarkdownBlock> =
   sourceIndex: z.number().int().min(0).optional(),
   markdown: z.string().max(16_777_216),
   mappingIds: z.array(boundedId).max(100_000),
-  fallbackProvider: translationProviderIdSchema.optional()
+  fallbackProvider: translationProviderIdSchema.optional(),
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/u).optional()
 }).strict()
 
 export const windowActionSchema = z.enum(['minimize', 'toggle-maximize', 'close'])
@@ -323,6 +325,8 @@ export const documentDetailsSchema = z.object({
   translatedBlocks: z.array(translatedMarkdownBlockSchema).max(100_000).nullable(),
   layoutJson: documentContent,
   mappings: z.array(blockMappingSchema).max(100_000),
+  // Added with in-reader editing; older Main processes omit it.
+  markdownEdits: resolvedMarkdownEditsSchema.nullable().optional(),
   pdfUrl: documentUrl,
   assetBaseUrl: documentUrl
 }).strict()

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { copyFile, lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -9,7 +9,10 @@ import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSL
 import { normalizeMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdown'
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
-import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
+import { MARKDOWN_MAPPING_ALGORITHM_VERSION, alignMarkdownBlocks } from '@shared/markdownBlocks'
+import { editExcerpt, effectiveOriginalBlocks, joinVisibleBlocks, resolveMarkdownEdits, type MarkdownEditsFile, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
+import { readerContentMappings } from '@shared/readerDocument'
+import { readMarkdownEditsFile } from '@runtime/markdownEditsFile'
 import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
 import { projectFigureMarkdown, type FigureArtifact } from '@shared/figureArtifacts'
 import type { CacheDocumentFigureRequest, CacheDocumentFigureResult } from '@shared/ipcSchemas'
@@ -29,12 +32,14 @@ export class ArtifactService {
   async getDocument(taskId: string): Promise<DocumentPayload> {
     const task = await this.requireTask(taskId)
     // Long papers produce multi-megabyte artifacts; read them concurrently.
-    const [markdown, translatedBlocks, storedTranslatedMarkdown, layoutJson, mappings] = await Promise.all([
+    const [markdown, translatedBlocks, storedTranslatedMarkdown, layoutJson, mappings, edits] = await Promise.all([
       this.readOptional(join(task.outputDir, 'full.md')),
       this.loadTranslatedBlocks(task),
       this.readOptional(join(task.outputDir, 'full.zh-CN.md')),
       this.readOptional(join(task.outputDir, 'layout.json'), '{}'),
-      this.loadMappings(task)
+      this.loadMappings(task),
+      // An unreadable edit file must not block reading; saving then reports it.
+      readMarkdownEditsFile(task.outputDir, task.id).catch(() => null)
     ])
     // A succeeded translation job can outlive a missing/stale convenience
     // projection. The manifest is task-bound and contains the durable ordered
@@ -50,6 +55,7 @@ export class ArtifactService {
       translatedBlocks,
       layoutJson,
       mappings,
+      markdownEdits: edits ? resolveReaderEdits(markdown, mappings, translatedBlocks, edits) : null,
       pdfUrl: `copilotix-asset://${task.id}/original.pdf`,
       assetBaseUrl: `copilotix-asset://${task.id}/`
     }
@@ -125,9 +131,9 @@ export class ArtifactService {
   async createResultZip(taskId: string, destination: string): Promise<void> {
     const task = await this.requireTask(taskId)
     await this.assertExportDestination(task, destination)
-    const original = await this.figureProjection(task, await this.readOptional(join(task.outputDir, 'full.md')))
-    const blocks = await this.loadTranslatedBlocks(task)
-    const translated = await this.figureProjection(task, blocks?.length ? joinTranslatedMarkdownBlocks(blocks) : await this.readOptional(join(task.outputDir, 'full.zh-CN.md')))
+    const texts = await this.editedTexts(task)
+    const original = await this.figureProjection(task, texts.original)
+    const translated = await this.figureProjection(task, texts.translated)
     const images = new Set<string>()
     const normalize = (markdown: string): string => normalizeMarkdown(markdown, (url) => {
       if (!isLocalMarkdownImage(url)) return url
@@ -170,9 +176,9 @@ export class ArtifactService {
   async exportMarkdown(taskId: string, kind: 'original-markdown' | 'translated-markdown', destination: string): Promise<void> {
     const task = await this.requireTask(taskId)
     await this.assertExportDestination(task, destination)
-    const blocks = kind === 'translated-markdown' ? await this.loadTranslatedBlocks(task) : null
-    const source = blocks?.length ? joinTranslatedMarkdownBlocks(blocks)
-      : await readFile(join(task.outputDir, kind === 'original-markdown' ? 'full.md' : 'full.zh-CN.md'), 'utf8')
+    const texts = await this.editedTexts(task)
+    const source = kind === 'original-markdown' ? texts.original : texts.translated
+    if (!source) throw new Error('没有可导出的 Markdown')
     const folder = `${basename(destination, extname(destination))}.assets-${randomUUID()}`
     const assetDir = join(dirname(destination), folder)
     const partialAssets = `${assetDir}.partial`
@@ -268,10 +274,11 @@ export class ArtifactService {
         // Older manifests may lack provider fields; those blocks simply carry no fallback mark.
         const fallbackProvider = block.status === 'completed' && isTranslationProvider(block.provider) &&
           isTranslationProvider(manifest.preferredProvider) && block.provider !== manifest.preferredProvider ? block.provider : undefined
-        return { sourceIndex: block.sourceIndex as number, markdown: block.markdown, mappingIds, fallbackProvider }
+        const sourceHash = typeof block.sourceHash === 'string' && /^[a-f0-9]{64}$/u.test(block.sourceHash) ? block.sourceHash : undefined
+        return { sourceIndex: block.sourceIndex as number, markdown: block.markdown, mappingIds, fallbackProvider, sourceHash }
       })
       if (blocks.some((block) => block === null)) return null
-      const validBlocks = blocks as Array<{ sourceIndex: number; markdown: string; mappingIds: string[] | null; fallbackProvider?: TranslationProviderId }>
+      const validBlocks = blocks as Array<{ sourceIndex: number; markdown: string; mappingIds: string[] | null; fallbackProvider?: TranslationProviderId; sourceHash?: string }>
       const sourceIndexes = validBlocks.map((block) => block.sourceIndex)
       const validSourceOrder = new Set(sourceIndexes).size === sourceIndexes.length &&
         [...sourceIndexes].sort((left, right) => left - right).every((sourceIndex, index) => sourceIndex === index)
@@ -281,14 +288,37 @@ export class ArtifactService {
       const trustMappings = validSourceOrder && manifest.mappingAlgorithmVersion === MARKDOWN_MAPPING_ALGORITHM_VERSION &&
         manifest.blockMappingVersion === BLOCK_MAPPING_VERSION &&
         ordered.every((block) => Array.isArray(block.mappingIds))
-      return ordered.map(({ sourceIndex, markdown, mappingIds, fallbackProvider }) => ({
+      return ordered.map(({ sourceIndex, markdown, mappingIds, fallbackProvider, sourceHash }) => ({
         sourceIndex,
         markdown,
         mappingIds: trustMappings ? mappingIds ?? [] : [],
-        ...(fallbackProvider ? { fallbackProvider } : {})
+        ...(fallbackProvider ? { fallbackProvider } : {}),
+        ...(sourceHash ? { sourceHash } : {})
       }))
     } catch {
       return null
+    }
+  }
+
+  /** What the reader shows: the user's edits applied and deleted blocks left out. */
+  private async editedTexts(task: CopilotixTask): Promise<{ original: string; translated: string }> {
+    const [markdown, blocks, storedTranslated, mappings] = await Promise.all([
+      this.readOptional(join(task.outputDir, 'full.md')), this.loadTranslatedBlocks(task),
+      this.readOptional(join(task.outputDir, 'full.zh-CN.md')), this.loadMappings(task)
+    ])
+    const translated = blocks?.length ? joinTranslatedMarkdownBlocks(blocks) : storedTranslated
+    // Exports refuse to drop the user's edits silently.
+    const edits = await readMarkdownEditsFile(task.outputDir, task.id)
+    if (!edits.blocks.length) return { original: markdown, translated }
+    const base = alignMarkdownBlocks(markdown, readerContentMappings(mappings))
+    const { byIndex } = resolveMarkdownEdits(base, edits, sha256)
+    const indexed = blocks?.length === base.length && blocks.every((block, index) => block.sourceIndex === index)
+    return {
+      original: joinVisibleBlocks(effectiveOriginalBlocks(base, byIndex)),
+      translated: indexed ? joinVisibleBlocks(blocks.map((block, index) => {
+        const entry = byIndex.get(index)
+        return { markdown: entry?.translated?.markdown ?? block.markdown, deleted: Boolean(entry?.deletedAt) }
+      })) : translated
     }
   }
 
@@ -320,6 +350,34 @@ function isTranslationProvider(value: unknown): value is TranslationProviderId {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
+
+/**
+ * The edit layer as the reader needs it. A translation is stale when it was made from different
+ * original text: the manifest records each block's source hash, and a translated edit records the
+ * original it was written against.
+ */
+export function resolveReaderEdits(markdown: string, mappings: BlockMapping[], translatedBlocks: readonly TranslatedMarkdownBlock[] | null, file: MarkdownEditsFile): ResolvedMarkdownEdits {
+  const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]))
+  const supplementalDeleted = file.supplementalDeleted.map(({ mappingId }) => ({ mappingId, excerpt: editExcerpt(mappingById.get(mappingId)?.sourceText ?? '') }))
+  if (!file.blocks.length) return { revision: file.revision, blocks: [], supplementalDeleted, orphans: 0 }
+  const base = alignMarkdownBlocks(markdown, readerContentMappings(mappings))
+  const { byIndex, orphans } = resolveMarkdownEdits(base, file, sha256)
+  const translatedBySource = new Map((translatedBlocks ?? []).map((block) => [block.sourceIndex, block]))
+  const blocks = [...byIndex.entries()].sort(([a], [b]) => a - b).map(([index, entry]) => {
+    const original = entry.original?.markdown ?? base[index]!.markdown
+    const machine = translatedBySource.get(index)
+    const stale = entry.translated ? entry.translated.sourceHash !== sha256(original)
+      : Boolean(entry.original && machine && machine.sourceHash !== sha256(original))
+    return {
+      index, mappingIds: [...base[index]!.mappingIds], deleted: Boolean(entry.deletedAt), stale, excerpt: editExcerpt(original),
+      ...(entry.original ? { original: entry.original.markdown } : {}),
+      ...(entry.translated ? { translated: entry.translated.markdown } : {})
+    }
+  })
+  return { revision: file.revision, blocks, supplementalDeleted, orphans: orphans.length }
 }
 
 function joinTranslatedMarkdownBlocks(blocks: readonly TranslatedMarkdownBlock[]): string {
