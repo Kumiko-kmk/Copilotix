@@ -22,6 +22,7 @@ import PaperInsightActions from './PaperInsightActions'
 import type { PaperChatController } from '../usePaperChat'
 import type { ReaderViewId } from '../readerLayout'
 import { buildReaderFigureGeometries, projectReaderFigureGroups } from '@shared/readerFigureGroups'
+import { applyFigureDisplay, useFigureDisplayChoices } from '../readerFigureDisplay'
 import { createScrollSyncHub } from '../readerScrollSync'
 import { useFigureArtifacts } from '../useFigureArtifacts'
 import { canRetry } from '../documentStatus'
@@ -118,13 +119,14 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   const translatedNotes = React.useMemo(() => (props.notes ?? []).filter((note) => note.view === 'translated'), [props.notes])
   const figureGeometries = React.useMemo(() => buildReaderFigureGeometries(mappings, props.layoutJson), [mappings, props.layoutJson])
   useFigureArtifacts(props.taskId, props.pdfUrl, figureGeometries)
+  const figureDisplay = useFigureDisplayChoices(props.taskId)
   const originalFigureGroups = React.useMemo(
-    () => projectReaderFigureGroups(figureGeometries, props.originalBlocks),
-    [figureGeometries, props.originalBlocks]
+    () => applyFigureDisplay(projectReaderFigureGroups(figureGeometries, props.originalBlocks), props.taskId, figureDisplay),
+    [figureGeometries, props.originalBlocks, props.taskId, figureDisplay]
   )
   const translatedFigureGroups = React.useMemo(
-    () => projectReaderFigureGroups(figureGeometries, props.translatedBlocks, props.originalBlocks),
-    [figureGeometries, props.translatedBlocks, props.originalBlocks]
+    () => applyFigureDisplay(projectReaderFigureGroups(figureGeometries, props.translatedBlocks, props.originalBlocks), props.taskId, figureDisplay),
+    [figureGeometries, props.translatedBlocks, props.originalBlocks, props.taskId, figureDisplay]
   )
   const { onReplaceAnnotations } = props
   const replaceOriginalAnnotations = React.useCallback(

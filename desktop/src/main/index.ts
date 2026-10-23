@@ -8,6 +8,7 @@ import { FigureInsightService } from './chat/figureInsightService'
 import { registerFigureInsightHandlers } from './chat/figureInsightIpc'
 import { figureInsightChangedSchema } from '@shared/figureInsight'
 import { registerPaperInsightHandlers } from './chat/paperInsightIpc'
+import { FigureDisplayStore, registerFigureDisplayHandlers } from './figureDisplayStore'
 import { createZoteroExportService, createZoteroImportService, registerZoteroExportHandler, registerZoteroHandlers } from './zotero/zoteroIpc'
 import { paperInsightChangedSchema } from '@shared/paperInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
@@ -608,6 +609,7 @@ function registerIpc(
     if (!utilitySupervisor || !repository) throw new Error('数据库尚未初始化')
     return utilitySupervisor
   }
+  registerFigureDisplayHandlers(new FigureDisplayStore(async (documentId) => (await repository?.getTask(documentId))?.outputDir ?? null), validationOptions)
   registerZoteroExportHandler(createZoteroExportService({
     repository: repository!,
     tasks,

@@ -7,6 +7,11 @@ import {
   projectReaderFigureGroups
 } from '../src/shared/readerFigureGroups'
 import { figureMosaic } from '../src/renderer/readerFigureMosaic'
+import { applyFigureDisplay } from '../src/renderer/readerFigureDisplay'
+import { FigureDisplayStore } from '../src/main/figureDisplayStore'
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 describe('reader figure groups', () => {
   it('keeps the full NOEM 19-panel grid when its two-column caption is only one point below it', () => {
@@ -500,6 +505,50 @@ describe('reader figure groups', () => {
       ])
     }
     expect(JSON.stringify(original)).toBe(before)
+  })
+})
+
+describe('reader figure display choice', () => {
+  it('forces the PDF crop or the parsed panels per figure and keeps the automatic status', () => {
+    const maps = [
+      mapping('left', 1, 'image', [40, 57, 290, 300], 'left.jpg'),
+      mapping('right', 2, 'image', [300, 57, 552, 300], 'right.jpg'),
+      mapping('caption', 3, 'text', [33, 320, 552, 350], undefined, 'Figure 3 | From image to text.')
+    ]
+    const blocks = [block('a', ['left', 'right'], '![](images/left.jpg)![](images/right.jpg)'), block('b', ['caption'], 'Figure 3 | From image to text.')]
+    const [group] = buildReaderFigureGroups(blocks, maps)
+    const id = group!.id
+    const documentId = '44444444-4444-4444-8444-444444444444'
+    expect(applyFigureDisplay([group!], documentId, {})[0]).toMatchObject({ status: 'complete', display: { automatic: 'complete', choice: null } })
+    const parsed = applyFigureDisplay([group!], documentId, { [id]: 'parsed' })[0]!
+    expect(parsed).toMatchObject({ status: 'ambiguous', display: { automatic: 'complete', choice: 'parsed' } })
+    // Shown as parsed panels, side-by-side panels still form a mosaic instead of separate images.
+    expect(figureMosaic(parsed)?.tiles).toHaveLength(2)
+    const uncertain = { ...group!, status: 'ambiguous' as const }
+    expect(applyFigureDisplay([uncertain], documentId, { [id]: 'pdf' })[0]).toMatchObject({ status: 'complete', display: { automatic: 'ambiguous', choice: 'pdf' } })
+  })
+
+  it('stores choices in the document folder, clears them, and treats a damaged file as automatic', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'copilotix-figure-display-'))
+    try {
+      const documentId = '55555555-5555-4555-8555-555555555555'
+      const store = new FigureDisplayStore(async (id) => (id === documentId ? dir : null))
+      const figureId = 'reader-figure-5-0f2a:0'
+      await Promise.all([
+        store.set({ documentId, figureId, choice: 'pdf' }),
+        store.set({ documentId, figureId: 'reader-figure-6-x:1', choice: 'parsed' })
+      ])
+      expect(JSON.parse(await readFile(join(dir, 'reader', 'figure-display.v1.json'), 'utf8'))).toEqual({
+        version: 1, choices: { [figureId]: 'pdf', 'reader-figure-6-x:1': 'parsed' }
+      })
+      expect(await store.set({ documentId, figureId, choice: null })).toEqual({ choices: { 'reader-figure-6-x:1': 'parsed' } })
+      await mkdir(join(dir, 'reader'), { recursive: true })
+      await writeFile(join(dir, 'reader', 'figure-display.v1.json'), '{broken')
+      expect(await store.get(documentId)).toEqual({ choices: {} })
+      await expect(store.get('66666666-6666-4666-8666-666666666666')).rejects.toThrow('文档不存在')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
 

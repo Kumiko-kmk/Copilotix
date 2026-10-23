@@ -257,6 +257,8 @@ export interface CopilotixDesktopApi {
     cancel(request: { documentId: string }): Promise<{ cancelled: boolean }>
     onChanged(listener: (event: { documentId: string; state: import('./paperInsight').PaperInsightState }) => void): () => void
   }
+  /** Reader figures: PDF crop or parsed panels, remembered per figure (see shared/figureDisplay.ts). */
+  figureDisplay: import('./figureDisplay').FigureDisplayDesktopApi
   /** Read-only Zotero library browsing and import (see shared/zotero.ts). */
   zotero: import('./zotero').ZoteroDesktopApi
   readerNotes: {

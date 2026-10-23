@@ -35,6 +35,8 @@ export interface ReaderFigureGroup extends ReaderFigureGeometry {
   memberBlockIndexes: number[]
   captionMarkdown: string
   supportingTextsByBlock?: Record<number, string[]>
+  /** Set by the reader when a display choice may apply (renderer/readerFigureDisplay.ts). */
+  display?: { documentId: string; automatic: FigureStatus; choice: 'pdf' | 'parsed' | null }
 }
 interface Entry {
   key: string
