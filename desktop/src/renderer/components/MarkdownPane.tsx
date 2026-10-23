@@ -26,6 +26,7 @@ import {
 import MarkdownMinimap from './MarkdownMinimap'
 import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnapshot'
 import ReaderFigureMosaic from './ReaderFigureMosaic'
+import ReaderFigureDisplayToggle from './ReaderFigureDisplayToggle'
 import { ReaderBlockActions, ReaderBlockEditor, StaleTranslationNotice, type ReaderBlockEditing } from './ReaderBlockEditing'
 import { figureMosaic, type FigureMosaic } from '../readerFigureMosaic'
 import { figureAssetName, markdownAssetSources, type ReaderFigureGroup } from '@shared/readerFigureGroups'
@@ -942,7 +943,7 @@ function FigureBlockPresentation(props: {
           加入问答
         </button>
         ) : null
-        return pdf || chat ? <React.Fragment key={group.id}>{pdf}{chat}</React.Fragment> : null
+        return <React.Fragment key={group.id}>{pdf}<ReaderFigureDisplayToggle group={group} />{chat}</React.Fragment>
       })}
     </>
   )

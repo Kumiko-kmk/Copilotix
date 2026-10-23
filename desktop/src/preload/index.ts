@@ -6,6 +6,7 @@ import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@sh
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema } from '@shared/paperChatSchemas'
 import { paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
 import { zoteroExportRequestSchema, zoteroExportResultSchema, zoteroCatalogRequestSchema, zoteroCatalogSchema, zoteroImportRequestSchema, zoteroImportResultSchema, zoteroItemsPageSchema, zoteroItemsRequestSchema } from '@shared/zotero'
+import { figureDisplayChoicesSchema, figureDisplayRequestSchema, figureDisplaySetRequestSchema } from '@shared/figureDisplay'
 import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema } from '@shared/readerNotes'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
 import { libraryRequestSchema, libraryResultSchema } from '@shared/librarySchemas'
@@ -99,6 +100,10 @@ const api: CopilotixDesktopApi = {
       ipcRenderer.on('paperInsight:changed', handler)
       return () => ipcRenderer.removeListener('paperInsight:changed', handler)
     }
+  },
+  figureDisplay: {
+    get: (request) => invokeValidated('reader-figure-display:get', figureDisplayRequestSchema, figureDisplayChoicesSchema, request),
+    set: (request) => invokeValidated('reader-figure-display:set', figureDisplaySetRequestSchema, figureDisplayChoicesSchema, request)
   },
   readerNotes: {
     list: (request) => invokeValidated('reader-notes:list', readerNotesRequestSchema, readerNotesSchema, request),
