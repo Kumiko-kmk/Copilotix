@@ -505,7 +505,19 @@ export function projectReaderFigureGroups(geometries: readonly ReaderFigureGeome
 
 type TextNode = { type: string; value?: string; url?: string; children?: TextNode[] }
 const figureTextParser = unified().use(remarkParse)
+const supportingCache = new Map<string, { texts: string[]; complete: boolean; resolved: string[] }>()
+/** Cached: projecting figure groups again after an edit must not re-parse every figure paragraph. */
 function projectSupportingTexts(source: string, target: string, knownTexts: string[]): { texts: string[]; complete: boolean; resolved: string[] } {
+  const key = [source, target, ...knownTexts].join('\u0000')
+  let result = supportingCache.get(key)
+  if (!result) {
+    result = computeSupportingTexts(source, target, knownTexts)
+    if (supportingCache.size >= 2_000) supportingCache.delete(supportingCache.keys().next().value!)
+    supportingCache.set(key, result)
+  }
+  return result
+}
+function computeSupportingTexts(source: string, target: string, knownTexts: string[]): { texts: string[]; complete: boolean; resolved: string[] } {
   const normalize = (text: string): string => text.replace(/\s+/gu, '')
   const known = new Set(knownTexts.map(normalize).filter(Boolean))
   const original = figureTextParser.parse(source) as TextNode
@@ -541,7 +553,17 @@ function projectSupportingTexts(source: string, target: string, knownTexts: stri
 export function buildReaderFigureGroups(blocks: readonly ReaderBlock[], mappings: readonly BlockMapping[], layoutJson?: string): ReaderFigureGroup[] {
   return projectReaderFigureGroups(buildReaderFigureGeometries(mappings, layoutJson), blocks)
 }
+const assetSourceCache = new Map<string, string[]>()
 export function markdownAssetSources(markdown: string): string[] {
+  let sources = assetSourceCache.get(markdown)
+  if (!sources) {
+    sources = scanAssetSources(markdown)
+    if (assetSourceCache.size >= 8_000) assetSourceCache.delete(assetSourceCache.keys().next().value!)
+    assetSourceCache.set(markdown, sources)
+  }
+  return sources
+}
+function scanAssetSources(markdown: string): string[] {
   return [...markdown.matchAll(/!\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"']*["'])?\s*\)|<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/giu)]
     .map(match => match[1] ?? match[2]!)
 }

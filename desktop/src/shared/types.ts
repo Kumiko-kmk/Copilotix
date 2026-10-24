@@ -294,7 +294,7 @@ export interface CopilotixDesktopApi {
   cacheDocumentFigure?(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult>
   repairDocumentTextLayer(documentId: string): Promise<RepairTextLayerResult>
   /** Writes the reader's edit layer (edit, revert, delete or restore one block). */
-  editDocumentMarkdown(request: MarkdownEditRequest): Promise<{ revision: number }>
+  editDocumentMarkdown(request: MarkdownEditRequest): Promise<{ revision: number; edits?: ResolvedMarkdownEdits }>
   /** Retranslates after original text was edited; unchanged blocks come from the translation cache. */
   retranslateEditedDocument(documentId: string): Promise<void>
   openDocumentOutput(documentId: string): Promise<void>

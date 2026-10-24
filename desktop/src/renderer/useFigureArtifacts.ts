@@ -1,6 +1,6 @@
 import React from 'react'
 import { acquirePdfDocument } from './pdfDocumentCache'
-import { renderDocumentRegion } from './components/ReaderFigureSnapshot'
+import { hasSavedFigureCrop, renderDocumentRegion } from './components/ReaderFigureSnapshot'
 import type { ReaderFigureGeometry } from '@shared/readerFigureGroups'
 
 function pngBase64(canvas: HTMLCanvasElement): Promise<string> {
@@ -46,7 +46,7 @@ export async function ensureFigureArtifacts(documentId: string, pdfUrl: string,
       const request = { documentId, figureId: geometry.id,
         geometryKey: JSON.stringify([geometry.pageIndex, geometry.cropBox, geometry.pageSize]) }
       const confirmed = [documentId, geometry.id, request.geometryKey].join('|')
-      if (confirmedCrops.has(confirmed)) { result.available++; onProgress?.(result.available, result.failed, figures.length); continue }
+      if (confirmedCrops.has(confirmed) || await hasSavedFigureCrop(pdfUrl, geometry)) { confirmCrop(confirmed); result.available++; onProgress?.(result.available, result.failed, figures.length); continue }
       try {
         const existing = await persist(request)
         signal.throwIfAborted()

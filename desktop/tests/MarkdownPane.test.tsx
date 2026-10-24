@@ -137,7 +137,9 @@ describe('MarkdownPane', () => {
 
     expect(view.container.querySelectorAll('.markdown-block')).toHaveLength(MARKDOWN_INITIAL_BLOCKS)
     expect(scroll.getAttribute('data-render-state')).toBe('loading')
-    expect(view.getByText(`段落 ${MARKDOWN_INITIAL_BLOCKS} / ${total}`)).toBeTruthy()
+    // Opening at the top shows paragraphs while the rest mounts, without a loading cover.
+    expect(scroll.classList.contains('markdown-render-progressive')).toBe(true)
+    expect(view.queryByText(`段落 ${MARKDOWN_INITIAL_BLOCKS} / ${total}`)).toBeNull()
 
     await waitFor(() => expect(scroll.getAttribute('data-render-state')).toBe('ready'))
     expect(view.container.querySelectorAll('.markdown-block')).toHaveLength(total)

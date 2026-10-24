@@ -63,19 +63,41 @@ export function readerContentMappings(mappings: readonly BlockMapping[]): BlockM
   return mappings.filter((mapping) => supplementalRole(mapping) === null)
 }
 
+/**
+ * Edit-independent part of the reader model, built once per parse: the content alignment shared by
+ * both views and the merged original blocks. The user's edits are a cheap pass on top
+ * (`withReaderEdits`), so an edit or deletion never re-parses the paper.
+ */
+export interface ReaderBase {
+  content: AlignedMarkdownBlock[]
+  original: ReaderBlock[]
+}
+export function buildReaderBase(markdown: string, mappings: BlockMapping[]): ReaderBase {
+  const content = alignMarkdownBlocks(markdown, readerContentMappings(mappings))
+  return { content, original: mergeReaderBlocks(content, mappings) }
+}
+
+/** `indexed`: the translation lines up with the source blocks, so edits can address it. */
+export function buildTranslatedBase(
+  base: ReaderBase,
+  translatedMarkdown: string,
+  translatedBlocks: TranslatedMarkdownBlock[] | null,
+  mappings: BlockMapping[]
+): { blocks: ReaderBlock[]; indexed: boolean } {
+  if (!translatedMarkdown) return { blocks: [], indexed: false }
+  const translatedContent = translatedBlocks
+    ? remapTranslatedContent(translatedBlocks, base.content)
+    : reuseOriginalMapping(translatedMarkdown)
+  if (translatedContent.length === 0) return { blocks: [], indexed: false }
+  return { blocks: mergeReaderBlocks(translatedContent, mappings), indexed: translatedContent.length === base.content.length }
+}
+
 export function buildOriginalReaderBlocks(
   markdown: string,
   mappings: BlockMapping[],
   edits?: ResolvedMarkdownEdits | null
 ): ReaderBlock[] {
-  const contentMappings = mappings.filter((mapping) => supplementalRole(mapping) === null)
-  const originalContent = alignMarkdownBlocks(markdown, contentMappings)
-  const byIndex = editsByIndex(edits)
-  const content = byIndex ? originalContent.map((block, index) => {
-    const edited = byIndex.get(index)?.original
-    return edited === undefined ? block : { ...block, markdown: edited }
-  }) : originalContent
-  return applyReaderEdits(mergeReaderBlocks(content, mappings), edits, 'original')
+  return withReaderEdits(buildReaderBase(markdown, mappings).original, edits, 'original')
 }
 
 export function buildTranslatedReaderBlocks(
@@ -85,31 +107,21 @@ export function buildTranslatedReaderBlocks(
   mappings: BlockMapping[],
   edits?: ResolvedMarkdownEdits | null
 ): ReaderBlock[] {
-  if (!translatedMarkdown) return []
-  const contentMappings = mappings.filter((mapping) => supplementalRole(mapping) === null)
-  const originalContent = alignMarkdownBlocks(markdown, contentMappings)
-  const translatedContent = translatedMarkdown
-    ? translatedBlocks
-      ? remapTranslatedContent(translatedBlocks, originalContent)
-      : reuseOriginalMapping(translatedMarkdown)
-    : []
-  if (translatedContent.length === 0) return []
+  const translated = buildTranslatedBase(buildReaderBase(markdown, mappings), translatedMarkdown, translatedBlocks, mappings)
   // Edits address source positions; a translation that cannot be matched to them is shown as is.
-  if (translatedContent.length !== originalContent.length) return mergeReaderBlocks(translatedContent, mappings)
-  const byIndex = editsByIndex(edits)
-  const content = byIndex ? translatedContent.map((block, index) => {
-    const edited = byIndex.get(index)?.translated
-    return edited === undefined ? block : { ...block, markdown: edited }
-  }) : translatedContent
-  return applyReaderEdits(mergeReaderBlocks(content, mappings), edits, 'translated')
+  return translated.indexed ? withReaderEdits(translated.blocks, edits, 'translated') : translated.blocks
 }
 
 function editsByIndex(edits: ResolvedMarkdownEdits | null | undefined): Map<number, ResolvedMarkdownEdits['blocks'][number]> | null {
   return edits && (edits.blocks.length || edits.supplementalDeleted.length || edits.boxMarks?.length) ? new Map(edits.blocks.map((entry) => [entry.index, entry])) : null
 }
 
-/** Marks edited and stale blocks and drops deleted ones after numbering, so annotation keys stay put. */
-function applyReaderEdits(blocks: ReaderBlock[], edits: ResolvedMarkdownEdits | null | undefined, view: 'original' | 'translated'): ReaderBlock[] {
+/**
+ * Applies the edit layer to built blocks: edited text replaces the block's Markdown, deleted blocks
+ * are dropped after numbering (annotation keys stay put), and edited, stale or framed blocks are
+ * marked. Untouched blocks keep their identity, so the reader re-renders only what changed.
+ */
+export function withReaderEdits(blocks: ReaderBlock[], edits: ResolvedMarkdownEdits | null | undefined, view: 'original' | 'translated'): ReaderBlock[] {
   const byIndex = editsByIndex(edits)
   if (!byIndex) return blocks
   const hidden = new Set(edits!.supplementalDeleted.map((item) => `supplemental:${item.mappingId}`))
@@ -119,13 +131,31 @@ function applyReaderEdits(blocks: ReaderBlock[], edits: ResolvedMarkdownEdits | 
     if (block.annotationKey && hidden.has(block.annotationKey)) continue
     const entry = block.contentIndex === undefined ? undefined : byIndex.get(block.contentIndex)
     if (entry?.deleted) continue
-    const edited = view === 'original' ? entry?.original !== undefined : entry?.translated !== undefined
+    const text = view === 'original' ? entry?.original : entry?.translated
+    const edited = text !== undefined
     const stale = view === 'translated' && Boolean(entry?.stale)
     const framed = boxed.size > 0 && (block.mappingIds.some((id) => boxed.has(id)) ||
       Boolean(block.annotationKey?.startsWith('supplemental:') && boxed.has(block.annotationKey.slice('supplemental:'.length))))
-    result.push(edited || stale || framed ? { ...block, ...(edited || stale ? { edit: { edited, stale } } : {}), ...(framed ? { boxed: true as const } : {}) } : block)
+    result.push(edited || stale || framed ? {
+      ...block,
+      ...(edited ? { markdown: preparedMarkdown(text), source: text } : {}),
+      ...(edited || stale ? { edit: { edited, stale } } : {}),
+      ...(framed ? { boxed: true as const } : {})
+    } : block)
   }
   return result
+}
+
+/** Reader preparation runs a Markdown parse per block; the same text always prepares the same way. */
+const preparedCache = new Map<string, string>()
+function preparedMarkdown(markdown: string): string {
+  let prepared = preparedCache.get(markdown)
+  if (prepared === undefined) {
+    prepared = prepareReaderMarkdown(markdown)
+    if (preparedCache.size >= 8_000) preparedCache.delete(preparedCache.keys().next().value!)
+    preparedCache.set(markdown, prepared)
+  }
+  return prepared
 }
 
 export function mergeReaderBlocks(
@@ -135,7 +165,7 @@ export function mergeReaderBlocks(
   const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]))
   const content = contentBlocks.map((block, sequence): ReaderBlock => ({
     role: 'content',
-    markdown: prepareReaderMarkdown(block.markdown),
+    markdown: preparedMarkdown(block.markdown),
     annotationKey: `content:${sequence}`,
     mappingIds: block.mappingIds,
     order: sequence,

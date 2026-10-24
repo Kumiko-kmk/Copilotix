@@ -73,6 +73,10 @@ export class TaskService extends EventEmitter {
     this.emit('changed')
   }
 
+  resolvedEdits(taskId: string) {
+    return this.artifacts.resolvedEdits(taskId)
+  }
+
   async retranslateEdited(taskId: string): Promise<void> {
     await this.commands.retranslateEdited(taskId)
     this.emit('changed')
