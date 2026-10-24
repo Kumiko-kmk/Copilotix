@@ -1,5 +1,6 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
+import BlockContextMenu, { type BlockMenuItem } from './BlockContextMenu'
 import { LeftOutlined, MinusOutlined, PlusOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons'
 import { Alert, Button, Progress, Space } from 'antd'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
@@ -43,7 +44,7 @@ export interface PdfViewState {
   anchor: PdfScrollAnchor | null
 }
 
-export interface PdfBlockMenuItem { key: string; label: string; danger?: boolean }
+export type PdfBlockMenuItem = BlockMenuItem
 /** Right-click menu on a layout block; the reader decides the items and acts on the choice. */
 export interface PdfBlockMenu {
   boxed: ReadonlySet<string>
@@ -70,6 +71,7 @@ export default function PdfPane(props: {
 }): React.JSX.Element {
   const [blockMenuAt, setBlockMenuAt] = React.useState<{ mappingId: string; x: number; y: number } | null>(null)
   const openBlockMenu = React.useCallback((mappingId: string, x: number, y: number) => setBlockMenuAt({ mappingId, x, y }), [])
+  const closeBlockMenu = React.useCallback(() => setBlockMenuAt(null), [])
   const [document, setDocument] = React.useState<PDFDocumentProxy | null>(null)
   const [loadingState, setLoadingState] = React.useState<LoadingState>({ status: 'loading', progress: null })
   const [currentPage, setCurrentPage] = React.useState(1)
@@ -434,7 +436,8 @@ export default function PdfPane(props: {
             </>
             : null}
         </div>
-        {blockMenuAt && props.blockMenu ? <PdfBlockContextMenu at={blockMenuAt} menu={props.blockMenu} onClose={() => setBlockMenuAt(null)} /> : null}
+        {blockMenuAt && props.blockMenu ? <BlockContextMenu x={blockMenuAt.x} y={blockMenuAt.y} items={props.blockMenu.items(blockMenuAt.mappingId)}
+          onSelect={(key) => props.blockMenu?.onSelect(key, blockMenuAt.mappingId)} onClose={closeBlockMenu} /> : null}
         {(['vertical', 'horizontal'] as const).map((axis) => (
           <PdfScrollbar key={axis} axis={axis} visible={scrollbars[axis]} metrics={scrollMetrics}
             scrollerRef={scrollerRef} scrollerId={scrollerId} onDragStart={startScrollbarDrag} onDragEnd={finishScrollbarDrag} />
@@ -650,47 +653,6 @@ const PdfPage = React.memo(function PdfPage(props: {
     </div>
   )
 })
-
-/** Opened by a right click at the pointer; closed by a choice, Esc, a click elsewhere, scrolling or resizing. */
-function PdfBlockContextMenu(props: { at: { mappingId: string; x: number; y: number }; menu: PdfBlockMenu; onClose(): void }): React.JSX.Element | null {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const items = props.menu.items(props.at.mappingId)
-  const { onClose } = props
-  const [position, setPosition] = React.useState({ left: props.at.x, top: props.at.y })
-  React.useLayoutEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const { width, height } = element.getBoundingClientRect()
-    setPosition({ left: Math.max(4, Math.min(props.at.x, window.innerWidth - width - 4)), top: Math.max(4, Math.min(props.at.y, window.innerHeight - height - 4)) })
-    element.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
-  }, [props.at])
-  React.useEffect(() => {
-    const outside = (event: Event): void => { if (!ref.current?.contains(event.target as Node)) onClose() }
-    const key = (event: KeyboardEvent): void => { if (event.key === 'Escape') { event.preventDefault(); onClose() } }
-    window.addEventListener('pointerdown', outside, true)
-    window.addEventListener('wheel', onClose, true)
-    window.addEventListener('resize', onClose)
-    window.addEventListener('blur', onClose)
-    window.addEventListener('keydown', key, true)
-    return () => {
-      window.removeEventListener('pointerdown', outside, true)
-      window.removeEventListener('wheel', onClose, true)
-      window.removeEventListener('resize', onClose)
-      window.removeEventListener('blur', onClose)
-      window.removeEventListener('keydown', key, true)
-    }
-  }, [onClose])
-  if (!items.length) return null
-  return createPortal(
-    <div ref={ref} className="pdf-block-menu" role="menu" aria-label="段落操作" style={position} onContextMenu={(event) => event.preventDefault()}>
-      {items.map((item) => (
-        <button key={item.key} type="button" role="menuitem" className={item.danger ? 'danger' : undefined}
-          onClick={() => { onClose(); props.menu.onSelect(item.key, props.at.mappingId) }}>{item.label}</button>
-      ))}
-    </div>,
-    window.document.body
-  )
-}
 
 const DEFAULT_PDF_PAGE_SIZE: PdfBaseSize = Object.freeze({ width: 612, height: 792 })
 const EMPTY_PAGE_MAPPINGS: BlockMapping[] = []

@@ -50,9 +50,9 @@ const compact = (text: string): string => text.replace(/\s/gu, '')
  * are dropped and an edited block becomes one chunk with the user's text. Chunk identities and
  * locators stay, so citations still navigate to the block.
  */
-export function applyChunkEdits(chunks: readonly RagChunk[], edits: MarkdownEditsFile | null | undefined): RagChunk[] {
+export function applyChunkEdits(chunks: readonly RagChunk[], edits: MarkdownEditsFile | null | undefined, order?: ReadonlyMap<string, number> | null): RagChunk[] {
   const entries = (edits?.blocks ?? []).filter((entry) => entry.mappingIds.length && (entry.original || entry.deletedAt))
-  if (!entries.length) return [...chunks]
+  if (!entries.length) return inChunkOrder([...chunks], order)
   const owner = (chunk: RagChunk) => chunk.mappingIds.length ? entries.find((entry) => chunk.mappingIds.every((id) => entry.mappingIds.includes(id))) : undefined
   const replaced = new Set<(typeof entries)[number]>()
   const result: RagChunk[] = []
@@ -63,7 +63,20 @@ export function applyChunkEdits(chunks: readonly RagChunk[], edits: MarkdownEdit
     replaced.add(entry)
     result.push({ ...chunk, sourceText: entry.original!.markdown })
   }
-  return result
+  return inChunkOrder(result, order)
+}
+
+/** The user's reading order: chunks follow their block's rank; a chunk without a mapping stays after its predecessor. */
+function inChunkOrder(chunks: RagChunk[], order: ReadonlyMap<string, number> | null | undefined): RagChunk[] {
+  if (!order?.size) return chunks
+  let previous = -1
+  const ranks = chunks.map((chunk) => {
+    const own = chunk.mappingIds.map((id) => order.get(id)).find((rank) => rank !== undefined)
+    previous = own ?? previous
+    return previous
+  })
+  return chunks.map((chunk, index) => ({ chunk, rank: ranks[index]!, index }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index).map(({ chunk }) => chunk)
 }
 /** Mentions per figure that may claim budget ahead of the general ranking; more are reported as omitted. */
 const FIGURE_MENTION_LIMIT = 24
@@ -71,7 +84,7 @@ const FIGURE_MENTION_LIMIT = 24
 export class PaperContextBuilder {
   constructor(private readonly rag: Pick<SqliteRagRepository, 'getDocumentKnowledge' | 'getContentRevision' | 'listChunks'>) {}
 
-  build(raw: PaperContextRequest, signal?: AbortSignal, edits?: MarkdownEditsFile | null): PaperContext {
+  build(raw: PaperContextRequest, signal?: AbortSignal, edits?: MarkdownEditsFile | null, order?: ReadonlyMap<string, number> | null): PaperContext {
     signal?.throwIfAborted()
     const input = paperContextRequestSchema.parse(raw)
     const knowledge = this.rag.getDocumentKnowledge(input.documentId)
@@ -81,7 +94,7 @@ export class PaperContextBuilder {
       throw new PaperContextError('CONTENT_NOT_READY', indexing ? '论文正在索引，请稍后重试' : '论文尚未建立可用索引，请先完成解析', true)
     }
     if (revision.documentId !== input.documentId) throw new PaperContextError('QUERY_SCOPE_INVALID', '论文索引范围不一致')
-    const chunks = applyChunkEdits(this.rag.listChunks(revision.contentRevisionId), edits)
+    const chunks = applyChunkEdits(this.rag.listChunks(revision.contentRevisionId), edits, order)
     if (!chunks.length) throw new PaperContextError('INSUFFICIENT_EVIDENCE', '论文中没有找到依据')
     const mappingIndex = new Map<string, number[]>()
     chunks.forEach((chunk, index) => {

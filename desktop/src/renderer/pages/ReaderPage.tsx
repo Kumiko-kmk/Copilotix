@@ -1,6 +1,10 @@
 import { paperSelectionText } from '@shared/paperSelectionText'
 import { readerContentMappings } from '@shared/readerDocument'
-import type { PdfBlockMenu, PdfBlockMenuItem } from '../components/PdfPane'
+import type { PdfBlockMenu } from '../components/PdfPane'
+import type { BlockMenuItem } from '../components/BlockContextMenu'
+import type { MarkdownBlockMenu } from '../components/MarkdownPane'
+import { automaticFigureDisplay, setFigureDisplayChoice } from '../readerFigureDisplay'
+import { TRANSLATION_PROVIDER_LABELS } from '@shared/providerPolicy'
 import React from 'react'
 import { usePaperChat } from '../usePaperChat'
 import { usePaperChatRouting } from '../usePaperChatRouting'
@@ -9,7 +13,8 @@ import { paperChatFigureImagePathSchema } from '@shared/paperChatFigures'
 import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
 import type { ReaderFigureChat } from '../components/MarkdownPane'
 import type { ReaderBlockEditing } from '../components/ReaderBlockEditing'
-import { optimisticEdits, type MarkdownEditRequest, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
+import { moveInOrder, optimisticEdits, type MarkdownEditRequest, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
+import type { ReaderBlockMove } from '../components/ReaderBlockReorder'
 import type { ReaderBlock } from '@shared/readerDocument'
 import { useReaderNotes } from '../useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -173,71 +178,126 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
     const report = async (action: () => Promise<void>): Promise<void> => {
       try { await action() } catch (error) { messageApi.error({ content: error instanceof Error ? error.message : '段落修改失败', key: 'reader-edit' }) }
     }
-    const restore = (target: { index: number } | { mappingId: string }): Promise<void> => report(() => 'index' in target
-      ? applyEdit({ kind: 'content', index: target.index, mappingIds: markdownEdits?.blocks.find(block => block.index === target.index)?.mappingIds ?? [] }, 'restore')
-      : applyEdit({ kind: 'supplemental', mappingId: target.mappingId }, 'restore'))
     const make = (view: 'original' | 'translated'): ReaderBlockEditing => ({
-      view, edits: markdownEdits, restore,
+      view,
       save: (block, text) => { void report(() => applyEdit(targetOf(block), view === 'original' ? 'set-original' : 'set-translated', text)); return Promise.resolve() },
     })
     return { original: make('original'), translated: make('translated') }
-  }, [applyEdit, markdownEdits, messageApi])
-  // Right click on a PDF block: retranslate, ask about, frame, delete or restore the whole paragraph.
+  }, [applyEdit, messageApi])
   const translationAvailable = Boolean(document?.translatedMarkdown)
+  // Reading order: the whole sequence is saved, so a move never depends on blocks the view hides.
+  const blockMove = React.useMemo<ReaderBlockMove>(() => {
+    const count = readerBase.content.length
+    const save = (sequence: number[], action: 'reorder' | 'reset-order'): void => {
+      void applyEdit({ kind: 'order', sequence }, action).catch(error => messageApi.error({ key: 'reader-edit', content: error instanceof Error ? error.message : '顺序保存失败' }))
+    }
+    return {
+      ordered: Boolean(markdownEdits?.order),
+      move: (unit, before) => save(moveInOrder(markdownEdits?.order ?? Array.from({ length: count }, (_, index) => index), unit, before), 'reorder'),
+      reset: () => save([], 'reset-order')
+    }
+  }, [applyEdit, markdownEdits?.order, messageApi, readerBase])
+  const viewMoves = React.useMemo(() => ({ original: blockMove, ...(translatedBase.indexed ? { translated: blockMove } : {}) }), [blockMove, translatedBase.indexed])
   const contentMappingIds = React.useMemo(() => new Set(readerContentMappings(mappings).map(mapping => mapping.id)), [mappings])
-  const pdfBlockMenu = React.useMemo<PdfBlockMenu>(() => {
+  // One set of paragraph and figure actions behind every right-click menu (PDF boxes, paragraphs,
+  // page headers, figures). A merged paragraph has several PDF boxes but is one reader paragraph.
+  const blockMenus = React.useMemo(() => {
+    type Subject = { contents: ReaderBlock[]; deleted: ResolvedMarkdownEdits['blocks']; furnitureId?: string; boxId?: string; figures: ReaderFigureGroup[]; stale: boolean; fallback?: string }
     const boxed = new Set(markdownEdits?.boxMarks ?? [])
-    const deletedContent = (id: string) => markdownEdits?.blocks.find(block => block.deleted && block.mappingIds.includes(id))
-    const deletedSupplemental = (id: string) => Boolean(markdownEdits?.supplementalDeleted.some(item => item.mappingId === id))
-    const deleted = new Set([...(markdownEdits?.blocks.filter(block => block.deleted).flatMap(block => block.mappingIds) ?? []),
-      ...(markdownEdits?.supplementalDeleted.map(item => item.mappingId) ?? [])])
-    const contentOf = (id: string) => originalBlocks.find(block => block.role === 'content' && block.contentIndex !== undefined && block.mappingIds.includes(id))
+    const originalByIndex = new Map(originalBlocks.flatMap(block => block.role === 'content' && block.contentIndex !== undefined ? [[block.contentIndex, block] as const] : []))
+    const translatedByIndex = new Map(translatedBlocks.flatMap(block => block.role === 'content' && block.contentIndex !== undefined ? [[block.contentIndex, block] as const] : []))
+    const staleIndex = (index: number | undefined): boolean => index !== undefined && Boolean(translatedByIndex.get(index)?.edit?.stale || translatedByIndex.get(index)?.sourceChanged)
+    const furnitureDeleted = (id: string): boolean => Boolean(markdownEdits?.supplementalDeleted.some(item => item.mappingId === id))
+    const fromMapping = (id: string): Subject => {
+      const contents = originalBlocks.filter(block => block.role === 'content' && block.contentIndex !== undefined && block.mappingIds.includes(id))
+      return { contents, deleted: markdownEdits?.blocks.filter(block => block.deleted && block.mappingIds.includes(id)) ?? [],
+        ...(contentMappingIds.has(id) ? {} : { furnitureId: id }), boxId: id, figures: [], stale: contents.some(block => staleIndex(block.contentIndex)) }
+    }
+    const fromBlock = (block: ReaderBlock, figures: ReaderFigureGroup[]): Subject => {
+      if (block.role !== 'content') {
+        const id = (block.annotationKey ?? '').replace(/^supplemental:/u, '')
+        return { contents: [], deleted: [], furnitureId: id, boxId: id, figures: [], stale: false }
+      }
+      const original = block.contentIndex === undefined ? undefined : originalByIndex.get(block.contentIndex)
+      // A figure is deleted with its caption: every paragraph of the group goes.
+      const members = figures.flatMap(group => group.mappingIds).length
+        ? originalBlocks.filter(candidate => candidate.role === 'content' && figures.some(group => candidate.mappingIds.some(id => group.mappingIds.includes(id))))
+        : []
+      const contents = [...new Set([...(original ? [original] : []), ...members])]
+      // Deleted neighbours without a PDF box can only be restored from here.
+      const unmappedDeleted = markdownEdits?.blocks.filter(entry => entry.deleted && !entry.mappingIds.length && block.contentIndex !== undefined && Math.abs(entry.index - block.contentIndex) === 1) ?? []
+      return { contents, deleted: unmappedDeleted, ...(block.mappingIds[0] ? { boxId: block.mappingIds[0] } : {}), figures,
+        stale: staleIndex(block.contentIndex), ...(block.fallbackProvider ? { fallback: TRANSLATION_PROVIDER_LABELS[block.fallbackProvider] } : {}) }
+    }
     const report = async (action: () => Promise<void>): Promise<void> => {
       try { await action() } catch (error) { messageApi.error({ content: error instanceof Error ? error.message : '段落操作失败', key: 'reader-edit' }) }
     }
-    return {
-      boxed, deleted,
-      items: (id) => {
-        const content = contentOf(id)
-        const furniture = !contentMappingIds.has(id)
-        const items: PdfBlockMenuItem[] = []
-        if (content && translationAvailable) items.push({ key: 'retranslate', label: '重新翻译此段' })
-        if (content) items.push({ key: 'chat', label: '整段加入对话' })
-        items.push(boxed.has(id) ? { key: 'unbox', label: '取消边界框标记' } : { key: 'box', label: '整段加边界框标记' })
-        if (deletedContent(id) || deletedSupplemental(id)) items.push({ key: 'restore', label: '恢复此段' })
-        else if (content || furniture) items.push({ key: 'delete', label: '删除此段', danger: true })
-        return items
-      },
-      onSelect: (key, id) => {
-        const content = contentOf(id)
-        const contentTarget = content ? { kind: 'content' as const, index: content.contentIndex!, mappingIds: content.mappingIds } : null
-        if (key === 'box' || key === 'unbox') void report(() => applyEdit({ kind: 'block', mappingId: id }, key))
-        else if (key === 'retranslate' && contentTarget) void report(async () => {
-          await applyEdit(contentTarget, 'retranslate')
-          await window.copilotix.retranslateEditedDocument(props.documentId)
-          messageApi.success({ key: 'reader-edit', content: '已开始重新翻译此段，其他段落沿用已有译文' })
-          await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
+    const contentTarget = (block: ReaderBlock): MarkdownEditRequest['target'] => ({ kind: 'content', index: block.contentIndex!, mappingIds: block.mappingIds })
+    const items = (subject: Subject): BlockMenuItem[] => {
+      const result: BlockMenuItem[] = []
+      if (subject.stale) result.push({ key: 'note-stale', label: '译文待更新：原文已修改', note: true })
+      if (subject.fallback) result.push({ key: 'note-fallback', label: `此段由 ${subject.fallback} 回退翻译`, note: true })
+      const figure = subject.figures[0]
+      if (figure) {
+        result.push({ key: 'figure-chat', label: figureChat.blocked ? `加入问答（${figureChat.blocked}）` : '图片加入问答', disabled: Boolean(figureChat.blocked) })
+        if (figure.display && (figure.assetSources.length || figure.display.choice)) result.push({ key: 'figure-display', label: figure.status === 'complete' ? '以解析子图显示' : '以 PDF 原图显示' })
+        result.push({ key: 'figure-pdf', label: '在 PDF 中查看' })
+      }
+      if (subject.contents.length && translationAvailable) result.push({ key: 'retranslate', label: '重新翻译此段' })
+      if (subject.contents.length && !figure) result.push({ key: 'chat', label: '整段加入对话' })
+      if (subject.boxId) result.push(boxed.has(subject.boxId) ? { key: 'unbox', label: '取消边界框标记' } : { key: 'box', label: '整段加边界框标记' })
+      if (subject.deleted.length || (subject.furnitureId && furnitureDeleted(subject.furnitureId))) result.push({ key: 'restore', label: subject.contents.length ? '恢复相邻的已删除段落' : '恢复此段' })
+      if (subject.contents.length || (subject.furnitureId && !furnitureDeleted(subject.furnitureId))) result.push({ key: 'delete', label: figure ? '删除此图' : '删除此段', danger: true })
+      return result
+    }
+    const select = (key: string, subject: Subject): void => {
+      const [first] = subject.contents
+      if (key === 'box' || key === 'unbox') { if (subject.boxId) void report(() => applyEdit({ kind: 'block', mappingId: subject.boxId! }, key)) }
+      else if (key === 'retranslate' && first) void report(async () => {
+        for (const block of subject.contents) await applyEdit(contentTarget(block), 'retranslate')
+        await window.copilotix.retranslateEditedDocument(props.documentId)
+        messageApi.success({ key: 'reader-edit', content: '已开始重新翻译此段，其他段落沿用已有译文' })
+        await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
+      })
+      else if (key === 'chat' && first) {
+        // The whole paragraph as an original-text selection, validated like a dragged one.
+        const text = paperSelectionText(first.source ?? first.markdown).trim().slice(0, 16_000)
+        if (!text) { messageApi.warning({ key: 'paper-chat-pin', content: '此段没有可加入对话的文字' }); return }
+        const quote = text.slice(0, 4_096).replace(/[\uD800-\uDBFF]$/u, '')
+        addToChat({ taskId: props.documentId, view: 'original', text, fragments: [{ blockKey: first.annotationKey!, startOffset: 0, endOffset: quote.length, quote, mappingIds: [...new Set(first.mappingIds)], ...(first.pageIndex !== undefined ? { pageIndex: first.pageIndex } : {}) }] })
+      } else if (key === 'figure-chat' && subject.figures[0]) figureChat.onAdd(subject.figures[0])
+      else if (key === 'figure-display' && subject.figures[0]?.display) {
+        const group = subject.figures[0]
+        // Choosing what the figure shows by default clears the stored choice.
+        const next = group.status === 'complete' ? 'parsed' : 'pdf'
+        void setFigureDisplayChoice(props.documentId, group.id, next === automaticFigureDisplay(group.display!.automatic) ? null : next).catch(() => messageApi.error({ key: 'reader-edit', content: '显示方式保存失败' }))
+      } else if (key === 'figure-pdf' && subject.figures[0]) {
+        const group = subject.figures[0]
+        const mappingId = group.captionMappingId || group.mappingIds[0]
+        if (mappingId) openFigurePdf({ mappingId, blockPosition: group.captionBlockPosition || group.members.find(member => member.mappingId === mappingId)?.blockPosition, origin: 'markdown' })
+      } else if (key === 'delete') {
+        const targets: MarkdownEditRequest['target'][] = subject.contents.length ? subject.contents.map(contentTarget) : subject.furnitureId ? [{ kind: 'supplemental', mappingId: subject.furnitureId }] : []
+        const shown = first?.source ?? mappings.find(mapping => mapping.id === subject.furnitureId)?.sourceText
+        void report(async () => {
+          const saved = Promise.all(targets.map(target => applyEdit(target, 'delete', undefined, shown)))
+          const undo = (): void => { messageApi.destroy('reader-edit'); void report(async () => { await Promise.all(targets.map(target => applyEdit(target, 'restore'))) }) }
+          messageApi.success({ key: 'reader-edit', duration: 6, content: <span>{subject.figures.length ? '已删除此图' : '已删除此段'}，原文与译文均不再显示。<a onClick={undo}>撤销</a></span> })
+          await saved
         })
-        else if (key === 'chat' && content) {
-          // The whole paragraph as an original-text selection, validated like a dragged one.
-          const text = paperSelectionText(content.source ?? content.markdown).trim().slice(0, 16_000)
-          if (!text) { messageApi.warning({ key: 'paper-chat-pin', content: '此段没有可加入对话的文字' }); return }
-          const quote = text.slice(0, 4_096).replace(/[\uD800-\uDBFF]$/u, '')
-          addToChat({ taskId: props.documentId, view: 'original', text, fragments: [{ blockKey: content.annotationKey!, startOffset: 0, endOffset: quote.length, quote, mappingIds: [...new Set(content.mappingIds)], ...(content.pageIndex !== undefined ? { pageIndex: content.pageIndex } : {}) }] })
-        } else if (key === 'delete') {
-          const target = contentTarget ?? { kind: 'supplemental' as const, mappingId: id }
-          void report(async () => {
-            const saved = applyEdit(target, 'delete', undefined, content?.source ?? mappings.find(mapping => mapping.id === id)?.sourceText)
-            messageApi.success({ key: 'reader-edit', duration: 6, content: <span>已删除此段，原文与译文均不再显示。<a onClick={() => { messageApi.destroy('reader-edit'); void report(() => applyEdit(target, 'restore')) }}>撤销</a></span> })
-            await saved
-          })
-        } else if (key === 'restore') {
-          const entry = deletedContent(id)
-          void report(() => applyEdit(entry ? { kind: 'content', index: entry.index, mappingIds: entry.mappingIds } : { kind: 'supplemental', mappingId: id }, 'restore'))
-        }
+      } else if (key === 'restore') {
+        const targets: MarkdownEditRequest['target'][] = subject.deleted.map(entry => ({ kind: 'content', index: entry.index, mappingIds: entry.mappingIds }))
+        if (subject.furnitureId && furnitureDeleted(subject.furnitureId)) targets.push({ kind: 'supplemental', mappingId: subject.furnitureId })
+        void report(async () => { await Promise.all(targets.map(target => applyEdit(target, 'restore'))) })
       }
     }
-  }, [addToChat, applyEdit, contentMappingIds, markdownEdits, messageApi, originalBlocks, props.documentId, queryClient, translationAvailable])
+    // A box is shown as deleted only when nothing of its paragraph is still shown.
+    const deleted = new Set([...(markdownEdits?.blocks.filter(block => block.deleted).flatMap(block => block.mappingIds) ?? [])
+      .filter(id => !originalBlocks.some(block => block.role === 'content' && block.mappingIds.includes(id))),
+    ...(markdownEdits?.supplementalDeleted.map(item => item.mappingId) ?? [])])
+    const pdf: PdfBlockMenu = { boxed, deleted, items: id => items(fromMapping(id)), onSelect: (key, id) => select(key, fromMapping(id)) }
+    const markdown: MarkdownBlockMenu = { items: (block, figures) => items(fromBlock(block, figures)), onSelect: (key, block, figures) => select(key, fromBlock(block, figures)) }
+    return { pdf, markdown }
+  }, [addToChat, applyEdit, contentMappingIds, figureChat, mappings, markdownEdits, messageApi, openFigurePdf, originalBlocks, props.documentId, queryClient, translatedBlocks, translationAvailable])
   // A citation scrolls the reading views to its block; if none is on screen, the workbench shows one.
   const openCitation = React.useCallback((next: BlockSelection) => {
     selectBlock(next)
@@ -335,11 +395,11 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           onReplaceAnnotations: replaceAnnotations,
           selection,
           onSelect: selectBlock,
-          onOpenFigurePdf: openFigurePdf,
           onAddToChat: addToChat,
-          figureChat,
           blockEditing,
-          pdfBlockMenu,
+          pdfBlockMenu: blockMenus.pdf,
+          markdownBlockMenu: blockMenus.markdown,
+          blockMove: viewMoves,
           notes: readerNotes.notes,
           onSaveNote: readerNotes.saveNote,
           onDeleteNote: readerNotes.deleteNote,

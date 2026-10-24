@@ -26,8 +26,15 @@ import {
 import MarkdownMinimap from './MarkdownMinimap'
 import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnapshot'
 import ReaderFigureMosaic from './ReaderFigureMosaic'
-import ReaderFigureDisplayToggle from './ReaderFigureDisplayToggle'
 import { ReaderBlockEditor, blockTypography, type ReaderBlockEditing } from './ReaderBlockEditing'
+import BlockContextMenu, { type BlockMenuItem } from './BlockContextMenu'
+import { useBlockReorder, type ReaderBlockMove } from './ReaderBlockReorder'
+
+/** Right-click menu on a paragraph, page header or figure; the reader decides the items. */
+export interface MarkdownBlockMenu {
+  items(block: ReaderBlock, figures: ReaderFigureGroup[]): BlockMenuItem[]
+  onSelect(key: string, block: ReaderBlock, figures: ReaderFigureGroup[]): void
+}
 import { figureMosaic, type FigureMosaic } from '../readerFigureMosaic'
 import { figureAssetName, markdownAssetSources, type ReaderFigureGroup } from '@shared/readerFigureGroups'
 import { recordReaderDuration } from '../readerPerformance'
@@ -37,7 +44,6 @@ import { useReaderNoteLayer } from './ReaderNotes'
 import { useReaderCitationLayer } from './ReaderCitations'
 import ReaderAnnotationToolbar from './ReaderAnnotationToolbar'
 import type { ReaderNote } from '@shared/readerNotes'
-import { TRANSLATION_PROVIDER_LABELS } from '@shared/providerPolicy'
 
 const MARKDOWN_RENDER_TIMEOUT_MS = 30_000
 /**
@@ -69,11 +75,11 @@ export default function MarkdownPane(props: {
   assetBaseUrl: string
   pdfUrl?: string
   figureGroups?: ReaderFigureGroup[]
-  onOpenFigurePdf?(selection: BlockSelection): void
-  /** "加入问答" on each figure; omitted where figures cannot be asked about. */
-  figureChat?: ReaderFigureChat
   /** In-place editing and deletion of blocks; omitted where the text cannot be edited. */
   blockEditing?: ReaderBlockEditing
+  blockMenu?: MarkdownBlockMenu
+  /** Long-press drag and menu moves of whole paragraphs and figures. */
+  blockMove?: ReaderBlockMove
   taskId: string
   view: ReaderAnnotationView
   annotations: ReaderAnnotation[]
@@ -127,6 +133,9 @@ export default function MarkdownPane(props: {
   const referenceSections = React.useMemo(() => readerReferenceSections(props.blocks), [props.blocks])
   // The block whose edit actions are shown (set by clicking it) and the one being edited.
   const [blockEditor, setBlockEditor] = React.useState<{ key: string; typography: React.CSSProperties } | null>(null)
+  const [blockMenuAt, setBlockMenuAt] = React.useState<{ block: ReaderBlock; figures: ReaderFigureGroup[]; x: number; y: number } | null>(null)
+  const openBlockMenu = React.useCallback((block: ReaderBlock, figures: ReaderFigureGroup[], x: number, y: number) => setBlockMenuAt({ block, figures, x, y }), [])
+  const closeBlockMenu = React.useCallback(() => setBlockMenuAt(null), [])
   const closeBlockEditor = React.useCallback(() => setBlockEditor(null), [])
   // A second single click on the current paragraph edits it. Waiting out the double-click interval
   // keeps word and paragraph selection (for highlights and notes) working on that paragraph.
@@ -219,6 +228,41 @@ export default function MarkdownPane(props: {
     previousGroupsRef.current = result
     return result
   }, [props.figureGroups])
+  // A figure moves as one block: its images, panels and caption paragraphs together.
+  const reorderUnitOf = React.useCallback((index: number): number[] | null => {
+    if (props.blocks[index]?.role !== 'content') return null
+    const unit = new Set([index])
+    for (let changed = true; changed;) {
+      changed = false
+      for (const member of [...unit]) for (const group of figureGroupByBlockIndex.get(member) ?? []) {
+        for (const next of [...group.memberBlockIndexes, group.captionBlockIndex]) {
+          if (next >= 0 && !unit.has(next) && props.blocks[next]?.role === 'content') { unit.add(next); changed = true }
+        }
+      }
+    }
+    return [...unit].sort((a, b) => a - b)
+  }, [figureGroupByBlockIndex, props.blocks])
+  const contentIndexOf = React.useCallback((index: number) => props.blocks[index]?.role === 'content' ? props.blocks[index]!.contentIndex : undefined, [props.blocks])
+  const moveBlocks = React.useCallback((unit: number[], before: number | null) => props.blockMove?.move(unit, before), [props.blockMove])
+  const reorderLine = useBlockReorder({ container: containerRef, article: articleRef, enabled: Boolean(props.blockMove) && ready && !blockEditor,
+    unitOf: reorderUnitOf, contentIndexOf, onMove: moveBlocks })
+  /** Neighbouring units in reading order, for the menu's move up / move down. */
+  const reorderNeighbours = (index: number): { unit: number[]; up?: number; down?: number | null } | null => {
+    const unit = reorderUnitOf(index)
+    if (!unit) return null
+    const order: number[][] = []
+    const seen = new Set<number>()
+    props.blocks.forEach((block, at) => {
+      if (block.role !== 'content' || seen.has(at)) return
+      const members = reorderUnitOf(at) ?? [at]
+      members.forEach(member => seen.add(member))
+      order.push(members)
+    })
+    const position = order.findIndex(members => members.includes(unit[0]!))
+    const first = (members: number[] | undefined): number | undefined => members ? contentIndexOf(members[0]!) : undefined
+    return { unit, up: position > 0 ? first(order[position - 1]) : undefined,
+      down: position >= 0 && position < order.length - 1 ? (position + 2 < order.length ? first(order[position + 2]) ?? null : null) : undefined }
+  }
   // Keyed by the figures themselves: editing or deleting a paragraph must not send every crop back to
   // "pending" (their placeholders collapse and the page loses its reading position).
   const figureRevision = React.useMemo(() => (props.figureGroups ?? [])
@@ -718,9 +762,8 @@ export default function MarkdownPane(props: {
                 readyFigureIds={figureGroups ? readyFigureIds : NO_READY_FIGURES}
                 figureMosaics={figureGroups ? figureMosaics : NO_MOSAICS}
                 onFigureStateChange={setFigureState}
-                onOpenFigurePdf={props.onOpenFigurePdf}
-                figureChat={figureGroups ? props.figureChat : undefined}
                 onEditRequest={editKey && block.role === 'content' && !editingThis ? requestBlockEdit : undefined}
+                onBlockMenu={props.blockMenu && !editingThis ? openBlockMenu : undefined}
                 editor={editingThis ? <ReaderBlockEditor block={block} editing={props.blockEditing!} typography={blockEditor!.typography} onClose={closeBlockEditor} /> : undefined}
                 blockIndex={index}
                 onFigureRendered={markFigureRendered}
@@ -754,6 +797,23 @@ export default function MarkdownPane(props: {
         ) : null}
         {noteLayer.layer}
         {citationLayer}
+        {blockMenuAt && props.blockMenu ? (() => {
+          const neighbours = props.blockMove ? reorderNeighbours(props.blocks.indexOf(blockMenuAt.block)) : null
+          const units = (neighbours?.unit ?? []).flatMap(index => { const content = contentIndexOf(index); return content === undefined ? [] : [content] })
+          const moves: BlockMenuItem[] = [
+            ...(neighbours?.up !== undefined ? [{ key: 'move-up', label: '上移' }] : []),
+            ...(neighbours?.down !== undefined ? [{ key: 'move-down', label: '下移' }] : []),
+            ...(props.blockMove?.ordered ? [{ key: 'reset-order', label: '恢复原始顺序' }] : [])
+          ]
+          return <BlockContextMenu x={blockMenuAt.x} y={blockMenuAt.y} items={[...props.blockMenu.items(blockMenuAt.block, blockMenuAt.figures), ...moves]}
+            onSelect={(key) => {
+              if (key === 'move-up' && neighbours?.up !== undefined) props.blockMove?.move(units, neighbours.up)
+              else if (key === 'move-down' && neighbours?.down !== undefined) props.blockMove?.move(units, neighbours.down)
+              else if (key === 'reset-order') props.blockMove?.reset()
+              else props.blockMenu?.onSelect(key, blockMenuAt.block, blockMenuAt.figures)
+            }} onClose={closeBlockMenu} />
+        })() : null}
+        {reorderLine}
       </div>
       <MarkdownMinimap
         active={props.active}
@@ -815,10 +875,10 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   readyFigureIds: ReadonlySet<string>
   figureMosaics: ReadonlyMap<string, FigureMosaic>
   onFigureStateChange(id: string, state: FigureRenderState): void
-  onOpenFigurePdf?(selection: BlockSelection): void
-  figureChat?: ReaderFigureChat
   /** Edit in place: offered on a single click on the text of the already current paragraph. */
   onEditRequest?(annotationKey: string, element: HTMLElement, clicks: number): void
+  /** Right click; a text selection keeps the system menu (copy). */
+  onBlockMenu?(block: ReaderBlock, figures: ReaderFigureGroup[], x: number, y: number): void
   /** Replaces the rendered text while the block is edited. */
   editor?: React.ReactNode
   blockIndex: number
@@ -846,6 +906,11 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
         data-page-index={props.block.pageIndex}
         className={'markdown-supplemental markdown-supplemental-' + props.block.role}
         data-boxed={props.block.boxed}
+        onContextMenu={props.onBlockMenu ? (event) => {
+          if (window.getSelection() && !window.getSelection()!.isCollapsed) return
+          event.preventDefault()
+          props.onBlockMenu!(props.block, [], event.clientX, event.clientY)
+        } : undefined}
       >
         <SafeMarkdown markdown={props.block.text ?? ''} assetBaseUrl={props.assetBaseUrl} />
       </div>
@@ -865,11 +930,17 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
       data-reader-role={props.block.role}
       data-fallback-provider={props.block.fallbackProvider}
       data-source-changed={props.block.sourceChanged ? '' : undefined}
-      data-fallback-label={blockNoteLabel(props.block)}
+      data-stale={props.block.sourceChanged || props.block.edit?.stale ? '' : undefined}
       data-edited={props.block.edit?.edited || undefined}
       data-editing={props.editor ? true : undefined}
       data-boxed={props.block.boxed}
       className={'markdown-block' + (props.active ? ' active' : '') + (props.referenceSection ? ' reader-references' : '')}
+      onContextMenu={props.onBlockMenu ? (event) => {
+        if (window.getSelection() && !window.getSelection()!.isCollapsed) return
+        event.preventDefault()
+        const owned = props.figureGroups?.filter(group => group.ownerBlockIndex === props.blockIndex) ?? []
+        props.onBlockMenu!(props.block, owned.length ? owned : props.figureGroups ?? [], event.clientX, event.clientY)
+      } : undefined}
       onClick={(event) => {
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return
         if (props.active && props.onEditRequest && props.block.annotationKey && isEditableTarget(event.target)) {
@@ -891,8 +962,6 @@ const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
           readyFigureIds={props.readyFigureIds}
           mosaics={props.figureMosaics}
           onStateChange={props.onFigureStateChange}
-          onOpenPdf={props.onOpenFigurePdf}
-          figureChat={props.figureChat}
         />
       ) : (
         <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} />
@@ -911,8 +980,6 @@ function FigureBlockPresentation(props: {
   readyFigureIds: ReadonlySet<string>
   mosaics: ReadonlyMap<string, FigureMosaic>
   onStateChange(id: string, state: FigureRenderState): void
-  onOpenPdf?(selection: BlockSelection): void
-  figureChat?: ReaderFigureChat
 }): React.JSX.Element {
   const owners = props.groups.filter(group => group.ownerBlockIndex === props.blockIndex)
   const isCaption = props.groups.some(group => props.blockIndex === group.captionBlockIndex)
@@ -952,31 +1019,6 @@ function FigureBlockPresentation(props: {
         return mosaic ? <ReaderFigureMosaic key={'mosaic|' + group.id} mosaic={mosaic} assetBaseUrl={props.assetBaseUrl} /> : null
       })}
       {isCaption ? <div className="reader-figure-caption">{source}</div> : source}
-      {owners.map(group => {
-        const mappingId = group.captionMappingId || group.mappingIds[0]
-        const pdf = props.onOpenPdf && mappingId ? (
-        <button key={group.id} type="button" className="reader-figure-action" data-reader-annotation-ignore="true"
-          onClick={event => {
-            event.stopPropagation()
-            // The selected mapping retains its stored identity. PDF reveals use
-            // that mapping, not a synthetic figure ID.
-            props.onOpenPdf?.({ mappingId, blockPosition: group.captionBlockPosition ||
-              group.members.find(member => member.mappingId === mappingId)?.blockPosition, origin: 'markdown' })
-          }} aria-label={'查看 PDF 第 ' + (group.pageIndex + 1) + ' 页整图'}>
-          查看 PDF
-        </button>
-        ) : null
-        const chat = props.figureChat ? (
-        // Stays clickable when blocked so the reason can be shown without a hover tooltip.
-        <button key={'chat|' + group.id} type="button" className="reader-figure-action reader-figure-chat" data-reader-annotation-ignore="true"
-          aria-disabled={props.figureChat.blocked ? true : undefined}
-          onClick={event => { event.stopPropagation(); props.figureChat?.onAdd(group) }}
-          aria-label={'将第 ' + (group.pageIndex + 1) + ' 页的图加入问答'}>
-          加入问答
-        </button>
-        ) : null
-        return <React.Fragment key={group.id}>{pdf}<ReaderFigureDisplayToggle group={group} />{chat}</React.Fragment>
-      })}
     </>
   )
 }
@@ -1050,16 +1092,6 @@ function waitForAnimationFrames(count: number, signal: AbortSignal): Promise<voi
     }
     window.requestAnimationFrame(next)
   })
-}
-
-/** On-page note above a translated block: fallback provider and/or a source that changed after translation. */
-function blockNoteLabel(block: ReaderBlock): string | undefined {
-  const notes = [
-    block.fallbackProvider ? `${TRANSLATION_PROVIDER_LABELS[block.fallbackProvider]} 回退翻译` : null,
-    block.sourceChanged ? '原文已修复，译文待更新' : null,
-    block.edit?.stale ? '原文已修改，译文待更新' : null
-  ].filter(Boolean)
-  return notes.length ? notes.join(' · ') : undefined
 }
 
 /** Text of the paragraph, not a link, button, figure or note control placed in it. */

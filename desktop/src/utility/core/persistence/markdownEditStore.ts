@@ -6,7 +6,7 @@ import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { blockMappingSchema } from '@shared/ipcSchemas'
 import { alignMarkdownBlocks } from '@shared/markdownBlocks'
 import { readerContentMappings } from '@shared/readerDocument'
-import { markdownEditRequestSchema, resolveMarkdownEdits, type MarkdownEditEntry, type MarkdownEditRequest, type MarkdownEditsFile } from '@shared/markdownEdits'
+import { isIdentity, isPermutation, markdownEditRequestSchema, resolveMarkdownEdits, validOrder, type MarkdownEditEntry, type MarkdownEditRequest, type MarkdownEditsFile } from '@shared/markdownEdits'
 import { PathPolicy } from '@runtime/pathPolicy'
 import { readMarkdownEditsFile, writeMarkdownEditsFile } from '@runtime/markdownEditsFile'
 
@@ -35,6 +35,25 @@ export class MarkdownEditStore {
     return run
   }
 
+  /** Rank of each mapping in the user's reading order, for the chat context; null without a reordering. */
+  async readingOrder(documentId: string): Promise<Map<string, number> | null> {
+    const root = this.root(documentId)
+    const file = await readMarkdownEditsFile(root, documentId)
+    if (!file.order) return null
+    const blocks = await this.contentBlocks(root)
+    const order = validOrder(file.order, blocks.length)
+    if (!order) return null
+    const rank = new Map<string, number>()
+    order.forEach((index, position) => { for (const id of blocks[index]!.mappingIds) rank.set(id, position) })
+    return rank
+  }
+
+  /** The reader's alignment of the current parse: positions and mapping identities as the user sees them. */
+  private async contentBlocks(root: string): Promise<ReturnType<typeof alignMarkdownBlocks>> {
+    const mappings = mappingsSchema.parse(JSON.parse(await this.text(root, 'block_list.json'))).mappings
+    return alignMarkdownBlocks(await this.text(root, 'full.md'), readerContentMappings(mappings))
+  }
+
   private async text(root: string, name: string): Promise<string> {
     const info = await lstat(join(root, name))
     if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024 * 1024) throw new Error('论文解析结果无效')
@@ -50,16 +69,22 @@ export class MarkdownEditStore {
     const now = new Date().toISOString()
     const next: MarkdownEditsFile = { ...file, revision: file.revision + 1, updatedAt: now, blocks: [...file.blocks], supplementalDeleted: [...file.supplementalDeleted] }
     const target = request.target
-    if (target.kind === 'block') {
+    if (target.kind === 'order') {
+      delete next.order
+      if (request.action === 'reorder') {
+        const count = (await this.contentBlocks(root)).length
+        if (!isPermutation(target.sequence, count)) throw new Error('段落位置已变化，请刷新后重试')
+        if (!isIdentity(target.sequence)) next.order = { count, sequence: [...target.sequence], updatedAt: now }
+      }
+    } else if (target.kind === 'block') {
       next.boxMarks = next.boxMarks.filter(item => item.mappingId !== target.mappingId)
       if (request.action === 'box') next.boxMarks.push({ mappingId: target.mappingId, markedAt: now })
     } else if (target.kind === 'supplemental') {
       next.supplementalDeleted = next.supplementalDeleted.filter(item => item.mappingId !== target.mappingId)
       if (request.action === 'delete') next.supplementalDeleted.push({ mappingId: target.mappingId, deletedAt: now })
     } else {
-      const mappings = mappingsSchema.parse(JSON.parse(await this.text(root, 'block_list.json'))).mappings
-      // The reader's alignment: positions and mapping identities must match what the user clicked.
-      const blocks = alignMarkdownBlocks(await this.text(root, 'full.md'), readerContentMappings(mappings))
+      // Positions and mapping identities must match what the user clicked.
+      const blocks = await this.contentBlocks(root)
       const block = blocks[target.index]
       const sameIds = block && block.mappingIds.length === target.mappingIds.length && [...block.mappingIds].sort().join('\0') === [...target.mappingIds].sort().join('\0')
       if (!block || !sameIds) throw new Error('段落位置已变化，请刷新后重试')

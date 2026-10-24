@@ -66,7 +66,7 @@ updated: 2026-10-21
 
 2026-10-21 起取代「擴展自動圖片解讀」的方向：圖片由用戶主動加入問答，模型結合上下文逐子圖解讀。figureInsight（文庫封面選圖）保留原樣，不共用存儲。
 
-- 入口：Markdown 原文／譯文每個圖組（`readerFigureGroups` 的 complete／ambiguous／unsupported 均可）在「查看 PDF」旁有「加入问答」，不切換頁籤，最多 4 張／問。PDF 視圖暫無入口（PdfPane 沒有圖區疊層）。
+- 入口：Markdown 原文／譯文每個圖組（`readerFigureGroups` 的 complete／ambiguous／unsupported 均可）右鍵選單有「图片加入问答」（不可用時以停用項寫明原因），不切換頁籤，最多 4 張／問。PDF 視圖暫無入口（PdfPane 沒有圖區疊層）。
 - 能力：`paperChatFigures.ts` 的 `paperChatImageInput`。Qwen 僅 `qwen3.8-flash`／`qwen3.8-max`，DeepSeek 僅 `deepseek-flash`，Codex 依模型目錄 `image`；目錄未知視為不可確認。當前模型不支持時，入口以 `aria-disabled` 變灰、點擊顯示原因（無懸停提示）；已加入的圖片保留在輸入欄，輸入欄顯示原因並禁止發送；Main 在保存 turn 前再次拒絕（`FIGURE_UNSUPPORTED`），從不靜默丟圖。
 - 圖片來源：Utility `compute:paper-chat-figure` 按 figureId 重算幾何。complete 且 `figures.json` 裁圖經 figureInsight descriptor 校驗通過時送整圖；否則送該圖組解析出的子圖（`images/<name>.jpg|png`，最多 6 張，PathPolicy、格式頭與大小校驗）。只回傳路徑、大小、SHA-256；Main 重讀並比對雜湊後編碼（>2 MiB PNG 傳輸用 JPEG98），全部圖片 ≤14 MiB、請求 ≤20 MiB，首包等待 120 秒。
 - 上下文：`PaperContextBuilder` 收到 `figures`（captionMappingIds、mappingIds、圖號 key）後，圖說 chunk 必選；全文中所有提及該圖號的段落（`figureMentions.ts`：Fig./Figs./Figure/图/圖、`(a)`／`1a`、`1–3` 範圍、Supplementary/Extended Data，不含 Fig. 10 或 configure 1）最多 24 段優先入選；其前後段落次之；章節路徑隨 evidence 傳遞。結果 `figures` 列出 caption／mention／nearby 的 E 編號與因預算略去的提及數。模型收到 `userFigures` 與按順序排列的圖片，提示要求逐子圖、結合正文並以 [E#] 引用提及段落；引用沿用既有可點擊定位。

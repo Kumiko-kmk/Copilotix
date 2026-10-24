@@ -40,7 +40,14 @@ export const markdownEditsFileSchema = z.object({
   /** Page headers, footers and footnotes shown from the layout rather than the Markdown. */
   supplementalDeleted: z.array(z.object({ mappingId: mappingIdSchema, deletedAt: timeSchema }).strict()).max(100_000),
   /** Dashed whole-block frames set from the PDF view, by layout block ID (content or page furniture). */
-  boxMarks: z.array(z.object({ mappingId: mappingIdSchema, markedAt: timeSchema }).strict()).max(100_000).default([])
+  boxMarks: z.array(z.object({ mappingId: mappingIdSchema, markedAt: timeSchema }).strict()).max(100_000).default([]),
+  /**
+   * The user's reading order of the content blocks (2026-10-24): every position once, for a parse with
+   * `count` blocks. Ignored, but kept, while the parse has a different number of blocks. Absent when
+   * the parsed order is used, so files without a reordering stay readable by older builds.
+   */
+  order: z.object({ count: z.number().int().min(1).max(100_000), sequence: z.array(z.number().int().min(0).max(100_000)).max(100_000), updatedAt: timeSchema }).strict()
+    .refine(value => isPermutation(value.sequence, value.count), 'Invalid block order').optional()
 }).strict()
 export type MarkdownEditsFile = z.infer<typeof markdownEditsFileSchema>
 export const emptyMarkdownEdits = (documentId: string): MarkdownEditsFile =>
@@ -62,12 +69,14 @@ export const resolvedMarkdownEditsSchema = z.object({
   }).strict()).max(100_000),
   supplementalDeleted: z.array(z.object({ mappingId: mappingIdSchema, excerpt: z.string().max(200) }).strict()).max(100_000),
   boxMarks: z.array(mappingIdSchema).max(100_000),
+  /** Content positions in reading order, when the user reordered blocks of this parse. */
+  order: z.array(z.number().int().min(0).max(100_000)).max(100_000).optional(),
   /** Edits whose block no longer exists in the parsed text; kept in the file, not shown. */
   orphans: z.number().int().min(0)
 }).strict()
 export type ResolvedMarkdownEdits = z.infer<typeof resolvedMarkdownEditsSchema>
 
-export const markdownEditActionSchema = z.enum(['set-original', 'set-translated', 'revert-original', 'revert-translated', 'delete', 'restore', 'retranslate', 'box', 'unbox'])
+export const markdownEditActionSchema = z.enum(['set-original', 'set-translated', 'revert-original', 'revert-translated', 'delete', 'restore', 'retranslate', 'box', 'unbox', 'reorder', 'reset-order'])
 export const markdownEditRequestSchema = z.object({
   documentId: z.string().uuid(),
   /** Optimistic concurrency: the revision the reader showed. */
@@ -76,13 +85,16 @@ export const markdownEditRequestSchema = z.object({
     z.object({ kind: z.literal('content'), index: z.number().int().min(0).max(1_000_000), mappingIds: z.array(mappingIdSchema).max(512) }).strict(),
     z.object({ kind: z.literal('supplemental'), mappingId: mappingIdSchema }).strict(),
     /** Any layout block, for the dashed frame. */
-    z.object({ kind: z.literal('block'), mappingId: mappingIdSchema }).strict()
+    z.object({ kind: z.literal('block'), mappingId: mappingIdSchema }).strict(),
+    /** The whole reading order; checked against the current parse when saved. */
+    z.object({ kind: z.literal('order'), sequence: z.array(z.number().int().min(0).max(100_000)).max(100_000) }).strict()
   ]),
   action: markdownEditActionSchema,
   markdown: blockText.optional()
 }).strict().refine(value => !value.action.startsWith('set-') || Boolean(value.markdown?.trim()), 'Edited text is required')
   .refine(value => value.target.kind !== 'supplemental' || value.action === 'delete' || value.action === 'restore', 'Only deletion applies to page furniture')
   .refine(value => (value.target.kind === 'block') === (value.action === 'box' || value.action === 'unbox'), 'Frames address layout blocks')
+  .refine(value => (value.target.kind === 'order') === (value.action === 'reorder' || value.action === 'reset-order'), 'Reordering addresses the reading order')
 export type MarkdownEditRequest = z.infer<typeof markdownEditRequestSchema>
 // `edits`: the edit layer resolved after the change, so the reader need not reload the whole paper.
 export const markdownEditResultSchema = z.object({ revision: z.number().int().min(0), edits: resolvedMarkdownEditsSchema.optional() }).strict()
@@ -96,6 +108,11 @@ export function optimisticEdits(current: ResolvedMarkdownEdits | null, request: 
     ? { ...current, blocks: [...current.blocks], supplementalDeleted: [...current.supplementalDeleted], boxMarks: [...(current.boxMarks ?? [])] }
     : { revision: 0, blocks: [], supplementalDeleted: [], boxMarks: [], orphans: 0 }
   const { target, action } = request
+  if (target.kind === 'order') {
+    delete edits.order
+    if (action === 'reorder' && !isIdentity(target.sequence)) edits.order = [...target.sequence]
+    return edits
+  }
   if (target.kind === 'block') {
     edits.boxMarks = edits.boxMarks.filter(id => id !== target.mappingId)
     if (action === 'box') edits.boxMarks.push(target.mappingId)
@@ -168,6 +185,44 @@ export function effectiveOriginalBlocks<T extends EditableBlock>(blocks: readonl
 export function joinVisibleBlocks(blocks: ReadonlyArray<{ markdown: string; deleted?: boolean }>): string {
   const visible = blocks.filter(block => !block.deleted).map(block => block.markdown.trimEnd())
   return visible.length ? `${visible.join('\n\n')}\n` : ''
+}
+
+export function isPermutation(sequence: readonly number[], count: number): boolean {
+  if (sequence.length !== count) return false
+  const seen = new Uint8Array(count)
+  for (const index of sequence) {
+    if (!Number.isInteger(index) || index < 0 || index >= count || seen[index]) return false
+    seen[index] = 1
+  }
+  return true
+}
+
+export function isIdentity(sequence: readonly number[]): boolean {
+  return sequence.every((index, position) => index === position)
+}
+
+/** The stored reading order when it fits a parse of `count` blocks; otherwise the parsed order applies. */
+export function validOrder(order: MarkdownEditsFile['order'], count: number): number[] | null {
+  return order && order.count === count && isPermutation(order.sequence, count) && !isIdentity(order.sequence) ? order.sequence : null
+}
+
+/** Items in reading order; `indexOf` gives an item's content position. Items without one keep their slot. */
+export function inReadingOrder<T>(items: readonly T[], order: readonly number[] | null | undefined, indexOf: (item: T) => number | undefined): T[] {
+  if (!order?.length) return [...items]
+  const rank = new Map(order.map((index, position) => [index, position]))
+  const ranked = items.filter(item => rank.has(indexOf(item) ?? -1))
+  ranked.sort((a, b) => rank.get(indexOf(a)!)! - rank.get(indexOf(b)!)!)
+  let next = 0
+  return items.map(item => rank.has(indexOf(item) ?? -1) ? ranked[next++]! : item)
+}
+
+/** Moves `unit` (content positions) in front of `before` (or to the end); returns the whole new order. */
+export function moveInOrder(order: readonly number[], unit: readonly number[], before: number | null): number[] {
+  const moving = new Set(unit)
+  const kept = order.filter(index => !moving.has(index))
+  const at = before === null ? kept.length : kept.indexOf(before)
+  const block = order.filter(index => moving.has(index))
+  return at < 0 ? [...order] : [...kept.slice(0, at), ...block, ...kept.slice(at)]
 }
 
 export function editExcerpt(markdown: string): string {

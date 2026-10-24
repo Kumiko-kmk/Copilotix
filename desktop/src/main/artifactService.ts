@@ -10,7 +10,7 @@ import { normalizeMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdow
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION, alignMarkdownBlocks } from '@shared/markdownBlocks'
-import { type EditableBlock, editExcerpt, effectiveOriginalBlocks, joinVisibleBlocks, resolveMarkdownEdits, type MarkdownEditsFile, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
+import { type EditableBlock, editExcerpt, effectiveOriginalBlocks, inReadingOrder, joinVisibleBlocks, resolveMarkdownEdits, validOrder, type MarkdownEditsFile, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
 import { readerContentMappings } from '@shared/readerDocument'
 import { readMarkdownEditsFile } from '@runtime/markdownEditsFile'
 import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
@@ -55,7 +55,7 @@ export class ArtifactService {
       translatedBlocks,
       layoutJson,
       mappings,
-      markdownEdits: edits ? resolveReaderEdits(markdown, mappings, translatedBlocks, edits, edits.blocks.length ? this.aligned(task.id, markdown, mappings) : undefined) : null,
+      markdownEdits: edits ? resolveReaderEdits(markdown, mappings, translatedBlocks, edits, edits.blocks.length || edits.order ? this.aligned(task.id, markdown, mappings) : undefined) : null,
       pdfUrl: `copilotix-asset://${task.id}/original.pdf`,
       assetBaseUrl: `copilotix-asset://${task.id}/`
     }
@@ -310,7 +310,7 @@ export class ArtifactService {
       this.readOptional(join(task.outputDir, 'full.md')), this.loadTranslatedBlocks(task), this.loadMappings(task),
       readMarkdownEditsFile(task.outputDir, task.id)
     ])
-    return resolveReaderEdits(markdown, mappings, translatedBlocks, edits, edits.blocks.length ? this.aligned(task.id, markdown, mappings) : undefined)
+    return resolveReaderEdits(markdown, mappings, translatedBlocks, edits, edits.blocks.length || edits.order ? this.aligned(task.id, markdown, mappings) : undefined)
   }
 
   /** Content alignment of the paper's current text; recomputed only when the text or mappings change. */
@@ -334,16 +334,18 @@ export class ArtifactService {
     const translated = blocks?.length ? joinTranslatedMarkdownBlocks(blocks) : storedTranslated
     // Exports refuse to drop the user's edits silently.
     const edits = await readMarkdownEditsFile(task.outputDir, task.id)
-    if (!edits.blocks.length) return { original: markdown, translated }
+    if (!edits.blocks.length && !edits.order) return { original: markdown, translated }
     const base = this.aligned(task.id, markdown, mappings)
     const { byIndex } = resolveMarkdownEdits(base, edits, sha256)
+    const order = validOrder(edits.order, base.length)
+    const ordered = <T>(items: T[]): T[] => inReadingOrder(items.map((item, index) => ({ item, index })), order, entry => entry.index).map(({ item }) => item)
     const indexed = blocks?.length === base.length && blocks.every((block, index) => block.sourceIndex === index)
     return {
-      original: joinVisibleBlocks(effectiveOriginalBlocks(base, byIndex)),
-      translated: indexed ? joinVisibleBlocks(blocks.map((block, index) => {
+      original: joinVisibleBlocks(ordered(effectiveOriginalBlocks(base, byIndex))),
+      translated: indexed ? joinVisibleBlocks(ordered(blocks.map((block, index) => {
         const entry = byIndex.get(index)
         return { markdown: entry?.translated?.markdown ?? block.markdown, deleted: Boolean(entry?.deletedAt) }
-      })) : translated
+      }))) : translated
     }
   }
 
@@ -411,8 +413,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 export function resolveReaderEdits(markdown: string, mappings: BlockMapping[], translatedBlocks: readonly TranslatedMarkdownBlock[] | null, file: MarkdownEditsFile, aligned?: readonly EditableBlock[]): ResolvedMarkdownEdits {
   const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]))
   const supplementalDeleted = file.supplementalDeleted.map(({ mappingId }) => ({ mappingId, excerpt: editExcerpt(mappingById.get(mappingId)?.sourceText ?? '') }))
-  if (!file.blocks.length) return { revision: file.revision, blocks: [], supplementalDeleted, boxMarks: file.boxMarks.map(item => item.mappingId), orphans: 0 }
+  if (!file.blocks.length && !file.order) return { revision: file.revision, blocks: [], supplementalDeleted, boxMarks: file.boxMarks.map(item => item.mappingId), orphans: 0 }
   const base = aligned ?? alignMarkdownBlocks(markdown, readerContentMappings(mappings))
+  const order = validOrder(file.order, base.length)
   const { byIndex, orphans } = resolveMarkdownEdits(base, file, sha256)
   const translatedBySource = new Map((translatedBlocks ?? []).map((block) => [block.sourceIndex, block]))
   const blocks = [...byIndex.entries()].sort(([a], [b]) => a - b).map(([index, entry]) => {
@@ -426,7 +429,7 @@ export function resolveReaderEdits(markdown: string, mappings: BlockMapping[], t
       ...(entry.translated ? { translated: entry.translated.markdown } : {})
     }
   })
-  return { revision: file.revision, blocks, supplementalDeleted, boxMarks: file.boxMarks.map(item => item.mappingId), orphans: orphans.length }
+  return { revision: file.revision, blocks, supplementalDeleted, boxMarks: file.boxMarks.map(item => item.mappingId), ...(order ? { order } : {}), orphans: orphans.length }
 }
 
 function joinTranslatedMarkdownBlocks(blocks: readonly TranslatedMarkdownBlock[]): string {

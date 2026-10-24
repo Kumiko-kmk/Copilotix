@@ -33,17 +33,23 @@ export async function setFigureDisplayChoice(documentId: string, figureId: strin
   notify()
 }
 
+/** What a figure shows without a stored choice: its PDF crop wherever one can be cut. */
+export function automaticFigureDisplay(status: ReaderFigureGroup['status']): FigureDisplayChoice {
+  return status === 'unsupported' ? 'parsed' : 'pdf'
+}
+
 /**
- * Applies the reader's choice on top of the automatic grouping: "pdf" shows the PDF crop even when
- * the panels could not be confirmed, "parsed" shows the parsed panels of a confirmed figure. The
- * automatic status is kept so choosing it again clears the override.
+ * Applies the reader's choice on top of the automatic grouping. Figures show their PDF crop by
+ * default, also when the panels could not be confirmed; "parsed" shows the parsed panels instead and
+ * "pdf" forces the crop of a figure without a caption. Choosing the automatic display clears the choice.
  */
 export function applyFigureDisplay(groups: readonly ReaderFigureGroup[], documentId: string, choices: Choices): ReaderFigureGroup[] {
   return groups.map((group) => {
     const choice = choices[group.id] ?? null
     const display = { documentId, automatic: group.status, choice }
-    if (choice === 'pdf' && group.status !== 'complete') return { ...group, status: 'complete', reason: '已选择以 PDF 原图显示', display }
-    if (choice === 'parsed' && group.status === 'complete') return { ...group, status: 'ambiguous', reason: '已选择以解析子图显示', display }
+    const shown = choice ?? automaticFigureDisplay(group.status)
+    if (shown === 'pdf' && group.status !== 'complete') return { ...group, status: 'complete', reason: choice ? '已选择以 PDF 原图显示' : '默认以 PDF 原图显示', display }
+    if (shown === 'parsed' && group.status === 'complete') return { ...group, status: 'ambiguous', reason: '已选择以解析子图显示', display }
     return { ...group, display }
   })
 }

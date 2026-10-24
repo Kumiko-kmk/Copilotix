@@ -1,15 +1,12 @@
 import React from 'react'
-import { Button, Dropdown } from 'antd'
+import { Button } from 'antd'
 import type { ReaderBlock } from '@shared/readerDocument'
-import type { ResolvedMarkdownEdits } from '@shared/markdownEdits'
 
 /** The reader's edit layer for one view. Editing starts from a second click on the current paragraph;
- * deletion, framing and retranslation are in the PDF view's right-click menu. Nothing appears on hover. */
+ * deletion, restoring, framing and retranslation are in the right-click menus. Nothing appears on hover. */
 export interface ReaderBlockEditing {
   view: 'original' | 'translated'
   save(block: ReaderBlock, markdown: string): Promise<void>
-  restore(target: { index: number } | { mappingId: string }): Promise<void>
-  edits: ResolvedMarkdownEdits | null
 }
 
 /** The rendered paragraph's own font, size and line height, so editing does not change how the text looks. */
@@ -67,23 +64,5 @@ export function ReaderBlockEditor(props: { block: ReaderBlock; editing: ReaderBl
         <Button size="small" type="primary" loading={saving} onClick={() => void save()}>保存</Button>
       </div>
     </div>
-  )
-}
-
-/** Toolbar entry listing deleted paragraphs; choosing one restores it. */
-export function DeletedBlocksMenu(props: { editing: ReaderBlockEditing }): React.JSX.Element | null {
-  const edits = props.editing.edits
-  const deleted = [
-    ...(edits?.blocks.filter(block => block.deleted).map(block => ({ key: `c:${block.index}`, label: block.excerpt || '（空段落）', target: { index: block.index } })) ?? []),
-    ...(edits?.supplementalDeleted.map(item => ({ key: `s:${item.mappingId}`, label: item.excerpt || '（页眉页脚）', target: { mappingId: item.mappingId } })) ?? [])
-  ]
-  if (!deleted.length) return null
-  return (
-    <Dropdown trigger={['click']} menu={{
-      items: [{ key: 'title', type: 'group', label: '选择要恢复的段落', children: deleted.map(item => ({ key: item.key, label: <span className="reader-deleted-item">{item.label}</span> })) }],
-      onClick: ({ key }) => { const item = deleted.find(entry => entry.key === key); if (item) void props.editing.restore(item.target) }
-    }}>
-      <Button type="text" size="small" className="reader-deleted-blocks">已删除 {deleted.length} 段</Button>
-    </Dropdown>
   )
 }

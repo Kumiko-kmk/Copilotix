@@ -7,6 +7,7 @@ import type { ReaderBlock } from '@shared/readerDocument'
 import { buildReaderDocumentBlocks } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
 import type { ReaderFigureGroup } from '../src/shared/readerFigureGroups'
+import { REORDER_HOLD_MS } from '../src/renderer/components/ReaderBlockReorder'
 import MarkdownPane, { MARKDOWN_BLOCKS_PER_FRAME, MARKDOWN_INITIAL_BLOCKS } from '../src/renderer/components/MarkdownPane'
 import { collectAnnotationBlockTexts } from '../src/renderer/readerAnnotations'
 import type { ReaderNote } from '@shared/readerNotes'
@@ -332,11 +333,12 @@ describe('MarkdownPane', () => {
       fallbackLegendText: '', ownerBlockIndex: 0, captionBlockIndex: 1, memberBlockIndexes: [0, 1],
       captionMarkdown: '图 1：第一段。\n\n完整第二段。'
     }
-    const openPdf = vi.fn(), select = vi.fn()
+    const menuSelect = vi.fn(), select = vi.fn()
+    const blockMenu = { items: () => [{ key: 'figure-pdf', label: '在 PDF 中查看' }], onSelect: menuSelect }
     const view = render(<MarkdownPane active blocks={blocks} figureGroups={[group]} pdfUrl="copilotix-asset://task/original.pdf"
       assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]} highlightColor="yellow"
       onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null}
-      onSelect={select} onOpenFigurePdf={openPdf} />)
+      onSelect={select} blockMenu={blockMenu} />)
     // Sources and unrelated images decode before the overview is prepared.
     for (const image of view.container.querySelectorAll<HTMLImageElement>('article img')) {
       Object.defineProperty(image, 'complete', { configurable: true, value: true })
@@ -349,8 +351,12 @@ describe('MarkdownPane', () => {
     act(() => figureMock.notify?.('failed'))
     await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     expect(view.container.querySelectorAll('article img')).toHaveLength(2)
-    fireEvent.click(view.getByText('查看 PDF'))
-    expect(openPdf).toHaveBeenCalledWith({ mappingId: 'caption', blockPosition: '0-caption', origin: 'markdown' })
+    // No standing buttons under the figure; its actions are in the right-click menu.
+    expect(view.container.querySelector('.reader-figure-action')).toBeNull()
+    fireEvent.contextMenu(view.container.querySelector('[data-annotation-block-key="content:0"]')!.closest('.markdown-block')!)
+    fireEvent.click(view.getByRole('menuitem', { name: '在 PDF 中查看' }))
+    expect(menuSelect).toHaveBeenCalledWith('figure-pdf', expect.objectContaining({ annotationKey: 'content:0' }), [group])
+    expect(view.queryByRole('menu')).toBeNull()
     expect(select).not.toHaveBeenCalled()
     act(() => figureMock.notify?.('ready'))
     expect(view.container.querySelectorAll('article img')).toHaveLength(1)
@@ -428,6 +434,43 @@ describe('MarkdownPane', () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(onSelect).toHaveBeenLastCalledWith({ mappingId: 'target', origin: 'markdown' })
+  })
+
+  it('moves a whole block on a long press, leaves quick drags to text selection, and offers menu moves', async () => {
+    const move = vi.fn(), reset = vi.fn(), select = vi.fn()
+    const blocks = ['First', 'Second', 'Third'].map((text, index) => ({ ...block(`m${index}`, text), annotationKey: `content:${index}`, contentIndex: index, order: index }))
+    const view = render(<MarkdownPane active blocks={blocks} assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]}
+      highlightColor="yellow" onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null} onSelect={select}
+      blockMenu={{ items: () => [], onSelect: vi.fn() }} blockMove={{ move, reset, ordered: true }} />)
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    const third = view.getByText('Third')
+    const pointer = (type: string, y: number) => new MouseEvent(type, { bubbles: true, button: 0, clientX: 10, clientY: y })
+    // Moving before the hold time is a text selection: nothing is picked up.
+    third.dispatchEvent(pointer('pointerdown', 50))
+    window.dispatchEvent(pointer('pointermove', 80))
+    await new Promise(resolve => setTimeout(resolve, REORDER_HOLD_MS + 50))
+    window.dispatchEvent(pointer('pointerup', 80))
+    expect(view.container.querySelector('.markdown-reordering')).toBeNull()
+    // Held still, the block is picked up, then dropped at the nearest gap (all at y=0 in jsdom: the top).
+    third.dispatchEvent(pointer('pointerdown', 50))
+    await new Promise(resolve => setTimeout(resolve, REORDER_HOLD_MS + 50))
+    expect(view.container.querySelector('.markdown-reordering')).not.toBeNull()
+    expect(view.container.querySelector('[data-reorder-source]')?.textContent).toBe('Third')
+    window.dispatchEvent(pointer('pointermove', 0))
+    window.dispatchEvent(pointer('pointerup', 0))
+    expect(move).toHaveBeenCalledWith([2], 0)
+    expect(view.container.querySelector('.markdown-reordering, [data-reorder-source]')).toBeNull()
+    // The click that ends the drag does not select the block under it.
+    fireEvent.click(third)
+    expect(select).not.toHaveBeenCalled()
+    // The same moves from the right-click menu.
+    fireEvent.contextMenu(view.getByText('Second'))
+    expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['上移', '下移', '恢复原始顺序'])
+    fireEvent.click(view.getByRole('menuitem', { name: '下移' }))
+    expect(move).toHaveBeenLastCalledWith([1], null)
+    fireEvent.contextMenu(view.getByText('Second'))
+    fireEvent.click(view.getByRole('menuitem', { name: '上移' }))
+    expect(move).toHaveBeenLastCalledWith([1], 0)
   })
 
   it('renders supplemental HTML as display-only gray content', async () => {
