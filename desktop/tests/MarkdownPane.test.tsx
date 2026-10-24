@@ -332,11 +332,12 @@ describe('MarkdownPane', () => {
       fallbackLegendText: '', ownerBlockIndex: 0, captionBlockIndex: 1, memberBlockIndexes: [0, 1],
       captionMarkdown: '图 1：第一段。\n\n完整第二段。'
     }
-    const openPdf = vi.fn(), select = vi.fn()
+    const menuSelect = vi.fn(), select = vi.fn()
+    const blockMenu = { items: () => [{ key: 'figure-pdf', label: '在 PDF 中查看' }], onSelect: menuSelect }
     const view = render(<MarkdownPane active blocks={blocks} figureGroups={[group]} pdfUrl="copilotix-asset://task/original.pdf"
       assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]} highlightColor="yellow"
       onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null}
-      onSelect={select} onOpenFigurePdf={openPdf} />)
+      onSelect={select} blockMenu={blockMenu} />)
     // Sources and unrelated images decode before the overview is prepared.
     for (const image of view.container.querySelectorAll<HTMLImageElement>('article img')) {
       Object.defineProperty(image, 'complete', { configurable: true, value: true })
@@ -349,8 +350,12 @@ describe('MarkdownPane', () => {
     act(() => figureMock.notify?.('failed'))
     await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     expect(view.container.querySelectorAll('article img')).toHaveLength(2)
-    fireEvent.click(view.getByText('查看 PDF'))
-    expect(openPdf).toHaveBeenCalledWith({ mappingId: 'caption', blockPosition: '0-caption', origin: 'markdown' })
+    // No standing buttons under the figure; its actions are in the right-click menu.
+    expect(view.container.querySelector('.reader-figure-action')).toBeNull()
+    fireEvent.contextMenu(view.container.querySelector('[data-annotation-block-key="content:0"]')!.closest('.markdown-block')!)
+    fireEvent.click(view.getByRole('menuitem', { name: '在 PDF 中查看' }))
+    expect(menuSelect).toHaveBeenCalledWith('figure-pdf', expect.objectContaining({ annotationKey: 'content:0' }), [group])
+    expect(view.queryByRole('menu')).toBeNull()
     expect(select).not.toHaveBeenCalled()
     act(() => figureMock.notify?.('ready'))
     expect(view.container.querySelectorAll('article img')).toHaveLength(1)

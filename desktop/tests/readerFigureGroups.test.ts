@@ -526,6 +526,9 @@ describe('reader figure display choice', () => {
     expect(figureMosaic(parsed)?.tiles).toHaveLength(2)
     const uncertain = { ...group!, status: 'ambiguous' as const }
     expect(applyFigureDisplay([uncertain], documentId, { [id]: 'pdf' })[0]).toMatchObject({ status: 'complete', display: { automatic: 'ambiguous', choice: 'pdf' } })
+    // The PDF crop is the default also for unconfirmed panels; a figure without a caption keeps its images.
+    expect(applyFigureDisplay([uncertain], documentId, {})[0]).toMatchObject({ status: 'complete', display: { automatic: 'ambiguous', choice: null } })
+    expect(applyFigureDisplay([{ ...group!, status: 'unsupported' }], documentId, {})[0]).toMatchObject({ status: 'unsupported', display: { choice: null } })
   })
 
   it('stores choices in the document folder, clears them, and treats a damaged file as automatic', async () => {

@@ -15,8 +15,8 @@ import type {
 } from '@shared/types'
 import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
 import type { PaperInsightSource } from '@shared/paperInsight'
-import MarkdownPane, { type ReaderFigureChat } from './MarkdownPane'
-import { DeletedBlocksMenu, type ReaderBlockEditing } from './ReaderBlockEditing'
+import MarkdownPane, { type MarkdownBlockMenu } from './MarkdownPane'
+import type { ReaderBlockEditing } from './ReaderBlockEditing'
 import PdfPane, { type PdfBlockMenu, type PdfViewState } from './PdfPane'
 import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
 import PaperInsightActions from './PaperInsightActions'
@@ -86,12 +86,12 @@ export interface ReaderViewsInput {
   onDeleteNote?(noteId: string): Promise<void>
   selection: BlockSelection | null
   onSelect(selection: BlockSelection): void
-  onOpenFigurePdf?(selection: BlockSelection): void
-  figureChat?: ReaderFigureChat
   /** The user's edit layer, one controller per reading view. */
   blockEditing?: { original: ReaderBlockEditing; translated: ReaderBlockEditing }
   /** Right-click menu on PDF blocks. */
   pdfBlockMenu?: PdfBlockMenu
+  /** Right-click menu on paragraphs and figures of the reading views. */
+  markdownBlockMenu?: MarkdownBlockMenu
   chat?: ReaderChatOptions
   /** Reading views currently on screen with scroll sync on; they lead and follow each other. */
   scrollSyncViews?: readonly ReaderViewId[]
@@ -176,8 +176,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
         label: '原文',
         icon: <FileTextOutlined />,
         panelClassName: 'reader-tab-panel',
-        render: ({ active, actionsHost }) => <>
-          {actionsHost && props.blockEditing ? createPortal(<DeletedBlocksMenu editing={props.blockEditing.original} />, actionsHost) : null}
+        render: ({ active }) => <>
           {!originalReady ? <ReaderDocumentState view="original" status={props.taskStatus} error={props.taskError} onRetry={props.onRetry} /> : active ? <MarkdownPane
           active
           blocks={props.originalBlocks}
@@ -185,9 +184,8 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           assetBaseUrl={props.assetBaseUrl}
           pdfUrl={props.pdfUrl}
           figureGroups={originalFigureGroups}
-          onOpenFigurePdf={props.onOpenFigurePdf}
-          figureChat={props.figureChat}
           blockEditing={props.blockEditing?.original}
+          blockMenu={props.markdownBlockMenu}
           taskId={props.taskId}
           view="original"
           annotations={originalAnnotations}
@@ -211,10 +209,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
         icon: <TranslationOutlined />,
         panelClassName: 'reader-tab-panel',
         render: ({ active, actionsHost }) => <>
-          {actionsHost ? createPortal(<>
-            {props.blockEditing ? <DeletedBlocksMenu editing={props.blockEditing.translated} /> : null}
-            <Tag color={translationColor(props.taskStatus)}>{translationLabel(props.taskStatus, originalReady, props.translationCount ?? null)}</Tag>
-          </>, actionsHost) : null}
+          {actionsHost ? createPortal(<Tag color={translationColor(props.taskStatus)}>{translationLabel(props.taskStatus, originalReady, props.translationCount ?? null)}</Tag>, actionsHost) : null}
           {props.translatedReady ? (active ? <MarkdownPane
             active
             blocks={props.translatedBlocks}
@@ -222,9 +217,8 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
             assetBaseUrl={props.assetBaseUrl}
             pdfUrl={props.pdfUrl}
             figureGroups={translatedFigureGroups}
-            onOpenFigurePdf={props.onOpenFigurePdf}
-            figureChat={props.figureChat}
             blockEditing={props.blockEditing?.translated}
+            blockMenu={props.markdownBlockMenu}
             taskId={props.taskId}
             view="translated"
             annotations={translatedAnnotations}
@@ -294,7 +288,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     return specs
   }, [
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
-    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.onOpenFigurePdf, props.figureChat, props.blockEditing, props.pdfBlockMenu, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
+    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.blockEditing, props.pdfBlockMenu, props.markdownBlockMenu, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
     props.taskStatus, props.translationCount, props.taskError, props.onRetry, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
     rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups
