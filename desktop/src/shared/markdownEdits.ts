@@ -84,7 +84,43 @@ export const markdownEditRequestSchema = z.object({
   .refine(value => value.target.kind !== 'supplemental' || value.action === 'delete' || value.action === 'restore', 'Only deletion applies to page furniture')
   .refine(value => (value.target.kind === 'block') === (value.action === 'box' || value.action === 'unbox'), 'Frames address layout blocks')
 export type MarkdownEditRequest = z.infer<typeof markdownEditRequestSchema>
-export const markdownEditResultSchema = z.object({ revision: z.number().int().min(0) }).strict()
+// `edits`: the edit layer resolved after the change, so the reader need not reload the whole paper.
+export const markdownEditResultSchema = z.object({ revision: z.number().int().min(0), edits: resolvedMarkdownEditsSchema.optional() }).strict()
+
+/**
+ * The reader's immediate view of a change, before the save returns: same shape as Main's resolution.
+ * Staleness of an edited original is assumed; Main's answer replaces this within one round trip.
+ */
+export function optimisticEdits(current: ResolvedMarkdownEdits | null, request: Pick<MarkdownEditRequest, 'target' | 'action' | 'markdown'>, shownText = ''): ResolvedMarkdownEdits {
+  const edits: ResolvedMarkdownEdits = current
+    ? { ...current, blocks: [...current.blocks], supplementalDeleted: [...current.supplementalDeleted], boxMarks: [...(current.boxMarks ?? [])] }
+    : { revision: 0, blocks: [], supplementalDeleted: [], boxMarks: [], orphans: 0 }
+  const { target, action } = request
+  if (target.kind === 'block') {
+    edits.boxMarks = edits.boxMarks.filter(id => id !== target.mappingId)
+    if (action === 'box') edits.boxMarks.push(target.mappingId)
+    return edits
+  }
+  if (target.kind === 'supplemental') {
+    edits.supplementalDeleted = edits.supplementalDeleted.filter(item => item.mappingId !== target.mappingId)
+    if (action === 'delete') edits.supplementalDeleted.push({ mappingId: target.mappingId, excerpt: editExcerpt(shownText) })
+    return edits
+  }
+  const at = edits.blocks.findIndex(block => block.index === target.index)
+  const entry = at >= 0 ? { ...edits.blocks[at]! } : { index: target.index, mappingIds: [...target.mappingIds], deleted: false, stale: false, excerpt: '' }
+  const text = request.markdown?.replace(/\r\n?/gu, '\n').trim()
+  if (action === 'set-original' && text) { entry.original = text; entry.stale = true }
+  else if (action === 'set-translated' && text) { entry.translated = text; entry.stale = false }
+  else if (action === 'revert-original') delete entry.original
+  else if (action === 'revert-translated') delete entry.translated
+  else if (action === 'delete') entry.deleted = true
+  else if (action === 'restore') entry.deleted = false
+  entry.excerpt = editExcerpt(entry.original ?? shownText) || entry.excerpt
+  const keep = entry.original !== undefined || entry.translated !== undefined || entry.deleted
+  if (at >= 0) { if (keep) edits.blocks[at] = entry; else edits.blocks.splice(at, 1) }
+  else if (keep) edits.blocks.push(entry)
+  return edits
+}
 
 export interface EditableBlock { markdown: string; mappingIds: readonly string[] }
 export type ResolvedEntry = MarkdownEditEntry & { baseChanged: boolean }

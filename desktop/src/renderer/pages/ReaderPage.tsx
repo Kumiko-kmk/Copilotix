@@ -9,13 +9,13 @@ import { paperChatFigureImagePathSchema } from '@shared/paperChatFigures'
 import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
 import type { ReaderFigureChat } from '../components/MarkdownPane'
 import type { ReaderBlockEditing } from '../components/ReaderBlockEditing'
-import type { MarkdownEditRequest } from '@shared/markdownEdits'
+import { optimisticEdits, type MarkdownEditRequest, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
 import type { ReaderBlock } from '@shared/readerDocument'
 import { useReaderNotes } from '../useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Space, Spin, Typography, message } from 'antd'
-import { buildOriginalReaderBlocks, buildTranslatedReaderBlocks } from '@shared/readerDocument'
+import { buildReaderBase, buildTranslatedBase, withReaderEdits } from '@shared/readerDocument'
 import type {
   DocumentAnnotation,
   DocumentDetails,
@@ -97,13 +97,16 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   const translatedSourceBlocks = document?.translatedBlocks ?? null
   const mappings = document?.mappings ?? EMPTY_MAPPINGS
   const markdownEdits = document?.markdownEdits ?? null
-  const originalBlocks = React.useMemo(
-    () => buildOriginalReaderBlocks(markdown, mappings, markdownEdits),
-    [markdown, mappings, markdownEdits]
+  // Parsed and translated blocks are built once; an edit only re-applies the edit layer on top.
+  const readerBase = React.useMemo(() => buildReaderBase(markdown, mappings), [markdown, mappings])
+  const translatedBase = React.useMemo(
+    () => buildTranslatedBase(readerBase, translatedMarkdown, translatedSourceBlocks, mappings),
+    [readerBase, mappings, translatedMarkdown, translatedSourceBlocks]
   )
+  const originalBlocks = React.useMemo(() => withReaderEdits(readerBase.original, markdownEdits, 'original'), [readerBase, markdownEdits])
   const translatedBlocks = React.useMemo(
-    () => buildTranslatedReaderBlocks(markdown, translatedMarkdown, translatedSourceBlocks, mappings, markdownEdits),
-    [markdown, mappings, translatedMarkdown, translatedSourceBlocks, markdownEdits]
+    () => translatedBase.indexed ? withReaderEdits(translatedBase.blocks, markdownEdits, 'translated') : translatedBase.blocks,
+    [translatedBase, markdownEdits]
   )
   const selectBlock = React.useCallback((next: BlockSelection) => setSelection(next), [])
   const openFigurePdf = React.useCallback((next: BlockSelection) => {
@@ -135,15 +138,34 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       })
     }
   }), [addFigure, messageApi, routing.imageBlocked])
-  // The user's edit layer. Every change is saved by Utility and the document reloaded, so the
-  // reader, translation, chat and exports all see the same text.
+  // The user's edit layer. A change shows at once (optimistic), saves are sent one at a time, and
+  // Main's resolved layer replaces the optimistic one; the paper itself is never reloaded for it.
   const editsUnreadable = document !== undefined && document.markdownEdits === null
-  const editRevision = markdownEdits?.revision ?? 0
-  const applyEdit = React.useCallback(async (target: MarkdownEditRequest['target'], action: MarkdownEditRequest['action'], text?: string): Promise<void> => {
-    if (editsUnreadable) throw new Error('段落修改文件无法读取，请检查文献目录中的 edits 文件夹')
-    await window.copilotix.editDocumentMarkdown({ documentId: props.documentId, expectedRevision: editRevision, target, action, ...(text !== undefined ? { markdown: text } : {}) })
-    await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
-  }, [editRevision, editsUnreadable, props.documentId, queryClient])
+  const editQueueRef = React.useRef<Promise<unknown>>(Promise.resolve())
+  const pendingEditsRef = React.useRef(0)
+  const editRevisionRef = React.useRef(0)
+  if (pendingEditsRef.current === 0) editRevisionRef.current = markdownEdits?.revision ?? 0
+  const setEdits = React.useCallback((update: (current: ResolvedMarkdownEdits | null) => ResolvedMarkdownEdits) => {
+    queryClient.setQueryData<DocumentDetails>(['document', props.documentId], (current) => current ? { ...current, markdownEdits: update(current.markdownEdits ?? null) } : current)
+  }, [props.documentId, queryClient])
+  const applyEdit = React.useCallback((target: MarkdownEditRequest['target'], action: MarkdownEditRequest['action'], text?: string, shownText?: string): Promise<void> => {
+    if (editsUnreadable) return Promise.reject(new Error('段落修改文件无法读取，请检查文献目录中的 edits 文件夹'))
+    const request = { target, action, ...(text !== undefined ? { markdown: text } : {}) }
+    setEdits((current) => optimisticEdits(current, request, shownText ?? text ?? ''))
+    pendingEditsRef.current++
+    const run = editQueueRef.current.then(async () => {
+      const result = await window.copilotix.editDocumentMarkdown({ documentId: props.documentId, expectedRevision: editRevisionRef.current, ...request })
+      editRevisionRef.current = result.revision
+      // Later optimistic changes stay on screen until their own answer arrives.
+      if (pendingEditsRef.current === 1 && result.edits) setEdits(() => result.edits!)
+    }).finally(() => { pendingEditsRef.current-- })
+    editQueueRef.current = run.catch(() => undefined)
+    return run.catch(async (error: unknown) => {
+      // The saved state is the truth: reload it rather than leave a change that was not kept.
+      await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
+      throw error
+    })
+  }, [editsUnreadable, props.documentId, queryClient, setEdits])
   const blockEditing = React.useMemo(() => {
     const targetOf = (block: ReaderBlock): MarkdownEditRequest['target'] => block.role === 'content' && block.contentIndex !== undefined
       ? { kind: 'content', index: block.contentIndex, mappingIds: block.mappingIds }
@@ -156,7 +178,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       : applyEdit({ kind: 'supplemental', mappingId: target.mappingId }, 'restore'))
     const make = (view: 'original' | 'translated'): ReaderBlockEditing => ({
       view, edits: markdownEdits, restore,
-      save: (block, text) => applyEdit(targetOf(block), view === 'original' ? 'set-original' : 'set-translated', text),
+      save: (block, text) => { void report(() => applyEdit(targetOf(block), view === 'original' ? 'set-original' : 'set-translated', text)); return Promise.resolve() },
     })
     return { original: make('original'), translated: make('translated') }
   }, [applyEdit, markdownEdits, messageApi])
@@ -205,8 +227,9 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
         } else if (key === 'delete') {
           const target = contentTarget ?? { kind: 'supplemental' as const, mappingId: id }
           void report(async () => {
-            await applyEdit(target, 'delete')
+            const saved = applyEdit(target, 'delete', undefined, content?.source ?? mappings.find(mapping => mapping.id === id)?.sourceText)
             messageApi.success({ key: 'reader-edit', duration: 6, content: <span>已删除此段，原文与译文均不再显示。<a onClick={() => { messageApi.destroy('reader-edit'); void report(() => applyEdit(target, 'restore')) }}>撤销</a></span> })
+            await saved
           })
         } else if (key === 'restore') {
           const entry = deletedContent(id)
@@ -299,6 +322,8 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           layoutJson: document.layoutJson,
           originalBlocks,
           translatedBlocks,
+          originalBaseBlocks: readerBase.original,
+          translatedBaseBlocks: translatedBase.blocks,
           translatedReady,
           taskStatus: document.summary.workflow.status,
           translationCount: translationCount(document.summary.workflow),

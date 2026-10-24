@@ -143,7 +143,47 @@ function acquireRegion(pdfUrl: string, group: ReaderFigureGroup, pixelWidth: num
   }
 }
 
+type SavedCrop = { figureId: string; imagePath: string; pageIndex: number; cropBox: number[] }
+const savedCrops = new Map<string, { assetBaseUrl: string; crops: Promise<Map<string, SavedCrop>> }>()
+/**
+ * The paper's saved whole-figure crops (figures.json). Drawing a saved PNG replaces re-rendering the
+ * PDF region on every open; a crop whose page or box no longer matches is ignored.
+ */
+export function registerSavedFigureCrops(pdfUrl: string, assetBaseUrl: string): void {
+  if (savedCrops.get(pdfUrl)?.assetBaseUrl === assetBaseUrl) return
+  const crops = fetch(`${assetBaseUrl}figures.json`).then(response => response.ok ? response.json() : null)
+    .then((value: { figures?: SavedCrop[] } | null) => new Map((value?.figures ?? []).map(crop => [crop.figureId, crop])))
+    .catch(() => new Map<string, SavedCrop>())
+  savedCrops.set(pdfUrl, { assetBaseUrl, crops })
+}
+async function savedCrop(pdfUrl: string, figure: Pick<ReaderFigureGroup, 'id' | 'pageIndex' | 'cropBox'>): Promise<string | null> {
+  const entry = savedCrops.get(pdfUrl)
+  const crop = entry ? (await entry.crops).get(figure.id) : undefined
+  if (!entry || !crop || crop.pageIndex !== figure.pageIndex || crop.cropBox.length !== 4 || crop.cropBox.some((value, i) => value !== figure.cropBox[i]) ||
+    !/^images\/figures\/[\w.-]+\.png$/u.test(crop.imagePath)) return null
+  return entry.assetBaseUrl + crop.imagePath
+}
+/** A saved crop exists for this geometry, so it need not be generated or checked again. */
+export async function hasSavedFigureCrop(pdfUrl: string, figure: Pick<ReaderFigureGroup, 'id' | 'pageIndex' | 'cropBox'>): Promise<boolean> {
+  return (await savedCrop(pdfUrl, figure).catch(() => null)) !== null
+}
+async function savedCropCanvas(pdfUrl: string, group: ReaderFigureGroup, signal: AbortSignal): Promise<HTMLCanvasElement | null> {
+  const url = await savedCrop(pdfUrl, group)
+  if (!url) return null
+  // Decoded off the main thread; drawing the bitmap is then a cheap copy.
+  const bitmap = await createImageBitmap(await (await fetch(url, { signal })).blob())
+  signal.throwIfAborted()
+  const canvas = window.document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  canvas.getContext('2d')?.drawImage(bitmap, 0, 0)
+  bitmap.close()
+  return canvas
+}
+
 async function renderRegion(pdfUrl: string, group: ReaderFigureGroup, pixelWidth: number, signal: AbortSignal): Promise<HTMLCanvasElement> {
+  const saved = await savedCropCanvas(pdfUrl, group, signal).catch(() => null)
+  if (saved) return saved
   const handle = acquirePdfDocument(pdfUrl)
   const release = (): void => handle.release()
   signal.addEventListener('abort', release, { once: true })

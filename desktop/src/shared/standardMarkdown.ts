@@ -59,6 +59,8 @@ export interface MarkdownNormalization {
 
 /** Code is opaque. Normalize alternate TeX delimiters before Markdown consumes their escapes. */
 export function normalizeMathDelimiters(source: string): string {
+  // Most blocks have no TeX bracket pair (MinerU's `\[12]` citations lack a closing `\]`): skip the parse.
+  if (!/\\[([]/u.test(source) || !/\\[)\]]/u.test(source)) return source
   const root = processor.parse(source) as unknown as Node
   const protectedRanges: Array<[number, number]> = []
   walk(root, (node) => {
@@ -255,6 +257,8 @@ export function repairMathSizing(value: string): string {
 export function prepareReaderMarkdown(source: string, rewriteImage?: (url: string) => string): string {
   const clean = normalizeMathDelimiters(source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
     .replace(/\p{Cc}/gu, (character) => character === '\t' || character === '\n' ? character : '\uFFFD'))
+  // Without image rewriting only math nodes are patched, and those need a `$`.
+  if (!rewriteImage && !clean.includes('$')) return clean
   const root = processor.parse(clean) as unknown as Node
   if (rewriteImage) resolveMarkdownReferences(root)
   const patches: Array<{ start: number; end: number; value: string }> = []

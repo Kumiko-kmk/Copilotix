@@ -157,6 +157,9 @@ export default function MarkdownPane(props: {
     totalImages: 0
   })
   const ready = renderState.status === 'ready'
+  // Opening at the top: show paragraphs while the rest of the paper mounts (nothing above can shift).
+  // Highlights, citations and the minimap still attach once the whole paper is ready.
+  const progressive = !props.initialScrollTop && (renderState.status === 'loading' || renderState.status === 'preparing')
   const resourcesReady = renderState.status === 'preparing' || ready
   const readyRef = React.useRef(ready)
   readyRef.current = ready
@@ -187,10 +190,12 @@ export default function MarkdownPane(props: {
   // at once: restarting the progressive mount would collapse the page and lose the reading position.
   const completeMountRef = React.useRef<{ attempt: number; length: number } | null>(null)
   // Decided once per revision; later renders of the same revision must not reconsider it.
-  const mountDecisionRef = React.useRef<{ key: string; full: boolean } | null>(null)
+  const mountDecisionRef = React.useRef<{ key: string; full: boolean; silent: boolean } | null>(null)
   if (mountDecisionRef.current?.key !== mountKey) {
     const complete = completeMountRef.current
-    mountDecisionRef.current = { key: mountKey, full: complete !== null && complete.attempt === renderAttempt && Math.abs(complete.length - props.blocks.length) <= 2 }
+    const full = complete !== null && complete.attempt === renderAttempt && Math.abs(complete.length - props.blocks.length) <= 2
+    // A shown paper stays shown: no loading cover while one paragraph changes.
+    mountDecisionRef.current = { key: mountKey, full, silent: full && renderState.status === 'ready' }
   }
   const [mountProgress, setMountProgress] = React.useState({ key: mountKey, count: MARKDOWN_INITIAL_BLOCKS })
   const mountedCount = Math.min(
@@ -200,11 +205,18 @@ export default function MarkdownPane(props: {
   const allBlocksMounted = mountedCount >= props.blocks.length
   if (allBlocksMounted) completeMountRef.current = { attempt: renderAttempt, length: props.blocks.length }
 
+  // Per-block group lists keep their identity while their groups do, so memoized blocks stay put.
+  const previousGroupsRef = React.useRef(new Map<number, ReaderFigureGroup[]>())
   const figureGroupByBlockIndex = React.useMemo(() => {
     const result = new Map<number, ReaderFigureGroup[]>()
     for (const group of props.figureGroups ?? []) {
       for (const index of group.memberBlockIndexes) result.set(index, [...(result.get(index) ?? []), group])
     }
+    for (const [index, groups] of result) {
+      const previous = previousGroupsRef.current.get(index)
+      if (previous && previous.length === groups.length && previous.every((group, i) => group === groups[i])) result.set(index, previous)
+    }
+    previousGroupsRef.current = result
     return result
   }, [props.figureGroups])
   // Keyed by the figures themselves: editing or deleting a paragraph must not send every crop back to
@@ -287,8 +299,9 @@ export default function MarkdownPane(props: {
     const images = Array.from(article.querySelectorAll<HTMLImageElement>('img'))
     let completedImages = 0
     let timeoutId: number | null = null
+    const silent = mountDecisionRef.current?.silent === true
 
-    setRenderState({ status: 'loading', completedImages: 0, totalImages: images.length })
+    if (!silent) setRenderState({ status: 'loading', completedImages: 0, totalImages: images.length })
 
     const render = async (): Promise<void> => {
       try {
@@ -307,7 +320,7 @@ export default function MarkdownPane(props: {
             if (controller.signal.aborted || !image.hasAttribute('data-reader-figure-source')) throw error
           }
           completedImages += 1
-          if (!controller.signal.aborted) {
+          if (!controller.signal.aborted && !silent) {
             setRenderState({ status: 'loading', completedImages, totalImages: images.length })
           }
         }))
@@ -315,7 +328,8 @@ export default function MarkdownPane(props: {
         await Promise.race([Promise.all([assets, fonts]), timeout])
         await waitForAnimationFrames(2, controller.signal)
         if (!controller.signal.aborted) {
-          setRenderState({ status: 'preparing' })
+          if (silent) setLayoutRevision(revision => revision + 1)
+          else setRenderState({ status: 'preparing' })
         }
       } catch (error) {
         if (controller.signal.aborted) return
@@ -500,12 +514,14 @@ export default function MarkdownPane(props: {
     releaseScrollSelectionSuppression()
   }, [props.onSelect, releaseScrollSelectionSuppression])
 
-  const citationContentKey = React.useMemo(() => ({}), [props.blocks, renderAttempt, figureStates])
+  // The citation index is rebuilt after the edited paper is on screen, not before.
+  const citationBlocks = React.useDeferredValue(props.blocks)
+  const citationContentKey = React.useMemo(() => ({}), [citationBlocks, renderAttempt, figureStates])
   const citationLayer = useReaderCitationLayer({
     active: props.active,
-    ready: resourcesReady && figuresSettled,
+    ready: resourcesReady && figuresSettled && citationBlocks === props.blocks,
     view: props.view,
-    blocks: props.blocks,
+    blocks: citationBlocks,
     counterpartBlocks: props.counterpartBlocks,
     containerRef,
     articleRef,
@@ -649,13 +665,13 @@ export default function MarkdownPane(props: {
     <div className="markdown-pane" ref={paneRef} data-render-state={renderState.status}>
       <div
         id={documentId}
-        className={`markdown-scroll markdown-render-${renderState.status}`}
+        className={`markdown-scroll markdown-render-${renderState.status}${progressive ? ' markdown-render-progressive' : ''}`}
         ref={containerRef}
         onScroll={onScroll}
         aria-busy={!ready}
         data-render-state={renderState.status}
       >
-        {renderState.status === 'loading' || renderState.status === 'preparing' ? (
+        {(renderState.status === 'loading' || renderState.status === 'preparing') && !progressive ? (
           <div className="markdown-render-status" role="status">
             <Spin size="large" />
             <span>正在渲染 Markdown…</span>
@@ -914,7 +930,11 @@ function FigureBlockPresentation(props: {
     ready: true
     }
   }, [props.groups, props.blockIndex, props.readyFigureIds, props.mosaics])
-  const source = <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} figurePresentation={presentation} />
+  // Same content, same object: a moved figure paragraph is not re-parsed.
+  const presentationRef = React.useRef(presentation)
+  if (JSON.stringify(presentationRef.current) !== JSON.stringify(presentation)) presentationRef.current = presentation
+  const stablePresentation = presentationRef.current
+  const source = <SafeMarkdown markdown={props.block.markdown} assetBaseUrl={props.assetBaseUrl} figurePresentation={stablePresentation} />
   return (
     <>
       {owners.filter(group => group.status === 'complete').map(group => (

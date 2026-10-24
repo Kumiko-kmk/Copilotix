@@ -10,7 +10,7 @@ import { normalizeMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdow
 import type { PathPolicyPort, TaskComputePort } from '@core/ports'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION, alignMarkdownBlocks } from '@shared/markdownBlocks'
-import { editExcerpt, effectiveOriginalBlocks, joinVisibleBlocks, resolveMarkdownEdits, type MarkdownEditsFile, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
+import { type EditableBlock, editExcerpt, effectiveOriginalBlocks, joinVisibleBlocks, resolveMarkdownEdits, type MarkdownEditsFile, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
 import { readerContentMappings } from '@shared/readerDocument'
 import { readMarkdownEditsFile } from '@runtime/markdownEditsFile'
 import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
@@ -55,7 +55,7 @@ export class ArtifactService {
       translatedBlocks,
       layoutJson,
       mappings,
-      markdownEdits: edits ? resolveReaderEdits(markdown, mappings, translatedBlocks, edits) : null,
+      markdownEdits: edits ? resolveReaderEdits(markdown, mappings, translatedBlocks, edits, edits.blocks.length ? this.aligned(task.id, markdown, mappings) : undefined) : null,
       pdfUrl: `copilotix-asset://${task.id}/original.pdf`,
       assetBaseUrl: `copilotix-asset://${task.id}/`
     }
@@ -303,6 +303,28 @@ export class ArtifactService {
     }
   }
 
+  /** The edit layer after a change, without sending the paper's text again. */
+  async resolvedEdits(taskId: string): Promise<ResolvedMarkdownEdits> {
+    const task = await this.requireTask(taskId)
+    const [markdown, translatedBlocks, mappings, edits] = await Promise.all([
+      this.readOptional(join(task.outputDir, 'full.md')), this.loadTranslatedBlocks(task), this.loadMappings(task),
+      readMarkdownEditsFile(task.outputDir, task.id)
+    ])
+    return resolveReaderEdits(markdown, mappings, translatedBlocks, edits, edits.blocks.length ? this.aligned(task.id, markdown, mappings) : undefined)
+  }
+
+  /** Content alignment of the paper's current text; recomputed only when the text or mappings change. */
+  private readonly alignments = new Map<string, { markdown: string; mappings: number; blocks: ReturnType<typeof alignMarkdownBlocks> }>()
+  private aligned(taskId: string, markdown: string, mappings: BlockMapping[]): ReturnType<typeof alignMarkdownBlocks> {
+    const cached = this.alignments.get(taskId)
+    if (cached && cached.markdown === markdown && cached.mappings === mappings.length) return cached.blocks
+    const blocks = alignMarkdownBlocks(markdown, readerContentMappings(mappings))
+    this.alignments.delete(taskId)
+    this.alignments.set(taskId, { markdown, mappings: mappings.length, blocks })
+    if (this.alignments.size > 8) this.alignments.delete(this.alignments.keys().next().value!)
+    return blocks
+  }
+
   /** What the reader shows: the user's edits applied and deleted blocks left out. */
   private async editedTexts(task: CopilotixTask): Promise<{ original: string; translated: string }> {
     const [markdown, blocks, storedTranslated, mappings] = await Promise.all([
@@ -313,7 +335,7 @@ export class ArtifactService {
     // Exports refuse to drop the user's edits silently.
     const edits = await readMarkdownEditsFile(task.outputDir, task.id)
     if (!edits.blocks.length) return { original: markdown, translated }
-    const base = alignMarkdownBlocks(markdown, readerContentMappings(mappings))
+    const base = this.aligned(task.id, markdown, mappings)
     const { byIndex } = resolveMarkdownEdits(base, edits, sha256)
     const indexed = blocks?.length === base.length && blocks.every((block, index) => block.sourceIndex === index)
     return {
@@ -386,11 +408,11 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
  * original text: the manifest records each block's source hash, and a translated edit records the
  * original it was written against.
  */
-export function resolveReaderEdits(markdown: string, mappings: BlockMapping[], translatedBlocks: readonly TranslatedMarkdownBlock[] | null, file: MarkdownEditsFile): ResolvedMarkdownEdits {
+export function resolveReaderEdits(markdown: string, mappings: BlockMapping[], translatedBlocks: readonly TranslatedMarkdownBlock[] | null, file: MarkdownEditsFile, aligned?: readonly EditableBlock[]): ResolvedMarkdownEdits {
   const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]))
   const supplementalDeleted = file.supplementalDeleted.map(({ mappingId }) => ({ mappingId, excerpt: editExcerpt(mappingById.get(mappingId)?.sourceText ?? '') }))
   if (!file.blocks.length) return { revision: file.revision, blocks: [], supplementalDeleted, boxMarks: file.boxMarks.map(item => item.mappingId), orphans: 0 }
-  const base = alignMarkdownBlocks(markdown, readerContentMappings(mappings))
+  const base = aligned ?? alignMarkdownBlocks(markdown, readerContentMappings(mappings))
   const { byIndex, orphans } = resolveMarkdownEdits(base, file, sha256)
   const translatedBySource = new Map((translatedBlocks ?? []).map((block) => [block.sourceIndex, block]))
   const blocks = [...byIndex.entries()].sort(([a], [b]) => a - b).map(([index, entry]) => {

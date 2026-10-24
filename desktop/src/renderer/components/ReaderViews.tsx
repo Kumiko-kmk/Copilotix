@@ -1,3 +1,4 @@
+import { registerSavedFigureCrops } from './ReaderFigureSnapshot'
 import React from 'react'
 import type { ReaderNote } from '@shared/readerNotes'
 import { createPortal } from 'react-dom'
@@ -21,7 +22,7 @@ import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
 import PaperInsightActions from './PaperInsightActions'
 import type { PaperChatController } from '../usePaperChat'
 import type { ReaderViewId } from '../readerLayout'
-import { buildReaderFigureGeometries, projectReaderFigureGroups } from '@shared/readerFigureGroups'
+import { buildReaderFigureGeometries, projectReaderFigureGroups, type ReaderFigureGroup } from '@shared/readerFigureGroups'
 import { applyFigureDisplay, useFigureDisplayChoices } from '../readerFigureDisplay'
 import { createScrollSyncHub } from '../readerScrollSync'
 import { useFigureArtifacts } from '../useFigureArtifacts'
@@ -66,6 +67,9 @@ export interface ReaderViewsInput {
   layoutJson?: string
   originalBlocks: ReaderBlock[]
   translatedBlocks: ReaderBlock[]
+  /** The same blocks before the user's edits; figure grouping is computed on these once. */
+  originalBaseBlocks?: ReaderBlock[]
+  translatedBaseBlocks?: ReaderBlock[]
   translatedReady: boolean
   taskStatus: DocumentWorkflowStatus
   /** Translated blocks as "n/total" while translation is counted. */
@@ -119,16 +123,32 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   )
   const originalNotes = React.useMemo(() => (props.notes ?? []).filter((note) => note.view === 'original'), [props.notes])
   const translatedNotes = React.useMemo(() => (props.notes ?? []).filter((note) => note.view === 'translated'), [props.notes])
+  // Registered during render: figure snapshots start in effects that run before this component's.
+  if (props.pdfUrl) registerSavedFigureCrops(props.pdfUrl, props.assetBaseUrl)
   const figureGeometries = React.useMemo(() => buildReaderFigureGeometries(mappings, props.layoutJson), [mappings, props.layoutJson])
   useFigureArtifacts(props.taskId, props.pdfUrl, figureGeometries)
   const figureDisplay = useFigureDisplayChoices(props.taskId)
+  // Figures are grouped on the unedited blocks, then re-indexed to the shown ones; a group keeps its
+  // identity while its blocks do, so editing or deleting a paragraph does not re-render every figure.
+  const originalBase = props.originalBaseBlocks ?? props.originalBlocks
+  const translatedBase = props.translatedBaseBlocks ?? props.translatedBlocks
+  const originalGroupCache = React.useRef(new Map<string, CachedGroup>())
+  const translatedGroupCache = React.useRef(new Map<string, CachedGroup>())
+  const originalProjected = React.useMemo(
+    () => applyFigureDisplay(projectReaderFigureGroups(figureGeometries, originalBase), props.taskId, figureDisplay),
+    [figureGeometries, originalBase, props.taskId, figureDisplay]
+  )
   const originalFigureGroups = React.useMemo(
-    () => applyFigureDisplay(projectReaderFigureGroups(figureGeometries, props.originalBlocks), props.taskId, figureDisplay),
-    [figureGeometries, props.originalBlocks, props.taskId, figureDisplay]
+    () => remapFigureGroups(originalProjected, originalBase, props.originalBlocks, originalGroupCache.current),
+    [originalProjected, originalBase, props.originalBlocks]
+  )
+  const translatedProjected = React.useMemo(
+    () => applyFigureDisplay(projectReaderFigureGroups(figureGeometries, translatedBase, originalBase), props.taskId, figureDisplay),
+    [figureGeometries, translatedBase, originalBase, props.taskId, figureDisplay]
   )
   const translatedFigureGroups = React.useMemo(
-    () => applyFigureDisplay(projectReaderFigureGroups(figureGeometries, props.translatedBlocks, props.originalBlocks), props.taskId, figureDisplay),
-    [figureGeometries, props.translatedBlocks, props.originalBlocks, props.taskId, figureDisplay]
+    () => remapFigureGroups(translatedProjected, translatedBase, props.translatedBlocks, translatedGroupCache.current),
+    [translatedProjected, translatedBase, props.translatedBlocks]
   )
   const { onReplaceAnnotations } = props
   const replaceOriginalAnnotations = React.useCallback(
@@ -282,6 +302,37 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
 }
 
 const EMPTY_MAPPINGS: BlockMapping[] = []
+
+type CachedGroup = { source: ReaderFigureGroup; signature: string; group: ReaderFigureGroup }
+/** Re-indexes groups from the unedited blocks to the shown ones (deleted blocks drop out). */
+function remapFigureGroups(groups: ReaderFigureGroup[], base: readonly ReaderBlock[], shown: readonly ReaderBlock[], cache: Map<string, CachedGroup>): ReaderFigureGroup[] {
+  if (base === shown) return groups
+  const position = new Map<string, number>()
+  shown.forEach((block, index) => { if (block.annotationKey) position.set(block.annotationKey, index) })
+  const remap = (index: number): number | undefined => {
+    const key = base[index]?.annotationKey
+    return key === undefined ? undefined : position.get(key)
+  }
+  const result: ReaderFigureGroup[] = []
+  for (const group of groups) {
+    const members = group.memberBlockIndexes.flatMap(index => { const next = remap(index); return next === undefined ? [] : [next] })
+    if (!members.length) continue
+    const owner = remap(group.ownerBlockIndex) ?? members[0]!
+    const caption = group.captionBlockIndex < 0 ? -1 : remap(group.captionBlockIndex) ?? -1
+    const signature = [owner, caption, ...members].join(',')
+    const cached = cache.get(group.id)
+    if (cached && cached.source === group && cached.signature === signature) { result.push(cached.group); continue }
+    const supportingTextsByBlock: Record<number, string[]> = {}
+    for (const [index, texts] of Object.entries(group.supportingTextsByBlock ?? {})) {
+      const next = remap(Number(index))
+      if (next !== undefined) supportingTextsByBlock[next] = texts
+    }
+    const remapped = { ...group, ownerBlockIndex: owner, captionBlockIndex: caption, memberBlockIndexes: members, supportingTextsByBlock }
+    cache.set(group.id, { source: group, signature, group: remapped })
+    result.push(remapped)
+  }
+  return result
+}
 
 function ReaderDocumentState(props: {
   view: 'original' | 'translated'

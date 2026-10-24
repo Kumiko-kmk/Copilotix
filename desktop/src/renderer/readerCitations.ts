@@ -100,8 +100,21 @@ function createIndex(blocks: readonly ReaderBlock[]): CitationIndex {
   return index
 }
 
-/** Plain text of each list item (with its number), or of the whole block. */
+const segmentCache = new Map<string, Segment[]>()
+/** Cached by text and position: an edit elsewhere does not re-parse the reference list. */
 function blockSegments(markdown: string, blockIndex: number): Segment[] {
+  const key = blockIndex + '\u0000' + markdown
+  let segments = segmentCache.get(key)
+  if (!segments) {
+    segments = parseBlockSegments(markdown, blockIndex)
+    if (segmentCache.size >= 4_000) segmentCache.delete(segmentCache.keys().next().value!)
+    segmentCache.set(key, segments)
+  }
+  return segments
+}
+
+/** Plain text of each list item (with its number), or of the whole block. */
+function parseBlockSegments(markdown: string, blockIndex: number): Segment[] {
   const tree = parser.parse(markdown) as MdNode
   const result: Segment[] = []
   const loose: string[] = []

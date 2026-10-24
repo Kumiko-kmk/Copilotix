@@ -616,6 +616,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-render-status { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px; color: var(--muted); background: var(--surface); }
 .markdown-render-status .ant-alert { width: min(560px, 90%); }
 .markdown-render-loading .markdown-body, .markdown-render-preparing .markdown-body, .markdown-render-error .markdown-body { visibility: hidden; pointer-events: none; }
+.markdown-render-progressive .markdown-body { visibility: visible; pointer-events: auto; }
 .markdown-pane[data-render-state="loading"] .markdown-minimap, .markdown-pane[data-render-state="preparing"] .markdown-minimap, .markdown-pane[data-render-state="error"] .markdown-minimap { visibility: hidden; pointer-events: none; }
 /* The reader's text size and line height come from Settings (theme.ts, --reader-font-size / --reader-line-height); everything below scales with them. */
 .markdown-body { max-width: 900px; margin: 0 auto; padding: 15px 42px 60px; color: var(--text); font-size: var(--reader-font-size, 16px); line-height: var(--reader-line-height, 1.8); }

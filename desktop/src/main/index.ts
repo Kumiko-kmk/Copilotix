@@ -562,8 +562,10 @@ function registerIpc(
     return tasks.retry(documentId)
   }, validationOptions)
   // The edit layer is written by Utility; Main only forwards the validated request.
-  registerValidatedHandler('documents:edit-markdown', markdownEditRequestSchema, markdownEditResultSchema, (_event, request) => {
-    return utilitySupervisor!.request('markdown-edits:apply', request, { timeoutMs: 30_000 })
+  registerValidatedHandler('documents:edit-markdown', markdownEditRequestSchema, markdownEditResultSchema, async (_event, request) => {
+    const { revision } = await utilitySupervisor!.request('markdown-edits:apply', request, { timeoutMs: 30_000 })
+    // The resolved layer replaces the reader's optimistic view; the paper itself is not resent.
+    return { revision, edits: await tasks.resolvedEdits(request.documentId) }
   }, validationOptions)
   registerValidatedHandler('documents:retranslate-edited', documentIdRequestSchema, voidResponseSchema, (_event, documentId) => {
     return tasks.retranslateEdited(documentId)
