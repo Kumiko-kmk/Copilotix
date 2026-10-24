@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { RagChunk } from '@core/types'
 import type { BlockMapping, CopilotixTask } from '@shared/types'
-import { MARKDOWN_EDITS_FILE, emptyMarkdownEdits, resolveMarkdownEdits, type MarkdownEditsFile } from '@shared/markdownEdits'
+import { MARKDOWN_EDITS_FILE, emptyMarkdownEdits, inReadingOrder, moveInOrder, optimisticEdits, resolveMarkdownEdits, validOrder, type MarkdownEditsFile } from '@shared/markdownEdits'
 import { buildOriginalReaderBlocks, buildTranslatedReaderBlocks } from '@shared/readerDocument'
 import { readMarkdownEditsFile } from '@runtime/markdownEditsFile'
 import { resolveReaderEdits } from '../src/main/artifactService'
@@ -161,5 +161,36 @@ describe('reader edit layer', () => {
       { index: 1, mappingIds: ['m1'], baseHash: sha('x'), original: { markdown: 'second, corrected', editedAt: '2026-10-22T00:00:00.000Z' } },
       { index: 2, mappingIds: ['m2'], baseHash: sha('y'), deletedAt: '2026-10-22T00:00:00.000Z' }] }
     expect(applyChunkEdits(chunks, file).map(item => [item.chunkId, item.sourceText])).toEqual([['c0', 'first'], ['c1a', 'second, corrected']])
+  })
+
+  it('keeps a reading order of whole blocks for reading, translation, chat and export, and ignores it for another parse', async () => {
+    const root = await paperDir()
+    const store = new MarkdownEditStore(() => root)
+    await expect(store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'order', sequence: [1, 0] }, action: 'reorder' })).rejects.toThrow('位置已变化')
+    expect(() => store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'order', sequence: [2, 0, 1] }, action: 'delete' })).toThrow('Reordering')
+    await store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'order', sequence: moveInOrder([0, 1, 2], [2], 0) }, action: 'reorder' })
+    await store.apply({ documentId: DOC, expectedRevision: 1, target: target(1), action: 'delete' })
+    const file = await readMarkdownEditsFile(root, DOC)
+    expect(file.order).toMatchObject({ count: 3, sequence: [2, 0, 1] })
+    const edits = resolveReaderEdits(MARKDOWN, MAPPINGS, null, file)
+    expect(edits.order).toEqual([2, 0, 1])
+    // Content changes places; keys, mappings and the page furniture's slots stay.
+    const blocks = buildOriginalReaderBlocks(MARKDOWN, MAPPINGS, edits)
+    expect(blocks.filter(block => block.role === 'content').map(block => [block.annotationKey, block.mappingIds])).toEqual([['content:2', ['m2']], ['content:0', ['m0']]])
+    expect(blocks.map(block => block.role)).toEqual(buildOriginalReaderBlocks(MARKDOWN, MAPPINGS, { ...edits, order: undefined }).map(block => block.role))
+    const translated = ['第一段。', '第二段。', '期刊噪声。'].map((markdown, sourceIndex) => ({ sourceIndex, markdown, mappingIds: [`m${sourceIndex}`] }))
+    expect(buildTranslatedReaderBlocks(MARKDOWN, translated.map(block => block.markdown).join('\n\n'), translated, MAPPINGS, edits)
+      .filter(block => block.role === 'content').map(block => block.markdown)).toEqual(['期刊噪声。', '第一段。'])
+    // Chat reads chunks in the same order; export joins blocks in it.
+    const chunk = (id: string, mappingIds: string[]) => ({ chunkId: id, sourceText: id, mappingIds }) as unknown as RagChunk
+    expect(applyChunkEdits([chunk('c0', ['m0']), chunk('c0b', []), chunk('c1', ['m1']), chunk('c2', ['m2'])], file, await store.readingOrder(DOC)).map(item => item.chunkId))
+      .toEqual(['c2', 'c0', 'c0b'])
+    expect(inReadingOrder(['a', 'b', 'c'], validOrder(file.order, 3), item => ['a', 'b', 'c'].indexOf(item))).toEqual(['c', 'a', 'b'])
+    expect(validOrder(file.order, 4)).toBeNull()
+    // The reader's optimistic view matches; the parsed order is stored as no order at all.
+    expect(optimisticEdits(null, { target: { kind: 'order', sequence: [2, 0, 1] }, action: 'reorder' }).order).toEqual([2, 0, 1])
+    expect(optimisticEdits(edits, { target: { kind: 'order', sequence: [0, 1, 2] }, action: 'reorder' }).order).toBeUndefined()
+    await store.apply({ documentId: DOC, expectedRevision: 2, target: { kind: 'order', sequence: [] }, action: 'reset-order' })
+    expect((await readMarkdownEditsFile(root, DOC)).order).toBeUndefined()
   })
 })

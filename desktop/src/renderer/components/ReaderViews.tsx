@@ -16,6 +16,7 @@ import type {
 import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
 import type { PaperInsightSource } from '@shared/paperInsight'
 import MarkdownPane, { type MarkdownBlockMenu } from './MarkdownPane'
+import type { ReaderBlockMove } from './ReaderBlockReorder'
 import type { ReaderBlockEditing } from './ReaderBlockEditing'
 import PdfPane, { type PdfBlockMenu, type PdfViewState } from './PdfPane'
 import ReaderChatPanel, { ReaderChatToolbar } from './ReaderChatPanel'
@@ -92,6 +93,8 @@ export interface ReaderViewsInput {
   pdfBlockMenu?: PdfBlockMenu
   /** Right-click menu on paragraphs and figures of the reading views. */
   markdownBlockMenu?: MarkdownBlockMenu
+  /** Reordering of whole paragraphs and figures; the translation only when it lines up with the source. */
+  blockMove?: { original?: ReaderBlockMove; translated?: ReaderBlockMove }
   chat?: ReaderChatOptions
   /** Reading views currently on screen with scroll sync on; they lead and follow each other. */
   scrollSyncViews?: readonly ReaderViewId[]
@@ -186,6 +189,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
           figureGroups={originalFigureGroups}
           blockEditing={props.blockEditing?.original}
           blockMenu={props.markdownBlockMenu}
+          blockMove={props.blockMove?.original}
           taskId={props.taskId}
           view="original"
           annotations={originalAnnotations}
@@ -219,6 +223,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
             figureGroups={translatedFigureGroups}
             blockEditing={props.blockEditing?.translated}
             blockMenu={props.markdownBlockMenu}
+            blockMove={props.blockMove?.translated}
             taskId={props.taskId}
             view="translated"
             annotations={translatedAnnotations}
@@ -288,7 +293,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
     return specs
   }, [
     highlightColor, mappings, originalAnnotations, originalFigureGroups, props.assetBaseUrl, props.chat,
-    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.blockEditing, props.pdfBlockMenu, props.markdownBlockMenu, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
+    props.onAddToChat, props.onSaveNote, props.onDeleteNote, originalNotes, translatedNotes, props.onSelect, props.blockEditing, props.pdfBlockMenu, props.markdownBlockMenu, props.blockMove, props.originalBlocks, props.pdfUrl, props.selection, props.taskId,
     props.taskStatus, props.translationCount, props.taskError, props.onRetry, props.translatedBlocks, props.translatedReady, rememberOriginalScroll, rememberPdfState,
     rememberTranslatedScroll, replaceOriginalAnnotations, replaceTranslatedAnnotations, syncHub, translatedAnnotations,
     translatedFigureGroups

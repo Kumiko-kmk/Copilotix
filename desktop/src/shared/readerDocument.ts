@@ -1,7 +1,7 @@
 import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from './markdownBlocks'
 import type { BlockMapping, TranslatedMarkdownBlock, TranslationProviderId } from './types'
 import { prepareReaderMarkdown } from './standardMarkdown'
-import type { ResolvedMarkdownEdits } from './markdownEdits'
+import { inReadingOrder, type ResolvedMarkdownEdits } from './markdownEdits'
 
 export type ReaderBlockRole =
   | 'content'
@@ -113,13 +113,14 @@ export function buildTranslatedReaderBlocks(
 }
 
 function editsByIndex(edits: ResolvedMarkdownEdits | null | undefined): Map<number, ResolvedMarkdownEdits['blocks'][number]> | null {
-  return edits && (edits.blocks.length || edits.supplementalDeleted.length || edits.boxMarks?.length) ? new Map(edits.blocks.map((entry) => [entry.index, entry])) : null
+  return edits && (edits.blocks.length || edits.supplementalDeleted.length || edits.boxMarks?.length || edits.order?.length) ? new Map(edits.blocks.map((entry) => [entry.index, entry])) : null
 }
 
 /**
  * Applies the edit layer to built blocks: edited text replaces the block's Markdown, deleted blocks
  * are dropped after numbering (annotation keys stay put), and edited, stale or framed blocks are
- * marked. Untouched blocks keep their identity, so the reader re-renders only what changed.
+ * marked. A reading order moves content blocks between the content slots; page headers and dividers
+ * keep their places. Untouched blocks keep their identity, so the reader re-renders only what changed.
  */
 export function withReaderEdits(blocks: ReaderBlock[], edits: ResolvedMarkdownEdits | null | undefined, view: 'original' | 'translated'): ReaderBlock[] {
   const byIndex = editsByIndex(edits)
@@ -143,7 +144,7 @@ export function withReaderEdits(blocks: ReaderBlock[], edits: ResolvedMarkdownEd
       ...(framed ? { boxed: true as const } : {})
     } : block)
   }
-  return result
+  return edits!.order?.length ? inReadingOrder(result, edits!.order, (block) => block.role === 'content' ? block.contentIndex : undefined) : result
 }
 
 /** Reader preparation runs a Markdown parse per block; the same text always prepares the same way. */

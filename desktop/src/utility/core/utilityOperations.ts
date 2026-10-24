@@ -185,7 +185,8 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const input = paperContextRequestSchema.parse(request.payload)
       // An unreadable edit layer falls back to the parsed text; saving an edit reports the problem.
       const edits = await editStore.read(input.documentId).catch(() => null)
-      return new PaperContextBuilder(requireRagRepository()).build(input, signal, edits)
+      const order = edits?.order ? await editStore.readingOrder(input.documentId).catch(() => null) : null
+      return new PaperContextBuilder(requireRagRepository()).build(input, signal, edits, order)
     },
     'compute:paper-chat-figure': (request, signal) => new PaperChatFigureStore(requireRepository(), figureInsightStore()).source(paperChatFigureRequestSchema.parse(request.payload), signal),
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },

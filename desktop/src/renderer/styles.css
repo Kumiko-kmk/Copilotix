@@ -722,6 +722,10 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .pdf-block-menu button:hover, .pdf-block-menu button:focus-visible, .pdf-block-menu button:active { background: color-mix(in srgb, var(--primary) 12%, transparent); outline: 0; }
 .pdf-block-menu button.danger { color: var(--danger, #c0392b); }
 .pdf-block-menu button:disabled { color: var(--muted); cursor: not-allowed; background: transparent; }
+/* Long-press reordering: no text selection while a block is carried; a line marks where it lands. */
+.markdown-reordering, .markdown-reordering * { user-select: none; cursor: grabbing; }
+.markdown-block[data-reorder-source] { opacity: .45; }
+.markdown-reorder-indicator { position: fixed; z-index: 1050; height: 2px; border-radius: 1px; background: var(--primary); pointer-events: none; }
 .pdf-block-menu-note { padding: 4px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--rule); color: var(--muted); font-size: 12px; line-height: 1.5; user-select: none; }
 .reader-block-editor textarea { display: block; box-sizing: border-box; width: 100%; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; }
 .reader-block-editor-footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 4px 0 8px; color: var(--muted); font-size: 12px; text-indent: 0; }

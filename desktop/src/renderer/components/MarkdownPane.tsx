@@ -28,6 +28,7 @@ import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnap
 import ReaderFigureMosaic from './ReaderFigureMosaic'
 import { ReaderBlockEditor, blockTypography, type ReaderBlockEditing } from './ReaderBlockEditing'
 import BlockContextMenu, { type BlockMenuItem } from './BlockContextMenu'
+import { useBlockReorder, type ReaderBlockMove } from './ReaderBlockReorder'
 
 /** Right-click menu on a paragraph, page header or figure; the reader decides the items. */
 export interface MarkdownBlockMenu {
@@ -77,6 +78,8 @@ export default function MarkdownPane(props: {
   /** In-place editing and deletion of blocks; omitted where the text cannot be edited. */
   blockEditing?: ReaderBlockEditing
   blockMenu?: MarkdownBlockMenu
+  /** Long-press drag and menu moves of whole paragraphs and figures. */
+  blockMove?: ReaderBlockMove
   taskId: string
   view: ReaderAnnotationView
   annotations: ReaderAnnotation[]
@@ -225,6 +228,41 @@ export default function MarkdownPane(props: {
     previousGroupsRef.current = result
     return result
   }, [props.figureGroups])
+  // A figure moves as one block: its images, panels and caption paragraphs together.
+  const reorderUnitOf = React.useCallback((index: number): number[] | null => {
+    if (props.blocks[index]?.role !== 'content') return null
+    const unit = new Set([index])
+    for (let changed = true; changed;) {
+      changed = false
+      for (const member of [...unit]) for (const group of figureGroupByBlockIndex.get(member) ?? []) {
+        for (const next of [...group.memberBlockIndexes, group.captionBlockIndex]) {
+          if (next >= 0 && !unit.has(next) && props.blocks[next]?.role === 'content') { unit.add(next); changed = true }
+        }
+      }
+    }
+    return [...unit].sort((a, b) => a - b)
+  }, [figureGroupByBlockIndex, props.blocks])
+  const contentIndexOf = React.useCallback((index: number) => props.blocks[index]?.role === 'content' ? props.blocks[index]!.contentIndex : undefined, [props.blocks])
+  const moveBlocks = React.useCallback((unit: number[], before: number | null) => props.blockMove?.move(unit, before), [props.blockMove])
+  const reorderLine = useBlockReorder({ container: containerRef, article: articleRef, enabled: Boolean(props.blockMove) && ready && !blockEditor,
+    unitOf: reorderUnitOf, contentIndexOf, onMove: moveBlocks })
+  /** Neighbouring units in reading order, for the menu's move up / move down. */
+  const reorderNeighbours = (index: number): { unit: number[]; up?: number; down?: number | null } | null => {
+    const unit = reorderUnitOf(index)
+    if (!unit) return null
+    const order: number[][] = []
+    const seen = new Set<number>()
+    props.blocks.forEach((block, at) => {
+      if (block.role !== 'content' || seen.has(at)) return
+      const members = reorderUnitOf(at) ?? [at]
+      members.forEach(member => seen.add(member))
+      order.push(members)
+    })
+    const position = order.findIndex(members => members.includes(unit[0]!))
+    const first = (members: number[] | undefined): number | undefined => members ? contentIndexOf(members[0]!) : undefined
+    return { unit, up: position > 0 ? first(order[position - 1]) : undefined,
+      down: position >= 0 && position < order.length - 1 ? (position + 2 < order.length ? first(order[position + 2]) ?? null : null) : undefined }
+  }
   // Keyed by the figures themselves: editing or deleting a paragraph must not send every crop back to
   // "pending" (their placeholders collapse and the page loses its reading position).
   const figureRevision = React.useMemo(() => (props.figureGroups ?? [])
@@ -759,8 +797,23 @@ export default function MarkdownPane(props: {
         ) : null}
         {noteLayer.layer}
         {citationLayer}
-        {blockMenuAt && props.blockMenu ? <BlockContextMenu x={blockMenuAt.x} y={blockMenuAt.y} items={props.blockMenu.items(blockMenuAt.block, blockMenuAt.figures)}
-          onSelect={(key) => props.blockMenu?.onSelect(key, blockMenuAt.block, blockMenuAt.figures)} onClose={closeBlockMenu} /> : null}
+        {blockMenuAt && props.blockMenu ? (() => {
+          const neighbours = props.blockMove ? reorderNeighbours(props.blocks.indexOf(blockMenuAt.block)) : null
+          const units = (neighbours?.unit ?? []).flatMap(index => { const content = contentIndexOf(index); return content === undefined ? [] : [content] })
+          const moves: BlockMenuItem[] = [
+            ...(neighbours?.up !== undefined ? [{ key: 'move-up', label: '上移' }] : []),
+            ...(neighbours?.down !== undefined ? [{ key: 'move-down', label: '下移' }] : []),
+            ...(props.blockMove?.ordered ? [{ key: 'reset-order', label: '恢复原始顺序' }] : [])
+          ]
+          return <BlockContextMenu x={blockMenuAt.x} y={blockMenuAt.y} items={[...props.blockMenu.items(blockMenuAt.block, blockMenuAt.figures), ...moves]}
+            onSelect={(key) => {
+              if (key === 'move-up' && neighbours?.up !== undefined) props.blockMove?.move(units, neighbours.up)
+              else if (key === 'move-down' && neighbours?.down !== undefined) props.blockMove?.move(units, neighbours.down)
+              else if (key === 'reset-order') props.blockMove?.reset()
+              else props.blockMenu?.onSelect(key, blockMenuAt.block, blockMenuAt.figures)
+            }} onClose={closeBlockMenu} />
+        })() : null}
+        {reorderLine}
       </div>
       <MarkdownMinimap
         active={props.active}

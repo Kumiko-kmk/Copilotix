@@ -13,7 +13,8 @@ import { paperChatFigureImagePathSchema } from '@shared/paperChatFigures'
 import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
 import type { ReaderFigureChat } from '../components/MarkdownPane'
 import type { ReaderBlockEditing } from '../components/ReaderBlockEditing'
-import { optimisticEdits, type MarkdownEditRequest, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
+import { moveInOrder, optimisticEdits, type MarkdownEditRequest, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
+import type { ReaderBlockMove } from '../components/ReaderBlockReorder'
 import type { ReaderBlock } from '@shared/readerDocument'
 import { useReaderNotes } from '../useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -184,6 +185,19 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
     return { original: make('original'), translated: make('translated') }
   }, [applyEdit, messageApi])
   const translationAvailable = Boolean(document?.translatedMarkdown)
+  // Reading order: the whole sequence is saved, so a move never depends on blocks the view hides.
+  const blockMove = React.useMemo<ReaderBlockMove>(() => {
+    const count = readerBase.content.length
+    const save = (sequence: number[], action: 'reorder' | 'reset-order'): void => {
+      void applyEdit({ kind: 'order', sequence }, action).catch(error => messageApi.error({ key: 'reader-edit', content: error instanceof Error ? error.message : '顺序保存失败' }))
+    }
+    return {
+      ordered: Boolean(markdownEdits?.order),
+      move: (unit, before) => save(moveInOrder(markdownEdits?.order ?? Array.from({ length: count }, (_, index) => index), unit, before), 'reorder'),
+      reset: () => save([], 'reset-order')
+    }
+  }, [applyEdit, markdownEdits?.order, messageApi, readerBase])
+  const viewMoves = React.useMemo(() => ({ original: blockMove, ...(translatedBase.indexed ? { translated: blockMove } : {}) }), [blockMove, translatedBase.indexed])
   const contentMappingIds = React.useMemo(() => new Set(readerContentMappings(mappings).map(mapping => mapping.id)), [mappings])
   // One set of paragraph and figure actions behind every right-click menu (PDF boxes, paragraphs,
   // page headers, figures). A merged paragraph has several PDF boxes but is one reader paragraph.
@@ -385,6 +399,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           blockEditing,
           pdfBlockMenu: blockMenus.pdf,
           markdownBlockMenu: blockMenus.markdown,
+          blockMove: viewMoves,
           notes: readerNotes.notes,
           onSaveNote: readerNotes.saveNote,
           onDeleteNote: readerNotes.deleteNote,

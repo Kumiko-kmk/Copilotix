@@ -7,6 +7,7 @@ import type { ReaderBlock } from '@shared/readerDocument'
 import { buildReaderDocumentBlocks } from '@shared/readerDocument'
 import type { BlockSelection } from '@shared/types'
 import type { ReaderFigureGroup } from '../src/shared/readerFigureGroups'
+import { REORDER_HOLD_MS } from '../src/renderer/components/ReaderBlockReorder'
 import MarkdownPane, { MARKDOWN_BLOCKS_PER_FRAME, MARKDOWN_INITIAL_BLOCKS } from '../src/renderer/components/MarkdownPane'
 import { collectAnnotationBlockTexts } from '../src/renderer/readerAnnotations'
 import type { ReaderNote } from '@shared/readerNotes'
@@ -433,6 +434,43 @@ describe('MarkdownPane', () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(onSelect).toHaveBeenLastCalledWith({ mappingId: 'target', origin: 'markdown' })
+  })
+
+  it('moves a whole block on a long press, leaves quick drags to text selection, and offers menu moves', async () => {
+    const move = vi.fn(), reset = vi.fn(), select = vi.fn()
+    const blocks = ['First', 'Second', 'Third'].map((text, index) => ({ ...block(`m${index}`, text), annotationKey: `content:${index}`, contentIndex: index, order: index }))
+    const view = render(<MarkdownPane active blocks={blocks} assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]}
+      highlightColor="yellow" onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null} onSelect={select}
+      blockMenu={{ items: () => [], onSelect: vi.fn() }} blockMove={{ move, reset, ordered: true }} />)
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    const third = view.getByText('Third')
+    const pointer = (type: string, y: number) => new MouseEvent(type, { bubbles: true, button: 0, clientX: 10, clientY: y })
+    // Moving before the hold time is a text selection: nothing is picked up.
+    third.dispatchEvent(pointer('pointerdown', 50))
+    window.dispatchEvent(pointer('pointermove', 80))
+    await new Promise(resolve => setTimeout(resolve, REORDER_HOLD_MS + 50))
+    window.dispatchEvent(pointer('pointerup', 80))
+    expect(view.container.querySelector('.markdown-reordering')).toBeNull()
+    // Held still, the block is picked up, then dropped at the nearest gap (all at y=0 in jsdom: the top).
+    third.dispatchEvent(pointer('pointerdown', 50))
+    await new Promise(resolve => setTimeout(resolve, REORDER_HOLD_MS + 50))
+    expect(view.container.querySelector('.markdown-reordering')).not.toBeNull()
+    expect(view.container.querySelector('[data-reorder-source]')?.textContent).toBe('Third')
+    window.dispatchEvent(pointer('pointermove', 0))
+    window.dispatchEvent(pointer('pointerup', 0))
+    expect(move).toHaveBeenCalledWith([2], 0)
+    expect(view.container.querySelector('.markdown-reordering, [data-reorder-source]')).toBeNull()
+    // The click that ends the drag does not select the block under it.
+    fireEvent.click(third)
+    expect(select).not.toHaveBeenCalled()
+    // The same moves from the right-click menu.
+    fireEvent.contextMenu(view.getByText('Second'))
+    expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['上移', '下移', '恢复原始顺序'])
+    fireEvent.click(view.getByRole('menuitem', { name: '下移' }))
+    expect(move).toHaveBeenLastCalledWith([1], null)
+    fireEvent.contextMenu(view.getByText('Second'))
+    fireEvent.click(view.getByRole('menuitem', { name: '上移' }))
+    expect(move).toHaveBeenLastCalledWith([1], 0)
   })
 
   it('renders supplemental HTML as display-only gray content', async () => {
