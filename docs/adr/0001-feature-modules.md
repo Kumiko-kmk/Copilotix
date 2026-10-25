@@ -31,14 +31,49 @@ src/
 每個功能內部按需要分 `main/`、`renderer/`、`utility/`、`contract/`：
 
 - `contract/`：zod schema 與型別、IPC 頻道與 Core RPC 定義；純資料、無 node／electron，可被其他功能引用。
+- `core/`：Main、Utility、Renderer 都可用的純邏輯（原 `src/core`、`src/shared` 中的演算法），同樣無 node／electron。
+- `runtime/`：Main 與 Utility 共用、可用 Node 但不碰 Electron 的代碼（原 `src/runtime`）。
 - `index.ts`（每個進程層一個）：該功能對外的唯一入口。
 
-## 依賴規則（以 dependency-cruiser 強制）
+`app/` 按同樣的層名分 `main/`、`preload/`、`renderer/`、`utility/`、`contract/`；`platform/` 按關注點分目錄（`platform/ipc/`、`platform/rpc/`…），關注點內再按層分子目錄，使進程層規則只看路徑即可判定。
 
-1. 功能 A 只能引用功能 B 的 `contract/` 或 B 對應進程層的 `index.ts`，不得引用 B 的內部檔案。
+## 模組地圖（2026-10-25，M1）
+
+現有檔案的歸屬，遷移時按此表；標「拆」的大檔拆分後再歸屬。表外的新檔按用途放入對應模組。
+
+| 目標 | 現有來源 |
+|---|---|
+| `app/main` | `main/index.ts`（拆為啟動、視窗、托盤、生命週期、packaged smoke）、`singleInstance` |
+| `app/preload` | `preload/index.ts`（改由各功能契約組合） |
+| `app/renderer` | `renderer/main.tsx`、`App.tsx`、`styles.css`、`EdgeDock`、`WindowControls` |
+| `app/utility` | `utility/index.ts`、`uninstallCleanupEntry.ts`、`utilityOperations.ts`（拆：只留組合，handler 歸各功能） |
+| `app/contract` | `shared/types.ts` 的 `CopilotixDesktopApi`、`coreRpcSchemas.ts` 的操作註冊表、`packagedSmoke` |
+| `platform/ipc` | `main/ipc.ts`、`shared/ipc.ts`、`preload/ipcClient.ts`、`ipcSchemas.ts` 的信封與空請求 schema |
+| `platform/rpc` | `core/coreClient.ts`、`coreRpcSchemas.ts` 的協定部分、`utilitySupervisor`、`electronUtilityFork`、`utilityEntryPath`、`utility/coreUtilityRuntime` |
+| `platform/jobs` | `core/jobs.ts`、`core/types.ts` 的作業型別、`jobScheduler`、`progressReporter`、`rpcJobRepository`、`coalescedRefresh`、`sqliteJobRepository` |
+| `platform/database` | `v2Database.ts`（schema 與 migration，含保留的 rag_* 表） |
+| `platform/files` | `runtime/pathPolicy.ts`、`core/ports.ts` 的 `PathPolicyPort` |
+| `platform/{log,network,assets,credentials,usage,uninstall}` | `logger`、`networkProxy`、`assetProtocol`、`credentialVault`、`usageAnalyticsService`（含其 schema）、main／utility 的 `uninstallCleanup` |
+| `platform/codex` | `runtime/codexRuntime.ts`、`codexConnection.ts`、`shared/codex.ts`、`chatMessages.ts` |
+| `platform/markdown` | `standardMarkdown`、`mathDelimiters`、`markdownBlocks`、`rehypeTableMath` |
+| `platform/pdf` | `renderer/pdfDocumentCache.ts` |
+| `features/library` | `taskService`、`documentCommandService`、`documentProjection`、`documentSummary`、`rpcTaskRepository`、`rpcTaskCompute`、`taskRepositoryCompat`（main／utility）、`v2TaskRepositoryCompat`（拆）、`libraryAccessGate`、`libraryMaintenance`、`libraryCategories`（三處）、`librarySchemas`、`pdfImport`、`pdfPageRemoval`、`pdfInspection`、`titleNaming`、`paperProfile`、`tutorialSample`（三處）、`storageService`、`ipcSchemas.ts` 的文獻／任務 schema；renderer `LibraryPage`、`NewParsePage`、`TutorialPage`、`paperArchive/*`（`PaperArchiveScene` 拆）、`documentCache`、`documentStatus`、`readerPageLoader`、首頁元件與 `homeCipher`／`homeWave`、`ImportProgress`、`WorkflowSteps`、`DocumentLifecycleActions` |
+| `features/parsing` | `parserClient`、`fileUploader`、`parseJobRunner`、`core/blockMapping`、`textLayerRepair`、`pdfTextLayer`、`useTextLayerRepair`、`figureArtifacts`、`figureArtifactStore`、`types.ts` 的塊映射型別 |
+| `features/translation` | `main/translation/*`、`translationJobRunner`、`translationPlanProtocol`、`providerPolicy`、`markdownTranslationPlan`（拆）、`tableTranslation`、`core/ports.ts` 的 `TaskComputePort` |
+| `features/reader` | `readerDocument`、`markdownEdits`、`runtime/markdownEditsFile`、`markdownEditStore`、`readerAnnotations`（shared／renderer）、`annotationMutations`、`readerNotes`、`readerNoteStore`、`useReaderNotes`、`figureDisplay`、`figureDisplayStore`、`readerFigureDisplay`、`readerFigureGroups`、`readerFigureLayout`、`readerFigureMosaic`、`paperSelectionText`、`artifactService`、`readerLayout`、`readerScrollSync`、`readerCitations`、`readerReferenceSections`、`readerPerformance`、`pdfRenderScheduler`、`useFigureArtifacts`、`ReaderPage`、`MarkdownPane`（拆）、`PdfPane`（拆）、`ReaderWorkbench`（拆）、`ReaderViews`、`MarkdownMinimap`（拆）、`SafeMarkdown`、`Reader*` 元件、`BlockContextMenu` |
+| `features/chat` | `main/chat/{chatProvider,modelGateway,paperChatService,paperChatIpc}`、`paperChatSchemas`、`paperChatStorageSchemas`、`paperChatFigures`、`chatResultMetadata`、`figureMentions`、`ragSchemas`、`paperChatStore`、`paperChatFigureStore`、`paperContextBuilder`、問答索引（`ragContentIndexService`、`structureAwareChunker`、`sqliteRagRepository`、`ragContentIndexJobRunner`、`rpcRagContentIndexer`）、`ReaderChatPanel`、`usePaperChat*`、`paperChat.css` |
+| `features/insight` | `main/chat/{paperInsight*,figureInsight*}`、`paperInsight`、`paperBrief/*`、`figureInsight`、`figureInsightPrompt`、`paperInsightStore`、`figureInsightStore`、`usePaperInsight`、`PaperInsightActions` |
+| `features/zotero` | `main/zotero/*`、`shared/zotero.ts`、`ZoteroImportDialog`、`ZoteroExportButton`、`zoteroImport.css` |
+| `features/settings` | `settingsService`、`constants.ts` 的預設設定、`ipcSchemas.ts`／`types.ts` 的設定與憑據型別、`SettingsPage`（拆）、`ThemeSettings`、`CodexSettingsCard`、`ServiceCard`、`PageBrand`、`theme.ts`、`settingsNavigation`、`storageInfoClient`、`codexStatusClient` |
+
+問答檢索索引（`rag-content-index` 作業、`sqliteRagRepository`）經 `chat:ensure-index` → 作業 → `paperContextBuilder` 仍是問答上下文的來源，歸入 chat；作業類型名、Core RPC 名與 rag_* 表保持原名。
+
+## 依賴規則（以 dependency-cruiser 強制：`pnpm desktop:deps`，配置 `desktop/.dependency-cruiser.cjs`）
+
+1. 功能 A 只能引用功能 B 的 `contract/` 或 B 某一層的 `index.ts`（`core`、`runtime`、`main`、`renderer`、`utility`），不得引用 B 的內部檔案。
 2. `platform/` 不得引用任何 `features/`。
 3. `app/` 可引用一切，但不含業務邏輯。
-4. 既有進程層規則不變：renderer 不碰 main、electron、node；contract／shared 不碰 node、electron；main 不碰 renderer。
+4. 既有進程層規則不變：renderer 不碰 main、electron、node；contract／shared 不碰 node、electron；main 不碰 renderer。dependency-cruiser 按路徑補上相對 import：core 同 contract；preload 只碰契約；main 不碰 utility；runtime、utility 不碰 electron 與其他進程層。
 5. 禁止循環依賴。
 
 ## 後果

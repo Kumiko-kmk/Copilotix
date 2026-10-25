@@ -8,6 +8,8 @@ export const PAPER_CHAT_MAX_IMAGE_BYTES = 14 * 1024 * 1024
 /** All encoded images of one request; below the 20 MiB request ceilings of the providers. */
 export const PAPER_CHAT_MAX_IMAGE_TOTAL_BYTES = 18 * 1024 * 1024
 
+// Control characters are what this check rejects.
+// eslint-disable-next-line no-control-regex
 const text = (max: number) => z.string().trim().min(1).max(max).refine(value => !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(value))
 export const paperChatFigureIdSchema = z.string().min(1).max(256).regex(/^[\w:.-]+$/u)
 const mappingIdSchema = z.string().min(1).max(256)

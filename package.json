@@ -9,6 +9,7 @@
     "desktop:dev": "pnpm --dir desktop dev",
     "desktop:typecheck": "pnpm --dir desktop typecheck",
     "desktop:lint": "pnpm --dir desktop lint",
+    "desktop:deps": "pnpm --dir desktop deps",
     "desktop:test": "pnpm --dir desktop test",
     "desktop:test:full": "pnpm --dir desktop test:full",
     "desktop:test:ui": "pnpm --dir desktop test:ui",
