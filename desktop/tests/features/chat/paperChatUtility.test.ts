@@ -1,4 +1,4 @@
-import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
+import { BLOCK_MAPPING_VERSION } from '@features/parsing/core/blockMapping'
 import { randomUUID, createHash } from 'node:crypto'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

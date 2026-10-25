@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
+import { BLOCK_MAPPING_VERSION } from '@features/parsing/core/blockMapping'
 import type { RagChunk } from '@core/types'
 import type { BlockMapping, CopilotixTask } from '@shared/types'
 import { MARKDOWN_EDITS_FILE, emptyMarkdownEdits, inReadingOrder, moveInOrder, optimisticEdits, resolveMarkdownEdits, validOrder, type MarkdownEditsFile } from '@shared/markdownEdits'

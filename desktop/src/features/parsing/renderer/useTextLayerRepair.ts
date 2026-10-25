@@ -1,7 +1,7 @@
 import React from 'react'
 import type { message } from 'antd'
 import { useQueryClient } from '@tanstack/react-query'
-import { findTextLayerCandidates } from '@shared/textLayerRepair'
+import { findTextLayerCandidates } from '../core/textLayerRepair'
 
 /** Documents already tried in this session; lines the text layer cannot confirm are not retried on every open. */
 const attempted = new Set<string>()

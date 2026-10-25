@@ -7,12 +7,13 @@ import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
 import type { TranslationBatchCommit } from '@core/types'
 import type { BlockMapping, TranslationBlockRecord, TranslationProviderId } from '@shared/types'
-import { type AlignedMarkdownBlock } from '@shared/markdownBlocks'
+import { type AlignedMarkdownBlock } from '@features/parsing/core'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION, TABLE_TRANSLATION_CACHE_VERSION, TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, translationPlanMutationResultSchema, type TableTranslationResponse, type TranslationPlanMutationResult, type TranslationPlanRequest, type TranslationPlanUnitKind, type TranslationPlanWorkDescriptor } from '../contract/translationPlanProtocol'
 import { type TableTranslationPlan } from './tableTranslation'
 import type { TranslationJobBinding } from '../../../utility/core/persistence/v2TaskRepositoryCompat'
 
 /** State, metadata shapes and pure helpers of the translation plan; the stateful manager is in ./markdownTranslationPlan. */
+
 export const processor = unified()
   .use(remarkParse)
   .use(remarkGfm)

@@ -1,6 +1,6 @@
 import { renderToString } from 'katex'
 import { parseFragment } from 'parse5'
-import { parseMarkdownAst } from '@shared/markdownBlocks'
+import { parseMarkdownAst } from '@features/parsing/core'
 import { splitMarkdownMath } from '@platform/markdown/core/mathDelimiters'
 
 interface MarkdownNode { type: string; value?: string; children?: MarkdownNode[] }

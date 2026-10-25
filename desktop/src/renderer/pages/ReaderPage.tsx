@@ -30,7 +30,7 @@ import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutation
 import ReaderWorkbench from '../components/ReaderWorkbench'
 import DocumentLifecycleActions from '../components/DocumentLifecycleActions'
 import { translationCount } from '../documentStatus'
-import { useTextLayerRepair } from '../useTextLayerRepair'
+import { useTextLayerRepair } from '@features/parsing/renderer'
 import { ZoteroExportButton } from '@features/zotero/renderer'
 import type { PaperInsightSource } from '@features/insight/contract/paperInsight'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'

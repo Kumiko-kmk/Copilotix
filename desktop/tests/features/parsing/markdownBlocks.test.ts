@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { buildBlockMappings } from '@core/blockMapping'
-import { alignMarkdownBlocks } from '@shared/markdownBlocks'
+import { buildBlockMappings } from '@features/parsing/core/blockMapping'
+import { alignMarkdownBlocks } from '@features/parsing/core/markdownBlocks'
 import type { BlockMapping } from '@shared/types'
 
 function mapping(id: string, order: number, sourceText: string, type = 'text'): BlockMapping {

@@ -8,9 +8,9 @@ import type { Job, JobRepositoryPort } from '@platform/jobs/core/jobs'
 import type { TaskComputePort } from '@core/ports'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { CopilotixTask } from '@shared/types'
-import { ParseJobRunner } from '@main/parseJobRunner'
+import { ParseJobRunner } from '@features/parsing/main/parseJobRunner'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
-import type { ParserClient } from '@main/parserClient'
+import type { ParserClient } from '@features/parsing/main/parserClient'
 
 const roots: string[] = []
 

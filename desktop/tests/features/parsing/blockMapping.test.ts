@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { BLOCK_MAPPING_VERSION, buildBlockMappings, stableBlockId } from '@core/blockMapping'
+import { BLOCK_MAPPING_VERSION, buildBlockMappings, stableBlockId } from '@features/parsing/core/blockMapping'
 
 describe('block mapping', () => {
   it('uses the canonical v3 artifact format', () => {

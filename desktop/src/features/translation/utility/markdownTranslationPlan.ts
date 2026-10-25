@@ -4,16 +4,12 @@ import { lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/pro
 import { dirname } from 'node:path'
 import { z } from 'zod'
 import type { TranslationBatchBlock, TranslationBatchCommit, TranslationCacheEntry } from '@core/types'
-import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
+import { BLOCK_MAPPING_VERSION, alignMarkdownBlocks, type AlignedMarkdownBlock } from '@features/parsing/core'
 import type { BlockMapping, TranslationBlockRecord, TranslationProviderId } from '@shared/types'
 import { blockMappingSchema } from '@shared/ipcSchemas'
 import { resolveMarkdownEdits, type MarkdownEditsFile } from '@shared/markdownEdits'
 import { readerContentMappings } from '@shared/readerDocument'
 import { readMarkdownEditsFile } from '@runtime/markdownEditsFile'
-import {
-  alignMarkdownBlocks,
-  type AlignedMarkdownBlock
-} from '@shared/markdownBlocks'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION, TABLE_TRANSLATION_CACHE_VERSION, TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, plainTranslationResponseSchema, tableTranslationRequestSchema, tableTranslationResponseSchema, translationCacheKey, translationPlanFinalizeResultSchema, translationPlanListResultSchema, translationPlanOpenResultSchema, translationPlanResponseEnvelopeSchema, type PlainTranslationRequest, type PlainTranslationResponse, type TableTextSegment, type TableTranslationResponse, type TranslationPlanFinalizeResult, type TranslationPlanListResult, type TranslationPlanMutationResult, type TranslationPlanOpenResult, type TranslationPlanResponse, type TranslationPlanWorkDescriptor } from '../contract/translationPlanProtocol'
 import { applyTableTranslation, buildTableTranslationUnits, type TableTranslationUnit } from './tableTranslation'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'

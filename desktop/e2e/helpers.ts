@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { _electron as electron, expect, type Page } from '@playwright/test'
-import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/core/blockMapping'
+import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/features/parsing/core/blockMapping'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/features/translation/contract/translationPlanProtocol'
 import { V2Database } from '../src/platform/database/utility/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
@@ -14,7 +14,7 @@ import {
   alignMarkdownBlocks,
   MARKDOWN_MAPPING_ALGORITHM_VERSION,
   splitMarkdownBlocks
-} from '../src/shared/markdownBlocks'
+} from '../src/features/parsing/core/markdownBlocks'
 
 const FIXTURE_MARKDOWN = [
   '# Fixture document',

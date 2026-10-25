@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import type { TextLayerItem, TextLayerPage } from '@shared/textLayerRepair'
+import type { TextLayerItem, TextLayerPage } from '../core/textLayerRepair'
 
 type PdfJs = typeof import('pdfjs-dist/legacy/build/pdf.mjs')
 

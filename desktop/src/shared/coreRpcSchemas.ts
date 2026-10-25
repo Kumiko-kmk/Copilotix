@@ -65,21 +65,6 @@ export const coreHashFileResultSchema = z.object({ sha256: coreHashSchema }).str
 // skipFirstPage (optional, 1.2.0): drop page 1 while publishing original.pdf; absent keeps the bytes unchanged.
 export const coreImportPdfPayloadSchema = z.object({ sourcePath: corePathSchema, documentId: coreIdSchema, skipFirstPage: z.boolean().optional() }).strict()
 export const coreImportPdfResultSchema = z.object({ sha256: coreHashSchema, size: z.number().int().min(0).max(200 * 1024 * 1024) }).strict()
-export const coreNormalizeParserPayloadSchema = z.object({ task: copilotixTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()
-export const coreNormalizeParserResultSchema = z.object({
-  normalized: z.literal(true),
-  displayTitle: z.string().max(32_768).refine(noNul).nullable(),
-  pageCount: z.number().int().min(0).max(100_000)
-}).strict()
-export const coreRebuildMappingsPayloadSchema = z.object({ taskId: coreIdSchema, outputDir: corePathSchema }).strict()
-export const coreRebuildMappingsResultSchema = z.object({ rebuilt: z.literal(true) }).strict()
-export const coreRepairTextLayerPayloadSchema = z.object({ taskId: coreIdSchema }).strict()
-export const coreRepairTextLayerResultSchema = z.object({
-  repaired: z.number().int().min(0).max(1_000_000),
-  unresolved: z.number().int().min(0).max(1_000_000)
-}).strict()
-
-
 /**
  * Feature operations still declared here until each module owns its contract (milestone M4).
  * The app registry (`app/contract/coreRpc.ts`) combines them with platform and job operations.
@@ -108,8 +93,5 @@ export const featureOperations = {
   'annotations:list-snapshot': { payload: coreAnnotationsSnapshotPayloadSchema, result: coreAnnotationsSnapshotResultSchema },
   'annotations:mutate': { payload: coreAnnotationsMutatePayloadSchema, result: coreAnnotationsMutateResultSchema },
   'compute:hash-file': { payload: coreHashFilePayloadSchema, result: coreHashFileResultSchema },
-  'compute:import-pdf': { payload: coreImportPdfPayloadSchema, result: coreImportPdfResultSchema },
-  'compute:normalize-parser': { payload: coreNormalizeParserPayloadSchema, result: coreNormalizeParserResultSchema },
-  'compute:rebuild-mappings': { payload: coreRebuildMappingsPayloadSchema, result: coreRebuildMappingsResultSchema },
-  'compute:repair-text-layer': { payload: coreRepairTextLayerPayloadSchema, result: coreRepairTextLayerResultSchema }
+  'compute:import-pdf': { payload: coreImportPdfPayloadSchema, result: coreImportPdfResultSchema }
 } as const

@@ -53,7 +53,7 @@
 - [x] M1 規則
 - [x] M2 平台層
 - [x] M3 中樞拆分
-- [ ] M4 逐模組遷移：~~zotero~~ · ~~settings~~ · ~~insight~~ · ~~chat~~ · ~~translation~~ · parsing · library · reader
+- [ ] M4 逐模組遷移：~~zotero~~ · ~~settings~~ · ~~insight~~ · ~~chat~~ · ~~translation~~ · ~~parsing~~ · library · reader
 - [ ] M5 收尾
 
 ### 依賴基線（M1，2026-10-25）
@@ -70,6 +70,7 @@
 - 「重新翻譯此段」「長按拖曳排序」尚未在真實憑據下走過完整流程。
 - CI「只測受影響部分」的選擇邏輯尚未在遠端驗證。
 - 本機 E2E `reader.spec.ts`「keeps the complete minimap static across long-document jumps」穩定失敗（標題距捲動容器頂 15.45 px，期望 16±0.5），master 原樣即如此，疑與顯示縮放有關；待在 CI／其他機器確認。
+- 本機 E2E `reader.spec.ts`「renders a local PDF with range requests before parsing succeeds」間歇失敗（約半數）：Markdown 程式捲動後 PDF `scrollTop` 仍變化（811→545），疑為前一步 PDF 置中的平滑捲動未結束；重構前提交上同樣出現。
 - RAG 時期遺留：`sqliteRagRepository.ts`、`rag-content-index` 作業與相關 schema；需先確認問答索引是否仍依賴，再決定刪除或改名歸入 chat 模組（schema 4 的 rag_* 表為遷移兼容必須保留）。
 
 ## 參考規範
@@ -84,6 +85,7 @@
 
 （各階段完成後在此記錄日期、提交與證據入口，一行一項。）
 
+- 2026-10-25 M4 parsing：解析客戶端、上傳、解析作業、塊映射、Markdown 分塊、文字層修復與 renderer hook 移入 `features/parsing`；`utilityOperations.ts` 中解析產物發布、映射重建與文字層修復（約 290 行）移至 `utility/parserOutput.ts`，handler 與 Core RPC 聲明歸模組（`utilityOperations.ts` 845→約 480 行）；圖片裁圖產物（`figureArtifacts`）只被閱讀文件使用，改歸 reader；`feature-boundary-parsing` 改 error。門禁：847 通過；E2E 29 通過／3 跳過／2 失敗——既有 minimap，以及 `renders a local PDF with range requests before parsing succeeds` 的被動捲動斷言（在上一提交 a0ceaf8 的構建上重跑 4 次同樣 2 次失敗，屬既有時序不穩，記入技術債）。
 - 2026-10-25 M4 translation：服務商、計劃編排、作業、計劃協定、Utility 計劃與表格翻譯 13 檔移入 `features/translation`；Core RPC 聲明與 Utility handler 歸模組；`markdownTranslationPlan.ts` 1361→975 行（型別、常量與純函式拆至 `planModel.ts`，其餘為狀態機，README 註明例外）；`feature-boundary-translation` 改 error。門禁同前（847 通過、E2E 僅既有 minimap 失敗）。
 - 2026-10-25 M4 chat：問答服務、模型閘道、Utility 存儲、檢索索引（RAG 殘留確認仍為問答上下文來源，整體歸入 chat，作業名與 rag_* 表不變）、契約與 renderer 共 32 檔移入 `features/chat`；chat 的 Core RPC 聲明與 Utility handler 歸模組；`sqliteRagRepository.ts` 656 行拆為 repository（290）＋ `ragRecords.ts`（394，型別、行映射與校驗）；`feature-boundary-chat` 改 error。門禁同前（847 通過、E2E 僅既有 minimap 失敗）。utility smoke 首次失敗：bundle 佈局改變後，Node 回顯的拋錯源碼行（一整行壓縮代碼，含 pdf-lib 的 "TypeError" 字樣）被誤判為執行期錯誤；`utility-bundle-smoke.mjs` 改為忽略該回顯段，只檢查診斷輸出，並補兩條斷言。
 - 2026-10-25 M4 insight：檔案卡與圖片解讀的 Main 服務、Utility 存儲、`paperBrief/`、契約與 renderer 共 22 檔移入 `features/insight`；insight 的 Core RPC 聲明移入 `contract/rpc.ts`，Utility handler 移入 `utility/operations.ts`（`utilityOperations.ts` 只展開）；`CoreUtilityOperationHandler` 去掉泛型（handler 自行校驗 payload，型別上不再依附單一註冊表）；拆掉 `lengths` ↔ `schema` 循環（`ARCHIVE_LENGTHS` 移至 `archiveLengths.ts`）；`feature-boundary-insight` 改 error。門禁同前（847 通過、E2E 僅既有 minimap 失敗）；deps 5 warn（1 循環＋4 個 app-is-root）。

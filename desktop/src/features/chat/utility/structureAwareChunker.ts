@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { BlockMapping } from '@shared/types'
 import type { RagChunk, RagChunkContentType, RagMappingConfidence } from '@core/types'
-import { alignMarkdownBlocks, parseMarkdownAst, stringifyMarkdownAst } from '@shared/markdownBlocks'
+import { alignMarkdownBlocks, parseMarkdownAst, stringifyMarkdownAst } from '@features/parsing/core'
 
 /** Bumping either value intentionally creates a new content-revision identity. */
 export const STRUCTURE_AWARE_CHUNKER_VERSION = 1

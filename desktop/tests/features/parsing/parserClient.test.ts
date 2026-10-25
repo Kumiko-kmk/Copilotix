@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { MAX_RESULT_ZIP_BYTES, OfficialParserClient, type FileUploader } from '@main/parserClient'
+import { MAX_RESULT_ZIP_BYTES, OfficialParserClient, type FileUploader } from '@features/parsing/main/parserClient'
 import type { AppSettings, CopilotixTask } from '@shared/types'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>

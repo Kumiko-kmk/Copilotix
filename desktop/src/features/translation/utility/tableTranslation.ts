@@ -5,7 +5,7 @@ import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
 import type { BlockMapping } from '@shared/types'
-import type { AlignedMarkdownBlock } from '@shared/markdownBlocks'
+import type { AlignedMarkdownBlock } from '@features/parsing/core'
 import { splitMarkdownMath } from '@platform/markdown/core/mathDelimiters'
 import {
   TABLE_TRANSLATION_PROTOCOL,

@@ -18,7 +18,7 @@ import type { CredentialVault } from '@platform/credentials/main/credentialVault
 import type { TaskLogger } from '@platform/log/main/logger'
 import { ParserApiError, type ParserClient, type BatchResult, type BatchSubmission } from './parserClient'
 import type { SettingsService } from '@features/settings/main'
-import type { TaskRepositoryCompat } from './taskRepositoryCompat'
+import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
 import type { JobRepositoryPort } from '@platform/jobs/core/jobs'
 import { ProgressReporter } from '@platform/jobs/main/progressReporter'
 import type { UsageAnalyticsRecorder } from '@features/settings/main'

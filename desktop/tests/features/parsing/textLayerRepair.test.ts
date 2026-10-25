@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyTextLayerRepairs, findTextLayerCandidates, isFragmentedText, planTextLayerRepairs, type TextLayerItem } from '@shared/textLayerRepair'
+import { applyTextLayerRepairs, findTextLayerCandidates, isFragmentedText, planTextLayerRepairs, type TextLayerItem } from '@features/parsing/core/textLayerRepair'
 
 const GARBLED = 'd h f ld h h d f l ll d h d'
 const REAL = '(CZM) and phase-field approaches. The advent of computational power allowed researchers and'

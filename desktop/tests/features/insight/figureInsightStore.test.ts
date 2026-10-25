@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile, stat, rm, symlink } from 'node:fs/
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
+import { BLOCK_MAPPING_VERSION } from '@features/parsing/core/blockMapping'
 import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
 import type { BlockMapping, CopilotixTask } from '@shared/types'
 import { FigureInsightStore } from '../../../src/features/insight/utility/figureInsightStore'

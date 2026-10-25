@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ net: { fetch: vi.fn() } }))
 
-import { ElectronFileUploader } from '@main/fileUploader'
+import { ElectronFileUploader } from '@features/parsing/main/fileUploader'
 
 const temporaryRoots: string[] = []
 
