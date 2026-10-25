@@ -8,9 +8,9 @@ import { paperChatSessionSchema, paperChatTurnSchema } from '@shared/paperChatSt
 import { coreProtocol, coreRequestSchema, validateCoreOperationResult, serializeCoreMessage } from '@app/contract/coreRpc'
 import { makeCoreEvent } from '@platform/rpc/contract/protocol'
 import { CoreClient } from '@platform/rpc/main/coreClient'
-import { registerPaperChatHandlers } from '../src/main/chat/paperChatIpc'
+import { registerPaperChatHandlers } from '../src/features/chat/main/ipc'
 import { PaperChatService } from '../src/main/chat/paperChatService'
-import type { IpcInvokeEventLike } from '../src/platform/ipc/main/ipc'
+import { createIpcRegistrar, type IpcInvokeEventLike } from '../src/platform/ipc/main/ipc'
 
 const doc = '10000000-0000-4000-8000-000000000001'
 const request = { documentId: doc, question: 'question', pinned: [], history: [] }
@@ -70,7 +70,7 @@ describe('paper chat wire contracts', () => {
     const frame = { url }
     const event: IpcInvokeEventLike = { sender: { mainFrame: frame, getURL: () => url, isDestroyed: () => false, send: vi.fn() }, senderFrame: frame }
     const ensureIndex = vi.fn(async () => ({ state: 'queued' as const, progress: 0, contentRevisionId: null }))
-    registerPaperChatHandlers(service, ensureIndex, { getMainWindow: () => owner, fromWebContents: () => owner, rendererEntryPath: entry, ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } })
+    registerPaperChatHandlers(service, ensureIndex, createIpcRegistrar({ getMainWindow: () => owner, fromWebContents: () => owner, rendererEntryPath: entry, ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } }))
     expect([...handlers.keys()]).toEqual(['paper-chat:load', 'paper-chat:session', 'paper-chat:save-session', 'paper-chat:delete-turn', 'paper-chat:clear', 'paper-chat:ask', 'paper-chat:cancel', 'paper-chat:ensure-index'])
     const ask = handlers.get('paper-chat:ask')!
     await expect(ask({ ...event, senderFrame: { url } }, request)).resolves.toMatchObject({ ok: false, error: { code: 'UNTRUSTED_SENDER' } })

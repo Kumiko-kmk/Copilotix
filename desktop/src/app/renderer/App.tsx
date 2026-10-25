@@ -1,32 +1,32 @@
 import React from 'react'
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
-import { refreshCodexStatus } from './codexStatusClient'
-import { loadStorageInfo } from './storageInfoClient'
-import { loadReaderPage, loadedReaderPage } from './readerPageLoader'
+import { refreshCodexStatus } from '@renderer/codexStatusClient'
+import { loadStorageInfo } from '@renderer/storageInfoClient'
+import { loadReaderPage, loadedReaderPage } from '@renderer/readerPageLoader'
 import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
 import type { AppSettings } from '@shared/types'
 import type { DocumentDetails, DocumentSummary } from '@shared/ipcSchemas'
-import EdgeDock from './components/EdgeDock'
-import WindowControls from './components/WindowControls'
-import NewParsePage from './pages/NewParsePage'
-import SettingsPage from './pages/SettingsPage'
-import TutorialPage from './pages/TutorialPage'
+import EdgeDock from './EdgeDock'
+import WindowControls from './WindowControls'
+import NewParsePage from '@renderer/pages/NewParsePage'
+import SettingsPage from '@renderer/pages/SettingsPage'
+import TutorialPage from '@renderer/pages/TutorialPage'
 import {
   applyDocumentChange,
   getDocumentRefreshPlan,
   patchDocumentDetails,
   type DocumentListCache
-} from './documentCache'
-import { loadLibraryCategories } from './paperArchive/libraryCategoriesClient'
-import { requestLibraryFocus } from './paperArchive/libraryFocus'
-import { ACTIVE_STATUSES } from './documentStatus'
-import type { SettingsNavigationGuard } from './settingsNavigation'
+} from '@renderer/documentCache'
+import { loadLibraryCategories } from '@renderer/paperArchive/libraryCategoriesClient'
+import { requestLibraryFocus } from '@renderer/paperArchive/libraryFocus'
+import { ACTIVE_STATUSES } from '@renderer/documentStatus'
+import type { SettingsNavigationGuard } from '@renderer/settingsNavigation'
 
 const ReaderPage = React.lazy(loadReaderPage)
 // Three.js is only loaded once the archive is opened.
-const LibraryPage = React.lazy(() => import('./pages/LibraryPage'))
+const LibraryPage = React.lazy(() => import('@renderer/pages/LibraryPage'))
 
 type ReaderOrigin = 'new' | 'library' | 'tutorial'
 type View = { name: ReaderOrigin | 'settings' } | { name: 'reader'; documentId: string; returnTo?: ReaderOrigin }

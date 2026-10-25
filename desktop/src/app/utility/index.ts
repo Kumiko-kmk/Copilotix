@@ -1,6 +1,6 @@
 import { createCoreUtilityRuntime } from '@platform/rpc/utility/coreUtilityRuntime'
-import { createUtilityOperationHandlers } from './core/utilityOperations'
-import { coreProtocol } from '@app/contract/coreRpc'
+import { createUtilityOperationHandlers } from '../../utility/core/utilityOperations'
+import { coreProtocol } from '../contract/coreRpc'
 
 // Electron exposes the utility IPC endpoint on the child process object.  The
 // cross-process `electron` module does not expose `parentPort` in this context.

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider, theme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import App from './App'
-import { currentTheme, mixHex, onThemeChange, restoreTheme, rgbChannels } from './theme'
+import { currentTheme, mixHex, onThemeChange, restoreTheme, rgbChannels } from '@renderer/theme'
 import './styles.css'
 
 // Before the first render, so the stored theme is the first thing painted.

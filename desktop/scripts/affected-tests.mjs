@@ -22,7 +22,7 @@ const FULL_TRIGGERS = [
   /^desktop\/scripts\/affected-tests\.mjs$/u
 ]
 /** Specs import only e2e helpers, so source paths map to the flows they exercise. */
-const E2E_ALL = [/^desktop\/e2e\/(?:helpers|launchPolicy)\.ts$/u, /^desktop\/src\/preload\//u, /^desktop\/src\/(?:app|platform\/(?:ipc|rpc))\//u, /^desktop\/src\/main\/index\.ts$/u, /^desktop\/src\/renderer\/(?:App|main)\.tsx$/u]
+const E2E_ALL = [/^desktop\/e2e\/(?:helpers|launchPolicy)\.ts$/u, /^desktop\/src\/(?:app|platform\/(?:ipc|rpc))\//u]
 const E2E_MAP = [
   [/^desktop\/src\/renderer\/(?:components\/(?:Reader(?!Chat|Figure)|MarkdownPane|MarkdownMinimap|PdfPane|DocumentLifecycle)|reader(?!Figure))/u, ['reader', 'qa-fixes']],
   [/(?:ReaderFigure|readerFigureGroups|figureArtifact|figureInsight)/u, ['reader-figures']],

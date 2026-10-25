@@ -1,29 +1,20 @@
-import {
-  zoteroCatalogRequestSchema,
-  zoteroExportRequestSchema,
-  zoteroExportResultSchema,
-  zoteroCatalogSchema,
-  zoteroImportRequestSchema,
-  zoteroImportResultSchema,
-  zoteroItemsPageSchema,
-  zoteroItemsRequestSchema
-} from '@shared/zotero'
-import { registerValidatedHandler, type IpcValidationOptions } from '@platform/ipc/main/ipc'
-import type { TaskRepositoryCompat } from '../taskRepositoryCompat'
-import type { TaskService } from '../taskService'
-import { readLocalApiFileUrl, readLocalApiSnapshot, readSqliteSnapshot } from './zoteroCatalog'
-import { ZoteroImportService } from './zoteroImportService'
-import { createZoteroConnector } from './zoteroConnector'
-import { ZoteroExportService } from './zoteroExportService'
+import type { IpcRegistrar } from '@platform/ipc/main/ipc'
+import { zoteroChannels } from '../contract/ipc'
+import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
+import type { TaskService } from '@main/taskService'
+import { readLocalApiFileUrl, readLocalApiSnapshot, readSqliteSnapshot } from '@main/zotero/zoteroCatalog'
+import { ZoteroImportService } from '@main/zotero/zoteroImportService'
+import { createZoteroConnector } from '@main/zotero/zoteroConnector'
+import { ZoteroExportService } from '@main/zotero/zoteroExportService'
 import { extractPaperProfile } from '@shared/paperProfile'
 import type { PaperInsightState } from '@shared/paperInsight'
 import type { ReaderNotes } from '@shared/readerNotes'
-import { locateZoteroProfile } from './zoteroProfile'
+import { locateZoteroProfile } from '@main/zotero/zoteroProfile'
 
-export function registerZoteroHandlers(service: ZoteroImportService, options: IpcValidationOptions): void {
-  registerValidatedHandler('zotero:catalog', zoteroCatalogRequestSchema, zoteroCatalogSchema, (_event, request) => service.catalog(request.refresh), options)
-  registerValidatedHandler('zotero:items', zoteroItemsRequestSchema, zoteroItemsPageSchema, (_event, request) => service.items(request), options)
-  registerValidatedHandler('zotero:import', zoteroImportRequestSchema, zoteroImportResultSchema, (_event, request) => service.importItems(request), options)
+export function registerZoteroHandlers(service: ZoteroImportService, ipc: IpcRegistrar): void {
+  ipc.handle(zoteroChannels.catalog, (_event, request) => service.catalog(request.refresh))
+  ipc.handle(zoteroChannels.items, (_event, request) => service.items(request))
+  ipc.handle(zoteroChannels.importItems, (_event, request) => service.importItems(request))
 }
 
 /** Wires the import service to the app's task service and repository. */
@@ -79,6 +70,6 @@ export function createZoteroExportService(deps: {
   })
 }
 
-export function registerZoteroExportHandler(service: ZoteroExportService, options: IpcValidationOptions): void {
-  registerValidatedHandler('zotero:export', zoteroExportRequestSchema, zoteroExportResultSchema, (_event, request) => service.exportDocuments(request), options)
+export function registerZoteroExportHandler(service: ZoteroExportService, ipc: IpcRegistrar): void {
+  ipc.handle(zoteroChannels.exportDocuments, (_event, request) => service.exportDocuments(request))
 }

@@ -5,6 +5,7 @@ import type { WebContents } from 'electron'
 import { z } from 'zod'
 import { ipcFailure, ipcSuccess } from '../contract/envelope'
 import { ipcEnvelopeSchema } from '../contract/schemas'
+import type { EventChannel, InvokeChannel } from '../contract/channels'
 
 export interface WebFrameLike {
   url: string
@@ -146,3 +147,22 @@ export function sendValidatedEvent<T>(
   contents.send(channel, ipcEnvelopeSchema(schema).parse(ipcSuccess(value)))
 }
 
+
+/** Registers contract channels with one shared sender policy and maintenance gate. */
+export interface IpcRegistrar {
+  handle<Request, Response>(
+    channel: InvokeChannel<Request, Response>,
+    handler: (event: IpcInvokeEventLike, request: Request) => Promise<Response> | Response
+  ): void
+}
+
+export function createIpcRegistrar(options: IpcValidationOptions): IpcRegistrar {
+  return {
+    handle: (channel, handler) => registerValidatedHandler(channel.channel, channel.request, channel.response, handler, options)
+  }
+}
+
+/** Sends one validated event envelope on a contract event channel. */
+export function emitEvent<Payload>(contents: WebContentsLike, channel: EventChannel<Payload>, value: Payload): void {
+  sendValidatedEvent(contents, channel.channel, channel.payload, value)
+}

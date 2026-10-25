@@ -22,8 +22,8 @@ export default defineConfig({
     emptyOutDir: false,
     lib: {
       entry: {
-        index: resolve(__dirname, 'src/utility/index.ts'),
-        'uninstall-cleanup': resolve(__dirname, 'src/utility/uninstallCleanupEntry.ts')
+        index: resolve(__dirname, 'src/app/utility/index.ts'),
+        'uninstall-cleanup': resolve(__dirname, 'src/app/utility/uninstallCleanupEntry.ts')
       },
       formats: ['cjs'],
       fileName: (_format, entryName) => `${entryName}.js`

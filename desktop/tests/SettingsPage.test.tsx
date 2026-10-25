@@ -3,7 +3,8 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { AppSettings, CopilotixDesktopApi } from '@shared/types'
+import type { AppSettings } from '@shared/types'
+import type { CopilotixDesktopApi } from '@app/contract/desktopApi'
 import SettingsPage from '../src/renderer/pages/SettingsPage'
 
 afterEach(() => {

@@ -23,7 +23,7 @@
 ## 退出標準（全部達成才算完成）
 
 - [ ] 依賴規則（dependency-cruiser）以 **error** 模式通過，0 違規；CI 中執行。
-- [ ] `src/main/index.ts` ≤ 150 行，只做組裝；各功能自行註冊 IPC。
+- [x] `src/main/index.ts`（現 `src/app/main/index.ts`，76 行）≤ 150 行，只做組裝；各功能自行註冊 IPC。
 - [ ] 每個功能模組有 `index.ts` 公開入口與一頁 `README.md`（用途、公開 API、資料檔、測試入口）。
 - [ ] 非生成檔案 ≤ 600 行；例外須在模組 README 說明原因。
 - [ ] `pnpm desktop:test --module <name>` 可只跑單一模組；受影響測試選擇改按模組圖。
@@ -52,7 +52,7 @@
 - [ ] M0 基線（push／遠端 CI 待授權；worktree 清理由主對話處理）
 - [x] M1 規則
 - [x] M2 平台層
-- [ ] M3 中樞拆分
+- [x] M3 中樞拆分
 - [ ] M4 逐模組遷移：zotero · settings · insight · chat · translation · parsing · library · reader
 - [ ] M5 收尾
 
@@ -84,5 +84,6 @@
 
 （各階段完成後在此記錄日期、提交與證據入口，一行一項。）
 
+- 2026-10-25 M3：入口移入 `src/app/{main,preload,renderer,utility}`（輸出仍為 `out/{main,preload,renderer,utility}`，產物檔名不變，renderer bundle 雜湊不變）；`main/index.ts` 723 行拆為 `app/main/index.ts`（76 行生命週期）、`bootstrap`（組裝）、`window`、`services`、`packagedSmoke`；IPC 改為各模組 `contract/ipc.ts` 聲明頻道與 preload API 工廠、`main/ipc.ts` 註冊（library、parsing、translation、reader、chat、insight、zotero、settings，codex 在 platform，視窗在 app），57 個頻道名與舊 preload 逐一相同；`CopilotixDesktopApi` 移至 `app/contract/desktopApi.ts`。基線循環 9→2。typecheck、lint 0 錯誤、847 通過、覆蓋率 84.2／82.1／87.6％（門檻內）、build＋utility smoke 通過、E2E 30 通過／3 跳過，僅既有 minimap 失敗。
 - 2026-10-25 M2：44 個檔案移入 `src/platform/`／`tests/platform/`（ipc、rpc、jobs、database、files、log、network、assets、credentials、uninstall、codex、markdown、pdf）；Core RPC 協定改為 `createCoreProtocol(registry)`，`CoreClient`、`UtilitySupervisor`、`createCoreUtilityRuntime` 由構造參數注入，完整註冊表在 `app/contract/coreRpc.ts`（operation 名、schema、線上校驗不變）；作業 RPC schema 移入 `platform/jobs/contract/rpc.ts`。`platform-no-features` 改為 error（0 違規）；新增 6 個 `app-is-root` warn（`main/index.ts`、`utility/index.ts`、`utilityOperations` 與三個 Rpc 轉接器暫借 app 註冊表型別，M3／M4 消除）。typecheck、lint 0 錯誤、`desktop:test:full` 847 通過／3 跳過、build:bundles＋utility smoke 通過、E2E（ipc／rpc 變更觸發全量）30 通過／3 跳過，僅既有 minimap 失敗。
 - 2026-10-25 M1：加入 dependency-cruiser 16.10.4（`desktop/.dependency-cruiser.cjs`，warn）、ADR 模組地圖與基線；順帶以行內註解消除 master 既有的 lint 錯誤（`paperChatFigures.ts` 的 `no-control-regex`，正則本意即拒絕控制字元）。typecheck、lint（0 錯誤）、`desktop:test:full` 847 通過／3 跳過、deps 9 warn；build:bundles＋utility smoke 通過；全量 E2E（package.json 變更觸發）30 通過／3 跳過／1 失敗：`reader.spec.ts` 小地圖跳轉後標題偏移 15.45 px（期望 16±0.5），重跑 3 次結果相同，M1 未改任何運行代碼，記入技術債。

@@ -119,7 +119,7 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 
 ## 12. 當前狀態與入口
 
-- **進行中：1.3.0 功能模組化 milestone**，進度與退出標準見 [MILESTONE_1_3_ZH.md](docs/MILESTONE_1_3_ZH.md)，目標結構與依賴規則見 [ADR-0001](docs/adr/0001-feature-modules.md)。期間重構只由一個 agent 執行、只搬代碼不改行為；跨功能基礎設施已移入 `desktop/src/platform/<關注點>/<層>/`（ipc、rpc、jobs、database、files、log、network、assets、credentials、uninstall、codex、markdown、pdf），測試在 `desktop/tests/platform/`；新功能等 milestone 完成後再開。
+- **進行中：1.3.0 功能模組化 milestone**，進度與退出標準見 [MILESTONE_1_3_ZH.md](docs/MILESTONE_1_3_ZH.md)，目標結構與依賴規則見 [ADR-0001](docs/adr/0001-feature-modules.md)。期間重構只由一個 agent 執行、只搬代碼不改行為；跨功能基礎設施已移入 `desktop/src/platform/<關注點>/<層>/`（ipc、rpc、jobs、database、files、log、network、assets、credentials、uninstall、codex、markdown、pdf），測試在 `desktop/tests/platform/`；Main／Preload／Renderer／Utility 入口在 `desktop/src/app/`，每個 IPC 頻道在所屬模組的 `contract/ipc.ts` 聲明一次（Main 以 `IpcRegistrar` 註冊，preload 由 `createDesktopApi` 組合），新增頻道不再改 preload；新功能等 milestone 完成後再開。
 - 預設開發分支為 `master`，包含文庫 UI 代碼與文檔。1.2.0 已於 2026-10-19 發布；正式簽章與逐 tag 例外以 docs/CODE_SIGNING_POLICY.md 為準。
 - 首頁背景使用 `homeCipher.ts`／`homeWave.ts`；已選定方案與文庫渲染契約見 [介面規範](docs/UI_PREFERENCES_ZH.md)。舊原型與候選方案由 Git 歷史保留。
 - Zotero 橋接（只在本機）：首頁「从 Zotero 导入」先讀本機只讀 API，失敗則讀 `zotero.sqlite` 唯讀副本；renderer 只傳條目 key，PDF 走既有 importPaths 按雜湊去重；條目關聯存文獻目錄 `zotero/link.v1.json`（無 migration）。閱讀器「导出到 Zotero」經本機連接器：Zotero 來源的論文建帶 `zotero://select` 連結的獨立筆記（連接器不能寫既有條目），其他論文建條目＋PDF＋子筆記，記錄存 `zotero/export.v1.json`。契約與驗證見 [Zotero 橋接](docs/ZOTERO_BRIDGE_ZH.md)。
