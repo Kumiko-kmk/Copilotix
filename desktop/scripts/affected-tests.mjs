@@ -1,9 +1,11 @@
 // Runs only the tests affected by changes since a base ref, plus a small always-run set.
 //   node scripts/affected-tests.mjs unit|e2e [--base <ref>] [--list]
+//   node scripts/affected-tests.mjs unit --module <name>   one module's own tests (ADR-0001)
 // Base: --base, else COPILOTIX_TEST_BASE, else merge-base(HEAD, master). Committed, staged,
 // unstaged and untracked files all count. Toolchain changes, or a base that cannot be
 // resolved, select everything; `pnpm desktop:test:full` / `test:e2e:full` stay explicit full runs.
 import { execFileSync, spawnSync } from 'node:child_process'
+import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -22,7 +24,7 @@ const FULL_TRIGGERS = [
   /^desktop\/scripts\/affected-tests\.mjs$/u
 ]
 /** Specs import only e2e helpers, so source paths map to the flows they exercise. */
-const E2E_ALL = [/^desktop\/e2e\/(?:helpers|launchPolicy)\.ts$/u, /^desktop\/src\/preload\//u, /^desktop\/src\/(?:app|platform\/(?:ipc|rpc))\//u, /^desktop\/src\/main\/index\.ts$/u, /^desktop\/src\/renderer\/(?:App|main)\.tsx$/u]
+const E2E_ALL = [/^desktop\/e2e\/(?:helpers|launchPolicy)\.ts$/u, /^desktop\/src\/(?:app|platform\/(?:ipc|rpc))\//u]
 const E2E_MAP = [
   [/^desktop\/src\/renderer\/(?:components\/(?:Reader(?!Chat|Figure)|MarkdownPane|MarkdownMinimap|PdfPane|DocumentLifecycle)|reader(?!Figure))/u, ['reader', 'qa-fixes']],
   [/(?:ReaderFigure|readerFigureGroups|figureArtifact|figureInsight)/u, ['reader-figures']],
@@ -34,6 +36,20 @@ const E2E_MAP = [
   [/(?:libraryMaintenance|libraryAccessGate|LibraryManagement)/u, ['library']],
   [/(?:import|HomePage|documentService|taskService)/iu, ['qa-fixes']]
 ]
+
+/** A module's own tests: tests/features/<name>/, or tests/platform/ and tests/app/ for those layers. */
+function moduleTestDirectory(name) {
+  return name === 'platform' || name === 'app' ? `tests/${name}` : `tests/features/${name}`
+}
+function testModules() {
+  const features = existsSync(join(DESKTOP, 'tests/features')) ? readdirSync(join(DESKTOP, 'tests/features')) : []
+  return [...features, 'platform', 'app'].filter(name => existsSync(join(DESKTOP, moduleTestDirectory(name))))
+}
+/** The module that owns a changed source path, by the ADR-0001 layout. */
+function owningModule(file) {
+  const match = /^desktop\/src\/(?:features\/([\w-]+)|(platform|app))\//u.exec(file)
+  return match ? match[1] ?? match[2] : null
+}
 
 function git(...args) { return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }) }
 
@@ -64,6 +80,18 @@ function run(cli, args) {
 
 const argv = process.argv.slice(2)
 const mode = argv[0] === 'e2e' ? 'e2e' : 'unit'
+const moduleIndex = argv.indexOf('--module')
+if (moduleIndex >= 0) {
+  const name = argv[moduleIndex + 1]
+  const available = testModules()
+  if (!name || !available.includes(name)) {
+    console.error(`[affected-tests] unknown module "${name ?? ''}"; modules with tests: ${available.join(', ')}`)
+    process.exit(2)
+  }
+  console.log(`[affected-tests] module ${name}: ${moduleTestDirectory(name)}`)
+  if (!argv.includes('--list')) run(VITEST, ['run', moduleTestDirectory(name)])
+  process.exit(0)
+}
 const listOnly = argv.includes('--list')
 const baseIndex = argv.indexOf('--base')
 const base = resolveBase(baseIndex >= 0 ? argv[baseIndex + 1] : undefined)
@@ -81,8 +109,10 @@ if (mode === 'unit') {
   const json = listed.stdout.slice(listed.stdout.indexOf('['))
   if (listed.status !== 0 || !json.startsWith('[')) { process.stderr.write(listed.stderr); process.exit(listed.status || 1) }
   const affected = JSON.parse(json).map(entry => relative(DESKTOP, entry.file).replaceAll('\\', '/'))
-  const selected = [...new Set([...REQUIRED_UNIT_TESTS, ...affected])]
-  console.log(`[affected-tests] ${affected.length} affected + ${REQUIRED_UNIT_TESTS.length} required → ${selected.length} files`)
+  // A change inside a module also runs that module's whole test directory (the module graph).
+  const modules = [...new Set(files.map(owningModule).filter(name => name && testModules().includes(name)))]
+  const selected = [...new Set([...REQUIRED_UNIT_TESTS, ...affected, ...modules.map(moduleTestDirectory)])]
+  console.log(`[affected-tests] ${affected.length} affected + ${modules.length} modules (${modules.join(', ') || 'none'}) + ${REQUIRED_UNIT_TESTS.length} required → ${selected.length} entries`)
   for (const file of selected) console.log(`  ${file}`)
   if (!listOnly) run(VITEST, ['run', ...selected])
 } else {

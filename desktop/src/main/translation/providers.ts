@@ -9,7 +9,7 @@ import {
   type TableTranslationRequest,
   type TableTranslationResponse
 } from '@shared/translationPlanProtocol'
-import type { ProviderTokenUsage } from '../usageAnalyticsService'
+import type { ProviderTokenUsage } from '@features/settings/main'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 type UsageObserver = (provider: 'qwen' | 'deepseek', usage: ProviderTokenUsage) => void | Promise<void>

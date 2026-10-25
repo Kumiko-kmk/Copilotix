@@ -16,7 +16,8 @@ export interface UtilityParentPortLike {
   postMessage(message: string): void
 }
 
-export type CoreUtilityOperationHandler<R extends CoreOperationRegistry = CoreOperationRegistry> = (request: CoreRequestOf<R>, signal: AbortSignal) => Promise<unknown> | unknown
+/** Handlers validate their own payload, so they take the registry-independent request shape. */
+export type CoreUtilityOperationHandler = (request: CoreRequestOf<CoreOperationRegistry>, signal: AbortSignal) => Promise<unknown> | unknown
 
 export class CoreUtilityOperationError extends Error {
   constructor(readonly code: string, message: string, readonly retryable = false) {
@@ -29,7 +30,7 @@ export interface CoreUtilityRuntimeOptions<R extends PlatformOperations = Platfo
   /** Wire validation for every operation this utility serves (the app registry in production). */
   protocol: CoreProtocol<R>
   /** Explicit operation handlers are the extension point for later DB/compute work. */
-  handlers?: Partial<Record<CoreOperationOf<R>, CoreUtilityOperationHandler<R>>>
+  handlers?: Partial<Record<CoreOperationOf<R>, CoreUtilityOperationHandler>>
   onDrain?: () => Promise<void> | void
   onShutdown?: () => Promise<void> | void
   scheduleExit?: (callback: () => void) => void

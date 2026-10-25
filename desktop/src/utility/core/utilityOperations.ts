@@ -1,12 +1,8 @@
-import { paperBriefSaveSchema } from '@shared/paperBrief/contracts'
-import { PaperInsightStore } from './persistence/paperInsightStore'
-import { FigureInsightStore } from './persistence/figureInsightStore'
+import { createInsightOperations } from '@features/insight/utility'
 import { PaperChatFigureStore } from './persistence/paperChatFigureStore'
 import { MarkdownEditStore } from './persistence/markdownEditStore'
 import { markdownEditRequestSchema } from '@shared/markdownEdits'
 import { paperChatFigureRequestSchema } from '@shared/paperChatFigures'
-import { figureInsightRequestSchema, figureInsightSaveSchema } from '@shared/figureInsight'
-import { paperInsightRequestSchema } from '@shared/paperInsight'
 import { libraryCategoriesRequestSchema } from '@shared/libraryCategories'
 import { LibraryCategoryService } from './libraryCategoryService'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
@@ -25,7 +21,7 @@ import { dirname, extname, isAbsolute, join, relative } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { CoreListCursor } from '@shared/coreRpcSchemas'
-import type { CoreOperation, CoreOperationRegistryShape } from '@app/contract/coreRpc'
+import type { CoreOperation } from '@app/contract/coreRpc'
 import {
   CORE_LIST_PAGE_MAX_ROWS,
   coreListPagePayloadSchema,
@@ -75,7 +71,7 @@ import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPla
 import { withoutFirstPage } from './compute/pdfPageRemoval'
 import { RagContentIndexError, RagContentIndexService } from './compute/ragContentIndexService'
 
-type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler<CoreOperationRegistryShape>>>
+type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
 
 interface UtilityPersistenceState {
   database?: V2Database
@@ -154,18 +150,13 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
   const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const noteStore = new ReaderNoteStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const editStore = new MarkdownEditStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
-  const insightStore = () => new PaperInsightStore(requireRepository())
-  const figureInsightStore = () => new FigureInsightStore(requireRepository())
+  const insight = createInsightOperations(requireRepository)
+  const { insightStore, figureInsightStore } = insight
   const categories = new LibraryCategoryService(insightStore, requireRepository)
   const handlers: UtilityHandlerMap = {
-    'figureInsight:get': request => figureInsightStore().get(figureInsightRequestSchema.parse(request.payload)),
-    'compute:figure-insight-descriptor': (request, signal) => figureInsightStore().descriptor(figureInsightRequestSchema.parse(request.payload), signal),
-    'figureInsight:save': request => figureInsightStore().save(figureInsightSaveSchema.parse(request.payload)),
+    ...insight.handlers,
     // Reads every paper's text on first use: compute lane, so quick data requests are not held up.
     'compute:library-categories': (request, signal) => categories.page(libraryCategoriesRequestSchema.parse(request.payload).after ?? 0, signal),
-    'insight:get': (request) => insightStore().get(paperInsightRequestSchema.parse(request.payload).documentId),
-    'insight:save-brief': (request) => { const { documentId, brief, anchors } = paperBriefSaveSchema.parse(request.payload); return insightStore().saveBrief(documentId, brief, anchors) },
-    'insight:brief-source': (request) => insightStore().briefSource(paperInsightRequestSchema.parse(request.payload).documentId),
     'chat:load': (request) => { const { documentId, before } = paperChatLoadRequestSchema.parse(request.payload); return chatStore.load(documentId, before) },
     'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
     'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),
@@ -360,7 +351,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     }
   }
 
-  for (const [operation, handler] of Object.entries(handlers) as Array<[CoreOperation, CoreUtilityOperationHandler<CoreOperationRegistryShape>]>) {
+  for (const [operation, handler] of Object.entries(handlers) as Array<[CoreOperation, CoreUtilityOperationHandler]>) {
     const lane = operationLane(operation)
     if (!lane) continue
     handlers[operation] = (request, signal) => runOnLane(lane, () => handler(request, signal)).catch((error: unknown) => {

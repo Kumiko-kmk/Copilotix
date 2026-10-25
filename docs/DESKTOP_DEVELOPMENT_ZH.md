@@ -45,7 +45,8 @@ pnpm desktop:dev
 
 | 命令 | 范围 |
 | --- | --- |
-| `pnpm desktop:test` | 只跑受改动影响的单元测试（`.test.ts`／`.test.tsx`／`.test.mjs` 按 import 图）＋每次必跑的安全集；`desktop:test:changed` 为同一命令 |
+| `pnpm desktop:test` | 只跑受改动影响的单元测试（`.test.ts`／`.test.tsx`／`.test.mjs` 按 import 图，改动落在某模块时另跑该模块整个测试目录）＋每次必跑的安全集；`desktop:test:changed` 为同一命令 |
+| `pnpm desktop:test --module <name>` | 只跑一个模块自己的测试：`tests/features/<name>/`，或 `platform`、`app`（ADR-0001） |
 | `pnpm desktop:test:e2e:affected` | smoke＋按改动路径映射的 E2E spec |
 | `pnpm desktop:test:ui` | 显式运行 DOM／React 回归 |
 | `pnpm desktop:test:full` | 所有保留的单元与集成测试 |

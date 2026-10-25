@@ -9,7 +9,7 @@ import { captionFigureKey } from '@shared/figureMentions'
 import { PAPER_CHAT_MAX_FIGURE_IMAGES, PAPER_CHAT_MAX_IMAGE_BYTES, paperChatFigureRequestSchema, paperChatFigureSourceSchema,
   type PaperChatFigureRequest, type PaperChatFigureSource } from '@shared/paperChatFigures'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
-import type { FigureInsightStore } from './figureInsightStore'
+import type { FigureInsightStore } from '@features/insight/utility'
 import type { V2TaskRepositoryCompat } from './v2TaskRepositoryCompat'
 
 const mappingsSchema = z.object({ version: z.literal(BLOCK_MAPPING_VERSION), mappings: z.array(blockMappingSchema).max(100_000) }).passthrough()

@@ -11,3 +11,4 @@ export const libraryCoreRequestSchema = libraryRequestSchema.extend({
 }).strict()
 export type LibraryRequest = z.infer<typeof libraryRequestSchema>
 export type LibraryResult = z.infer<typeof libraryResultSchema>
+export type LibraryCoreRequest = z.infer<typeof libraryCoreRequestSchema>

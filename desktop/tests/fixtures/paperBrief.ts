@@ -1,4 +1,4 @@
-import type { PaperBriefContent } from '../../src/shared/paperBrief/schema'
+import type { PaperBriefContent } from '../../src/features/insight/core/paperBrief/schema'
 
 /** A brief within every length range of BRIEF_LENGTHS, so one provider answer is accepted as is. */
 export const briefContent: PaperBriefContent = {

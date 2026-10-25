@@ -69,8 +69,8 @@ main ──▶ runtime ──▶ core ◀── runtime ◀── utility
 | 跨层契约 | `shared/ipcSchemas.ts`、`types.ts`、`coreRpcSchemas.ts`、`ragSchemas.ts`、`paperChat*Schemas.ts`、`paperInsight.ts`、`figureInsight.ts`、`librarySchemas.ts`、`libraryCategories.ts`、`translationPlanProtocol.ts` | 所有 IPC／RPC／磁盘 JSON 的 Zod 契约；`documentSummary.ts` 是文档摘要唯一投影 |
 | 文档纯逻辑 | `shared/markdownBlocks.ts`、`standardMarkdown.ts`、`mathDelimiters.ts`、`readerDocument.ts`、`readerAnnotations.ts`、`readerFigureGroups.ts`、`readerFigureLayout.ts`、`figureArtifacts.ts`、`titleNaming.ts`、`paperBrief/` | 无 I/O 的解析、映射、导出投影与提示词构造，可在任意进程运行 |
 | Core 契约与基础件 | `platform/rpc`（协定与 `CoreClient`）、`platform/jobs`、`core/types.ts`、`core/ports.ts`、`core/blockMapping.ts`；完整 RPC 注册表在 `app/contract/coreRpc.ts` | 文件系统路径实现位于 `platform/files/runtime/pathPolicy.ts`，由 Main 与 Utility 共用 |
-| Preload 桥 | `preload/index.ts`、`ipcClient.ts` | 只暴露 `window.copilotix` 显式领域方法 |
-| Main：外壳与 IPC | `main/index.ts`、`ipc.ts`、`libraryAccessGate.ts`、`assetProtocol.ts`、`singleInstance.ts`、`networkProxy.ts`、`logger.ts` | 生命周期、窗口、托盘、IPC 注册；所有 handler 经 `registerValidatedHandler` |
+| Preload 桥 | `app/preload/index.ts`、`app/contract/desktopApi.ts`、`platform/ipc/preload/{bridge,ipcClient}.ts` | 只暴露 `window.copilotix` 显式领域方法；方法与频道由各模块 `contract/ipc.ts` 组合 |
+| Main：外壳与 IPC | `app/main/{index,bootstrap,window,services,packagedSmoke,singleInstance}.ts`、`platform/ipc/main/ipc.ts`、`libraryAccessGate.ts`、`platform/{assets,network,log}` | 生命周期、窗口、托盘与组装；各模块 `main/ipc.ts` 以 `IpcRegistrar.handle(契约频道, handler)` 注册，底层仍经 `registerValidatedHandler` |
 | Main：Utility 桥 | `utilitySupervisor.ts`、`electronUtilityFork.ts`、`utilityEntryPath.ts`、`rpc*.ts`、`taskRepositoryCompat.ts` | Utility 生命周期与 RPC 代理；`rpc*` 只把端口方法映射为固定 operation |
 | Main：文档与作业 | `taskService.ts`、`documentCommandService.ts`、`documentProjection.ts`、`artifactService.ts`、`figureArtifactStore.ts`、`jobScheduler.ts`、`*JobRunner.ts`、`progressReporter.ts` | 导入／重试／删除／导出与 durable job 执行；只经 JobRepository／TaskCompute 端口改状态 |
 | Main：外部服务 | `parserClient.ts`、`fileUploader.ts`、`translation/`、`chat/chatProvider.ts`、`credentialVault.ts`、`settingsService.ts`、`usageAnalyticsService.ts` | 网络、凭据与设置；Token／Key 不离开 Main |
@@ -336,7 +336,6 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 ## 14. 已知結構債（未處理）
 
 - `v2TaskRepositoryCompat.ts`（約 1300 行）仍以舊 `CopilotixTask` 投影同時承擔文檔、artifact、翻譯塊、標註、設置；宜按聚合拆成獨立 Repository，Main 側 `TaskRepositoryCompat` 隨之收窄。
-- `main/index.ts` 內聯約 20 個 IPC handler；宜按 `chat/*Ipc.ts` 的模式拆出文檔、文庫、設置、窗口註冊模組。
 - 過大單文件：`paperArchive/PaperArchiveScene.ts`、`compute/markdownTranslationPlan.ts`、`MarkdownPane.tsx`、`MarkdownMinimap.tsx`、`PdfPane.tsx`。
 - Renderer 根目錄平鋪十餘個 reader／pdf 模組，待按「閱讀工作台／文庫」分子目錄；搬移前先與其他 worktree 協調以免衝突。
 - `ragSchemas`／`sqliteRagRepository`／`rag-content-index` 的 rag 前綴已名不副實；作業類型字串已持久化，只能改代碼名。`database:flush` operation 目前 Main 未調用。

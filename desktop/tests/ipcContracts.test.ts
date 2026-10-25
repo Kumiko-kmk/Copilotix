@@ -6,13 +6,13 @@ import { ipcEnvelopeSchema } from '../src/platform/ipc/contract/schemas'
 import { decodeIpcEvent, decodeIpcResponse } from '../src/platform/ipc/preload/ipcClient'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { assertTrustedSender, isTrustedRendererUrl, registerValidatedHandler, toIpcError, type IpcInvokeEventLike, type IpcMainLike } from '../src/platform/ipc/main/ipc'
+import { assertTrustedSender, createIpcRegistrar, isTrustedRendererUrl, registerValidatedHandler, toIpcError, type IpcInvokeEventLike, type IpcMainLike } from '../src/platform/ipc/main/ipc'
 import { z } from 'zod'
 import { computeDocumentChange } from '../src/main/documentProjection'
 import { randomUUID } from 'node:crypto'
-import { registerPaperInsightHandlers } from '../src/main/chat/paperInsightIpc'
-import { type PaperInsightService } from '../src/main/chat/paperInsightService'
-import { paperInsightChangedSchema } from '../src/shared/paperInsight'
+import { registerPaperInsightHandlers } from '../src/features/insight/main/ipc'
+import { type PaperInsightService } from '../src/features/insight/main/paperInsightService'
+import { paperInsightChangedSchema } from '../src/features/insight/contract/paperInsight'
 
 describe("ipcContracts", () => {
   describe('IPC contracts', () => {
@@ -308,10 +308,10 @@ describe("paperInsightIpc", () => {
     const owner = { isDestroyed: () => false }, frame = { url: pathToFileURL(resolve('renderer/index.html')).href }
     const event = { sender: { mainFrame: frame, getURL: () => frame.url, isDestroyed: () => false, send: () => undefined }, senderFrame: frame }
     const get = vi.fn(async () => ({ status: 'missing' })), generate = vi.fn(async () => undefined), cancel = vi.fn(() => ({ cancelled: true }))
-    registerPaperInsightHandlers({ get, generate, cancel } as unknown as PaperInsightService, {
+    registerPaperInsightHandlers({ get, generate, cancel } as unknown as PaperInsightService, createIpcRegistrar({
       getMainWindow: () => owner, fromWebContents: () => owner, rendererEntryPath: resolve('renderer/index.html'),
       ipcMain: { handle: (channel, handler) => { handlers.set(channel, handler) } }
-    })
+    }))
     const request = { documentId: randomUUID() }
     for (const channel of ['paperInsight:get', 'paperInsight:generate', 'paperInsight:cancel']) {
       expect(await handlers.get(channel)!(event, { ...request, path: '/escape' })).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } })

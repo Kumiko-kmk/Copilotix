@@ -5,7 +5,7 @@ import ArchiveText from '../src/renderer/paperArchive/ArchiveText'
 import SafeMarkdown from '../src/renderer/components/SafeMarkdown'
 import BriefContent from '../src/renderer/paperArchive/BriefContent'
 import { briefContent } from './fixtures/paperBrief'
-import type { PaperBrief } from '../src/shared/paperBrief/schema'
+import type { PaperBrief } from '../src/features/insight/core/paperBrief/schema'
 
 afterEach(cleanup)
 

@@ -5,7 +5,7 @@
 ## Zotero → Copilotix 導入（已實作）
 
 - 入口：首頁「从 Zotero 导入」→ `ZoteroImportDialog`。左欄是分類樹，另有「全部條目」和「未分類條目」；右欄只列出帶 PDF 附件的條目，可篩選、勾選，每頁最多 200 條。
-- 讀取順序（`main/zotero/zoteroCatalog.ts`）：
+- 讀取順序（`features/zotero/main/zoteroCatalog.ts`）：
   1. 先用 Zotero 本機 API `http://127.0.0.1:<port>/api/users/0/{collections,items}`。只讀，預設不含回收站；需在 Zotero 勾選「設定 → 進階 → 允許此電腦上的其他應用程式與 Zotero 通訊」（pref `httpServer.localAPI.enabled`）。
   2. 若 Zotero 沒有回應、返回 403 或其他非 2xx，就把 `zotero.sqlite`（含 `-wal`）複製到應用 temp 目錄，以唯讀方式讀這份副本，讀完刪除副本。介面會顯示退回的原因。
   - 資料夾位置取自預設 profile 的 `prefs.js`（`extensions.zotero.dataDir`／`useDataDir`、`baseAttachmentPath`、`httpServer.port`），找不到就用 `~/Zotero`。
@@ -16,8 +16,8 @@
   - 兼容：不新增 migration，不改 IPC 既有通道、Core RPC 或資料庫。舊版本會忽略這個目錄。
   - 備份／恢復／遷移：隨完整文獻目錄一起複製；卸載清理按文獻目錄處理，沒有逐檔清單需要同步。
   - 恢復語義：檔案損壞或不合 schema 時視為「沒有關聯」，不阻塞導入；再次從 Zotero 導入同一條目就會重建。
-- IPC：`zotero:catalog`、`zotero:items`、`zotero:import`（schema 在 `shared/zotero.ts`），經 `registerValidatedHandler` 校驗來源，並受文庫維護鎖約束。
-- 測試：`desktop/tests/zoteroBridge.test.ts` 覆蓋以下行為：用最小 Zotero schema 的 sqlite 副本驗證回收站／路徑解析；mock 本機 API 的成功、403 與連不上；`prefs.js` 定位；導入時新建與既有論文的關聯、缺檔報錯、已導入標記、過期快照拒絕。2026-10-21 用使用者真實文庫的唯讀副本試讀：該文庫 3 個分類和 103 個父條目都在回收站，所以只列出 2 條活條目（其中 1 個 PDF 不在本機）。
+- IPC：`zotero:catalog`、`zotero:items`、`zotero:import`（schema 在 `features/zotero/contract/zotero.ts`，頻道在同目錄 `ipc.ts`），經 `registerValidatedHandler` 校驗來源，並受文庫維護鎖約束。
+- 測試：`desktop/tests/features/zotero/zoteroBridge.test.ts` 覆蓋以下行為：用最小 Zotero schema 的 sqlite 副本驗證回收站／路徑解析；mock 本機 API 的成功、403 與連不上；`prefs.js` 定位；導入時新建與既有論文的關聯、缺檔報錯、已導入標記、過期快照拒絕。2026-10-21 用使用者真實文庫的唯讀副本試讀：該文庫 3 個分類和 103 個父條目都在回收站，所以只列出 2 條活條目（其中 1 個 PDF 不在本機）。
 
 ## Copilotix → Zotero 導出（已實作）
 

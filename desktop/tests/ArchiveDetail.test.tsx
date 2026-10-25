@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import ArchiveDetail from '../src/renderer/paperArchive/ArchiveDetail'
 import { briefGeneration } from './fixtures/paperBrief'
-import { parseBriefResponse, assembleBrief, buildFullBriefContext } from '../src/shared/paperBrief'
-import type { PaperInsightSource } from '../src/shared/paperInsight'
+import { parseBriefResponse, assembleBrief, buildFullBriefContext } from '../src/features/insight/core/paperBrief'
+import type { PaperInsightSource } from '../src/features/insight/contract/paperInsight'
 
 const query = vi.hoisted(() => ({ data: undefined as undefined | { markdown: string; translatedMarkdown: string; summary: { updatedAt: string } } }))
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: !query.data, data: query.data }), useQueryClient: () => ({}) }))

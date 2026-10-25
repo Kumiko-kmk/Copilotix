@@ -11,7 +11,7 @@ import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRe
 import { ParseJobRunner } from '../src/main/parseJobRunner'
 import { TranslationJobRunner } from '../src/main/translationJobRunner'
 import { PathPolicy } from '../src/platform/files/runtime/pathPolicy'
-import { SettingsService } from '../src/main/settingsService'
+import { SettingsService } from '../src/features/settings/main/settingsService'
 import { TaskService } from '../src/main/taskService'
 import { DocumentCommandService } from '../src/main/documentCommandService'
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'

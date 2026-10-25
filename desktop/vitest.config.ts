@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  resolve: { alias: { '@app': resolve(__dirname, 'src/app'), '@platform': resolve(__dirname, 'src/platform'), '@features': resolve(__dirname, 'src/features'), '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@runtime': resolve(__dirname, 'src/runtime'), '@main': resolve(__dirname, 'src/main') } },
+  resolve: { alias: { '@app': resolve(__dirname, 'src/app'), '@platform': resolve(__dirname, 'src/platform'), '@features': resolve(__dirname, 'src/features'), '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@runtime': resolve(__dirname, 'src/runtime'), '@main': resolve(__dirname, 'src/main'), '@renderer': resolve(__dirname, 'src/renderer') } },
   // Mirrors the renderer config: the paper archive embeds its cassette model with `?inline`.
   assetsInclude: ['**/*.glb'],
   test: {
@@ -44,9 +44,9 @@ export default defineConfig({
         'release/**',
         '**/generated/**',
         '**/*.d.ts',
-        // Electron owns process bootstrap and utility-process creation; these
-        // two adapters have no meaningful unit-test boundary.
-        'src/main/index.ts',
+        // Electron owns process bootstrap (the Main composition root) and utility-process creation; these
+        // adapters have no meaningful unit-test boundary.
+        'src/app/main/**',
         'src/platform/rpc/main/electronUtilityFork.ts',
         // These files are type-only contracts after TypeScript erasure.
         'src/core/ports.ts',

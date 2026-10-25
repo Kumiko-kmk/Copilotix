@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { TUTORIAL_PAPER_SHA256 } from '@shared/tutorialSample'
 import type { DocumentSummary } from '@shared/ipcSchemas'
-import type { CopilotixDesktopApi } from '@shared/types'
+import type { CopilotixDesktopApi } from '@app/contract/desktopApi'
 import TutorialPage from '../src/renderer/pages/TutorialPage'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.localStorage.clear() })

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { LibraryAccessGate } from '../src/main/libraryAccessGate'
-import { acquirePrimaryInstance } from '../src/main/singleInstance'
+import { acquirePrimaryInstance } from '../src/app/main/singleInstance'
 
 describe('library operation isolation', () => {
   it('excludes in-flight UI operations and locks all data access until maintenance finishes', async () => {

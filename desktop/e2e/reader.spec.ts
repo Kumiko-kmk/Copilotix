@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
 import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
-import type { CopilotixDesktopApi } from '../src/shared/types'
+import type { CopilotixDesktopApi } from '../src/app/contract/desktopApi'
 
 const FIXTURE_TRANSLATED_MARKDOWN = [
   '# 测试文档',

@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
+import type { PaperInsightSource, PaperInsightState } from '@features/insight/contract/paperInsight'
 import { buildReaderFigureGeometries, type ReaderFigureGeometry } from '@shared/readerFigureGroups'
 import type { ArchivePaper } from './archiveShelves'
 

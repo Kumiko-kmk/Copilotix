@@ -1,6 +1,5 @@
-import { CONTRIBUTION_KIND_LABELS, type PaperBrief } from '@shared/paperBrief/schema'
-import type { BriefAnchor } from '@shared/paperBrief/contracts'
-import { backgroundPoints } from '@shared/paperBrief/background'
+import { CONTRIBUTION_KIND_LABELS, type PaperBrief, backgroundPoints } from '@features/insight/core'
+import type { BriefAnchor } from '@features/insight/core'
 import ArchiveText from './ArchiveText'
 
 export type BriefTab = 'overview' | 'findings' | 'limits'

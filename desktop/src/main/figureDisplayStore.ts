@@ -5,12 +5,9 @@ import {
   FIGURE_DISPLAY_MAX,
   figureDisplayChoicesSchema,
   figureDisplayFileSchema,
-  figureDisplayRequestSchema,
-  figureDisplaySetRequestSchema,
   type FigureDisplayChoices,
   type FigureDisplaySetRequest
 } from '@shared/figureDisplay'
-import { registerValidatedHandler, type IpcValidationOptions } from '@platform/ipc/main/ipc'
 
 /**
  * Reader figure display choices, one small JSON file in each document folder. It is backed up,
@@ -57,11 +54,6 @@ export class FigureDisplayStore {
       return {}
     }
   }
-}
-
-export function registerFigureDisplayHandlers(store: FigureDisplayStore, options: IpcValidationOptions): void {
-  registerValidatedHandler('reader-figure-display:get', figureDisplayRequestSchema, figureDisplayChoicesSchema, (_event, request) => store.get(request.documentId), options)
-  registerValidatedHandler('reader-figure-display:set', figureDisplaySetRequestSchema, figureDisplayChoicesSchema, (_event, request) => store.set(request), options)
 }
 
 async function writeJsonAtomic(target: string, value: unknown): Promise<void> {
