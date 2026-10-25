@@ -7,12 +7,11 @@ import { createTranslationProviders } from './providers'
 import { executableProviderOrder } from '../contract/providerPolicy'
 import { runTranslationPlan } from './translationPlanOrchestrator'
 import type { CredentialVault } from '@platform/credentials/main/credentialVault'
-import type { SettingsService } from '@features/settings/main'
-import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
+import type { SettingsService, UsageAnalyticsRecorder } from '@features/settings/main'
+import type { TaskRepositoryCompat } from '@features/library/contract/taskRepository'
 import type { TaskLogger } from '@platform/log/main/logger'
 import { ArtifactService } from '@main/artifactService'
 import { ProgressReporter } from '@platform/jobs/main/progressReporter'
-import type { UsageAnalyticsRecorder } from '@features/settings/main'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 

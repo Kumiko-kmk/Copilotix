@@ -14,7 +14,7 @@ import { MARKDOWN_MAPPING_ALGORITHM_VERSION, TABLE_TRANSLATION_CACHE_VERSION, TA
 import { applyTableTranslation, buildTableTranslationUnits, type TableTranslationUnit } from './tableTranslation'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
-import type { TranslationJobBinding, V2TaskRepositoryCompat } from '../../../utility/core/persistence/v2TaskRepositoryCompat'
+import type { TranslationJobBinding, V2TaskRepositoryCompat } from '@features/library/utility'
 import { processor, MAX_TRANSLATION_BATCH_ITEMS, isAutomaticUnit, countsFor, mutationFor, checkpointFor, collectPlainSegments, normalizeTranslatedText, buildReferenceActions, translationBlockId, stableUuid, sha256, joinMarkdownBlocks, unitMarkdownMap, legacyCacheKey, assertPersistableTranslationBatch, translationBatchFits, assertTranslationBatchSize, planKey, normalizeCursor, normalizeLimit, parseJson, isRecord, isPlanMetadata, isTranslationProviderId, arraysEqual, nestedArraysEqual, isAbsolutePath, syncDirectory, type TranslationPlanRepository, type TranslationPlanManagerOptions, type UnitState, type PlanState, type PlanMetadata, type PreviousManifest } from './planModel'
 export type { TranslationPlanRepository, TranslationPlanManagerOptions } from './planModel'
 

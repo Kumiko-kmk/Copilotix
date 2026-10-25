@@ -1,6 +1,6 @@
 import { Notification } from 'electron'
-import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
-import type { TaskService } from '@main/taskService'
+import type { TaskRepositoryCompat } from '../contract/taskRepository'
+import type { TaskService } from './taskService'
 
 /** A system notification when a document finishes; clicking it opens that document. */
 export function registerTaskNotifications(tasks: TaskService, repository: Pick<TaskRepositoryCompat, 'getTask'>, actions: {

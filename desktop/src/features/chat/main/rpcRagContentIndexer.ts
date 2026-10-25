@@ -1,6 +1,6 @@
 import type { CorePayloadOf, CoreRequester, CoreResultOf } from '@platform/rpc/contract/protocol'
 import type { ChatOperations } from '../contract/rpc'
-import { COMPUTE_RPC_TIMEOUT_MS } from '@main/rpcTaskCompute'
+import { COMPUTE_RPC_TIMEOUT_MS } from '@features/library/main'
 
 export type RpcRagContentIndexResult = CoreResultOf<ChatOperations, 'compute:rag-content-index'>
 

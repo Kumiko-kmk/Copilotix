@@ -9,8 +9,9 @@ import type { CopilotixTask } from '@shared/types'
 import { DEFAULT_SETTINGS } from '../src/shared/constants'
 import { V2Database } from '../src/platform/database/utility/v2Database'
 import { SqliteRagRepository } from '../src/features/chat/utility/sqliteRagRepository'
-import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import { byteBoundedPage, createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
+import { V2TaskRepositoryCompat } from '../src/features/library/utility/v2TaskRepositoryCompat'
+import { byteBoundedPage } from '../src/features/library/utility/paging'
+import { createUtilityOperationHandlers } from '../src/utility/core/utilityOperations'
 
 describe('utility persistence lifecycle', () => {
   it('serializes a flush before close', async () => {

@@ -9,7 +9,7 @@ import type { CopilotixTask } from '@shared/types'
 import { flattenSegments, TRANSLATION_PIPELINE_VERSION, type TableTranslationRequest } from '@features/translation/contract/translationPlanProtocol'
 import { MarkdownTranslationPlanManager } from '../../../src/features/translation/utility/markdownTranslationPlan'
 import { V2Database } from '../../../src/platform/database/utility/v2Database'
-import { V2TaskRepositoryCompat } from '../../../src/utility/core/persistence/v2TaskRepositoryCompat'
+import { V2TaskRepositoryCompat } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111'

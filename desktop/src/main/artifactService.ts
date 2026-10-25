@@ -17,7 +17,7 @@ import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
 import { projectFigureMarkdown, type FigureArtifact } from '@shared/figureArtifacts'
 import type { CacheDocumentFigureRequest, CacheDocumentFigureResult } from '@shared/ipcSchemas'
 import { figureGeometryKey, figureSourceRevision, readFigureArtifacts, storeFigureArtifact, writeDerivedFile } from './figureArtifactStore'
-import type { TaskRepositoryCompat } from './taskRepositoryCompat'
+import type { TaskRepositoryCompat } from '@features/library/contract/taskRepository'
 
 /** Filesystem-facing document/artifact operations kept out of command and runner orchestration. */
 export class ArtifactService {

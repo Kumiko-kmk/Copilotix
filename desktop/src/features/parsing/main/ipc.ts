@@ -1,5 +1,5 @@
 import type { IpcRegistrar } from '@platform/ipc/main/ipc'
-import type { TaskService } from '@main/taskService'
+import type { TaskService } from '@features/library/main'
 import { parsingChannels } from '../contract/ipc'
 
 export function registerParsingIpc(ipc: IpcRegistrar, tasks: Pick<TaskService, 'cacheFigure' | 'repairTextLayer'>): void {

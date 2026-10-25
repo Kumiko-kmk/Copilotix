@@ -1,0 +1,747 @@
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import type { CompatDocumentRow, CompatJobRow } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
+import { projectCompatTask, V2TaskRepositoryCompat } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
+import { V2Database } from '../../../src/platform/database/utility/v2Database'
+import type { CopilotixTask, ReaderAnnotation } from '@shared/types'
+
+const roots: string[] = []
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+})
+
+async function createFixture(useStorageAlias = false): Promise<{ root: string; database: V2Database; repository: V2TaskRepositoryCompat; task: CopilotixTask }> {
+  const root = await mkdtemp(join(tmpdir(), 'copilotix-v2-compat-'))
+  roots.push(root)
+  const database = new V2Database(join(root, 'copilotix-desktop-v2.sqlite3'))
+  const repository = new V2TaskRepositoryCompat(database)
+  const actualOutputDir = join(root, 'documents-v2', 'document-1')
+  await mkdir(actualOutputDir, { recursive: true })
+  const outputDir = useStorageAlias ? join(root, 'storage-alias') : actualOutputDir
+  if (useStorageAlias) await symlink(actualOutputDir, outputDir, process.platform === 'win32' ? 'junction' : 'dir')
+  const now = '2026-01-01T00:00:00.000Z'
+  const task: CopilotixTask = {
+    id: 'document-1',
+    originalName: 'paper.pdf',
+    title: null,
+    name: 'paper.pdf',
+    sourcePath: join(outputDir, 'original.pdf'),
+    sourceHash: 'source-hash',
+    outputDir,
+    status: 'uploading',
+    progress: 0,
+    translationProvider: 'qwen',
+    remoteBatchId: null,
+    remoteDataId: null,
+    remoteResultUrl: null,
+    error: null,
+    createdAt: now,
+    updatedAt: now
+  }
+  repository.insertTask(task)
+  return { root, database, repository, task }
+}
+
+function closeFixture(repository: V2TaskRepositoryCompat): void {
+  repository.close()
+}
+
+describe('temporary v2 task repository compatibility projection', () => {
+  it('stores relative artifact paths through a root alias while still rejecting escaping links', async () => {
+    const fixture = await createFixture(true)
+    try {
+      expect(fixture.database.connection.prepare("SELECT relative_path FROM artifacts WHERE kind='source_pdf'").get())
+        .toEqual({ relative_path: 'original.pdf' })
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(await realpath(fixture.task.outputDir), 'full.md'), 'hash')
+      expect(fixture.database.connection.prepare("SELECT relative_path FROM artifacts WHERE kind='parsed_markdown'").get())
+        .toEqual({ relative_path: 'full.md' })
+      const outside = join(fixture.root, 'outside')
+      await mkdir(outside)
+      await symlink(outside, join(fixture.task.outputDir, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
+      expect(() => fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'escape', 'full.md'), 'unsafe'))
+        .toThrow(/symlink\/junction/)
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('publishes improved translation revisions only after a new attempt', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 45 })
+      const output = join(fixture.task.outputDir, 'full.zh-CN.md')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', output, 'partial-hash')
+      expect(() => fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', output, 'improved-hash')).toThrow('ARTIFACT_COMMIT_CONFLICT')
+      fixture.database.connection.prepare("UPDATE jobs SET attempt=attempt+1 WHERE document_id=? AND kind='translate'").run(fixture.task.id)
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', output, 'improved-hash')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', output, 'improved-hash')
+      expect(fixture.database.connection.prepare("SELECT revision,content_hash FROM artifacts WHERE document_id=? AND kind='translated_markdown' ORDER BY revision").all(fixture.task.id)).toEqual([
+        { revision: 1, content_hash: 'partial-hash' }, { revision: 2, content_hash: 'improved-hash' }
+      ])
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('does not report completion when parse finishes after translation was queued', async () => {
+    const fixture = await createFixture()
+    try {
+      const id = '11111111-1111-4111-8111-111111111111'
+      await mkdir(join(fixture.root, id), { recursive: true })
+      fixture.repository.insertTask({ ...fixture.task, id, outputDir: join(fixture.root, id), sourcePath: join(fixture.root, id, 'original.pdf'), sourceHash: 'batch-paper-hash' })
+      fixture.repository.updateTask(id, { status: 'translating', progress: 0 })
+      fixture.database.connection.prepare("UPDATE jobs SET status='queued',progress=0,updated_at='2026-01-01T00:00:01.000Z' WHERE document_id=? AND kind='translate'").run(id)
+      fixture.database.connection.prepare("UPDATE jobs SET status='succeeded',progress=100,updated_at='2026-01-01T00:00:02.000Z' WHERE document_id=? AND kind='parse'").run(id)
+      expect(fixture.repository.getTask(id)).toMatchObject({ status: 'translating', progress: 0 })
+      expect(fixture.repository.getDocumentSummary(id)?.workflow).toMatchObject({ status: 'queued', activeJobKind: 'translate', progress: 0 })
+      fixture.database.connection.prepare("UPDATE jobs SET status='succeeded',progress=100 WHERE document_id=? AND kind='translate'").run(id)
+      expect(fixture.repository.getTask(id)?.status).toBe('completed')
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('inserts one document, queued parse job and source artifact without a tasks table', async () => {
+    const fixture = await createFixture()
+    try {
+      expect(fixture.repository.getTask(fixture.task.id)).toMatchObject({
+        id: fixture.task.id,
+        outputDir: fixture.task.outputDir,
+        sourcePath: fixture.task.sourcePath,
+        status: 'uploading'
+      })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM documents').get()).toEqual({ count: 1 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM jobs').get()).toEqual({ count: 1 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM artifacts').get()).toEqual({ count: 1 })
+      expect(fixture.database.connection.prepare('SELECT kind,status,max_attempts FROM jobs').get()).toEqual({
+        kind: 'parse', status: 'queued', max_attempts: 5
+      })
+      expect(fixture.database.connection.prepare('SELECT kind,relative_path FROM artifacts').get()).toEqual({
+        kind: 'source_pdf', relative_path: 'original.pdf'
+      })
+      expect(fixture.database.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'").get()).toBeUndefined()
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('lists a large library in stable keyset pages that match single-document projections', async () => {
+    const fixture = await createFixture()
+    try {
+      // Same timestamps force the id tie-breaker to decide page boundaries.
+      for (const [index, createdAt] of ['2026-01-02T00:00:00.000Z', '2026-01-02T00:00:00.000Z', '2026-01-03T00:00:00.000Z'].entries()) {
+        const outputDir = join(fixture.root, 'documents-v2', `document-${index + 2}`)
+        await mkdir(outputDir, { recursive: true })
+        fixture.repository.insertTask({
+          ...fixture.task,
+          id: `document-${index + 2}`,
+          sourceHash: `hash-${index + 2}`,
+          sourcePath: join(outputDir, 'original.pdf'),
+          outputDir,
+          createdAt,
+          updatedAt: createdAt
+        })
+      }
+      fixture.repository.updateTask('document-3', { status: 'translating' })
+
+      const all = fixture.repository.listTasks()
+      expect(all.map((task) => task.id)).toEqual(['document-4', 'document-2', 'document-3', 'document-1'])
+      const paged: string[] = []
+      let after: { createdAt: string; id: string } | null = null
+      do {
+        const page = fixture.repository.listTasksPage(after, 1)
+        paged.push(...page.map((task) => task.id))
+        const last = page.at(-1)
+        after = last ? { createdAt: last.createdAt, id: last.id } : null
+      } while (after)
+      expect(paged).toEqual(all.map((task) => task.id))
+      expect(fixture.repository.listTasks()).toEqual(all.map((task) => fixture.repository.getTask(task.id)))
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('projects translation progress identically in batched summaries and single lookups', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-v2-summaries-'))
+    roots.push(root)
+    const repository = new V2TaskRepositoryCompat(new V2Database(join(root, 'copilotix-desktop-v2.sqlite3')))
+    try {
+      const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']
+      for (const [index, id] of ids.entries()) {
+        const outputDir = join(root, 'documents-v2', id)
+        await mkdir(outputDir, { recursive: true })
+        repository.insertTask({
+          id,
+          originalName: `paper-${index}.pdf`,
+          title: null,
+          name: `paper-${index}.pdf`,
+          sourcePath: join(outputDir, 'original.pdf'),
+          sourceHash: `hash-${index}`,
+          outputDir,
+          status: 'uploading',
+          progress: 0,
+          translationProvider: 'qwen',
+          remoteBatchId: null,
+          remoteDataId: null,
+          remoteResultUrl: null,
+          error: null,
+          createdAt: `2026-01-0${index + 1}T00:00:00.000Z`,
+          updatedAt: `2026-01-0${index + 1}T00:00:00.000Z`
+        })
+      }
+      repository.updateTask(ids[0]!, { status: 'translating' })
+      repository['database'].connection.prepare("UPDATE jobs SET checkpoint_json=? WHERE document_id=? AND kind='translate'")
+        .run(JSON.stringify({ totalBlocks: 10, completedBlocks: 4, failedBlocks: 1 }), ids[0]!)
+
+      const summaries = repository.listDocumentSummaries()
+      expect(summaries).toEqual([ids[1]!, ids[0]!].map((id) => repository.getDocumentSummary(id)))
+      expect(summaries[1]!.workflow.translationProgress).toEqual({ totalBlocks: 10, completedBlocks: 4, failedBlocks: 1 })
+    } finally {
+      repository.close()
+    }
+  })
+
+  it('keeps title metadata separate from the stable UUID storage path', async () => {
+    const fixture = await createFixture()
+    try {
+      const outputDir = fixture.task.outputDir
+      const sourcePath = fixture.task.sourcePath
+      const updated = fixture.repository.updateTask(fixture.task.id, {
+        title: 'Attention Is All You Need',
+        name: 'Attention Is All You Need.pdf'
+      })
+      expect(updated).toMatchObject({
+        title: 'Attention Is All You Need',
+        name: 'Attention Is All You Need.pdf',
+        outputDir,
+        sourcePath
+      })
+      expect(fixture.database.connection.prepare('SELECT display_title,storage_path FROM documents WHERE id=?').get(fixture.task.id))
+        .toEqual({ display_title: 'Attention Is All You Need', storage_path: outputDir })
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('projects remote IDs into parse checkpoint and creates a dependent translate job', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.updateTask(fixture.task.id, {
+        status: 'parsing',
+        progress: 17,
+        remoteBatchId: 'batch-1',
+        remoteDataId: 'data-1',
+        remoteResultUrl: 'https://example.test/result.zip'
+      })
+      const parsing = fixture.repository.getTask(fixture.task.id)
+      expect(parsing).toMatchObject({
+        status: 'parsing', progress: 17,
+        remoteBatchId: 'batch-1', remoteDataId: 'data-1', remoteResultUrl: 'https://example.test/result.zip'
+      })
+      const parseCheckpoint = fixture.database.connection.prepare(
+        "SELECT checkpoint_json FROM jobs WHERE document_id=? AND kind='parse'"
+      ).get(fixture.task.id) as { checkpoint_json: string }
+      expect(JSON.parse(parseCheckpoint.checkpoint_json)).toMatchObject({
+        remoteBatchId: 'batch-1', remoteDataId: 'data-1', remoteResultUrl: 'https://example.test/result.zip'
+      })
+      expect(fixture.database.connection.prepare('PRAGMA table_info(documents)').all()).not.toContainEqual(
+        expect.objectContaining({ name: 'remote_batch_id' })
+      )
+
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 45 })
+      const jobs = fixture.database.connection.prepare(
+        'SELECT kind,status,depends_on_job_id FROM jobs WHERE document_id=? ORDER BY kind'
+      ).all(fixture.task.id) as Array<{ kind: string; status: string; depends_on_job_id: string | null }>
+      const parse = jobs.find((job) => job.kind === 'parse')
+      const translate = jobs.find((job) => job.kind === 'translate')
+      expect(parse).toMatchObject({ status: 'succeeded', depends_on_job_id: null })
+      expect(translate).toMatchObject({ status: 'running' })
+      const parseId = fixture.database.connection.prepare(
+        "SELECT id FROM jobs WHERE document_id=? AND kind='parse'"
+      ).get(fixture.task.id) as { id: string }
+      expect(translate?.depends_on_job_id).toBe(parseId.id)
+      expect(fixture.repository.getTask(fixture.task.id)).toMatchObject({ status: 'translating', progress: 45 })
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('uses the latest translate job for legacy blocks and keeps artifact completion idempotent', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 45 })
+      const parsedPath = join(fixture.task.outputDir, 'full.md')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', parsedPath, 'parsed-hash')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', parsedPath, 'parsed-hash')
+      expect(() => fixture.repository.recordArtifactRevision(
+        fixture.task.id, 'parsed_markdown', parsedPath, 'different-hash'
+      )).toThrow('ARTIFACT_COMMIT_CONFLICT')
+      expect(() => fixture.repository.recordArtifactRevision(
+        fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, '..', 'escaped.md'), 'escaped-hash'
+      )).toThrow()
+      expect(fixture.database.connection.prepare(
+        "SELECT COUNT(*) AS count,MAX(revision) AS revision FROM artifacts WHERE document_id=? AND kind='parsed_markdown'"
+      ).get(fixture.task.id)).toEqual({ count: 1, revision: 1 })
+
+      fixture.repository.upsertTranslationBlock({
+        taskId: fixture.task.id,
+        blockId: 'block-1',
+        sourceHash: 'block-hash',
+        sourceMarkdown: 'A source block',
+        translatedMarkdown: '一个源块',
+        provider: 'qwen',
+        model: 'fixture',
+        status: 'completed',
+        error: null
+      })
+      expect(fixture.repository.listTranslationBlocks(fixture.task.id)).toEqual([expect.objectContaining({
+        taskId: fixture.task.id, blockId: 'block-1', translatedMarkdown: '一个源块'
+      })])
+
+      const translatedPath = join(fixture.task.outputDir, 'full.zh-CN.md')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', translatedPath, 'translated-hash')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'translated_markdown', translatedPath, 'translated-hash')
+      expect(fixture.database.connection.prepare(
+        "SELECT COUNT(*) AS count,MAX(revision) AS revision FROM artifacts WHERE document_id=? AND kind='translated_markdown'"
+      ).get(fixture.task.id)).toEqual({ count: 1, revision: 1 })
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('publishes one canonical content revision/job for duplicate parsed bundles and supersedes obsolete content work', async () => {
+    const fixture = await createFixture()
+    try {
+      const parse = fixture.database.connection.prepare("SELECT id FROM jobs WHERE document_id=? AND kind='parse'").get(fixture.task.id) as { id: string }
+      fixture.database.connection.prepare("UPDATE jobs SET status='succeeded',progress=100,finished_at=?,updated_at=? WHERE id=?")
+        .run('2026-01-01T00:00:01.000Z', '2026-01-01T00:00:01.000Z', parse.id)
+      const outputDir = fixture.task.outputDir
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(outputDir, 'full.md'), checksum: 'content-hash-1', jobId: parse.id },
+        {
+          taskId: fixture.task.id,
+          kind: 'block_mappings',
+          path: join(outputDir, 'block_list.json'),
+          checksum: 'mapping-hash-1',
+          metadata: { mappingFingerprint: 'mapping-fingerprint-1', chunkerFingerprint: 'chunker-v1' },
+          jobId: parse.id
+        }
+      ])
+
+      const firstRevision = fixture.database.connection.prepare('SELECT * FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id) as {
+        content_revision_id: string
+        artifact_id: string
+        content_hash: string
+        mapping_fingerprint: string
+        chunker_fingerprint: string
+        state: string
+      }
+      expect(firstRevision).toMatchObject({
+        content_hash: 'content-hash-1',
+        mapping_fingerprint: 'mapping-fingerprint-1',
+        chunker_fingerprint: 'chunker-v1',
+        state: 'building'
+      })
+      expect(fixture.database.connection.prepare("SELECT id,status FROM jobs WHERE document_id=? AND kind='rag-content-index'").all(fixture.task.id))
+        .toEqual([expect.objectContaining({ id: expect.stringMatching(/^rag-content-job-/u), status: 'queued' })])
+
+      // A retry can use a different parse job and artifact IDs.  The three
+      // fingerprints, rather than artifact provenance, remain the identity.
+      fixture.database.connection.prepare(`
+        INSERT INTO jobs(
+          id,document_id,depends_on_job_id,kind,status,progress,priority,attempt,max_attempts,payload_json,checkpoint_json,
+          available_at,lease_owner,lease_expires_at,error_code,error_message,started_at,finished_at,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run('parse-retry-1', fixture.task.id, null, 'parse', 'succeeded', 100, 0, 1, 5, '{}', '{}',
+        '2026-01-01T00:00:02.000Z', null, null, null, null, '2026-01-01T00:00:02.000Z', '2026-01-01T00:00:02.000Z',
+        '2026-01-01T00:00:02.000Z', '2026-01-01T00:00:02.000Z')
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(outputDir, 'retry.md'), checksum: 'content-hash-1', jobId: 'parse-retry-1' },
+        {
+          taskId: fixture.task.id,
+          kind: 'block_mappings',
+          path: join(outputDir, 'retry-blocks.json'),
+          checksum: 'mapping-hash-1-retry',
+          metadata: { mappingFingerprint: 'mapping-fingerprint-1', chunkerFingerprint: 'chunker-v1' },
+          jobId: 'parse-retry-1'
+        }
+      ])
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ count: 1 })
+      expect(fixture.database.connection.prepare("SELECT COUNT(*) AS count FROM jobs WHERE document_id=? AND kind='rag-content-index'").get(fixture.task.id))
+        .toEqual({ count: 1 })
+      expect(fixture.database.connection.prepare('SELECT artifact_id FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ artifact_id: firstRevision.artifact_id })
+
+      // A deterministic row may already exist in a terminal state after a
+      // failed runner attempt. Republishing the same complete bundle must
+      // recover that row in place; otherwise local_state could be queued with
+      // no executable content job behind it.
+      const firstContentJob = fixture.database.connection.prepare(
+        "SELECT id FROM jobs WHERE document_id=? AND kind='rag-content-index'"
+      ).get(fixture.task.id) as { id: string }
+      fixture.database.connection.prepare(
+        "UPDATE jobs SET status='failed',error_code='RAG_CONTENT_FAILED',error_message='fixture',finished_at=?,updated_at=? WHERE id=?"
+      ).run('2026-01-01T00:00:02.500Z', '2026-01-01T00:00:02.500Z', firstContentJob.id)
+      // Leave an unrelated active row behind to prove supersession happens
+      // before the terminal deterministic target is requeued.
+      fixture.database.connection.prepare(`
+        INSERT INTO jobs(
+          id,document_id,depends_on_job_id,kind,status,progress,priority,attempt,max_attempts,payload_json,checkpoint_json,
+          available_at,lease_owner,lease_expires_at,error_code,error_message,started_at,finished_at,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run('obsolete-content-job', fixture.task.id, null, 'rag-content-index', 'queued', 0, -100, 0, 5, '{}', '{}',
+        '2026-01-01T00:00:02.500Z', null, null, null, null, null, null,
+        '2026-01-01T00:00:02.500Z', '2026-01-01T00:00:02.500Z')
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(outputDir, 'full.md'), checksum: 'content-hash-1', jobId: parse.id },
+        {
+          taskId: fixture.task.id,
+          kind: 'block_mappings',
+          path: join(outputDir, 'block_list.json'),
+          checksum: 'mapping-hash-1',
+          metadata: { mappingFingerprint: 'mapping-fingerprint-1', chunkerFingerprint: 'chunker-v1' },
+          jobId: parse.id
+        }
+      ])
+      expect(fixture.database.connection.prepare('SELECT status,attempt FROM jobs WHERE id=?').get(firstContentJob.id))
+        .toEqual({ status: 'queued', attempt: 1 })
+      expect(fixture.database.connection.prepare('SELECT status,error_code FROM jobs WHERE id=?').get('obsolete-content-job'))
+        .toEqual({ status: 'cancelled', error_code: 'RAG_CONTENT_SUPERSEDED' })
+
+      // A new immutable hash gets a new revision; the old queued work becomes
+      // terminal before the replacement job is inserted.
+      fixture.database.connection.prepare(`
+        INSERT INTO jobs(
+          id,document_id,depends_on_job_id,kind,status,progress,priority,attempt,max_attempts,payload_json,checkpoint_json,
+          available_at,lease_owner,lease_expires_at,error_code,error_message,started_at,finished_at,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run('parse-retry-2', fixture.task.id, null, 'parse', 'succeeded', 100, 0, 1, 5, '{}', '{}',
+        '2026-01-01T00:00:03.000Z', null, null, null, null, '2026-01-01T00:00:03.000Z', '2026-01-01T00:00:03.000Z',
+        '2026-01-01T00:00:03.000Z', '2026-01-01T00:00:03.000Z')
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(outputDir, 'new.md'), checksum: 'content-hash-2', jobId: 'parse-retry-2' },
+        {
+          taskId: fixture.task.id,
+          kind: 'block_mappings',
+          path: join(outputDir, 'new-blocks.json'),
+          checksum: 'mapping-hash-2',
+          metadata: { mappingFingerprint: 'mapping-fingerprint-2', chunkerFingerprint: 'chunker-v1' },
+          jobId: 'parse-retry-2'
+        }
+      ])
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ count: 2 })
+      expect(fixture.database.connection.prepare(
+        'SELECT state FROM rag_content_revisions WHERE document_id=? AND content_hash=?'
+      ).get(fixture.task.id, 'content-hash-1')).toEqual({ state: 'stale' })
+      const contentJobs = fixture.database.connection.prepare(
+        "SELECT status,error_code FROM jobs WHERE document_id=? AND kind='rag-content-index' ORDER BY id"
+      ).all(fixture.task.id) as Array<{ status: string; error_code: string | null }>
+      expect(contentJobs).toHaveLength(3)
+      expect(contentJobs.filter((job) => job.status === 'queued')).toHaveLength(1)
+      expect(contentJobs.filter((job) => job.status === 'cancelled')).toHaveLength(2)
+      expect(contentJobs.filter((job) => job.status === 'cancelled').every((job) => job.error_code === 'RAG_CONTENT_SUPERSEDED')).toBe(true)
+      expect(fixture.database.connection.prepare('SELECT local_state FROM rag_documents WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ local_state: 'queued' })
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('does not create a canonical content job from a translation-only artifact', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 1 })
+      const translatedJob = fixture.database.connection.prepare(
+        "SELECT id FROM jobs WHERE document_id=? AND kind='translate'"
+      ).get(fixture.task.id) as { id: string }
+      fixture.repository.recordArtifactRevision(
+        fixture.task.id,
+        'translated_markdown',
+        join(fixture.task.outputDir, 'full.zh-CN.md'),
+        'translation-hash',
+        {},
+        translatedJob.id
+      )
+      expect(fixture.database.connection.prepare("SELECT COUNT(*) AS count FROM jobs WHERE document_id=? AND kind='rag-content-index'").get(fixture.task.id))
+        .toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ count: 0 })
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('deletes all document-scoped RAG rows in the Utility transaction and leaves a succeeded tombstone', async () => {
+    const fixture = await createFixture()
+    try {
+      const parse = fixture.database.connection.prepare("SELECT id FROM jobs WHERE document_id=? AND kind='parse'").get(fixture.task.id) as { id: string }
+      fixture.database.connection.prepare("UPDATE jobs SET status='succeeded',progress=100,finished_at=?,updated_at=? WHERE id=?")
+        .run('2026-01-01T00:00:01.000Z', '2026-01-01T00:00:01.000Z', parse.id)
+      fixture.repository.recordArtifactRevisions([
+        { taskId: fixture.task.id, kind: 'parsed_markdown', path: join(fixture.task.outputDir, 'full.md'), checksum: 'content-hash', jobId: parse.id },
+        { taskId: fixture.task.id, kind: 'block_mappings', path: join(fixture.task.outputDir, 'block_list.json'), checksum: 'mapping-hash', jobId: parse.id }
+      ])
+      // Include the normal parse -> translate dependency graph: document
+      // deletion must still cascade all workflow jobs and RAG jobs safely.
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 1 })
+      fixture.repository.deleteTask(fixture.task.id)
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM documents WHERE id=?').get(fixture.task.id)).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_documents WHERE document_id=?').get(fixture.task.id)).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_content_revisions WHERE document_id=?').get(fixture.task.id)).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_vector_indexes WHERE document_id=?').get(fixture.task.id)).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_chunks').get()).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_chunk_variants').get()).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT COUNT(*) AS count FROM rag_embeddings').get()).toEqual({ count: 0 })
+      expect(fixture.database.connection.prepare('SELECT state FROM rag_deletion_tombstones WHERE document_id=?').get(fixture.task.id))
+        .toEqual({ state: 'succeeded' })
+      expect(fixture.database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('commits a bounded translation batch against its explicit translate job', async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.repository.updateTask(fixture.task.id, { status: 'translating', progress: 45 })
+      const job = fixture.database.connection.prepare(
+        "SELECT id FROM jobs WHERE document_id=? AND kind='translate'"
+      ).get(fixture.task.id) as { id: string }
+      fixture.repository.commitTranslationBatch({
+        taskId: fixture.task.id,
+        jobId: job.id,
+        blocks: [{
+          blockId: 'batch-block-1',
+          sourceHash: 'batch-source-hash',
+          sourceMarkdown: 'Batch source',
+          translatedMarkdown: '批量译文',
+          provider: 'qwen',
+          model: 'fixture',
+          status: 'completed',
+          error: null
+        }],
+        cacheEntries: [{ cacheKey: 'batch-cache', translated: '批量译文', provider: 'qwen', model: 'fixture' }],
+        checkpoint: { totalBlocks: 1, completedBlocks: 1, failedBlocks: 0, failedBlockIds: [] }
+      })
+
+      expect(fixture.repository.listTranslationBlocks(fixture.task.id, job.id)).toEqual([
+        expect.objectContaining({ taskId: fixture.task.id, jobId: job.id, blockId: 'batch-block-1' })
+      ])
+      expect(fixture.database.connection.prepare('SELECT translated_markdown FROM translation_cache WHERE cache_key=?').get('batch-cache'))
+        .toEqual({ translated_markdown: '批量译文' })
+      const checkpoint = fixture.database.connection.prepare('SELECT checkpoint_json FROM jobs WHERE id=?').get(job.id) as { checkpoint_json: string }
+      expect(JSON.parse(checkpoint.checkpoint_json)).toMatchObject({ totalBlocks: 1, completedBlocks: 1, failedBlocks: 0 })
+      expect(() => fixture.repository.commitTranslationBatch({
+        taskId: fixture.task.id,
+        jobId: 'not-this-job',
+        blocks: [],
+        cacheEntries: []
+      })).toThrow('翻译作业尚未创建')
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('rejects source and derived artifact paths that escape the document root', async () => {
+    const fixture = await createFixture()
+    try {
+      const unsafeOutputDir = join(fixture.root, 'documents-v2', 'document-2')
+      await mkdir(unsafeOutputDir, { recursive: true })
+      expect(() => fixture.repository.insertTask({
+        ...fixture.task,
+        id: 'document-2',
+        outputDir: unsafeOutputDir,
+        sourcePath: unsafeOutputDir
+      })).toThrow()
+      expect(fixture.database.connection.prepare('SELECT id FROM documents WHERE id=?').get('document-2')).toBeUndefined()
+
+      const outside = process.platform === 'win32' ? String.raw`Z:\outside\artifact.md` : '/outside-volume/artifact.md'
+      expect(() => fixture.repository.recordArtifactRevision(
+        fixture.task.id, 'parsed_markdown', outside, 'outside-hash'
+      )).toThrow()
+      expect(() => fixture.repository.recordArtifactRevision(
+        fixture.task.id, 'parsed_markdown', fixture.task.outputDir, 'root-hash'
+      )).toThrow()
+      expect(() => fixture.repository.recordArtifactRevision(
+        fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, '..', 'outside.md'), 'parent-hash'
+      )).toThrow()
+      expect(() => fixture.repository.recordArtifactRevision(
+        fixture.task.id, 'parsed_markdown', `${fixture.task.outputDir}${process.platform === 'win32' ? '\\' : '/'}bad\0name`, 'nul-hash'
+      )).toThrow(/NUL/)
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('requires a current view artifact and stores annotation replacements against that artifact set', async () => {
+    const fixture = await createFixture()
+    try {
+      const annotation = makeAnnotation(fixture.task.id, 'original', 'annotation-1')
+      expect(() => fixture.repository.replaceReaderAnnotations({
+        taskId: fixture.task.id, view: 'original', annotations: [annotation]
+      })).toThrow('当前文档尚无可标注的产物')
+
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'full.md'), 'parsed-hash')
+      expect(fixture.repository.replaceReaderAnnotations({
+        taskId: fixture.task.id, view: 'original', annotations: [annotation]
+      })).toEqual([expect.objectContaining({ taskId: fixture.task.id, view: 'original' })])
+      expect(fixture.repository.listReaderAnnotations(fixture.task.id)).toEqual([expect.objectContaining({
+        id: 'annotation-1', taskId: fixture.task.id, view: 'original', quote: 'alpha'
+      })])
+      const set = fixture.database.connection.prepare(
+        "SELECT document_id,artifact_id,view FROM annotation_sets WHERE document_id=?"
+      ).get(fixture.task.id) as { document_id: string; artifact_id: string; view: string }
+      expect(set).toMatchObject({ document_id: fixture.task.id, view: 'original' })
+
+      const newerTimestamp = new Date(Date.now() + 1_000).toISOString()
+      fixture.database.connection.prepare(`
+        INSERT INTO jobs(
+          id,document_id,depends_on_job_id,kind,status,progress,priority,attempt,max_attempts,payload_json,checkpoint_json,
+          available_at,lease_owner,lease_expires_at,error_code,error_message,started_at,finished_at,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run('parse-2', fixture.task.id, null, 'parse', 'succeeded', 100, 0, 1, 5, '{}', '{}', newerTimestamp,
+        null, null, null, null, newerTimestamp, newerTimestamp, newerTimestamp, newerTimestamp)
+      fixture.repository.recordArtifactRevision(
+        fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'full.v2.md'), 'parsed-hash-v2'
+      )
+      expect(fixture.repository.listReaderAnnotations(fixture.task.id)).toEqual([])
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('records a text-layer repair under the same parse job and keeps original-view annotations', async () => {
+    const fixture = await createFixture()
+    try {
+      const markdownPath = join(fixture.task.outputDir, 'full.md')
+      fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', markdownPath, 'parsed-hash')
+      fixture.repository.replaceReaderAnnotations({ taskId: fixture.task.id, view: 'original', annotations: [makeAnnotation(fixture.task.id, 'original', 'annotation-1')] })
+      // A normal parse revision cannot be replaced under the same job.
+      expect(() => fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', markdownPath, 'repaired-hash')).toThrow('ARTIFACT_COMMIT_CONFLICT')
+
+      fixture.repository.recordTextLayerRepair(fixture.task.id, [
+        { kind: 'parsed_markdown', path: markdownPath, checksum: 'repaired-hash' },
+        { kind: 'layout', path: join(fixture.task.outputDir, 'layout.json'), checksum: 'layout-hash' }
+      ], { textLayerRepair: 1, repairs: 2 })
+
+      const latest = fixture.database.connection.prepare(
+        "SELECT id,revision,content_hash,metadata_json FROM artifacts WHERE document_id=? AND kind='parsed_markdown' ORDER BY revision DESC LIMIT 1"
+      ).get(fixture.task.id) as { id: string; revision: number; content_hash: string; metadata_json: string }
+      expect(latest).toMatchObject({ revision: 2, content_hash: 'repaired-hash' })
+      expect(JSON.parse(latest.metadata_json)).toEqual({ textLayerRepair: 1, repairs: 2 })
+      expect(fixture.repository.listReaderAnnotations(fixture.task.id)).toEqual([expect.objectContaining({ id: 'annotation-1', quote: 'alpha' })])
+      expect(fixture.database.connection.prepare('SELECT artifact_id FROM annotation_sets WHERE document_id=?').get(fixture.task.id)).toEqual({ artifact_id: latest.id })
+      expect(fixture.database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+
+  it('exposes pure document/job projection rules for renderer compatibility', () => {
+    const document: CompatDocumentRow = {
+      id: 'document-1',
+      original_filename: 'paper.pdf',
+      display_title: 'Stable title',
+      storage_path: 'C:/output/documents-v2/document-1',
+      source_checksum: 'hash',
+      translation_provider: 'qwen',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z'
+    }
+    const parse: CompatJobRow = makeJob({
+      id: 'parse-1', kind: 'parse', status: 'succeeded', progress: 42,
+      checkpoint_json: JSON.stringify({ phase: 'parsing', remoteBatchId: 'batch-1', remoteDataId: 'data-1' }),
+      updated_at: '2026-01-01T00:00:01.000Z'
+    })
+    const translate: CompatJobRow = makeJob({
+      id: 'translate-1', kind: 'translate', status: 'partial', progress: 100,
+      depends_on_job_id: 'parse-1', updated_at: '2026-01-01T00:00:02.000Z'
+    })
+    expect(projectCompatTask(document, [translate, parse])).toMatchObject({
+      title: 'Stable title', name: 'Stable title.pdf', outputDir: document.storage_path,
+      status: 'partial', progress: 100, remoteBatchId: 'batch-1', remoteDataId: 'data-1'
+    })
+  })
+
+  it('follows the parse runner stage, not the insertion phase, for uploading versus parsing', () => {
+    const document: CompatDocumentRow = {
+      id: 'document-1', original_filename: 'paper.pdf', display_title: null, storage_path: 'C:/output/documents-v2/document-1',
+      source_checksum: 'hash', translation_provider: 'qwen', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z'
+    }
+    const parse = (checkpoint: object): CompatJobRow => makeJob({ id: 'parse-1', status: 'running', checkpoint_json: JSON.stringify(checkpoint) })
+    expect(projectCompatTask(document, [parse({ phase: 'uploading' })]).status).toBe('uploading')
+    expect(projectCompatTask(document, [parse({ phase: 'uploading', stage: 'uploading' })]).status).toBe('uploading')
+    expect(projectCompatTask(document, [parse({ phase: 'uploading', stage: 'polling' })]).status).toBe('parsing')
+    expect(projectCompatTask(document, [parse({ phase: 'uploading', stage: 'downloading' })]).status).toBe('parsing')
+  })
+
+  it('keeps a PDF-metadata title provisional in the parse checkpoint only', async () => {
+    const fixture = await createFixture()
+    try {
+      const outputDir = join(fixture.root, 'documents-v2', 'document-2')
+      await mkdir(outputDir, { recursive: true })
+      const task: CopilotixTask = {
+        ...fixture.task, id: 'document-2', outputDir, sourcePath: join(outputDir, 'original.pdf'), sourceHash: 'other-hash',
+        title: 'Metadata Title Of The Paper', name: 'Metadata Title Of The Paper.pdf', titleSource: 'pdf-metadata'
+      }
+      fixture.repository.insertTask(task)
+      const checkpoint = (id: string): Record<string, unknown> => JSON.parse((fixture.database.connection
+        .prepare("SELECT checkpoint_json FROM jobs WHERE document_id=? AND kind='parse'").get(id) as { checkpoint_json: string }).checkpoint_json)
+      expect(checkpoint(task.id)).toMatchObject({ titleSource: 'pdf-metadata', provisionalTitle: 'Metadata Title Of The Paper' })
+      expect(checkpoint(fixture.task.id)).not.toHaveProperty('provisionalTitle')
+      expect(fixture.repository.getTask(task.id)).toMatchObject({ title: 'Metadata Title Of The Paper' })
+      expect(fixture.repository.getTask(task.id)).not.toHaveProperty('titleSource')
+    } finally {
+      closeFixture(fixture.repository)
+    }
+  })
+})
+
+function makeAnnotation(taskId: string, view: 'original' | 'translated', id: string): ReaderAnnotation {
+  return {
+    id,
+    taskId,
+    view,
+    kind: 'highlight',
+    color: 'yellow',
+    blockKey: 'content:0',
+    startOffset: 0,
+    endOffset: 5,
+    quote: 'alpha',
+    prefix: '',
+    suffix: '',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z'
+  }
+}
+
+function makeJob(overrides: Partial<CompatJobRow>): CompatJobRow {
+  return {
+    id: 'job',
+    document_id: 'document-1',
+    depends_on_job_id: null,
+    kind: 'parse',
+    status: 'queued',
+    progress: 0,
+    priority: 0,
+    attempt: 0,
+    max_attempts: 5,
+    payload_json: '{}',
+    checkpoint_json: '{}',
+    available_at: '2026-01-01T00:00:00.000Z',
+    lease_owner: null,
+    lease_expires_at: null,
+    error_code: null,
+    error_message: null,
+    started_at: null,
+    finished_at: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    ...overrides
+  }
+}

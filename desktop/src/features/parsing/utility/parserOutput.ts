@@ -1,36 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { createReadStream } from 'node:fs'
 import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { prepareReaderMarkdown, isLocalMarkdownImage } from '@platform/markdown/core/standardMarkdown'
 import { dirname, extname, isAbsolute, join, relative } from 'node:path'
 import type { BlockMapping, CopilotixTask } from '@shared/types'
 import { alignMarkdownBlocks } from '../core/markdownBlocks'
-import { displayPaperTitle, extractPaperTitle } from '@shared/titleNaming'
+import { displayPaperTitle, extractPaperTitle } from '@features/library/core'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../core/blockMapping'
 import { applyTextLayerRepairs, findTextLayerCandidates, planTextLayerRepairs, TEXT_LAYER_REPAIR_VERSION, type TextLayerRepairReport } from '../core/textLayerRepair'
 import { readPdfTextLayer } from './pdfTextLayer'
 import { CoreUtilityOperationError } from '@platform/rpc/utility/coreUtilityRuntime'
-import { V2TaskRepositoryCompat } from '../../../utility/core/persistence/v2TaskRepositoryCompat'
+import { V2TaskRepositoryCompat } from '@features/library/utility'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
+import { hashFile, isNotFound } from '@platform/files/utility/fileHash'
 
 /** Utility side of parsing: publish parser output, rebuild block mappings and repair fragmented lines from the PDF text layer. */
-
-export async function hashFile(path: string): Promise<string> {
-  if (!isAbsolute(path) || path.length > 32_768 || path.includes('\0')) throw new CoreUtilityOperationError('CORE_PROTOCOL_ERROR', 'Invalid compute path', false)
-  const hash = createHash('sha256')
-  await new Promise<void>((resolvePromise, reject) => {
-    const input = createReadStream(path)
-    input.on('data', (chunk) => hash.update(chunk))
-    input.on('end', resolvePromise)
-    input.on('error', reject)
-  })
-  return hash.digest('hex')
-}
-
-export function isNotFound(error: unknown): boolean {
-  return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'ENOENT')
-}
-
 export async function normalizeParserOutput(
   task: CopilotixTask,
   extractedDir: string,

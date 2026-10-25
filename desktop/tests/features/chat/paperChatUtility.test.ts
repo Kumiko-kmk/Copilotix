@@ -10,7 +10,7 @@ import { paperChatStatusSchema, paperContextResultSchema } from '@features/chat/
 import { V2Database } from '../../../src/platform/database/utility/v2Database'
 import { SqliteRagRepository } from '../../../src/features/chat/utility/sqliteRagRepository'
 import { SqliteJobRepository } from '../../../src/platform/jobs/utility/sqliteJobRepository'
-import { V2TaskRepositoryCompat } from '../../../src/utility/core/persistence/v2TaskRepositoryCompat'
+import { V2TaskRepositoryCompat } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
 import { RagContentIndexService } from '../../../src/features/chat/utility/ragContentIndexService'
 import { createUtilityOperationHandlers } from '../../../src/utility/core/utilityOperations'
 

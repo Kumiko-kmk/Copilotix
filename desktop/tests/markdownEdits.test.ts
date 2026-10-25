@@ -14,7 +14,7 @@ import { applyChunkEdits } from '../src/features/chat/utility/paperContextBuilde
 import { MarkdownEditStore } from '../src/utility/core/persistence/markdownEditStore'
 import { MarkdownTranslationPlanManager } from '../src/features/translation/utility/markdownTranslationPlan'
 import { V2Database } from '../src/platform/database/utility/v2Database'
-import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
+import { V2TaskRepositoryCompat } from '../src/features/library/utility/v2TaskRepositoryCompat'
 import { SqliteJobRepository } from '../src/platform/jobs/utility/sqliteJobRepository'
 
 const DOC = '11111111-1111-4111-8111-111111111111'

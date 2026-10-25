@@ -3,7 +3,7 @@ import type { JobScheduler } from '@platform/jobs/main/jobScheduler'
 import type { UtilitySupervisor } from '@platform/rpc/main/utilitySupervisor'
 import type { FigureInsightService, PaperInsightService } from '@features/insight/main'
 import type { PaperChatService } from '@features/chat/main'
-import { LibraryAccessGate } from '@main/libraryAccessGate'
+import { LibraryAccessGate } from '@features/library/main'
 import type { CoreOperationRegistryShape } from '../contract/coreRpc'
 import { AppShell } from './window'
 

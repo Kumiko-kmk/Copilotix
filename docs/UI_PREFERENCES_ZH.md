@@ -60,7 +60,7 @@
 ### 資訊與資料
 
 - 圖片 AI 解讀提供 `window.copilotix.figureInsight.get/generate/cancel/onChanged`，模型只返回 `displayWeight`（唯一綜合展示分數）、`overview`、`takeaway`；不加封面評分／理由／supports。每張結果存 `<文獻目錄>/insight/figures/<SHA256(figureId)>.v1.json`，位置、圖片雜湊和來源版本由程序附加；封面依現有結果讀取排序，不觸發生成，尚無獨立解析窗口或自動批次上傳。原 PNG 定位與傳輸 JPEG98 身份須區分；接口、兼容、傳輸及驗證邊界只在 [圖片 AI 解讀](FIGURE_INSIGHT_ZH.md) 維護。
-- `LibraryPage` 懶載入 Three.js；從文庫進 Reader 用 `returnTo: 'library'` 返回並恢復論文，從教程進入返回教程，其他入口返回首頁。重試與刪除論文在閱讀器頂欄（`DocumentLifecycleActions`）。RhineLabUI 來源與 MIT 許可見 `THIRD_PARTY_NOTICES.md`、`paperArchive/RHINELABUI_LICENSE.txt`；GLB 僅五個外殼網格，沿用 inline／parseAsync 和原 CSP。
+- `LibraryPage` 懶載入 Three.js；從文庫進 Reader 用 `returnTo: 'library'` 返回並恢復論文，從教程進入返回教程，其他入口返回首頁。重試與刪除論文在閱讀器頂欄（`DocumentLifecycleActions`）。RhineLabUI 來源與 MIT 許可見 `THIRD_PARTY_NOTICES.md`、`features/library/renderer/archive/RHINELABUI_LICENSE.txt`；GLB 僅五個外殼網格，沿用 inline／parseAsync 和原 CSP。
 - 每分類一列，列／行循環並記住論文 ID；右下角列數等於分類數，分類名十二字固定寬度居中，箭頭位置固定。分類算法、分頁與緩存只在 [內容分類](LIBRARY_CATEGORIES_ZH.md) 維護。
 - 瀏覽標題移除末尾 `.pdf`，固定兩行高度、單行垂直居中、超出省略；譯文標題固定一行，沒有譯文留空。停留選中論文 180ms 後讀取，與詳情共用 query cache；不另調模型。
 - 選中頁元信息只含單行關鍵詞（空格分隔，按寬度縮至 11px，仍超出省略）及下方總結（v2 `tldr`／v1 `summary`）；不顯示類型、日期、生成狀態。詳情標題下同樣顯示譯文標題，不重複類型／學科／總結；證據基礎與檢驗方式在新舊檔案展示均不顯示，舊字段只作存儲兼容。

@@ -30,8 +30,8 @@ This inventory supplements, and does not replace, embedded package notices.
 The paper archive (文库) page adapts motion curves, camera framing, materials,
 lighting and the cassette shell geometry from RhineLabUI
 (https://github.com/LBEILC/RhineLabUI), MIT License, Copyright (c) 2026 LBEILC.
-desktop/src/renderer/paperArchive/assets/archive-shell.glb contains only the shell
+desktop/src/features/library/renderer/archive/assets/archive-shell.glb contains only the shell
 meshes extracted from its public/assets/archive-cassette.glb. The full MIT notice
-is kept in desktop/src/renderer/paperArchive/RHINELABUI_LICENSE.txt. RhineLabUI is
+is kept in desktop/src/features/library/renderer/archive/RHINELABUI_LICENSE.txt. RhineLabUI is
 an unofficial fan recreation; Copilotix does not include its fonts, audio, archive
 texts or Arknights branding.

@@ -1,0 +1,1064 @@
+import { createHash, randomUUID } from 'node:crypto'
+import { resolvePaperChatModel } from '@features/chat/contract/paperChatSchemas'
+import type { StatementSync } from 'node:sqlite'
+import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
+import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
+import type { AppSettings, CopilotixTask, ReaderAnnotation, ReplaceReaderAnnotationsRequest, TranslationBlockRecord } from '@shared/types'
+import {
+  documentAnnotationSchema,
+  mutateReaderAnnotationsRequestSchema,
+  readerAnnotationSnapshotSchema,
+  type DocumentSummary,
+  type MutateReaderAnnotationsRequest,
+  type ReaderAnnotationSnapshot
+} from '@shared/ipcSchemas'
+import { DEFAULT_SETTINGS } from '@shared/constants'
+import { normalizeEnabledProviders, normalizeProviderOrder } from '@features/translation/contract/providerPolicy'
+import type { ArtifactReference } from './taskRepositoryCompat'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
+import { V2Database } from '@platform/database/utility/v2Database'
+import { projectDocumentSummary } from '../core/documentSummary'
+import { SqliteJobRepository } from '@platform/jobs/utility/sqliteJobRepository'
+import { RAG_DEFAULT_CHUNKER_FINGERPRINT, TERMINAL, WORKFLOW_JOB_QUERY_CHUNK, assertTranslationBatchWithinLimits, projectCompatTask, latestJobOfKind, checkpointForTask, toBatchBlock, parseObject, isTerminalJobStatus, metadataFingerprint, nextLexicalGeneration, toRelativePath, validateAnnotations, type CompatDocumentRow, type V2JobKind, type V2JobStatus, type ListCursor, type DocumentMetadataPatch, type CompatJobRow, type TranslationJobBinding, type ArtifactRevisionInput, type ArtifactBundleRow } from './compatRecords'
+export { RAG_DEFAULT_CHUNKER_FINGERPRINT, projectCompatTask, projectTaskStatus } from './compatRecords'
+export type { CompatDocumentRow, ListCursor, DocumentMetadataPatch, CompatJobRow, TranslationJobBinding, ArtifactRevisionInput } from './compatRecords'
+
+export class CompatDomainError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message)
+    this.name = 'CompatDomainError'
+  }
+}
+
+/** Temporary phase-2 compatibility adapter; remove when services use core ports directly in phase 3. */
+/** Utility-owned implementation. Main talks to this class only through RPC. */
+export class V2TaskRepositoryCompat {
+  private readonly jobRepository: SqliteJobRepository
+  private readonly translationJobById: StatementSync
+  private readonly translationBlockUpsert: StatementSync
+  private readonly translationCacheUpsert: StatementSync
+  private readonly translationCheckpointUpdate: StatementSync
+  private readonly translationBlocksByJob: StatementSync
+
+  constructor(
+    private readonly database: V2Database,
+    private readonly pathPolicy: PathPolicyPort = new PathPolicy()
+  ) {
+    this.jobRepository = new SqliteJobRepository(database)
+    this.translationJobById = database.connection.prepare(
+      "SELECT * FROM jobs WHERE id=? AND document_id=? AND kind='translate'"
+    )
+    this.translationBlockUpsert = database.connection.prepare(`
+      INSERT INTO translation_blocks(
+        job_id,block_id,source_hash,source_markdown,translated_markdown,provider,model,status,error
+      ) VALUES(?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(job_id,block_id) DO UPDATE SET
+        source_hash=excluded.source_hash,
+        source_markdown=excluded.source_markdown,
+        translated_markdown=excluded.translated_markdown,
+        provider=excluded.provider,
+        model=excluded.model,
+        status=excluded.status,
+        error=excluded.error
+    `)
+    this.translationCacheUpsert = database.connection.prepare(`
+      INSERT INTO translation_cache(cache_key,translated_markdown,provider,model,created_at)
+      VALUES(?,?,?,?,?)
+      ON CONFLICT(cache_key) DO UPDATE SET translated_markdown=excluded.translated_markdown,
+        provider=excluded.provider,model=excluded.model,created_at=excluded.created_at
+    `)
+    this.translationCheckpointUpdate = database.connection.prepare(
+      'UPDATE jobs SET checkpoint_json=?, updated_at=? WHERE id=?'
+    )
+    this.translationBlocksByJob = database.connection.prepare(`
+      SELECT ? as taskId, job_id as jobId, block_id as blockId, source_hash as sourceHash,
+        source_markdown as sourceMarkdown, translated_markdown as translatedMarkdown,
+        provider, model, status, error
+      FROM translation_blocks WHERE job_id = ? ORDER BY rowid
+    `)
+  }
+
+  close(): void {
+    this.database.close()
+  }
+
+  getSettings(outputRoot: string): AppSettings {
+    const rows = this.database.connection.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>
+    const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value)])) as Partial<AppSettings>
+    const translationProvider = stored.translationProvider ?? DEFAULT_SETTINGS.translationProvider
+    const translationProviderOrder = normalizeProviderOrder(stored.translationProviderOrder, translationProvider)
+    const enabledTranslationProviders = normalizeEnabledProviders(stored.enabledTranslationProviders, translationProviderOrder)
+    return {
+      ...DEFAULT_SETTINGS,
+      outputRoot: stored.outputRoot ?? outputRoot,
+      formulaEnabled: true,
+      tableEnabled: true,
+      translationProvider: enabledTranslationProviders[0]!,
+      translationProviderOrder,
+      enabledTranslationProviders,
+      codex: stored.codex ?? DEFAULT_SETTINGS.codex,
+      qwenBaseUrl: stored.qwenBaseUrl ?? DEFAULT_SETTINGS.qwenBaseUrl,
+      qwenModel: stored.qwenModel ?? DEFAULT_SETTINGS.qwenModel,
+      deepseekBaseUrl: stored.deepseekBaseUrl ?? DEFAULT_SETTINGS.deepseekBaseUrl,
+      deepseekModel: stored.deepseekModel ?? DEFAULT_SETTINGS.deepseekModel,
+      chatProvider: stored.chatProvider ?? DEFAULT_SETTINGS.chatProvider,
+      // Automatic AI briefs after translation are always on; an old stored false is ignored.
+      autoGeneratePaperInsight: true,
+      qwenChatModel: resolvePaperChatModel('qwen', stored.qwenChatModel),
+      deepseekChatModel: resolvePaperChatModel('deepseek', stored.deepseekChatModel),
+      chatConsentProvider: null,
+      chatConsentVersion: null,
+      credentials: DEFAULT_SETTINGS.credentials
+    }
+  }
+
+  saveSettings(settings: AppSettings): void {
+    const hidden = new Set(['credentials', 'chatConsentProvider', 'chatConsentVersion'])
+    this.database.transaction(() => {
+      this.database.connection.exec("DELETE FROM settings WHERE key IN ('chatConsentProvider', 'chatConsentVersion')")
+      const statement = this.database.connection.prepare(
+        'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
+      )
+      for (const [key, value] of Object.entries(settings)) if (!hidden.has(key)) statement.run(key, JSON.stringify(value))
+    })
+  }
+
+  getMigrationMarker(id: string): boolean {
+    return Boolean(this.database.connection.prepare('SELECT 1 FROM app_migrations WHERE id=?').get(id))
+  }
+
+  markMigration(id: string): void {
+    this.database.connection
+      .prepare('INSERT OR IGNORE INTO app_migrations(id, applied_at) VALUES(?, ?)')
+      .run(id, new Date().toISOString())
+  }
+
+  /** All tasks, newest first. Prefer the paged variant for RPC responses. */
+  listTasks(): CopilotixTask[] {
+    return this.listTasksPage(null, -1)
+  }
+
+  /** One keyset page in list order; `after` is the last row of the previous page. */
+  listTasksPage(after: ListCursor | null, limit: number): CopilotixTask[] {
+    return this.readProjectionPage(after, limit).map(({ task }) => task)
+  }
+
+  getTask(id: string): CopilotixTask | null {
+    return this.readProjection(id)
+  }
+
+  /**
+   * Return the only filesystem binding a translation plan may use.  Keeping
+   * this lookup narrow prevents callers from accepting an arbitrary output
+   * directory or a parse job that happens to share the same document.
+   */
+  requireTranslationJobBinding(taskId: string, jobId: string): TranslationJobBinding {
+    const document = this.readDocument(taskId)
+    if (!document) throw new CompatDomainError('TRANSLATION_TASK_NOT_FOUND', '翻译任务不存在')
+    const job = this.translationJobById.get(jobId, taskId) as CompatJobRow | undefined
+    if (!job) throw new CompatDomainError('TRANSLATION_JOB_NOT_FOUND', '翻译作业不存在')
+    return {
+      taskId,
+      jobId,
+      attempt: job.attempt,
+      outputDir: document.storage_path,
+      translationProvider: document.translation_provider,
+      checkpoint: parseObject(job.checkpoint_json),
+      status: job.status
+    }
+  }
+
+  listDocumentSummaries(): DocumentSummary[] {
+    return this.listDocumentSummariesPage(null, -1)
+  }
+
+  listDocumentSummariesPage(after: ListCursor | null, limit: number): DocumentSummary[] {
+    return this.readProjectionPage(after, limit).map(({ task, translate }) => this.projectSummary(task, translate))
+  }
+
+  getDocumentSummary(id: string): DocumentSummary | null {
+    const task = this.getTask(id)
+    return task ? this.projectSummary(task, this.latestJob(id, 'translate') ?? undefined) : null
+  }
+
+  private projectSummary(task: CopilotixTask, job: CompatJobRow | undefined): DocumentSummary {
+    const summary = projectDocumentSummary(task)
+    // A failed translation keeps its counts, so the failure can be shown at the translation step.
+    const failedTranslation = task.status === 'failed' && (job?.status === 'failed' || job?.status === 'cancelled')
+    if (!job || (task.status !== 'translating' && task.status !== 'partial' && task.status !== 'completed' && !failedTranslation)) return summary
+    const checkpoint = parseObject(job.checkpoint_json)
+    if (task.status === 'translating' && (job.status === 'queued' || job.status === 'retry-wait')) summary.workflow.status = 'queued'
+    const { totalBlocks, completedBlocks, failedBlocks } = checkpoint
+    if ([totalBlocks, completedBlocks, failedBlocks].every((value) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)) {
+      summary.workflow.translationProgress = {
+        totalBlocks: totalBlocks as number, completedBlocks: completedBlocks as number, failedBlocks: failedBlocks as number
+      }
+    }
+    return summary
+  }
+
+  getLatestArtifactReference(documentId: string, kind: ArtifactKind): ArtifactReference | null {
+    const row = this.database.connection.prepare(`
+      SELECT id,document_id,kind,revision,relative_path,content_hash,metadata_json
+      FROM artifacts
+      WHERE document_id=? AND kind=?
+      ORDER BY revision DESC
+      LIMIT 1
+    `).get(documentId, kind) as {
+      id: string
+      document_id: string
+      kind: ArtifactKind
+      revision: number
+      relative_path: string
+      content_hash: string
+      metadata_json: string
+    } | undefined
+    if (!row) return null
+    return {
+      id: row.id,
+      documentId: row.document_id,
+      kind: row.kind,
+      revision: row.revision,
+      relativePath: row.relative_path,
+      contentHash: row.content_hash,
+      metadata: parseObject(row.metadata_json)
+    }
+  }
+
+  listDocumentAnnotations(request: { documentId: string; view: 'original' | 'translated' }): ReaderAnnotationSnapshot {
+    return this.database.transaction(() => {
+      const normalized = {
+        documentId: request.documentId,
+        view: request.view
+      }
+      const artifactKind: ArtifactKind = request.view === 'translated' ? 'translated_markdown' : 'parsed_markdown'
+      const artifact = this.getLatestArtifactReference(request.documentId, artifactKind)
+      if (!artifact) throw new CompatDomainError('ANNOTATION_ARTIFACT_NOT_FOUND', '当前文档尚无可标注的产物')
+      return this.readDocumentAnnotationSnapshotUnsafe(normalized.documentId, artifact, normalized.view)
+    })
+  }
+
+  mutateDocumentAnnotations(request: MutateReaderAnnotationsRequest): ReaderAnnotationSnapshot {
+    const normalized = mutateReaderAnnotationsRequestSchema.parse(request)
+    return this.database.transaction(() => {
+      const document = this.readDocument(normalized.documentId)
+      if (!document) throw new CompatDomainError('DOCUMENT_NOT_FOUND', '文档不存在')
+      const artifactKind: ArtifactKind = normalized.view === 'translated' ? 'translated_markdown' : 'parsed_markdown'
+      const artifact = this.getLatestArtifactReference(normalized.documentId, artifactKind)
+      if (!artifact || artifact.id !== normalized.artifactId) {
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注对应的文档产物已更新，请重新加载')
+      }
+
+      const currentSet = this.database.connection.prepare(`
+        SELECT id,revision FROM annotation_sets
+        WHERE document_id=? AND artifact_id=? AND view=?
+      `).get(normalized.documentId, normalized.artifactId, normalized.view) as {
+        id: string
+        revision: number
+      } | undefined
+      const currentRevision = currentSet?.revision ?? 0
+      if (currentRevision !== normalized.expectedRevision) {
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注版本已变化，请重新加载')
+      }
+
+      this.assertAnnotationRowsAvailable(normalized)
+      if (normalized.upserts.length === 0 && normalized.deleteIds.length === 0) {
+        return this.readDocumentAnnotationSnapshotUnsafe(normalized.documentId, artifact, normalized.view)
+      }
+
+      const now = new Date().toISOString()
+      const setId = currentSet?.id ?? randomUUID()
+      if (currentSet) {
+        const update = this.database.connection.prepare(`
+          UPDATE annotation_sets
+          SET revision=revision+1,updated_at=?
+          WHERE id=? AND document_id=? AND artifact_id=? AND view=? AND revision=?
+        `).run(now, currentSet.id, normalized.documentId, normalized.artifactId, normalized.view, normalized.expectedRevision)
+        if (update.changes !== 1) throw new CompatDomainError('ANNOTATION_CONFLICT', '标注版本已变化，请重新加载')
+      } else {
+        this.database.connection.prepare(`
+          INSERT INTO annotation_sets(id,document_id,artifact_id,view,revision,created_at,updated_at)
+          VALUES(?,?,?,?,?,?,?)
+        `).run(setId, normalized.documentId, normalized.artifactId, normalized.view, 1, now, now)
+      }
+
+      if (normalized.deleteIds.length > 0) {
+        const placeholders = normalized.deleteIds.map(() => '?').join(',')
+        this.database.connection.prepare(
+          `DELETE FROM reader_annotations WHERE annotation_set_id=? AND id IN (${placeholders})`
+        ).run(setId, ...normalized.deleteIds)
+      }
+
+      const upsert = this.database.connection.prepare(`
+        INSERT INTO reader_annotations(
+          id,document_id,artifact_id,annotation_set_id,view,kind,color,block_key,
+          start_offset,end_offset,quote,prefix,suffix,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          kind=excluded.kind,
+          color=excluded.color,
+          block_key=excluded.block_key,
+          start_offset=excluded.start_offset,
+          end_offset=excluded.end_offset,
+          quote=excluded.quote,
+          prefix=excluded.prefix,
+          suffix=excluded.suffix,
+          updated_at=excluded.updated_at
+        WHERE reader_annotations.annotation_set_id=excluded.annotation_set_id
+      `)
+      for (const annotation of normalized.upserts) {
+        upsert.run(
+          annotation.id,
+          annotation.documentId,
+          annotation.artifactId,
+          setId,
+          annotation.view,
+          annotation.kind,
+          annotation.color,
+          annotation.blockKey,
+          annotation.startOffset,
+          annotation.endOffset,
+          annotation.quote,
+          annotation.prefix,
+          annotation.suffix,
+          annotation.createdAt,
+          annotation.updatedAt
+        )
+      }
+      return this.readDocumentAnnotationSnapshotUnsafe(normalized.documentId, artifact, normalized.view)
+    })
+  }
+
+  findByHash(hash: string): CopilotixTask | null {
+    const row = this.database.connection.prepare(
+      'SELECT id FROM documents WHERE source_checksum = ? ORDER BY created_at DESC LIMIT 1'
+    ).get(hash) as { id: string } | undefined
+    return row ? this.readProjection(row.id) : null
+  }
+
+  insertTask(task: CopilotixTask): void {
+    this.database.transaction(() => this.insertTaskUnsafe(task))
+  }
+
+  insertTasks(tasks: CopilotixTask[]): void {
+    this.database.transaction(() => {
+      for (const task of tasks) this.insertTaskUnsafe(task)
+    })
+  }
+
+  updateDocumentMetadata(id: string, patch: DocumentMetadataPatch): void {
+    const current = this.readDocument(id)
+    if (!current) throw new Error('文档不存在')
+    const title = patch.displayTitle === undefined ? current.display_title : patch.displayTitle
+    if (title !== null && typeof title !== 'string') throw new Error('文档元数据无效')
+    this.database.connection.prepare('UPDATE documents SET display_title=?, updated_at=? WHERE id=?')
+      .run(title, new Date().toISOString(), id)
+  }
+
+  updateTask(id: string, patch: Partial<CopilotixTask>): CopilotixTask {
+    this.database.transaction(() => {
+      const current = this.readProjection(id)
+      if (!current) throw new Error(`Task not found: ${id}`)
+      const next: CopilotixTask = { ...current, ...patch, id, updatedAt: new Date().toISOString() }
+      this.database.connection.prepare(`
+        UPDATE documents SET display_title=?, translation_provider=?, updated_at=? WHERE id=?
+      `).run(next.title, next.translationProvider, next.updatedAt, id)
+      this.syncJobsUnsafe(next)
+    })
+    return this.readProjection(id) ?? (() => { throw new Error(`Task not found: ${id}`) })()
+  }
+
+  deleteTask(id: string): void {
+    this.database.transaction(() => {
+      const now = new Date().toISOString()
+      // The tombstone is deliberately not FK-bound to documents.  Jobs for
+      // the document are deleted by the document cascade, so scheduling a
+      // rag-delete job here would create a false success (or delete the job
+      // before it can run).  Persist and complete cleanup in this boundary.
+      this.database.connection.prepare(`
+        INSERT INTO rag_deletion_tombstones(document_id,state,error_code,error_message,created_at,updated_at)
+        VALUES(?, 'queued', NULL, NULL, ?, ?)
+        ON CONFLICT(document_id) DO UPDATE SET state='queued', error_code=NULL,
+          error_message=NULL, updated_at=excluded.updated_at
+      `).run(id, now, now)
+      // Clear outgoing pointers before removing document-scoped rows.  The
+      // explicit deletes make this safe even for a partially-created database;
+      // normal FK cascades remove chunks, variants, embeddings, and jobs.
+      this.database.connection.prepare(`
+        UPDATE rag_documents SET
+          local_state='unindexed', local_progress=0, local_error_code=NULL,
+          local_error_message=NULL, local_error_retryable=NULL,
+          local_error_retry_after_ms=NULL, active_content_revision_id=NULL,
+          semantic_state='disabled', semantic_progress=0, semantic_error_code=NULL,
+          semantic_error_message=NULL, semantic_error_retryable=NULL,
+          semantic_error_retry_after_ms=NULL, semantic_content_revision_id=NULL,
+          active_vector_index_id=NULL, semantic_profile_id=?, updated_at=?
+        WHERE document_id=?
+      `).run(null, now, id)
+      this.database.connection.prepare('DELETE FROM rag_documents WHERE document_id=?').run(id)
+      this.database.connection.prepare('DELETE FROM rag_vector_indexes WHERE document_id=?').run(id)
+      this.database.connection.prepare('DELETE FROM rag_content_revisions WHERE document_id=?').run(id)
+      // The v4 jobs graph keeps a self-referencing dependency and artifacts
+      // retain their producing job with ON DELETE RESTRICT.  Remove ordinary
+      // document artifacts first, then detach the graph before the document
+      // cascade; otherwise SQLite correctly rejects deleting a parse job that
+      // is still referenced by translate or an artifact.
+      this.database.connection.prepare('DELETE FROM artifacts WHERE document_id=?').run(id)
+      this.database.connection.prepare('UPDATE jobs SET depends_on_job_id=NULL WHERE document_id=?').run(id)
+      this.database.connection.prepare('DELETE FROM documents WHERE id = ?').run(id)
+      this.database.connection.prepare(`
+        UPDATE rag_deletion_tombstones SET state='succeeded', error_code=NULL,
+          error_message=NULL, updated_at=? WHERE document_id=?
+      `).run(now, id)
+    })
+  }
+
+  upsertTranslationBlock(block: TranslationBlockRecord): void {
+    if (block.jobId) {
+      this.commitTranslationBatch({
+        taskId: block.taskId,
+        jobId: block.jobId,
+        blocks: [toBatchBlock(block)],
+        cacheEntries: []
+      })
+      return
+    }
+    this.database.transaction(() => {
+      const job = block.jobId
+        ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=? AND document_id=? AND kind=\'translate\'').get(block.jobId, block.taskId) as CompatJobRow | undefined
+        : this.latestJob(block.taskId, 'translate')
+      if (!job) throw new Error('翻译作业尚未创建')
+      this.upsertTranslationBlockUnsafe(job.id, block)
+    })
+  }
+
+  commitTranslationBatch(input: TranslationBatchCommit): void {
+    assertTranslationBatchWithinLimits(input)
+    if (!input.taskId || !input.jobId) {
+      throw new Error('翻译批次参数无效')
+    }
+    this.database.transaction(() => {
+      const job = this.translationJobById.get(input.jobId, input.taskId) as CompatJobRow | undefined
+      if (!job) throw new Error('翻译作业尚未创建')
+      for (const block of input.blocks) this.upsertTranslationBlockUnsafe(job.id, block)
+      const committedAt = new Date().toISOString()
+      for (const entry of input.cacheEntries) {
+        this.translationCacheUpsert.run(entry.cacheKey, entry.translated, entry.provider, entry.model, committedAt)
+      }
+      if (input.checkpoint) {
+        const current = parseObject(job.checkpoint_json)
+        const checkpoint = {
+          ...current,
+          totalBlocks: input.checkpoint.totalBlocks,
+          completedBlocks: input.checkpoint.completedBlocks,
+          failedBlocks: input.checkpoint.failedBlocks,
+          failedBlockIds: input.checkpoint.failedBlockIds.slice(0, 64)
+        }
+        this.translationCheckpointUpdate.run(JSON.stringify(checkpoint), committedAt, job.id)
+      }
+    })
+  }
+
+  listTranslationBlocks(taskId: string, jobId?: string): TranslationBlockRecord[] {
+    const job = jobId
+      ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=? AND document_id=? AND kind=\'translate\'').get(jobId, taskId) as CompatJobRow | undefined
+      : this.latestJob(taskId, 'translate')
+    if (!job) return []
+    return this.translationBlocksByJob.all(taskId, job.id) as unknown as TranslationBlockRecord[]
+  }
+
+  getCache(cacheKey: string): string | null {
+    const row = this.database.connection.prepare('SELECT translated_markdown FROM translation_cache WHERE cache_key=?').get(cacheKey) as { translated_markdown: string } | undefined
+    return row?.translated_markdown ?? null
+  }
+
+  listReaderAnnotations(taskId: string): ReaderAnnotation[] {
+    return this.database.connection.prepare(`
+      SELECT id,document_id as taskId,view,kind,color,block_key as blockKey,
+        start_offset as startOffset,end_offset as endOffset,quote,prefix,suffix,
+        created_at as createdAt,updated_at as updatedAt
+      FROM reader_annotations
+      WHERE document_id=? AND (
+        (view='original' AND artifact_id=(
+          SELECT id FROM artifacts WHERE document_id=? AND kind='parsed_markdown'
+          ORDER BY revision DESC LIMIT 1
+        )) OR
+        (view='translated' AND artifact_id=(
+          SELECT id FROM artifacts WHERE document_id=? AND kind='translated_markdown'
+          ORDER BY revision DESC LIMIT 1
+        ))
+      )
+      ORDER BY view,block_key,start_offset,end_offset,id
+    `).all(taskId, taskId, taskId) as unknown as ReaderAnnotation[]
+  }
+
+  private readDocumentAnnotationSnapshotUnsafe(
+    documentId: string,
+    artifact: ArtifactReference,
+    view: 'original' | 'translated'
+  ): ReaderAnnotationSnapshot {
+    const set = this.database.connection.prepare(`
+      SELECT id,revision FROM annotation_sets
+      WHERE document_id=? AND artifact_id=? AND view=?
+    `).get(documentId, artifact.id, view) as { id: string; revision: number } | undefined
+    const rows = set
+      ? this.database.connection.prepare(`
+          SELECT id,document_id,artifact_id,view,kind,color,block_key,
+            start_offset,end_offset,quote,prefix,suffix,created_at,updated_at
+          FROM reader_annotations
+          WHERE annotation_set_id=? AND document_id=? AND artifact_id=? AND view=?
+          ORDER BY block_key,start_offset,end_offset,id
+        `).all(set.id, documentId, artifact.id, view) as Array<Record<string, unknown>>
+      : []
+    const annotations = rows.map((row) => documentAnnotationSchema.parse({
+      id: row.id,
+      documentId: row.document_id,
+      artifactId: row.artifact_id,
+      view: row.view,
+      kind: row.kind,
+      color: row.color,
+      blockKey: row.block_key,
+      startOffset: row.start_offset,
+      endOffset: row.end_offset,
+      quote: row.quote,
+      prefix: row.prefix,
+      suffix: row.suffix,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }))
+    return readerAnnotationSnapshotSchema.parse({
+      documentId,
+      artifactId: artifact.id,
+      view,
+      revision: set?.revision ?? 0,
+      annotations
+    })
+  }
+
+  private assertAnnotationRowsAvailable(request: MutateReaderAnnotationsRequest): void {
+    const set = this.database.connection.prepare(`
+      SELECT id FROM annotation_sets
+      WHERE document_id=? AND artifact_id=? AND view=?
+    `).get(request.documentId, request.artifactId, request.view) as { id: string } | undefined
+    for (const annotation of request.upserts) {
+      const existing = this.database.connection.prepare(
+        'SELECT annotation_set_id FROM reader_annotations WHERE id=?'
+      ).get(annotation.id) as { annotation_set_id: string } | undefined
+      if (existing && existing.annotation_set_id !== set?.id) {
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注 ID 已属于其他标注集')
+      }
+    }
+  }
+
+  replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): ReaderAnnotation[] {
+    return this.database.transaction(() => {
+      const document = this.readDocument(request.taskId)
+      if (!document) throw new Error('任务不存在')
+      const artifactKind: ArtifactKind = request.view === 'translated' ? 'translated_markdown' : 'parsed_markdown'
+      const artifact = this.latestArtifact(request.taskId, artifactKind)
+      if (!artifact) throw new Error('当前文档尚无可标注的产物')
+      validateAnnotations(request)
+      const now = new Date().toISOString()
+      const set = this.database.connection.prepare(`
+        SELECT id,revision FROM annotation_sets
+        WHERE document_id=? AND artifact_id=? AND view=?
+      `).get(request.taskId, artifact.id, request.view) as { id: string; revision: number } | undefined
+      const setId = set?.id ?? randomUUID()
+      const revision = (set?.revision ?? 0) + 1
+      if (set) {
+        this.database.connection.prepare('UPDATE annotation_sets SET revision=?,updated_at=? WHERE id=?')
+          .run(revision, now, set.id)
+      } else {
+        this.database.connection.prepare(`
+          INSERT INTO annotation_sets(id,document_id,artifact_id,view,revision,created_at,updated_at)
+          VALUES(?,?,?,?,?,?,?)
+        `).run(setId, request.taskId, artifact.id, request.view, revision, now, now)
+      }
+      this.database.connection.prepare('DELETE FROM reader_annotations WHERE annotation_set_id=?').run(setId)
+      const insert = this.database.connection.prepare(`
+        INSERT INTO reader_annotations(
+          id,document_id,artifact_id,annotation_set_id,view,kind,color,block_key,
+          start_offset,end_offset,quote,prefix,suffix,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `)
+      for (const annotation of request.annotations) {
+        insert.run(annotation.id, request.taskId, artifact.id, setId, request.view, annotation.kind, annotation.color,
+          annotation.blockKey, annotation.startOffset, annotation.endOffset, annotation.quote, annotation.prefix,
+          annotation.suffix, annotation.createdAt || now, now)
+      }
+      return this.listReaderAnnotations(request.taskId)
+    })
+  }
+
+  recordArtifactRevision(taskId: string, kind: ArtifactKind, path: string, checksum: string, metadata: Record<string, unknown> = {}, jobId?: string): void {
+    this.recordArtifactRevisions([{ taskId, kind, path, checksum, metadata, jobId }])
+  }
+
+  recordArtifactRevisions(revisions: readonly ArtifactRevisionInput[]): void {
+    this.database.transaction(() => {
+      for (const revision of revisions) this.recordArtifactRevisionUnsafe(revision)
+      // Only a newly published canonical bundle member may open the RAG
+      // lifecycle boundary.  A translation artifact must remain a replaceable
+      // variant and must not resurrect/trigger a canonical content job.
+      const documentIds = new Set(
+        revisions
+          .filter((revision) => revision.kind === 'parsed_markdown' || revision.kind === 'block_mappings')
+          .map((revision) => revision.taskId)
+      )
+      for (const documentId of documentIds) this.maybeQueueParsedContentIndexUnsafe(documentId)
+    })
+  }
+
+  private recordArtifactRevisionUnsafe(input: ArtifactRevisionInput): void {
+    const document = this.readDocument(input.taskId)
+    if (!document) throw new Error('任务不存在')
+    const jobKind: V2JobKind = input.kind === 'translated_markdown' || input.kind === 'manifest' ? 'translate' : 'parse'
+    const job = input.jobId
+      ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=?').get(input.jobId) as CompatJobRow | undefined
+      : this.latestJob(input.taskId, jobKind)
+    if (!job || job.document_id !== input.taskId || job.kind !== jobKind) throw new Error('产物对应的作业不存在')
+    const relativePath = this.toRelativeArtifactPath(document.storage_path, input.path)
+    const existing = this.database.connection.prepare(`
+      SELECT id,relative_path,content_hash,metadata_json FROM artifacts
+      WHERE document_id=? AND kind=? AND created_by_job_id=? ORDER BY revision DESC LIMIT 1
+    `).get(input.taskId, input.kind, job.id) as { id: string; relative_path: string; content_hash: string; metadata_json: string } | undefined
+    if (existing) {
+      if (existing.relative_path === relativePath && existing.content_hash === input.checksum) return
+      const previousAttempt = parseObject(existing.metadata_json).attempt ?? 0
+      // Retried translation keeps its job ID and publishes improved revisions.
+      if (jobKind !== 'translate' || existing.relative_path !== relativePath ||
+        typeof previousAttempt !== 'number' || job.attempt <= previousAttempt) throw new Error('ARTIFACT_COMMIT_CONFLICT')
+    }
+    const latest = this.database.connection.prepare(
+      'SELECT COALESCE(MAX(revision),0) as revision FROM artifacts WHERE document_id=? AND kind=?'
+    ).get(input.taskId, input.kind) as { revision: number }
+    this.database.connection.prepare(`
+      INSERT INTO artifacts(
+        id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?)
+    `).run(randomUUID(), input.taskId, job.id, input.kind, latest.revision + 1, relativePath, input.checksum,
+      JSON.stringify(jobKind === 'translate' ? { ...input.metadata, attempt: job.attempt } : input.metadata ?? {}), new Date().toISOString())
+  }
+
+  /**
+   * Record a text-layer correction of an already published parse. The new
+   * revisions belong to the latest parse job (a normal parse revision cannot be
+   * replaced under the same job), and original-view annotations move to the new
+   * Markdown revision, where the reader re-anchors them by quote and context.
+   */
+  recordTextLayerRepair(taskId: string, revisions: ReadonlyArray<{ kind: 'parsed_markdown' | 'layout' | 'block_mappings'; path: string; checksum: string }>, metadata: Record<string, unknown>): void {
+    this.database.transaction(() => {
+      const document = this.readDocument(taskId)
+      if (!document) throw new Error('任务不存在')
+      const job = this.latestJob(taskId, 'parse')
+      if (!job) throw new Error('产物对应的作业不存在')
+      const previousMarkdown = this.latestArtifact(taskId, 'parsed_markdown')
+      const now = new Date().toISOString()
+      for (const revision of revisions) {
+        const latest = this.latestArtifact(taskId, revision.kind)
+        this.database.connection.prepare(`
+          INSERT INTO artifacts(id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at)
+          VALUES(?,?,?,?,?,?,?,?,?)
+        `).run(randomUUID(), taskId, job.id, revision.kind, (latest?.revision ?? 0) + 1,
+          this.toRelativeArtifactPath(document.storage_path, revision.path), revision.checksum, JSON.stringify(metadata), now)
+      }
+      const nextMarkdown = this.latestArtifact(taskId, 'parsed_markdown')
+      if (previousMarkdown && nextMarkdown && previousMarkdown.id !== nextMarkdown.id) {
+        // The set and its rows reference each other through a composite key; check it at commit.
+        this.database.connection.exec('PRAGMA defer_foreign_keys = ON')
+        this.database.connection.prepare(`UPDATE annotation_sets SET artifact_id=?,updated_at=? WHERE document_id=? AND artifact_id=? AND view='original'`)
+          .run(nextMarkdown.id, now, taskId, previousMarkdown.id)
+        this.database.connection.prepare(`UPDATE reader_annotations SET artifact_id=? WHERE document_id=? AND artifact_id=? AND view='original'`)
+          .run(nextMarkdown.id, taskId, previousMarkdown.id)
+      }
+      this.maybeQueueParsedContentIndexUnsafe(taskId)
+    })
+  }
+
+  /**
+   * Publish the canonical-content boundary only after both parser artifacts
+   * exist.  The artifact ID is retained as provenance, while the identity is
+   * the document plus the three content fingerprints.  All work is performed
+   * inside recordArtifactRevisions()'s transaction, including superseding an
+   * obsolete active job and inserting the new durable job.
+   */
+  ensureContentIndex(documentId: string): void {
+    if (!this.getTask(documentId)) throw new CompatDomainError('QUERY_SCOPE_INVALID', '文档不存在')
+    this.database.transaction(() => this.maybeQueueParsedContentIndexUnsafe(documentId))
+  }
+
+  private maybeQueueParsedContentIndexUnsafe(documentId: string): void {
+    const parsed = this.database.connection.prepare(`
+      SELECT id,created_by_job_id,content_hash,metadata_json
+      FROM artifacts WHERE document_id=? AND kind='parsed_markdown'
+      ORDER BY revision DESC,id DESC LIMIT 1
+    `).get(documentId) as ArtifactBundleRow | undefined
+    const mappings = this.database.connection.prepare(`
+      SELECT id,created_by_job_id,content_hash,metadata_json
+      FROM artifacts WHERE document_id=? AND kind='block_mappings'
+      ORDER BY revision DESC,id DESC LIMIT 1
+    `).get(documentId) as ArtifactBundleRow | undefined
+    if (!parsed || !mappings) return
+    // A mapping produced by a different parse job may belong to an older
+    // markdown artifact.  Legacy mapping rebuilds have no job provenance and
+    // are allowed to pair with the current parsed artifact.
+    if (parsed.created_by_job_id && mappings.created_by_job_id && parsed.created_by_job_id !== mappings.created_by_job_id) return
+
+    const parsedMetadata = parseObject(parsed.metadata_json)
+    const mappingMetadata = parseObject(mappings.metadata_json)
+    const mappingFingerprint = metadataFingerprint(mappingMetadata, 'mappingFingerprint') ?? mappings.content_hash
+    const chunkerFingerprint = metadataFingerprint(parsedMetadata, 'chunkerFingerprint') ??
+      metadataFingerprint(mappingMetadata, 'chunkerFingerprint') ?? RAG_DEFAULT_CHUNKER_FINGERPRINT
+    const identity = JSON.stringify([documentId, parsed.content_hash, mappingFingerprint, chunkerFingerprint])
+    const digest = createHash('sha256').update(identity).digest('hex')
+    const contentRevisionId = `rag-content-revision-${digest}`
+    const contentJobId = `rag-content-job-${digest}`
+    const now = new Date().toISOString()
+
+    this.database.connection.prepare(
+      'INSERT INTO rag_documents(document_id,updated_at) VALUES(?,?) ON CONFLICT(document_id) DO NOTHING'
+    ).run(documentId, now)
+
+    this.database.connection.prepare(`
+      INSERT INTO rag_content_revisions(
+        content_revision_id,document_id,artifact_id,content_hash,mapping_fingerprint,
+        chunker_fingerprint,lexical_generation,state,error_code,error_message,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,'building',NULL,NULL,?,?)
+      ON CONFLICT(document_id,content_hash,mapping_fingerprint,chunker_fingerprint) DO NOTHING
+    `).run(contentRevisionId, documentId, parsed.id, parsed.content_hash, mappingFingerprint,
+      chunkerFingerprint, nextLexicalGeneration(this.database.connection, documentId), now, now)
+
+    const revision = this.database.connection.prepare(`
+      SELECT content_revision_id,state FROM rag_content_revisions
+      WHERE document_id=? AND content_hash=? AND mapping_fingerprint=? AND chunker_fingerprint=?
+    `).get(documentId, parsed.content_hash, mappingFingerprint, chunkerFingerprint) as {
+      content_revision_id: string
+      state: string
+    } | undefined
+    if (!revision) throw new Error('RAG_CONTENT_REVISION_NOT_CREATED')
+
+    // If a runner already completed this exact immutable revision, publishing
+    // the same parser bytes is a no-op.  A retry of an unimplemented queued
+    // job remains queued and is reused by its deterministic ID.
+    const knowledge = this.database.connection.prepare(`
+      SELECT local_state,active_content_revision_id,semantic_consent,semantic_state
+      FROM rag_documents WHERE document_id=?
+    `).get(documentId) as {
+      local_state: string
+      active_content_revision_id: string | null
+      semantic_consent: number
+      semantic_state: string
+    } | undefined
+    const existingJob = this.database.connection.prepare('SELECT id,kind,document_id,status FROM jobs WHERE id=?').get(contentJobId) as {
+      id: string
+      kind: string
+      document_id: string
+      status: V2JobStatus
+    } | undefined
+    if (existingJob && (existingJob.kind !== 'rag-content-index' || existingJob.document_id !== documentId)) {
+      throw new Error('RAG_CONTENT_JOB_ID_CONFLICT')
+    }
+    const sameActiveRevision = knowledge?.active_content_revision_id === revision.content_revision_id && knowledge.local_state === 'ready'
+    if (revision.state === 'ready' && sameActiveRevision) return
+
+    // The partial unique index permits only one active content job per
+    // document.  Supersede all obsolete queued/retry/running jobs before the
+    // new deterministic job is inserted; a runner cannot later mark them
+    // succeeded because they are already terminal.
+    const activeJobs = this.database.connection.prepare(`
+      SELECT id FROM jobs WHERE document_id=? AND kind='rag-content-index'
+        AND status NOT IN ('succeeded','partial','failed','cancelled') AND id<>?
+    `).all(documentId, contentJobId) as Array<{ id: string }>
+    for (const active of activeJobs) {
+      this.jobRepository.supersedeWithinTransaction({
+        jobId: active.id,
+        now,
+        errorCode: 'RAG_CONTENT_SUPERSEDED',
+        errorMessage: 'Canonical content was superseded by a newer parser artifact',
+        detail: { replacementRevisionId: revision.content_revision_id }
+      })
+    }
+
+    // A new canonical revision invalidates any in-flight semantic work for
+    // the previous revision.  Terminalising those rows here also prevents the
+    // jobs(document_id, kind) active uniqueness rule from blocking a later
+    // ensure-embed call for the new content.
+    if (!sameActiveRevision) {
+      // Retire the previously active canonical revision and every vector
+      // index derived from older content.  These rows remain for provenance,
+      // but no stale semantic result may be mistaken for the new revision.
+      // Do not stale the old active content revision while its replacement is
+      // merely queued/building.  It is the read-safe fallback if chunking
+      // fails; publication marks it stale only after the new revision is ready.
+      if (knowledge?.active_content_revision_id && knowledge.active_content_revision_id !== revision.content_revision_id && knowledge.local_state !== 'ready') {
+        this.database.connection.prepare(`
+          UPDATE rag_content_revisions SET state='stale',error_code=NULL,error_message=NULL,updated_at=?
+          WHERE content_revision_id=? AND state IN ('building','ready')
+        `).run(now, knowledge.active_content_revision_id)
+      }
+      this.database.connection.prepare(`
+        UPDATE rag_vector_indexes SET state='stale',error_code=NULL,error_message=NULL,updated_at=?
+        WHERE document_id=? AND content_revision_id<>? AND state IN ('queued','building','ready')
+      `).run(now, documentId, revision.content_revision_id)
+      const activeEmbeddingJobs = this.database.connection.prepare(`
+        SELECT id FROM jobs WHERE document_id=? AND kind='rag-embed'
+          AND status NOT IN ('succeeded','partial','failed','cancelled')
+      `).all(documentId) as Array<{ id: string }>
+      for (const active of activeEmbeddingJobs) {
+        this.jobRepository.supersedeWithinTransaction({
+          jobId: active.id,
+          now,
+          errorCode: 'RAG_EMBED_SUPERSEDED',
+          errorMessage: 'Embedding work was superseded by a newer canonical content revision',
+          detail: { replacementRevisionId: revision.content_revision_id }
+        })
+      }
+    }
+
+    // Keep the deterministic lifecycle identity reusable after a failed
+    // attempt. This must happen after obsolete active rows are terminalized:
+    // requeueing first would collide with jobs(document_id, kind)'s partial
+    // unique index. A succeeded job is recovered too when its revision is
+    // not ready: that state is inconsistent with successful indexing and must
+    // be made executable again rather than silently treated as complete.
+    if (existingJob && revision.state !== 'ready' && isTerminalJobStatus(existingJob.status)) {
+      this.jobRepository.requeueWithinTransaction({
+        jobId: existingJob.id,
+        now,
+        detail: { contentRevisionId: revision.content_revision_id, recovered: true }
+      })
+    }
+
+    if (!existingJob) {
+      this.jobRepository.enqueueWithinTransaction({
+        id: contentJobId,
+        documentId,
+        kind: 'rag-content-index',
+        priority: -100,
+        checkpoint: { phase: 'queued', contentRevisionId: revision.content_revision_id },
+        payload: {
+          contentRevisionId: revision.content_revision_id,
+          contentHash: parsed.content_hash,
+          mappingFingerprint,
+          chunkerFingerprint
+        },
+        now
+      })
+    }
+
+    this.database.connection.prepare(`
+      UPDATE rag_documents SET
+        local_state=CASE WHEN local_state='ready' AND active_content_revision_id IS NOT NULL THEN 'ready' ELSE 'queued' END,
+        local_progress=CASE WHEN local_state='ready' AND active_content_revision_id IS NOT NULL THEN 100 ELSE 0 END,
+        local_error_code=NULL,
+        local_error_message=NULL, local_error_retryable=NULL,
+        local_error_retry_after_ms=NULL,
+        -- Keep a previously ready revision addressable while the replacement
+        -- is building.  The runner swaps this pointer only after every chunk
+        -- and provenance row has passed validation; this is what makes a
+        -- failed replacement non-destructive to the user's last good index.
+        active_content_revision_id=CASE WHEN active_content_revision_id IS NULL THEN ? ELSE active_content_revision_id END,
+        semantic_state=CASE
+          WHEN semantic_consent=1 AND semantic_state NOT IN ('disabled','requires-consent','requires-credential') THEN 'stale'
+          ELSE semantic_state
+        END,
+        semantic_progress=0, semantic_error_code=NULL, semantic_error_message=NULL,
+        semantic_error_retryable=NULL, semantic_error_retry_after_ms=NULL,
+        semantic_content_revision_id=NULL, active_vector_index_id=NULL,
+        semantic_profile_id=NULL, updated_at=?
+      WHERE document_id=?
+    `).run(revision.content_revision_id, now, documentId)
+  }
+
+  private upsertTranslationBlockUnsafe(jobId: string, block: TranslationBatchBlock | TranslationBlockRecord): void {
+    this.translationBlockUpsert.run(jobId, block.blockId, block.sourceHash, block.sourceMarkdown, block.translatedMarkdown,
+      block.provider, block.model, block.status, block.error)
+  }
+
+  private insertTaskUnsafe(task: CopilotixTask): void {
+    this.database.connection.prepare(`
+      INSERT INTO documents(
+        id,original_filename,display_title,storage_path,source_checksum,
+        translation_provider,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?)
+    `).run(task.id, task.originalName || task.name, task.title, task.outputDir, task.sourceHash,
+      task.translationProvider, task.createdAt, task.updatedAt)
+    const parseJobId = randomUUID()
+    this.createJobUnsafe({
+      id: parseJobId, documentId: task.id, dependsOnJobId: null, kind: 'parse', status: 'queued', progress: task.progress,
+      checkpoint: checkpointForTask(task), createdAt: task.createdAt, updatedAt: task.updatedAt,
+      errorCode: null, errorMessage: null, startedAt: null, finishedAt: null
+    })
+    this.appendEventUnsafe(parseJobId, null, 'queued', { phase: task.status })
+    this.insertArtifactUnsafe(task.id, parseJobId, 'source_pdf', this.toRelativeArtifactPath(task.outputDir, task.sourcePath), task.sourceHash, task.createdAt)
+  }
+
+  private syncJobsUnsafe(task: CopilotixTask): void {
+    const parse = this.latestJob(task.id, 'parse')
+    const translate = this.latestJob(task.id, 'translate')
+    const now = task.updatedAt
+    const translatePhase = task.status === 'translating' || task.status === 'completed' || task.status === 'partial' || (task.status === 'failed' && Boolean(translate))
+    const parseStatus: V2JobStatus = task.status === 'failed' && !translate
+      ? 'failed'
+      : translatePhase || task.status === 'completed' || task.status === 'partial'
+        ? 'succeeded'
+        : task.status === 'uploading' || task.status === 'parsing'
+          ? 'running'
+          : 'succeeded'
+    const parseCheckpoint = {
+      ...(parse ? parseObject(parse.checkpoint_json) : {}),
+      ...checkpointForTask(task),
+      phase: task.status
+    }
+    if (parse) {
+      this.updateJobUnsafe(parse, parseStatus, task.progress, parseCheckpoint,
+        parseStatus === 'failed' ? 'TASK_FAILED' : null, parseStatus === 'failed' ? task.error : null, now)
+    } else {
+      this.createJobUnsafe({
+        id: randomUUID(), documentId: task.id, dependsOnJobId: null, kind: 'parse', status: parseStatus, progress: task.progress,
+        checkpoint: parseCheckpoint, createdAt: now, updatedAt: now,
+        errorCode: parseStatus === 'failed' ? 'TASK_FAILED' : null, errorMessage: parseStatus === 'failed' ? task.error : null,
+        startedAt: null, finishedAt: TERMINAL.has(parseStatus) ? now : null
+      })
+    }
+
+    if (!translatePhase) return
+    const translationStatus: V2JobStatus = task.status === 'translating' ? 'running' : task.status === 'partial' ? 'partial' : task.status === 'failed' ? 'failed' : 'succeeded'
+    if (translate) {
+      this.updateJobUnsafe(translate, translationStatus, task.progress, parseObject(translate.checkpoint_json),
+        translationStatus === 'failed' ? 'TRANSLATION_FAILED' : null,
+        translationStatus === 'failed' || translationStatus === 'partial' ? task.error : null, now)
+    } else {
+      const id = randomUUID()
+      this.createJobUnsafe({
+        id, documentId: task.id, dependsOnJobId: parse?.id ?? null, kind: 'translate', status: translationStatus, progress: task.progress,
+        checkpoint: {}, createdAt: now, updatedAt: now,
+        errorCode: translationStatus === 'failed' ? 'TRANSLATION_FAILED' : null,
+        errorMessage: translationStatus === 'failed' || translationStatus === 'partial' ? task.error : null,
+        startedAt: translationStatus === 'running' ? now : null,
+        finishedAt: TERMINAL.has(translationStatus) ? now : null
+      })
+      this.appendEventUnsafe(id, null, translationStatus, {})
+    }
+  }
+
+  private createJobUnsafe(input: {
+    id: string
+    documentId: string
+    dependsOnJobId: string | null
+    kind: V2JobKind
+    status: V2JobStatus
+    progress: number
+    checkpoint: Record<string, unknown>
+    createdAt: string
+    updatedAt: string
+    errorCode: string | null
+    errorMessage: string | null
+    startedAt: string | null
+    finishedAt: string | null
+  }): void {
+    this.database.connection.prepare(`
+      INSERT INTO jobs(
+        id,document_id,depends_on_job_id,kind,status,progress,priority,attempt,max_attempts,payload_json,checkpoint_json,
+        available_at,lease_owner,lease_expires_at,error_code,error_message,started_at,finished_at,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(input.id, input.documentId, input.dependsOnJobId, input.kind, input.status, input.progress, 0, 0, 5, '{}',
+      JSON.stringify(input.checkpoint), input.updatedAt, null, null, input.errorCode, input.errorMessage,
+      input.startedAt, input.finishedAt, input.createdAt, input.updatedAt)
+  }
+
+  private updateJobUnsafe(
+    current: CompatJobRow,
+    status: V2JobStatus,
+    progress: number,
+    checkpoint: Record<string, unknown>,
+    errorCode: string | null,
+    errorMessage: string | null,
+    updatedAt: string
+  ): void {
+    const startedAt = current.started_at ?? (status === 'running' ? updatedAt : null)
+    const finishedAt = TERMINAL.has(status) ? (current.finished_at ?? updatedAt) : null
+    this.database.connection.prepare(`
+      UPDATE jobs SET status=?,progress=?,checkpoint_json=?,error_code=?,error_message=?,started_at=?,finished_at=?,updated_at=? WHERE id=?
+    `).run(status, progress, JSON.stringify(checkpoint), errorCode, errorMessage, startedAt, finishedAt, updatedAt, current.id)
+    if (current.status !== status) this.appendEventUnsafe(current.id, current.status, status, { progress })
+  }
+
+  private appendEventUnsafe(jobId: string, fromState: V2JobStatus | null, toState: V2JobStatus, detail: Record<string, unknown>): void {
+    const row = this.database.connection.prepare('SELECT COALESCE(MAX(sequence),0) as sequence FROM job_events WHERE job_id=?').get(jobId) as { sequence: number }
+    this.database.connection.prepare(`
+      INSERT INTO job_events(id,job_id,sequence,from_state,to_state,detail_json,created_at)
+      VALUES(?,?,?,?,?,?,?)
+    `).run(randomUUID(), jobId, row.sequence + 1, fromState, toState, JSON.stringify(detail), new Date().toISOString())
+  }
+
+  private insertArtifactUnsafe(documentId: string, jobId: string, kind: ArtifactKind, relativePath: string, contentHash: string, createdAt: string): void {
+    this.database.connection.prepare(`
+      INSERT INTO artifacts(id,document_id,created_by_job_id,kind,revision,relative_path,content_hash,metadata_json,created_at)
+      VALUES(?,?,?,?,1,?,?,?,?)
+    `).run(randomUUID(), documentId, jobId, kind, relativePath, contentHash, '{}', createdAt)
+  }
+
+  private toRelativeArtifactPath(storagePath: string, path: string): string {
+    const resolvedPath = this.pathPolicy.resolveChild(storagePath, path)
+    return toRelativePath(storagePath, resolvedPath)
+  }
+
+  private readDocument(id: string): CompatDocumentRow | null {
+    const row = this.database.connection.prepare('SELECT * FROM documents WHERE id=?').get(id) as CompatDocumentRow | undefined
+    return row ?? null
+  }
+
+  private latestJob(documentId: string, kind: V2JobKind): CompatJobRow | null {
+    const row = this.database.connection.prepare(`
+      SELECT * FROM jobs WHERE document_id=? AND kind=? ORDER BY updated_at DESC,id DESC LIMIT 1
+    `).get(documentId, kind) as CompatJobRow | undefined
+    return row ?? null
+  }
+
+  private latestArtifact(documentId: string, kind: ArtifactKind): { id: string; revision: number } | null {
+    const row = this.database.connection.prepare(`
+      SELECT id,revision FROM artifacts WHERE document_id=? AND kind=? ORDER BY revision DESC LIMIT 1
+    `).get(documentId, kind) as { id: string; revision: number } | undefined
+    return row ?? null
+  }
+
+  /**
+   * Project a page of documents with two queries (documents + their workflow
+   * jobs) instead of one query per document. A negative limit reads all rows.
+   */
+  private readProjectionPage(after: ListCursor | null, limit: number): Array<{ task: CopilotixTask; translate: CompatJobRow | undefined }> {
+    const documents = (after
+      ? this.database.connection.prepare(`
+          SELECT * FROM documents WHERE created_at < ? OR (created_at = ? AND id > ?)
+          ORDER BY created_at DESC, id ASC LIMIT ?
+        `).all(after.createdAt, after.createdAt, after.id, limit)
+      : this.database.connection.prepare('SELECT * FROM documents ORDER BY created_at DESC, id ASC LIMIT ?').all(limit)
+    ) as unknown as CompatDocumentRow[]
+    const jobsByDocument = new Map<string, CompatJobRow[]>()
+    for (let start = 0; start < documents.length; start += WORKFLOW_JOB_QUERY_CHUNK) {
+      const ids = documents.slice(start, start + WORKFLOW_JOB_QUERY_CHUNK).map((document) => document.id)
+      const rows = this.database.connection.prepare(`
+        SELECT * FROM jobs WHERE kind IN ('parse','translate') AND document_id IN (${ids.map(() => '?').join(',')})
+      `).all(...ids) as unknown as CompatJobRow[]
+      for (const row of rows) {
+        const jobs = jobsByDocument.get(row.document_id)
+        if (jobs) jobs.push(row)
+        else jobsByDocument.set(row.document_id, [row])
+      }
+    }
+    return documents.map((document) => {
+      const jobs = jobsByDocument.get(document.id) ?? []
+      return { task: projectCompatTask(document, jobs), translate: latestJobOfKind(jobs, 'translate') }
+    })
+  }
+
+  private readProjection(id: string): CopilotixTask | null {
+    const document = this.readDocument(id)
+    if (!document) return null
+    const jobs = this.database.connection.prepare(`
+      SELECT * FROM jobs WHERE document_id=? ORDER BY updated_at DESC,id DESC
+    `).all(id) as unknown as CompatJobRow[]
+    return projectCompatTask(document, jobs)
+  }
+}

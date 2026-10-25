@@ -1,7 +1,7 @@
 import type { CoreUtilityOperationHandler } from '@platform/rpc/utility/coreUtilityRuntime'
 import type { FigureInsightStore } from '@features/insight/utility'
 import type { MarkdownEditStore } from '../../../utility/core/persistence/markdownEditStore'
-import type { V2TaskRepositoryCompat } from '../../../utility/core/persistence/v2TaskRepositoryCompat'
+import type { V2TaskRepositoryCompat } from '@features/library/utility'
 import { paperChatFigureRequestSchema } from '../contract/paperChatFigures'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '../contract/paperChatSchemas'
 import { paperChatDeleteTurnSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveSessionSchema, paperChatSaveTurnSchema } from '../contract/paperChatStorageSchemas'

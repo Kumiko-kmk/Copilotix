@@ -10,7 +10,7 @@ import { PAPER_CHAT_MAX_FIGURE_IMAGES, PAPER_CHAT_MAX_IMAGE_BYTES, paperChatFigu
   type PaperChatFigureRequest, type PaperChatFigureSource } from '../contract/paperChatFigures'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import type { FigureInsightStore } from '@features/insight/utility'
-import type { V2TaskRepositoryCompat } from '../../../utility/core/persistence/v2TaskRepositoryCompat'
+import type { V2TaskRepositoryCompat } from '@features/library/utility'
 
 const mappingsSchema = z.object({ version: z.literal(BLOCK_MAPPING_VERSION), mappings: z.array(blockMappingSchema).max(100_000) }).passthrough()
 const PANEL_NAME = /^[A-Za-z0-9_-]{1,128}\.(?:jpe?g|png)$/iu

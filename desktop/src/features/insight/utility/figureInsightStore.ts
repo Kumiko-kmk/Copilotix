@@ -11,7 +11,7 @@ import { FIGURE_INSIGHT_MAX_IMAGE_BYTES, FIGURE_INSIGHT_PROMPT_VERSION, figureIn
   figureInsightLocationSchema, figureInsightRecordSchema, figureInsightSaveSchema,
   type FigureInsightRequest, type FigureInsightDescriptor, type FigureInsightSave, type FigureInsightState, type FigureInsightRecord } from '../contract/figureInsight'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
-import type { V2TaskRepositoryCompat } from '../../../utility/core/persistence/v2TaskRepositoryCompat'
+import type { V2TaskRepositoryCompat } from '@features/library/utility'
 
 const hash = (value: string | Buffer): string => createHash('sha256').update(value).digest('hex')
 const absent = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT'

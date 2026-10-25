@@ -29,7 +29,7 @@ const E2E_MAP = [
   [/^desktop\/src\/renderer\/(?:components\/(?:Reader(?!Chat|Figure)|MarkdownPane|MarkdownMinimap|PdfPane|DocumentLifecycle)|reader(?!Figure))/u, ['reader', 'qa-fixes']],
   [/(?:ReaderFigure|readerFigureGroups|figureArtifact|figureInsight)/u, ['reader-figures']],
   [/(?:ReaderChatPanel|paperChat|\/rag)/u, ['paper-chat']],
-  [/(?:paperArchive|LibraryPage|ArchiveDetail|ArchiveText|lineRedaction|libraryCategories|useArchivePreparation)/u, ['paper-archive', 'archive-layout', 'archive-math']],
+  [/(?:paperArchive|library\/renderer\/archive\/|LibraryPage|ArchiveDetail|ArchiveText|lineRedaction|libraryCategories|useArchivePreparation)/u, ['paper-archive', 'archive-layout', 'archive-math']],
   [/(?:paperInsight|paperBrief|PaperInsight)/u, ['paper-insight', 'archive-math']],
   [/(?:SettingsPage|AppNavigation|theme\.ts|settingsService|storageService)/u, ['ui-chrome', 'qa-fixes']],
   [/(?:window|TitleBar|EdgeDock)/iu, ['window-controls']],

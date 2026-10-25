@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, Menu, shell, Tray } from 'electron'
 import { emitEvent, type IpcInvokeEventLike, type IpcRegistrar } from '@platform/ipc/main/ipc'
-import { MINERU_API_TOKEN_URL, TUTORIAL_PAPER_SOURCE_URL } from '@shared/tutorialSample'
+import { MINERU_API_TOKEN_URL, TUTORIAL_PAPER_SOURCE_URL } from '@features/library/contract/tutorialSample'
 import type { WindowState } from '@shared/types'
 import { windowChannels } from '../contract/window'
 

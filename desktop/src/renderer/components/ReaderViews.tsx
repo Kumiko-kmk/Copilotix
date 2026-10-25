@@ -27,7 +27,7 @@ import { buildReaderFigureGeometries, projectReaderFigureGroups, type ReaderFigu
 import { applyFigureDisplay, useFigureDisplayChoices } from '../readerFigureDisplay'
 import { createScrollSyncHub } from '../readerScrollSync'
 import { useFigureArtifacts } from '../useFigureArtifacts'
-import { canRetry } from '../documentStatus'
+import { canRetry } from '@features/library/renderer'
 
 /** AI chat lives in the same workbench as the readers; it is optional so the reader works without it. */
 export interface ReaderChatOptions {
