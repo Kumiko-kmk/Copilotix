@@ -1,6 +1,6 @@
 # 1.3.0 Milestone：功能模組化與開發秩序
 
-狀態：規劃中（2026-10-25 使用者確認方向）。本文件是本 milestone 的唯一進度入口，各階段完成後在此勾選並刪除過時說明；架構決策見 [ADR-0001](adr/0001-feature-modules.md)。
+狀態：進行中（2026-10-25 使用者確認方向；重構在分支 `modularize-1.3`）。本文件是本 milestone 的唯一進度入口，各階段完成後在此勾選並刪除過時說明；架構決策見 [ADR-0001](adr/0001-feature-modules.md)。
 
 ## 目標
 
@@ -47,6 +47,19 @@
 | M6 文件 | ARCHITECTURE 依 C4 重寫（系統／容器／元件）；各模組 README；決策寫 ADR；AGENTS.md 瘦身為入口；技術債清單 | 文件審閱 |
 | M7 發布 | 版本號 1.3.0、CHANGELOG（Keep a Changelog）、RC 給使用者試用、全量 CI、打 tag（需授權） | 1.3.0 tag |
 
+### 階段進度
+
+- [ ] M0 基線（push／遠端 CI 待授權；worktree 清理由主對話處理）
+- [x] M1 規則
+- [ ] M2 平台層
+- [ ] M3 中樞拆分
+- [ ] M4 逐模組遷移：zotero · settings · insight · chat · translation · parsing · library · reader
+- [ ] M5 收尾
+
+### 依賴基線（M1，2026-10-25）
+
+`pnpm desktop:deps`（warn 模式，CI 在 typecheck 後執行）：274 個模組、1165 條依賴，**9 個違規，全為 `no-circular`**，皆在 `shared/`：`types.ts` 與 `ipcSchemas`、`paperChatSchemas`、`paperChatStorageSchemas`、`paperInsight`、`figureInsight`、`pdfImport`（經 `titleNaming`）互相引用型別（7 個）；`readerFigureGroups` ↔ `readerFigureLayout`；`paperBrief/lengths` ↔ `paperBrief/schema`。功能邊界 0（尚無 `features/`），進程層 0，入口不可達的檔案 0。跨模組耦合集中在 `shared/types.ts`、`ipcSchemas.ts`、`coreRpcSchemas.ts`、`utilityOperations.ts`、`main/index.ts`、`preload/index.ts` 六個中樞，M2–M5 依次拆開。
+
 ## 技術債清單（待逐項結論）
 
 - Runtime 355.6／360 MiB，暫列 advisory（`release-policy.mjs`）。
@@ -56,6 +69,7 @@
 - PDF 視圖無引用懸停（無鏈接注釋層）。
 - 「重新翻譯此段」「長按拖曳排序」尚未在真實憑據下走過完整流程。
 - CI「只測受影響部分」的選擇邏輯尚未在遠端驗證。
+- 本機 E2E `reader.spec.ts`「keeps the complete minimap static across long-document jumps」穩定失敗（標題距捲動容器頂 15.45 px，期望 16±0.5），master 原樣即如此，疑與顯示縮放有關；待在 CI／其他機器確認。
 - RAG 時期遺留：`sqliteRagRepository.ts`、`rag-content-index` 作業與相關 schema；需先確認問答索引是否仍依賴，再決定刪除或改名歸入 chat 模組（schema 4 的 rag_* 表為遷移兼容必須保留）。
 
 ## 參考規範
@@ -69,3 +83,5 @@
 ## 驗收紀錄
 
 （各階段完成後在此記錄日期、提交與證據入口，一行一項。）
+
+- 2026-10-25 M1：加入 dependency-cruiser 16.10.4（`desktop/.dependency-cruiser.cjs`，warn）、ADR 模組地圖與基線；順帶以行內註解消除 master 既有的 lint 錯誤（`paperChatFigures.ts` 的 `no-control-regex`，正則本意即拒絕控制字元）。typecheck、lint（0 錯誤）、`desktop:test:full` 847 通過／3 跳過、deps 9 warn；build:bundles＋utility smoke 通過；全量 E2E（package.json 變更觸發）30 通過／3 跳過／1 失敗：`reader.spec.ts` 小地圖跳轉後標題偏移 15.45 px（期望 16±0.5），重跑 3 次結果相同，M1 未改任何運行代碼，記入技術債。

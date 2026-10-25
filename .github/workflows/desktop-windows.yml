@@ -69,6 +69,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm desktop:lint
       - run: pnpm desktop:typecheck
+      # Module boundaries (ADR-0001): warnings are the migration backlog, errors fail the build.
+      - run: pnpm desktop:deps
       # Unit tests affected by the change (import graph) plus the always-run safety set; toolchain changes run all.
       - name: Affected unit regression
         if: env.FULL_VALIDATION != 'true'
