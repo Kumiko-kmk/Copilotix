@@ -1,8 +1,5 @@
-import { paperChatFigureRequestSchema, paperChatFigureSourceSchema } from './paperChatFigures'
 import { markdownEditRequestSchema, markdownEditResultSchema } from './markdownEdits'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from './libraryCategories'
-import { paperChatStatusRequestSchema, paperChatStatusSchema, paperContextRequestSchema, paperContextResultSchema } from './paperChatSchemas'
-import { paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from './paperChatStorageSchemas'
 import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema } from './readerNotes'
 import { z } from 'zod'
 import { libraryCoreRequestSchema, libraryResultSchema } from './librarySchemas'
@@ -95,16 +92,6 @@ export const coreRepairTextLayerResultSchema = z.object({
   repaired: z.number().int().min(0).max(1_000_000),
   unresolved: z.number().int().min(0).max(1_000_000)
 }).strict()
-export const coreRagContentIndexPayloadSchema = z.object({
-  documentId: coreIdSchema,
-  contentRevisionId: coreIdSchema
-}).strict()
-export const coreRagContentIndexResultSchema = z.object({
-  documentId: coreIdSchema,
-  contentRevisionId: coreIdSchema,
-  chunkCount: z.number().int().min(0).max(100_000),
-  revisionState: z.literal('ready')
-}).strict()
 
 const coreTranslationPlanIdSchema = z.string().uuid().refine(noNul, 'translation plan id cannot contain NUL')
 const coreTranslationPlanPathSchema = z.string().min(1).max(1_024).refine(noNul, 'translation plan path cannot contain NUL').refine((value) =>
@@ -161,19 +148,10 @@ export const coreTranslationPlanFinalizeResultSchema = translationPlanFinalizeRe
  */
 export const featureOperations = {
   'compute:library-categories': { payload: libraryCategoriesRequestSchema, result: libraryCategoriesPageSchema },
-  'chat:load': { payload: paperChatLoadRequestSchema, result: paperChatPageSchema },
-  'chat:save-turn': { payload: paperChatSaveTurnSchema, result: paperChatSavedSchema },
-  'chat:session': { payload: paperChatDocumentRequestSchema, result: paperChatSessionSchema },
-  'chat:save-session': { payload: paperChatSaveSessionSchema, result: paperChatSavedSchema },
   'notes:list': { payload: readerNotesRequestSchema, result: readerNotesSchema },
   'notes:upsert': { payload: readerNoteUpsertSchema, result: readerNotesSchema },
   'notes:delete': { payload: readerNoteDeleteSchema, result: readerNotesSchema },
-  'chat:delete-turn': { payload: paperChatDeleteTurnSchema, result: paperChatDeletedSchema },
-  'chat:clear': { payload: paperChatDocumentRequestSchema, result: paperChatClearedSchema },
-  'chat:ensure-index': { payload: paperChatStatusRequestSchema, result: paperChatStatusSchema },
-  'chat:build-context': { payload: paperContextRequestSchema, result: paperContextResultSchema },
   'markdown-edits:apply': { payload: markdownEditRequestSchema, result: markdownEditResultSchema },
-  'compute:paper-chat-figure': { payload: paperChatFigureRequestSchema, result: paperChatFigureSourceSchema },
   'library:check': { payload: emptyPayloadSchema, result: z.object({ idle: z.literal(true) }).strict() },
   'library:manage': { payload: libraryCoreRequestSchema, result: libraryResultSchema },
   'settings:get': { payload: coreSettingsGetPayloadSchema, result: coreSettingsGetResultSchema },
@@ -196,7 +174,6 @@ export const featureOperations = {
   'compute:normalize-parser': { payload: coreNormalizeParserPayloadSchema, result: coreNormalizeParserResultSchema },
   'compute:rebuild-mappings': { payload: coreRebuildMappingsPayloadSchema, result: coreRebuildMappingsResultSchema },
   'compute:repair-text-layer': { payload: coreRepairTextLayerPayloadSchema, result: coreRepairTextLayerResultSchema },
-  'compute:rag-content-index': { payload: coreRagContentIndexPayloadSchema, result: coreRagContentIndexResultSchema },
   'compute:translation-plan-open': { payload: coreTranslationPlanOpenPayloadSchema, result: coreTranslationPlanOpenResultSchema },
   'compute:translation-plan-list': { payload: coreTranslationPlanListPayloadSchema, result: coreTranslationPlanListResultSchema },
   'compute:translation-plan-cache': { payload: coreTranslationPlanCachePayloadSchema, result: coreTranslationPlanCacheResultSchema },

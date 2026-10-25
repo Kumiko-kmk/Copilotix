@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS } from '../src/shared/constants'
 import type { CopilotixTask, AppSettings } from '../src/shared/types'
 import { FigureInsightStore } from '../src/features/insight/utility/figureInsightStore'
 import { FigureInsightService } from '../src/features/insight/main/figureInsightService'
-import { ChatProvider } from '../src/main/chat/chatProvider'
+import { ChatProvider } from '../src/features/chat/main/chatProvider'
 import { WindowsCredentialVault } from '../src/platform/credentials/main/credentialVault'
 import { figureInsightContentSchema, type FigureInsightDescriptor, type FigureInsightRequest, type FigureInsightState } from '../src/features/insight/contract/figureInsight'
 

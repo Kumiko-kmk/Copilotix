@@ -1,7 +1,7 @@
 import { eventChannel, invokeChannel, type IpcBridge } from '@platform/ipc/contract/channels'
-import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema, type PaperChatAskRequest, type PaperChatStatus } from '@shared/paperChatSchemas'
-import { paperChatClearedSchema, paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSavedSchema, paperChatSessionSchema, type PaperChatLoadRequest, type PaperChatPage, type PaperChatSession } from '@shared/paperChatStorageSchemas'
-import { ragStreamEventSchema, type RagStreamEvent } from '@shared/ragSchemas'
+import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema, type PaperChatAskRequest, type PaperChatStatus } from './paperChatSchemas'
+import { paperChatClearedSchema, paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSavedSchema, paperChatSessionSchema, type PaperChatLoadRequest, type PaperChatPage, type PaperChatSession } from './paperChatStorageSchemas'
+import { ragStreamEventSchema, type RagStreamEvent } from './ragSchemas'
 
 export const paperChatChannels = {
   load: invokeChannel('paper-chat:load', paperChatLoadRequestSchema, paperChatPageSchema),

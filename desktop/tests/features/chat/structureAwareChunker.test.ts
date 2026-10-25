@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockMapping } from '@shared/types'
-import { DEFAULT_CHUNK_HARD_MAX_TOKENS, estimateTokens, structureAwareChunk, STRUCTURE_AWARE_CHUNKER_FINGERPRINT } from '../src/utility/core/compute/structureAwareChunker'
+import { DEFAULT_CHUNK_HARD_MAX_TOKENS, estimateTokens, structureAwareChunk, STRUCTURE_AWARE_CHUNKER_FINGERPRINT } from '../../../src/features/chat/utility/structureAwareChunker'
 
 function mapping(id: string, order: number, sourceText: string, type = 'text'): BlockMapping {
   return { id, order, sourceText, type, boxes: [{ pageIndex: order, pageSize: [612, 792], bbox: [1, 2, 3, 4], blockPosition: `p-${order}` }] }

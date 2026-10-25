@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { resolvePaperChatModel } from '@shared/paperChatSchemas'
+import { resolvePaperChatModel } from '@features/chat/contract/paperChatSchemas'
 import { existsSync, realpathSync } from 'node:fs'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'

@@ -1,4 +1,4 @@
-import type { PaperChatProvider } from '@shared/paperChatSchemas'
+import type { PaperChatProvider } from '../contract/paperChatSchemas'
 import type { ChatProvider } from './chatProvider'
 import type { CodexRuntime } from '@platform/codex/runtime/codexRuntime'
 import type { CodexSettings } from '@platform/codex/contract/codex'

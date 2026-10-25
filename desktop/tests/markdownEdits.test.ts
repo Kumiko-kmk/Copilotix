@@ -10,7 +10,7 @@ import { MARKDOWN_EDITS_FILE, emptyMarkdownEdits, inReadingOrder, moveInOrder, o
 import { buildOriginalReaderBlocks, buildTranslatedReaderBlocks } from '@shared/readerDocument'
 import { readMarkdownEditsFile } from '@runtime/markdownEditsFile'
 import { resolveReaderEdits } from '../src/main/artifactService'
-import { applyChunkEdits } from '../src/utility/core/paperContextBuilder'
+import { applyChunkEdits } from '../src/features/chat/utility/paperContextBuilder'
 import { MarkdownEditStore } from '../src/utility/core/persistence/markdownEditStore'
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
 import { V2Database } from '../src/platform/database/utility/v2Database'

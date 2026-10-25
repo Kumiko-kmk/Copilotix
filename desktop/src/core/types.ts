@@ -1,4 +1,4 @@
-import type { CitationLocator } from '@shared/ragSchemas'
+import type { CitationLocator } from '@features/chat/contract/ragSchemas'
 
 export type DocumentId = string
 export type DocumentTranslationProvider = 'qwen' | 'deepseek' | 'bing' | 'transmart' | 'codex'

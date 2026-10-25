@@ -18,7 +18,7 @@ import {
   ragWireByteLength,
   selectionFragmentSchema,
   semanticIndexStateSchema
-} from '@shared/ragSchemas'
+} from '@features/chat/contract/ragSchemas'
 import {
   documentSummarySchema,
   documentWorkflowSchema,

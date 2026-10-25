@@ -1,9 +1,9 @@
 import React from 'react'
-import { canTransitionRagStreamEvent, type Citation, type RagStreamEventType, type RagStreamEvent } from '@shared/ragSchemas'
-import { paperChatPinnedSchema, supportedChatModelSchema, type PaperChatPinned, type PaperChatProvider } from '@shared/paperChatSchemas'
+import { canTransitionRagStreamEvent, type Citation, type RagStreamEventType, type RagStreamEvent } from '../contract/ragSchemas'
+import { paperChatPinnedSchema, supportedChatModelSchema, type PaperChatPinned, type PaperChatProvider } from '../contract/paperChatSchemas'
 import type { ReaderChatSelection } from '@shared/types'
-import { emptyPaperChatSession, paperChatTurnSelections, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
-import { PAPER_CHAT_MAX_FIGURES, paperChatFigurePinSchema, type PaperChatFigurePin } from '@shared/paperChatFigures'
+import { emptyPaperChatSession, paperChatTurnSelections, type PaperChatSession, type StoredPaperChatTurn } from '../contract/paperChatStorageSchemas'
+import { PAPER_CHAT_MAX_FIGURES, paperChatFigurePinSchema, type PaperChatFigurePin } from '../contract/paperChatFigures'
 
 export interface PaperChatTurn extends Partial<Pick<StoredPaperChatTurn, 'id' | 'model' | 'provider' | 'createdAt' | 'completedAt' | 'durationMs' | 'usage' | 'selections' | 'figures'>> {
   /** The selections sent with this question, kept in memory so a retry asks about them again. */

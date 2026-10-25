@@ -7,7 +7,7 @@ import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
 import type { BlockMapping, CopilotixTask } from '@shared/types'
 import { FigureInsightStore } from '../../../src/features/insight/utility/figureInsightStore'
-import { PaperChatFigureStore } from '../../../src/utility/core/persistence/paperChatFigureStore'
+import { PaperChatFigureStore } from '../../../src/features/chat/utility/paperChatFigureStore'
 
 const roots: string[] = []
 const hash = (v: string | Buffer): string => createHash('sha256').update(v).digest('hex')

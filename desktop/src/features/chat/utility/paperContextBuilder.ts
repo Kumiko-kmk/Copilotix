@@ -1,9 +1,9 @@
 import type { RagChunk } from '@core/types'
-import { PAPER_CHAT_MAX_BYTES, paperContextRequestSchema, paperContextResultSchema, type PaperContext, type PaperContextRequest, type PaperEvidence } from '@shared/paperChatSchemas'
-import { ragWireByteLength } from '@shared/ragSchemas'
-import type { SqliteRagRepository } from './persistence/sqliteRagRepository'
+import { PAPER_CHAT_MAX_BYTES, paperContextRequestSchema, paperContextResultSchema, type PaperContext, type PaperContextRequest, type PaperEvidence } from '../contract/paperChatSchemas'
+import { ragWireByteLength } from '../contract/ragSchemas'
+import type { SqliteRagRepository } from './sqliteRagRepository'
 import { paperSelectionText } from '@shared/paperSelectionText'
-import { captionFigureKey, mentionsFigure } from '@shared/figureMentions'
+import { captionFigureKey, mentionsFigure } from '../contract/figureMentions'
 import type { MarkdownEditsFile } from '@shared/markdownEdits'
 
 export class PaperContextError extends Error {

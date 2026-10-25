@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { citationLocatorSchema, ragQuerySchema, ragUuidSchema, ragWireByteLength, selectionFragmentSchema, scoreProvenanceSchema } from './ragSchemas'
-import type { AppSettings } from './types'
+import type { AppSettings } from '@shared/types'
 import { PAPER_CHAT_MAX_FIGURES, paperChatFigurePinSchema, paperContextFigureResultSchema, paperContextFigureSchema } from './paperChatFigures'
 
 export const CHAT_CONSENT_VERSION = 2

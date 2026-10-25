@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { abortable, ChatProvider, type ChatFetcher } from '../src/main/chat/chatProvider'
+import { abortable, ChatProvider, type ChatFetcher } from '../../../src/features/chat/main/chatProvider'
 
 const encoder = new TextEncoder()
 const packet = (text: string): string => `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`

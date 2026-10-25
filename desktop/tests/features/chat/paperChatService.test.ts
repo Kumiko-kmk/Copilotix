@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { CHAT_CONSENT_VERSION, type PaperChatAskRequest, type PaperContext } from '@shared/paperChatSchemas'
-import { canTransitionRagStreamEvent, type RagStreamEvent } from '@shared/ragSchemas'
-import { ChatProviderError } from '../src/main/chat/chatProvider'
-import { buildPaperChatMessages, PaperChatService, type PaperChatDependencies } from '../src/main/chat/paperChatService'
+import { CHAT_CONSENT_VERSION, type PaperChatAskRequest, type PaperContext } from '@features/chat/contract/paperChatSchemas'
+import { canTransitionRagStreamEvent, type RagStreamEvent } from '@features/chat/contract/ragSchemas'
+import { ChatProviderError } from '../../../src/features/chat/main/chatProvider'
+import { buildPaperChatMessages, PaperChatService, type PaperChatDependencies } from '../../../src/features/chat/main/paperChatService'
 
 const doc = '10000000-0000-4000-8000-000000000001'
 const request: PaperChatAskRequest = { documentId: doc, question: 'private question', pinned: [], history: [] }

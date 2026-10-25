@@ -5,7 +5,7 @@
 import { z } from 'zod'
 import { paperBriefSchema } from '../core/paperBrief/schema'
 import { briefAnchorsSchema } from '../core/paperBrief/contracts'
-import { paperChatProviderSchema, PAPER_CHAT_MODELS, supportedChatModelSchema } from '@shared/paperChatSchemas'
+import { paperChatProviderSchema, PAPER_CHAT_MODELS, supportedChatModelSchema } from '@features/chat/contract/paperChatSchemas'
 
 const text = (max: number) => z.string().trim().min(1).max(max).refine((value) => ![...value].some((char) => char.charCodeAt(0) < 32 && !'\t\n\r'.includes(char)))
 export const PAPER_INSIGHT_MAX_BYTES = 128 * 1024

@@ -2,13 +2,14 @@ import { createCoreProtocol, platformOperations, type CoreMessageOf, type CoreOp
 import { jobOperations } from '@platform/jobs/contract/rpc'
 import { featureOperations } from '@shared/coreRpcSchemas'
 import { insightOperations } from '@features/insight/contract/rpc'
+import { chatOperations } from '@features/chat/contract/rpc'
 
 /**
  * The complete Core RPC registry, the only source of operation payload/result
  * types. Operations are declared next to their owner and combined here; Main
  * and Utility receive the bound protocol instead of importing this file.
  */
-export const coreOperationRegistry = { ...platformOperations, ...jobOperations, ...insightOperations, ...featureOperations } as const
+export const coreOperationRegistry = { ...platformOperations, ...jobOperations, ...insightOperations, ...chatOperations, ...featureOperations } as const
 export type CoreOperationRegistryShape = typeof coreOperationRegistry
 
 export const coreProtocol = createCoreProtocol(coreOperationRegistry)

@@ -9,7 +9,7 @@ import remarkMath from 'remark-math'
 import type { PluggableList } from 'unified'
 import 'katex/dist/katex.min.css'
 import rehypeTableMath from '@platform/markdown/renderer/rehypeTableMath'
-import type { Citation } from '@shared/ragSchemas'
+import type { Citation } from '@features/chat/contract/ragSchemas'
 import { figureAssetName } from '@shared/readerFigureGroups'
 
 const markdownSanitizeSchema = {

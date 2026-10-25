@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { normalizeEnabledProviders, normalizeProviderOrder, executableProviderOrder } from '@shared/providerPolicy'
-import { paperChatSessionSchema } from '@shared/paperChatStorageSchemas'
-import { ModelGateway } from '../src/main/chat/modelGateway'
-import type { ChatProvider } from '../src/main/chat/chatProvider'
+import { paperChatSessionSchema } from '@features/chat/contract/paperChatStorageSchemas'
+import { ModelGateway } from '../src/features/chat/main/modelGateway'
+import type { ChatProvider } from '../src/features/chat/main/chatProvider'
 import type { CodexRuntime } from '../src/platform/codex/runtime/codexRuntime'
 import { V2Database, V2_MIGRATIONS } from '../src/platform/database/utility/v2Database'
 

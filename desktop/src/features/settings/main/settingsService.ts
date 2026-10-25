@@ -12,7 +12,7 @@ import type {
   SettingsUpdate
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { resolvePaperChatModel } from '@shared/paperChatSchemas'
+import { resolvePaperChatModel } from '@features/chat/contract/paperChatSchemas'
 import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
 
 /** The only persistence SettingsService needs. */

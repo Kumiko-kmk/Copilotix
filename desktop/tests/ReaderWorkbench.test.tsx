@@ -7,9 +7,9 @@ import type { ReaderBlock } from '@shared/readerDocument'
 import ReaderWorkbench, { MIN_GROUP_HEIGHT, MIN_GROUP_WIDTH, dropVerdict, dropZoneAt, minNodeExtent } from '../src/renderer/components/ReaderWorkbench'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../src/renderer/components/ReaderViews'
 import { defaultReaderLayout, normalizeLayout, splitView, type ReaderLayout } from '../src/renderer/readerLayout'
-import type { PaperChatController } from '../src/renderer/usePaperChat'
+import type { PaperChatController } from '../src/features/chat/renderer/usePaperChat'
 
-vi.mock('../src/renderer/components/ReaderChatPanel', () => ({
+vi.mock('../src/features/chat/renderer/ReaderChatPanel', () => ({
   default: () => <section aria-label="论文 Chat"><textarea aria-label="问答草稿" /></section>,
   ReaderChatToolbar: () => <div>问答工具栏</div>
 }))

@@ -5,7 +5,7 @@ import { FIGURE_INSIGHT_PROMPT_VERSION, figureInsightContentSchema, figureInsigh
   type FigureInsightDescriptor, type FigureInsightState, type FigureInsightSave } from '@features/insight/contract/figureInsight'
 import { buildFigureInsightMessages } from '@features/insight/core/figureInsightPrompt'
 import { FigureInsightService, type FigureInsightDependencies } from '../../../src/features/insight/main/figureInsightService'
-import { ChatProvider } from '../../../src/main/chat/chatProvider'
+import { ChatProvider } from '../../../src/features/chat/main/chatProvider'
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2l1sAAAAASUVORK5CYII=', 'base64')
 const digest = createHash('sha256').update(png).digest('hex')

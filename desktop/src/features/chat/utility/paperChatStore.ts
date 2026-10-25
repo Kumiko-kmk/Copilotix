@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { lstat, mkdir, open, readdir, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { ragWireByteLength } from '@shared/ragSchemas'
-import { PAPER_CHAT_MAX_BYTES } from '@shared/paperChatSchemas'
-import { emptyPaperChatSession, paperChatCursorSchema, paperChatSessionSchema, paperChatTurnSchema, type PaperChatDeleteTurnRequest, type PaperChatPage, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
+import { ragWireByteLength } from '../contract/ragSchemas'
+import { PAPER_CHAT_MAX_BYTES } from '../contract/paperChatSchemas'
+import { emptyPaperChatSession, paperChatCursorSchema, paperChatSessionSchema, paperChatTurnSchema, type PaperChatDeleteTurnRequest, type PaperChatPage, type PaperChatSession, type StoredPaperChatTurn } from '../contract/paperChatStorageSchemas'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 
 const turnFileSchema = z.object({ version: z.literal(1), documentId: z.string(), turn: paperChatTurnSchema }).strict()

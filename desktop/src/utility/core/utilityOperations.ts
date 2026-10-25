@@ -1,16 +1,11 @@
 import { createInsightOperations } from '@features/insight/utility'
-import { PaperChatFigureStore } from './persistence/paperChatFigureStore'
 import { MarkdownEditStore } from './persistence/markdownEditStore'
 import { markdownEditRequestSchema } from '@shared/markdownEdits'
-import { paperChatFigureRequestSchema } from '@shared/paperChatFigures'
 import { libraryCategoriesRequestSchema } from '@shared/libraryCategories'
 import { LibraryCategoryService } from './libraryCategoryService'
-import { paperChatStatusRequestSchema, paperContextRequestSchema } from '@shared/paperChatSchemas'
-import { paperChatDeleteTurnSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatSaveTurnSchema, paperChatSaveSessionSchema } from '@shared/paperChatStorageSchemas'
-import { PaperChatStore } from './persistence/paperChatStore'
 import { ReaderNoteStore } from './persistence/readerNoteStore'
 import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema } from '@shared/readerNotes'
-import { PaperContextBuilder, PaperContextError } from './paperContextBuilder'
+import { createChatOperations, PaperContextError, RagContentIndexError, RagContentIndexService, SqliteRagRepository, SqliteRagRepositoryError } from '@features/chat/utility'
 import { assertLibraryIdle, manageLibrary } from './libraryMaintenance'
 import { libraryCoreRequestSchema } from '@shared/librarySchemas'
 import { createHash, randomUUID } from 'node:crypto'
@@ -29,7 +24,6 @@ import {
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
   coreRepairTextLayerPayloadSchema,
-  coreRagContentIndexPayloadSchema,
   coreTranslationPlanOpenPayloadSchema,
   coreTranslationPlanListPayloadSchema,
   coreTranslationPlanCachePayloadSchema,
@@ -65,11 +59,9 @@ import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '@pl
 import { V2Database } from '@platform/database/utility/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
 import { SqliteJobRepository, SqliteJobRepositoryError } from '@platform/jobs/utility/sqliteJobRepository'
-import { SqliteRagRepository, SqliteRagRepositoryError } from './persistence/sqliteRagRepository'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
 import { withoutFirstPage } from './compute/pdfPageRemoval'
-import { RagContentIndexError, RagContentIndexService } from './compute/ragContentIndexService'
 
 type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
 
@@ -147,42 +139,27 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     }
     return state.translationPlanManager
   }
-  const chatStore = new PaperChatStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const noteStore = new ReaderNoteStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const editStore = new MarkdownEditStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
   const insight = createInsightOperations(requireRepository)
   const { insightStore, figureInsightStore } = insight
   const categories = new LibraryCategoryService(insightStore, requireRepository)
+  const chat = createChatOperations({
+    repository: requireRepository,
+    ragRepository: requireRagRepository,
+    ragIndex: requireRagContentIndexService,
+    edits: editStore,
+    figureInsightStore
+  })
   const handlers: UtilityHandlerMap = {
     ...insight.handlers,
     // Reads every paper's text on first use: compute lane, so quick data requests are not held up.
     'compute:library-categories': (request, signal) => categories.page(libraryCategoriesRequestSchema.parse(request.payload).after ?? 0, signal),
-    'chat:load': (request) => { const { documentId, before } = paperChatLoadRequestSchema.parse(request.payload); return chatStore.load(documentId, before) },
-    'chat:save-turn': (request) => { const { documentId, turn } = paperChatSaveTurnSchema.parse(request.payload); return chatStore.saveTurn(documentId, turn) },
-    'chat:session': (request) => chatStore.session(paperChatDocumentRequestSchema.parse(request.payload).documentId),
-    'chat:save-session': (request) => { const { documentId, session } = paperChatSaveSessionSchema.parse(request.payload); return chatStore.saveSession(documentId, session) },
-    'chat:delete-turn': (request) => chatStore.deleteTurn(paperChatDeleteTurnSchema.parse(request.payload)),
-    'chat:clear': (request) => chatStore.clear(paperChatDocumentRequestSchema.parse(request.payload).documentId),
+    ...chat.handlers,
     'markdown-edits:apply': (request) => editStore.apply(markdownEditRequestSchema.parse(request.payload)),
     'notes:list': (request) => noteStore.list(readerNotesRequestSchema.parse(request.payload).documentId),
     'notes:upsert': (request) => { const { documentId, note } = readerNoteUpsertSchema.parse(request.payload); return noteStore.upsert(documentId, note) },
     'notes:delete': (request) => { const { documentId, noteId } = readerNoteDeleteSchema.parse(request.payload); return noteStore.delete(documentId, noteId) },
-    'chat:ensure-index': (request, signal) => {
-      signal.throwIfAborted()
-      const { documentId } = paperChatStatusRequestSchema.parse(request.payload)
-      requireRepository().ensureContentIndex(documentId)
-      const rag = requireRagRepository()
-      const k = rag.getDocumentKnowledge(documentId) ?? rag.ensureDocumentKnowledge(documentId)
-      return { state: k?.localState ?? 'unindexed', progress: k?.localProgress ?? 0, contentRevisionId: k?.activeContentRevisionId ?? null }
-    },
-    'chat:build-context': async (request, signal) => {
-      const input = paperContextRequestSchema.parse(request.payload)
-      // An unreadable edit layer falls back to the parsed text; saving an edit reports the problem.
-      const edits = await editStore.read(input.documentId).catch(() => null)
-      const order = edits?.order ? await editStore.readingOrder(input.documentId).catch(() => null) : null
-      return new PaperContextBuilder(requireRagRepository()).build(input, signal, edits, order)
-    },
-    'compute:paper-chat-figure': (request, signal) => new PaperChatFigureStore(requireRepository(), figureInsightStore()).source(paperChatFigureRequestSchema.parse(request.payload), signal),
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {
       if (!state.databasePath) throw new Error('文档库尚未初始化')
@@ -313,10 +290,6 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       const payload = request.payload as { taskId: string; outputDir: string }
       await rebuildMappings(payload.taskId, payload.outputDir, requireRepository())
       return { rebuilt: true }
-    },
-    'compute:rag-content-index': async (request, signal) => {
-      const payload = coreRagContentIndexPayloadSchema.parse(request.payload)
-      return requireRagContentIndexService().index(payload, signal)
     },
     'compute:translation-plan-open': async (request) => {
       const payload = coreTranslationPlanOpenPayloadSchema.parse(request.payload)

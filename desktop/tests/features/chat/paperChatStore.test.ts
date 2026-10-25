@@ -3,9 +3,9 @@ import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PAPER_CHAT_MAX_BYTES } from '@shared/paperChatSchemas'
-import { emptyPaperChatSession, paperChatPageSchema, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
-import { PaperChatStore } from '../src/utility/core/persistence/paperChatStore'
+import { PAPER_CHAT_MAX_BYTES } from '@features/chat/contract/paperChatSchemas'
+import { emptyPaperChatSession, paperChatPageSchema, type StoredPaperChatTurn } from '@features/chat/contract/paperChatStorageSchemas'
+import { PaperChatStore } from '../../../src/features/chat/utility/paperChatStore'
 
 const roots: string[] = []
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
