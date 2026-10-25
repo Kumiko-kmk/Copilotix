@@ -1,5 +1,5 @@
 import { emitHomeWave, handleHomeWaveRequests } from './homeWave'
-import { rgbChannels } from './theme'
+import { rgbChannels } from '@features/settings/renderer'
 
 /**
  * Home backdrop: a cipher field. Faint monospace glyphs sit on the wordmark's own character grid

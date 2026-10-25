@@ -13,7 +13,7 @@ import type {
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { resolvePaperChatModel } from '@shared/paperChatSchemas'
-import type { TaskRepositoryCompat } from './taskRepositoryCompat'
+import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
 
 /** The only persistence SettingsService needs. */
 export type SettingsRepositoryPort = Pick<TaskRepositoryCompat, 'getSettings' | 'saveSettings' | 'getMigrationMarker' | 'markMigration'>

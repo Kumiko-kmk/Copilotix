@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { AppSettings, HealthResult, SettingsUpdate } from '@shared/types'
-import type { CredentialAccount, CredentialVault } from '../src/platform/credentials/main/credentialVault'
-import { maskCredential, SettingsService, TRANSLATION_CREDENTIAL_RESET_MIGRATION, type SettingsRepositoryPort } from '../src/main/settingsService'
+import type { CredentialAccount, CredentialVault } from '../../../src/platform/credentials/main/credentialVault'
+import { maskCredential, SettingsService, TRANSLATION_CREDENTIAL_RESET_MIGRATION, type SettingsRepositoryPort } from '../../../src/features/settings/main/settingsService'
 
 const roots: string[] = []
 

@@ -4,7 +4,7 @@
 // moved: a migrated feature goes into ENFORCED_FEATURES, the rest into the M5 switch.
 
 /** Features whose public boundary is enforced (M4 adds each module after its move). */
-const ENFORCED_FEATURES = new Set(['zotero'])
+const ENFORCED_FEATURES = new Set(['zotero', 'settings'])
 /** Cycles, platform isolation and process layers become errors in M5. */
 const STRUCTURE_SEVERITY = 'warn'
 

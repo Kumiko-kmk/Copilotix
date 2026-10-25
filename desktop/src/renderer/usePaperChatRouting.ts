@@ -4,7 +4,7 @@ import { PAPER_CHAT_MODELS, resolvePaperChatModel, resolvePaperChatProvider } fr
 import { paperChatImageInput, paperChatImageUnsupportedMessage } from '@shared/paperChatFigures'
 import type { AppSettings } from '@shared/types'
 import type { PaperChatSession } from '@shared/paperChatStorageSchemas'
-import { useCodexStatus } from './codexStatusClient'
+import { useCodexStatus } from '@features/settings/renderer'
 
 /**
  * Provider, model and readiness derived from the shared translation settings. The chat panel

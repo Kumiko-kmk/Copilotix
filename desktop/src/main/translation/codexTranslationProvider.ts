@@ -1,7 +1,7 @@
 import type { TranslationProvider } from './providers'
 import type { CodexRuntime } from '@platform/codex/runtime/codexRuntime'
 import { flattenSegments, parseTableTranslationResponse, validateTableTranslationResponse, type TableTranslationRequest, type TableTranslationResponse } from '@shared/translationPlanProtocol'
-import type { ProviderTokenUsage } from '../usageAnalyticsService'
+import type { ProviderTokenUsage } from '@features/settings/main'
 import { plainTranslationResponseSchema, type PlainTranslationRequest, type PlainTranslationResponse } from '@shared/translationPlanProtocol'
 import { z } from 'zod'
 

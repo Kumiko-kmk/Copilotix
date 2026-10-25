@@ -5,7 +5,7 @@ import { PAPER_CHAT_DEFAULT_BUDGET, PAPER_CHAT_MODELS, paperChatAskRequestSchema
 import { canTransitionRagStreamEvent, citationSchema, ragErrorCodeSchema, ragStreamEventSchema, RAG_MAX_STREAM_DELTA_CHARS, type RagStreamEvent, type RagStreamEventType, type RagErrorCode } from '@shared/ragSchemas'
 import type { AppSettings } from '@shared/types'
 import { paperChatTurnSelections, type StoredPaperChatTurn, type PaperChatDeleteTurnRequest, type PaperChatLoadRequest, type PaperChatPage, type PaperChatSession } from '@shared/paperChatStorageSchemas'
-import type { ProviderTokenUsage } from '../usageAnalyticsService'
+import type { ProviderTokenUsage } from '@features/settings/main'
 import type { ChatContentPart, ChatMessage } from './chatProvider'
 import { PAPER_CHAT_MAX_IMAGE_TOTAL_BYTES, paperChatImageUnsupportedMessage, type PaperChatFigureRequest, type PaperChatFigureSource, type PaperChatTurnFigure } from '@shared/paperChatFigures'
 import type { MultimodalChatMessage } from '@platform/codex/contract/chatMessages'

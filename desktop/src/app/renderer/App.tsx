@@ -1,7 +1,6 @@
 import React from 'react'
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
-import { refreshCodexStatus } from '@renderer/codexStatusClient'
-import { loadStorageInfo } from '@renderer/storageInfoClient'
+import { refreshCodexStatus, loadStorageInfo, SettingsPage } from '@features/settings/renderer'
 import { loadReaderPage, loadedReaderPage } from '@renderer/readerPageLoader'
 import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -11,7 +10,6 @@ import type { DocumentDetails, DocumentSummary } from '@shared/ipcSchemas'
 import EdgeDock from './EdgeDock'
 import WindowControls from './WindowControls'
 import NewParsePage from '@renderer/pages/NewParsePage'
-import SettingsPage from '@renderer/pages/SettingsPage'
 import TutorialPage from '@renderer/pages/TutorialPage'
 import {
   applyDocumentChange,
@@ -22,7 +20,7 @@ import {
 import { loadLibraryCategories } from '@renderer/paperArchive/libraryCategoriesClient'
 import { requestLibraryFocus } from '@renderer/paperArchive/libraryFocus'
 import { ACTIVE_STATUSES } from '@renderer/documentStatus'
-import type { SettingsNavigationGuard } from '@renderer/settingsNavigation'
+import type { SettingsNavigationGuard } from '@features/settings/renderer'
 
 const ReaderPage = React.lazy(loadReaderPage)
 // Three.js is only loaded once the archive is opened.

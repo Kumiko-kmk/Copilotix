@@ -12,7 +12,7 @@ import { resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider
 import type { AppSettings } from '@shared/types'
 import type { Job } from '@platform/jobs/core/jobs'
 import { ChatProviderError } from './chatProvider'
-import type { ProviderTokenUsage } from '../usageAnalyticsService'
+import type { ProviderTokenUsage } from '@features/settings/main'
 import { CodexGenerationError, codexFailure } from '@platform/codex/runtime/codexRuntime'
 
 export async function loadFullBriefContext(documentId: string, signal: AbortSignal,

@@ -9,7 +9,7 @@ import { buildFigureInsightMessages } from '@shared/figureInsightPrompt'
 import { resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { AppSettings } from '@shared/types'
 import { abortable } from './chatProvider'
-import type { ProviderTokenUsage } from '../usageAnalyticsService'
+import type { ProviderTokenUsage } from '@features/settings/main'
 
 export interface FigureInsightDependencies {
   settings(): Promise<AppSettings>

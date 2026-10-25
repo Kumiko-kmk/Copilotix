@@ -1,5 +1,5 @@
 import React from 'react'
-import { READER_FONT_SIZES, READER_LINE_HEIGHTS, THEMES, type Appearance, type ThemeDefinition } from '../theme'
+import { READER_FONT_SIZES, READER_LINE_HEIGHTS, THEMES, type Appearance, type ThemeDefinition } from './theme'
 
 function previewStyle(theme: ThemeDefinition): React.CSSProperties {
   const { colors } = theme

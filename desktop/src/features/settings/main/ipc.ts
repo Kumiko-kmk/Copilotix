@@ -1,8 +1,8 @@
 import { mkdir } from 'node:fs/promises'
 import type { IpcRegistrar } from '@platform/ipc/main/ipc'
-import type { SettingsService } from '@main/settingsService'
-import type { UsageAnalyticsService } from '@main/usageAnalyticsService'
-import { inspectStorage } from '@main/storageService'
+import type { SettingsService } from './settingsService'
+import type { UsageAnalyticsService } from './usageAnalyticsService'
+import { inspectStorage } from './storageService'
 import type { CopilotixTask, SettingsSaveResult, SettingsUpdate, AppSettings } from '@shared/types'
 import { settingsChannels } from '../contract/ipc'
 
