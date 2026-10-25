@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import type { LibraryRequest, LibraryResult } from '@shared/librarySchemas'
-import type { V2Database } from './persistence/v2Database'
+import type { V2Database } from '@platform/database/utility/v2Database'
 
 const itemSchema = z.object({
   path: z.string().min(1).max(32768), bytes: z.number().int().nonnegative(),

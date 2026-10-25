@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { JobKind } from '@core/types'
+import type { JobKind } from '@platform/jobs/core/jobs'
 import {
   RAG_MAX_RESULT_PAGE_ITEMS,
   RAG_MAX_SERIALIZED_BYTES,

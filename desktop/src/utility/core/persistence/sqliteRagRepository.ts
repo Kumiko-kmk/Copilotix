@@ -9,7 +9,7 @@ import type {
   LocalIndexState,
   SemanticIndexState
 } from '@shared/ragSchemas'
-import { V2Database } from './v2Database'
+import { V2Database } from '@platform/database/utility/v2Database'
 
 export type RagContentRevisionState = 'building' | 'ready' | 'stale' | 'failed'
 

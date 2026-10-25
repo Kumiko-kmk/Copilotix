@@ -1,6 +1,6 @@
 import React from 'react'
 import SafeMarkdown from '../components/SafeMarkdown'
-import { prepareReaderMarkdown } from '@shared/standardMarkdown'
+import { prepareReaderMarkdown } from '@platform/markdown/core/standardMarkdown'
 import { remarkArchiveVariables } from './archiveVariables'
 
 const plugins = [remarkArchiveVariables]

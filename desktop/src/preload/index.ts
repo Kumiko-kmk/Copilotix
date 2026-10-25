@@ -1,5 +1,5 @@
 import { markdownEditRequestSchema, markdownEditResultSchema } from '@shared/markdownEdits'
-import { codexProbeSchema, codexStatusSchema } from '@shared/codex'
+import { codexProbeSchema, codexStatusSchema } from '@platform/codex/contract/codex'
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightCancelSchema, paperInsightChangedSchema } from '@shared/paperInsight'
 import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightCancelSchema, figureInsightChangedSchema } from '@shared/figureInsight'
 import { libraryCategoriesRequestSchema, libraryCategoriesPageSchema } from '@shared/libraryCategories'
@@ -20,7 +20,6 @@ import {
   appSettingsSchema,
   credentialValidationRequestSchema,
   credentialValidationResultSchema,
-  outputDirectorySchema,
   deleteDocumentRequestSchema,
   documentChangeEventSchema,
   documentDetailsSchema,
@@ -37,7 +36,6 @@ import {
   importDocumentsResultSchema,
   listReaderAnnotationsRequestSchema,
   mutateReaderAnnotationsRequestSchema,
-  noRequestSchema,
   readerAnnotationSnapshotSchema,
   saveDocumentAsRequestSchema,
   saveDocumentAsResultSchema,
@@ -45,11 +43,11 @@ import {
   settingsUpdateSchema,
   storageInfoSchema,
   usageAnalyticsSchema,
-  voidResponseSchema,
   windowActionSchema,
   windowStateSchema
 } from '@shared/ipcSchemas'
-import { decodeIpcEvent, decodeIpcResponse } from './ipcClient'
+import { outputDirectorySchema, noRequestSchema, voidResponseSchema } from '@platform/ipc/contract/schemas'
+import { decodeIpcEvent, decodeIpcResponse } from '@platform/ipc/preload/ipcClient'
 import type {
   CopilotixDesktopApi,
   CredentialName,

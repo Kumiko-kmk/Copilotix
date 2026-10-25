@@ -1,5 +1,5 @@
-import type { JobRunner, JobRunnerInput, JobRunnerResult } from '@core/jobs'
-import { JobRunnerError } from '@core/jobs'
+import type { JobRunner, JobRunnerInput, JobRunnerResult } from '@platform/jobs/core/jobs'
+import { JobRunnerError } from '@platform/jobs/core/jobs'
 import type { RpcRagContentIndexer } from './rpcRagContentIndexer'
 
 /** Executes the local AST chunking phase; all file/SQLite work stays Utility-owned. */

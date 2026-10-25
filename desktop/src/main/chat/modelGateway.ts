@@ -1,7 +1,7 @@
 import type { PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ChatProvider } from './chatProvider'
-import type { CodexRuntime } from '@runtime/codexRuntime'
-import type { CodexSettings } from '@shared/codex'
+import type { CodexRuntime } from '@platform/codex/runtime/codexRuntime'
+import type { CodexSettings } from '@platform/codex/contract/codex'
 export type ModelInput = Omit<Parameters<ChatProvider['stream']>[0], 'provider' | 'key' | 'baseUrl'> & {
   provider: PaperChatProvider; key?: string | null; baseUrl?: string; outputSchema?: unknown
   lane?: 'interactive' | 'background'

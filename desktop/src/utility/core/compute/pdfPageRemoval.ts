@@ -1,7 +1,7 @@
 import { PDFDocument } from 'pdf-lib'
 import { MAX_PDF_BYTES } from '@shared/constants'
 import { MAX_PDF_CROP_BYTES } from '@shared/pdfImport'
-import { CoreUtilityOperationError } from '../../coreUtilityRuntime'
+import { CoreUtilityOperationError } from '@platform/rpc/utility/coreUtilityRuntime'
 
 /**
  * Returns the PDF without its first page, for cover sheets that repositories put in front of a

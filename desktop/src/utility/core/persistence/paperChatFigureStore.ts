@@ -8,7 +8,7 @@ import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
 import { captionFigureKey } from '@shared/figureMentions'
 import { PAPER_CHAT_MAX_FIGURE_IMAGES, PAPER_CHAT_MAX_IMAGE_BYTES, paperChatFigureRequestSchema, paperChatFigureSourceSchema,
   type PaperChatFigureRequest, type PaperChatFigureSource } from '@shared/paperChatFigures'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import type { FigureInsightStore } from './figureInsightStore'
 import type { V2TaskRepositoryCompat } from './v2TaskRepositoryCompat'
 

@@ -8,7 +8,7 @@ import { paperChatTurnSelections, type StoredPaperChatTurn, type PaperChatDelete
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
 import type { ChatContentPart, ChatMessage } from './chatProvider'
 import { PAPER_CHAT_MAX_IMAGE_TOTAL_BYTES, paperChatImageUnsupportedMessage, type PaperChatFigureRequest, type PaperChatFigureSource, type PaperChatTurnFigure } from '@shared/paperChatFigures'
-import type { MultimodalChatMessage } from '@shared/chatMessages'
+import type { MultimodalChatMessage } from '@platform/codex/contract/chatMessages'
 import { abortable, ChatProviderError } from './chatProvider'
 
 type EventBody = RagStreamEvent extends infer E ? E extends RagStreamEvent ? Omit<E, 'requestId' | 'sequence'> : never : never

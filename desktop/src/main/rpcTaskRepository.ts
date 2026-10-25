@@ -6,7 +6,7 @@ import type {
   ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
 import type { CoreListCursor } from '@shared/coreRpcSchemas'
-import type { UtilitySupervisor } from './utilitySupervisor'
+import type { AppCoreRequester } from '@app/contract/coreRpc'
 import type { DocumentMetadataPatch, TaskRepositoryCompat } from './taskRepositoryCompat'
 
 /**
@@ -15,7 +15,7 @@ import type { DocumentMetadataPatch, TaskRepositoryCompat } from './taskReposito
  * operations and contains no database or filesystem implementation.
  */
 export class RpcTaskRepository implements TaskRepositoryCompat {
-  constructor(private readonly supervisor: UtilitySupervisor) {}
+  constructor(private readonly supervisor: AppCoreRequester) {}
 
   async close(): Promise<void> {
     await this.supervisor.request('database:close', {})

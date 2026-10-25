@@ -5,7 +5,7 @@ import { LeftOutlined, MinusOutlined, PlusOutlined, ReloadOutlined, RightOutline
 import { Alert, Button, Progress, Space } from 'antd'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import type { BlockBox, BlockMapping, BlockSelection } from '@shared/types'
-import { acquirePdfDocument } from '../pdfDocumentCache'
+import { acquirePdfDocument } from '@platform/pdf/renderer/pdfDocumentCache'
 import { pdfPageRenderScheduler, type ScheduledPdfRender } from '../pdfRenderScheduler'
 import { recordReaderDuration } from '../readerPerformance'
 import { SYNC_READING_LINE, clampFraction, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'

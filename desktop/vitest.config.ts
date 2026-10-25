@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  resolve: { alias: { '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@runtime': resolve(__dirname, 'src/runtime'), '@main': resolve(__dirname, 'src/main') } },
+  resolve: { alias: { '@app': resolve(__dirname, 'src/app'), '@platform': resolve(__dirname, 'src/platform'), '@features': resolve(__dirname, 'src/features'), '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@runtime': resolve(__dirname, 'src/runtime'), '@main': resolve(__dirname, 'src/main') } },
   // Mirrors the renderer config: the paper archive embeds its cassette model with `?inline`.
   assetsInclude: ['**/*.glb'],
   test: {
@@ -27,12 +27,15 @@ export default defineConfig({
         'src/core/**/*.tsx',
         'src/runtime/**/*.ts',
         'src/shared/**/*.ts',
-        'src/shared/**/*.tsx'
+        'src/shared/**/*.tsx',
+        // ADR-0001 layout: the same process layers as above.
+        'src/{app,platform/*,features/*}/{main,core,runtime,contract}/**/*.{ts,tsx}'
       ],
       exclude: [
         'src/renderer/**',
         'src/preload/**',
         'src/utility/**',
+        'src/{app,platform/*,features/*}/{renderer,preload,utility}/**',
         'tests/**',
         'e2e/**',
         'out/**',
@@ -44,9 +47,10 @@ export default defineConfig({
         // Electron owns process bootstrap and utility-process creation; these
         // two adapters have no meaningful unit-test boundary.
         'src/main/index.ts',
-        'src/main/electronUtilityFork.ts',
+        'src/platform/rpc/main/electronUtilityFork.ts',
         // These files are type-only contracts after TypeScript erasure.
         'src/core/ports.ts',
+        'src/platform/files/contract/pathPolicyPort.ts',
         'src/core/types.ts',
         'src/shared/types.ts',
         'src/main/taskRepositoryCompat.ts'

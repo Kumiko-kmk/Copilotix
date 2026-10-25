@@ -6,7 +6,7 @@ import {
   flattenSegments,
   type TableTranslationRequest
 } from '@shared/translationPlanProtocol'
-import type { CredentialVault } from '@main/credentialVault'
+import type { CredentialVault } from '@platform/credentials/main/credentialVault'
 
 const vault: CredentialVault = {
   get: async () => null,

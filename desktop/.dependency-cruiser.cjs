@@ -41,7 +41,8 @@ module.exports = {
     {
       name: 'platform-no-features',
       comment: 'ADR-0001 rule 2: platform is infrastructure and cannot know any feature or the app root.',
-      severity: STRUCTURE_SEVERITY,
+      // Enforced since M2 extracted the platform layer.
+      severity: 'error',
       from: { path: '^src/platform/' },
       to: { path: '^src/(?:features|app)/' }
     },

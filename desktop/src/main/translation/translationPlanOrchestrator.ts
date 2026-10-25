@@ -16,10 +16,11 @@ import {
   validateTableTranslationResponse
 } from '@shared/translationPlanProtocol'
 import type { CredentialName, CopilotixTask, TranslationProviderId } from '@shared/types'
-import type { PathPolicyPort, TaskComputePort } from '@core/ports'
+import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
+import type { TaskComputePort } from '@core/ports'
 import type { TranslationProvider } from './providers'
 import { TranslationCredentialError, TranslationHttpError } from './providers'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 
 const MAX_TRANSLATION_SEGMENT_LENGTH = 4_000
 const MAX_TRANSLATION_PLAN_PAGE = 32

@@ -72,7 +72,7 @@ Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_IN
 
 ## 7. 閱讀器、併發與問答契約
 
-- Core RPC 只保留 Main 實際調用的 operation；新增能力採「Utility 生成 descriptor，Main 只傳 ID 與小結果」。可能隨文庫增長的列表一律分頁；`tasks:list`／`documents:list` 採 keyset `{ after? } → { items, next }`，每頁 ≤200 行、≤512 KiB。
+- Core RPC 只保留 Main 實際調用的 operation；完整註冊表在 `desktop/src/app/contract/coreRpc.ts`（由平台、作業與功能各自聲明的 operation 組合），Main／Utility 經構造參數取得綁定的 protocol，`platform/` 不認識具體功能；新增能力採「Utility 生成 descriptor，Main 只傳 ID 與小結果」。可能隨文庫增長的列表一律分頁；`tasks:list`／`documents:list` 採 keyset `{ after? } → { items, next }`，每頁 ≤200 行、≤512 KiB。
 - Utility SQLite operation 分 data、compute（`compute:*`）及獨佔生命週期（init／flush／close／library）通道；事務回調內不得 await。Main compute 用 `COMPUTE_RPC_TIMEOUT_MS` 與作業 signal 取消。
 - JobScheduler 的 `job-changed(job)`／`job-notification(job)` 用 `job.documentId` 定位文檔；Main 高頻事件經 `createCoalescedRefresh` 合併刷新。Reader 給 MarkdownPane 的 blocks／annotations 用 `useMemo` 保持引用穩定。
 - PDF 貼合完整 clientWidth，無外圍 padding／邊框／陰影、原生捲動條、頁間或末頁 gap；浮動捲動條支援拖曳／鍵盤且不佔位。透明欄分隔器覆蓋右欄。寬度／縮放／延遲尺寸改變時，layout effect 按頁號與頁內比例恢復，停用 overflow anchoring 並取消舊 frame；人工翻頁與引用定位正常更新頁碼。
@@ -119,7 +119,7 @@ Codex 的進程隔離、交互 FIFO／后台 8 槽位、新臨時會話、取消
 
 ## 12. 當前狀態與入口
 
-- **進行中：1.3.0 功能模組化 milestone**，進度與退出標準見 [MILESTONE_1_3_ZH.md](docs/MILESTONE_1_3_ZH.md)，目標結構與依賴規則見 [ADR-0001](docs/adr/0001-feature-modules.md)。期間重構只由一個 agent 執行、只搬代碼不改行為；新功能等 milestone 完成後再開。
+- **進行中：1.3.0 功能模組化 milestone**，進度與退出標準見 [MILESTONE_1_3_ZH.md](docs/MILESTONE_1_3_ZH.md)，目標結構與依賴規則見 [ADR-0001](docs/adr/0001-feature-modules.md)。期間重構只由一個 agent 執行、只搬代碼不改行為；跨功能基礎設施已移入 `desktop/src/platform/<關注點>/<層>/`（ipc、rpc、jobs、database、files、log、network、assets、credentials、uninstall、codex、markdown、pdf），測試在 `desktop/tests/platform/`；新功能等 milestone 完成後再開。
 - 預設開發分支為 `master`，包含文庫 UI 代碼與文檔。1.2.0 已於 2026-10-19 發布；正式簽章與逐 tag 例外以 docs/CODE_SIGNING_POLICY.md 為準。
 - 首頁背景使用 `homeCipher.ts`／`homeWave.ts`；已選定方案與文庫渲染契約見 [介面規範](docs/UI_PREFERENCES_ZH.md)。舊原型與候選方案由 Git 歷史保留。
 - Zotero 橋接（只在本機）：首頁「从 Zotero 导入」先讀本機只讀 API，失敗則讀 `zotero.sqlite` 唯讀副本；renderer 只傳條目 key，PDF 走既有 importPaths 按雜湊去重；條目關聯存文獻目錄 `zotero/link.v1.json`（無 migration）。閱讀器「导出到 Zotero」經本機連接器：Zotero 來源的論文建帶 `zotero://select` 連結的獨立筆記（連接器不能寫既有條目），其他論文建條目＋PDF＋子筆記，記錄存 `zotero/export.v1.json`。契約與驗證見 [Zotero 橋接](docs/ZOTERO_BRIDGE_ZH.md)。

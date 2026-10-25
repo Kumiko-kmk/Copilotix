@@ -17,7 +17,7 @@ import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 
 /** The only persistence SettingsService needs. */
 export type SettingsRepositoryPort = Pick<TaskRepositoryCompat, 'getSettings' | 'saveSettings' | 'getMigrationMarker' | 'markMigration'>
-import type { CredentialAccount, CredentialVault } from './credentialVault'
+import type { CredentialAccount, CredentialVault } from '@platform/credentials/main/credentialVault'
 
 export const TRANSLATION_CREDENTIAL_RESET_MIGRATION = 'translation-credentials-preserved-v2'
 

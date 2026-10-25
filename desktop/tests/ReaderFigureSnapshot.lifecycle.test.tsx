@@ -2,12 +2,12 @@
 import { cleanup, fireEvent, render, waitFor, act } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { acquirePdfDocument } from '../src/renderer/pdfDocumentCache'
+import { acquirePdfDocument } from '../src/platform/pdf/renderer/pdfDocumentCache'
 import ReaderFigureSnapshot, { FIGURE_CACHE_BYTES, figureRegionCacheStats } from '../src/renderer/components/ReaderFigureSnapshot'
 import type { ReaderFigureGroup } from '../src/shared/readerFigureGroups'
 import { ensureFigureArtifacts, forgetConfirmedCrops } from '../src/renderer/useFigureArtifacts'
 
-vi.mock('../src/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
+vi.mock('../src/platform/pdf/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
 const group: ReaderFigureGroup = {
   id: 'figure', pageIndex: 0, pageSize: [612, 792], cropBox: [10, 20, 500, 700],
   mappingIds: ['a', 'caption'], assetSources: ['a.jpg'], captionMappingId: 'caption',

@@ -1,7 +1,7 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import { figureAssetName, type ReaderFigureGeometry } from './readerFigureGroups'
-import { isLocalMarkdownImage } from './standardMarkdown'
+import { isLocalMarkdownImage } from '@platform/markdown/core/standardMarkdown'
 
 export interface FigureArtifact {
   figureId: string

@@ -1,6 +1,6 @@
 import PQueue from 'p-queue'
 import type { AppSettings, CredentialName, HealthResult, TranslationProviderId } from '@shared/types'
-import type { CredentialVault } from '../credentialVault'
+import type { CredentialVault } from '@platform/credentials/main/credentialVault'
 import {
   flattenSegments,
   parseTableTranslationResponse,

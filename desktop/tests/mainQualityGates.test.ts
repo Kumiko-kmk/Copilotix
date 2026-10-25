@@ -5,30 +5,30 @@ import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactService } from '@main/artifactService'
 import { DocumentCommandService } from '@main/documentCommandService'
-import { isTrustedRendererUrl, sendValidatedEvent, toIpcError } from '@main/ipc'
-import { AsyncSemaphore, fullJitterExponentialBackoff, JobScheduler } from '@main/jobScheduler'
-import { JsonLineLogger } from '@main/logger'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { isTrustedRendererUrl, sendValidatedEvent, toIpcError } from '@platform/ipc/main/ipc'
+import { AsyncSemaphore, fullJitterExponentialBackoff, JobScheduler } from '@platform/jobs/main/jobScheduler'
+import { JsonLineLogger } from '@platform/log/main/logger'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { ParseJobRunner } from '@main/parseJobRunner'
 import { projectDocumentDetails } from '@main/documentProjection'
 import { projectDocumentSummary } from '@shared/documentSummary'
-import { RpcJobRepository } from '@main/rpcJobRepository'
+import { RpcJobRepository } from '@platform/jobs/main/rpcJobRepository'
 import { RpcRagContentIndexer } from '@main/rpcRagContentIndexer'
 import { COMPUTE_RPC_TIMEOUT_MS, RpcTaskCompute } from '@main/rpcTaskCompute'
 import { RpcTaskRepository } from '@main/rpcTaskRepository'
 import { SettingsService } from '@main/settingsService'
-import { canTransition, JobRunnerError } from '@core/jobs'
+import { canTransition, JobRunnerError } from '@platform/jobs/core/jobs'
 import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
 import type { TaskComputePort } from '@core/ports'
-import type { Job } from '@core/types'
-import type { JobRepositoryPort } from '@core/jobs'
+import type { Job } from '@platform/jobs/core/jobs'
+import type { JobRepositoryPort } from '@platform/jobs/core/jobs'
 import type { AppSettings, DocumentPayload, CopilotixTask } from '@shared/types'
 import { z } from 'zod'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION } from '@shared/markdownBlocks'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '@shared/translationPlanProtocol'
-import type { UtilitySupervisor } from '@main/utilitySupervisor'
+import type { AppCoreRequester } from '@app/contract/coreRpc'
 import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
-import type { CredentialAccount, CredentialVault } from '@main/credentialVault'
+import type { CredentialAccount, CredentialVault } from '@platform/credentials/main/credentialVault'
 
 const keyring = vi.hoisted(() => ({
   values: new Map<string, string>(),
@@ -133,7 +133,7 @@ describe('main quality boundaries', () => {
   })
 
   it('uses the platform credential vault contract without leaking native failures', async () => {
-    const { WindowsCredentialVault } = await import('@main/credentialVault')
+    const { WindowsCredentialVault } = await import('@platform/credentials/main/credentialVault')
     const vault: CredentialVault = new WindowsCredentialVault()
     await expect(vault.get('parser-token')).resolves.toBeNull()
     await vault.set('parser-token', '  parser-secret  ')
@@ -164,7 +164,7 @@ describe('main quality boundaries', () => {
         }
         return undefined
       }
-    } as unknown as UtilitySupervisor
+    } as unknown as AppCoreRequester
 
     const compute = new RpcTaskCompute(supervisor)
     await expect(compute.hashFile('input.pdf')).resolves.toBe('hash')
@@ -414,7 +414,7 @@ describe('main quality boundaries', () => {
       enqueue: async (input: unknown) => { enqueued.push(input); return job },
       manualRetry: async (input: unknown) => { enqueued.push(input); return job }
     } as unknown as JobRepositoryPort
-    const scheduler = { wake: vi.fn(), cancelDocument: vi.fn(async () => undefined) } as unknown as import('@main/jobScheduler').JobScheduler
+    const scheduler = { wake: vi.fn(), cancelDocument: vi.fn(async () => undefined) } as unknown as import('@platform/jobs/main/jobScheduler').JobScheduler
     const logger = { info: vi.fn(), error: vi.fn() }
     const service = new DocumentCommandService(
       repository,

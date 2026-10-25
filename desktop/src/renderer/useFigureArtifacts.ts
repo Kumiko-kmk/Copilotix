@@ -1,5 +1,5 @@
 import React from 'react'
-import { acquirePdfDocument } from './pdfDocumentCache'
+import { acquirePdfDocument } from '@platform/pdf/renderer/pdfDocumentCache'
 import { hasSavedFigureCrop, renderDocumentRegion } from './components/ReaderFigureSnapshot'
 import type { ReaderFigureGeometry } from '@shared/readerFigureGroups'
 

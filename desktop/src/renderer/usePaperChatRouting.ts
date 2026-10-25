@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
+import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { PAPER_CHAT_MODELS, resolvePaperChatModel, resolvePaperChatProvider } from '@shared/paperChatSchemas'
 import { paperChatImageInput, paperChatImageUnsupportedMessage } from '@shared/paperChatFigures'
 import type { AppSettings } from '@shared/types'

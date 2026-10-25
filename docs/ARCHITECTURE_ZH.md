@@ -68,7 +68,7 @@ main ──▶ runtime ──▶ core ◀── runtime ◀── utility
 |---|---|---|
 | 跨层契约 | `shared/ipcSchemas.ts`、`types.ts`、`coreRpcSchemas.ts`、`ragSchemas.ts`、`paperChat*Schemas.ts`、`paperInsight.ts`、`figureInsight.ts`、`librarySchemas.ts`、`libraryCategories.ts`、`translationPlanProtocol.ts` | 所有 IPC／RPC／磁盘 JSON 的 Zod 契约；`documentSummary.ts` 是文档摘要唯一投影 |
 | 文档纯逻辑 | `shared/markdownBlocks.ts`、`standardMarkdown.ts`、`mathDelimiters.ts`、`readerDocument.ts`、`readerAnnotations.ts`、`readerFigureGroups.ts`、`readerFigureLayout.ts`、`figureArtifacts.ts`、`titleNaming.ts`、`paperBrief/` | 无 I/O 的解析、映射、导出投影与提示词构造，可在任意进程运行 |
-| Core 契约与基础件 | `core/coreClient.ts`、`jobs.ts`、`types.ts`、`ports.ts`、`blockMapping.ts` | 文件系统路径实现位于 `runtime/pathPolicy.ts`，由 Main 与 Utility 共用 |
+| Core 契约与基础件 | `platform/rpc`（协定与 `CoreClient`）、`platform/jobs`、`core/types.ts`、`core/ports.ts`、`core/blockMapping.ts`；完整 RPC 注册表在 `app/contract/coreRpc.ts` | 文件系统路径实现位于 `platform/files/runtime/pathPolicy.ts`，由 Main 与 Utility 共用 |
 | Preload 桥 | `preload/index.ts`、`ipcClient.ts` | 只暴露 `window.copilotix` 显式领域方法 |
 | Main：外壳与 IPC | `main/index.ts`、`ipc.ts`、`libraryAccessGate.ts`、`assetProtocol.ts`、`singleInstance.ts`、`networkProxy.ts`、`logger.ts` | 生命周期、窗口、托盘、IPC 注册；所有 handler 经 `registerValidatedHandler` |
 | Main：Utility 桥 | `utilitySupervisor.ts`、`electronUtilityFork.ts`、`utilityEntryPath.ts`、`rpc*.ts`、`taskRepositoryCompat.ts` | Utility 生命周期与 RPC 代理；`rpc*` 只把端口方法映射为固定 operation |
@@ -193,7 +193,7 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 ### 6.2 STRICT schema 与迁移纪律
 
-`desktop/src/utility/core/persistence/v2Database.ts` 用 `node:sqlite` 的 `DatabaseSync`，开启 WAL 与 foreign keys。连接属于 Utility，不属于 Main。当前 schema 使用 STRICT 表并包含：
+`desktop/src/platform/database/utility/v2Database.ts` 用 `node:sqlite` 的 `DatabaseSync`，开启 WAL 与 foreign keys。连接属于 Utility，不属于 Main。当前 schema 使用 STRICT 表并包含：
 
 - `settings`：JSON 公开设置；
 - `documents`：来源名、标题、storage path、checksum、解析/翻译配置；
@@ -206,7 +206,7 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 ### 6.3 PathPolicy
 
-`runtime/pathPolicy.ts` 是 Main 与 Utility 共用的唯一 `PathPolicy` 实现（端口见 `core/ports.ts`）。实现从 Core 移入 runtime 层，导出的类与词法校验函数、磁盘路径规则及恢复语义保持不变；无需数据库或 IPC migration。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
+`platform/files/runtime/pathPolicy.ts` 是 Main 与 Utility 共用的唯一 `PathPolicy` 实现（端口见 `platform/files/contract/pathPolicyPort.ts`）。实现从 Core 移入 runtime 层，导出的类与词法校验函数、磁盘路径规则及恢复语义保持不变；无需数据库或 IPC migration。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
 
 1. 拒绝 NUL、绝对跨平台路径和 `..` 段；
 2. 先做 lexical containment，再做 realpath containment；
@@ -348,8 +348,8 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 
 ## Codex provider（本机 App Server）
 
-- Main 的 `runtime/codexRuntime.ts` 通过 `codex.exe app-server --listen stdio://` 建立 JSON-RPC；`modelGateway.ts` 统一远端与 Codex 流式调用，翻译适配器保留现有表格 ID 校验。翻译、问答、Paper Brief 和图片解读共享此运行时；不提供 embeddings 或 PDF 解析替代。
-- `shared/codex.ts` 定义可兼容旧设置的可选配置与状态。Preload 只开放经 Main 校验的检查／模型测试与原生选执行文件 IPC；无令牌接口。模型、视觉输入和推理强度来自当前模型目录，模型缺失显式失败。旧四服务顺序可读取，默认追加但不启用 Codex。2026-10-21 起（产品决策：多数用户以 Codex 为主，接受自动切换）翻译不再在 Codex 处截止：Codex 退避重试后仍失败的单元按顺序落到下一个已启用且凭据有效的服务；不新增开关，「模型设置」中关闭其他翻译来源即为仅用 Codex。manifest 逐块 provider/model 不变；Main 读取时对 provider≠preferredProvider 的完成块附加可选 `fallbackProvider`（IPC `translatedMarkdownBlockSchema` 新增可选字段，旧 manifest 无 provider 时不标记，无迁移），译文视图不常驻标注（2026-10-24 起），该段右键菜单首行显示「此段由 X 回退翻译」，不进入选区、标注偏移或复制文本。档案卡在 Codex 失败（非上下文超限）或一次修复后仍不符合字数／结构契约时，改用翻译顺序中下一个已启用且 Key 有效的 Qwen／DeepSeek，从干净提示重新生成并各有一次修复，档案卡状态显示实际模型名；`paper-insight` 日志的 `problems` 只记字段路径与字数（如 `analysis.abstract:178`）；问答、图片解读不回退。
+- Main 的 `platform/codex/runtime/codexRuntime.ts` 通过 `codex.exe app-server --listen stdio://` 建立 JSON-RPC；`modelGateway.ts` 统一远端与 Codex 流式调用，翻译适配器保留现有表格 ID 校验。翻译、问答、Paper Brief 和图片解读共享此运行时；不提供 embeddings 或 PDF 解析替代。
+- `platform/codex/contract/codex.ts` 定义可兼容旧设置的可选配置与状态。Preload 只开放经 Main 校验的检查／模型测试与原生选执行文件 IPC；无令牌接口。模型、视觉输入和推理强度来自当前模型目录，模型缺失显式失败。旧四服务顺序可读取，默认追加但不启用 Codex。2026-10-21 起（产品决策：多数用户以 Codex 为主，接受自动切换）翻译不再在 Codex 处截止：Codex 退避重试后仍失败的单元按顺序落到下一个已启用且凭据有效的服务；不新增开关，「模型设置」中关闭其他翻译来源即为仅用 Codex。manifest 逐块 provider/model 不变；Main 读取时对 provider≠preferredProvider 的完成块附加可选 `fallbackProvider`（IPC `translatedMarkdownBlockSchema` 新增可选字段，旧 manifest 无 provider 时不标记，无迁移），译文视图不常驻标注（2026-10-24 起），该段右键菜单首行显示「此段由 X 回退翻译」，不进入选区、标注偏移或复制文本。档案卡在 Codex 失败（非上下文超限）或一次修复后仍不符合字数／结构契约时，改用翻译顺序中下一个已启用且 Key 有效的 Qwen／DeepSeek，从干净提示重新生成并各有一次修复，档案卡状态显示实际模型名；`paper-insight` 日志的 `problems` 只记字段路径与字数（如 `analysis.abstract:178`）；问答、图片解读不回退。
 - 交互保留独立 FIFO，后台共用等待队列，由空闲槽位领取下一请求，最多 8 个独立进程槽位，每槽同时一个请求。槽内复用经过隔离配置校验的进程，每次请求创建新 ephemeral thread；闲置 30 秒、协议／连接出错或退出关闭进程，turn 正常结束为 failed 时保留进程供重试。避免每段重复 account/read／model/list；不复用论文会话。最终回答、token usage、结构化 schema 经业务校验后落盘。CLI 限定 0.159.x，子进程不经 shell，工作目录在 userData 的 codex-runtime。
 - 翻译按 32 条元数据分页预取，同时准备最多 64 个单元，Codex／Qwen／DeepSeek 请求上限 8。Codex 仅合并同一作业 signal 的短片段：每批最多 16 组／64 片段／约 8K 字符，单个超长组独立发送而不截断；短传输 ID 在本地还原后逐单元校验、保存。表格保留行列结构，使用同样的短 ID 映射与完整性检查。翻译 low、档案 medium；thread/start 与 turn/start 均使用任务实际档位，问答沿用全局设置。读取相同输出根目录的设置不重建翻译计划。
 - 会话级覆盖关闭 shell、MCP、应用、插件、浏览器、联网搜索、记忆和子代理，设置只读沙箱、无持久历史、忽略项目文档；启动时读回隔离配置。工具请求一律拒绝并终止任务。覆盖不写入用户配置。用户文档、图片与历史均作为不可信内容；图片只接收应用已验证的 PNG/JPEG 数据。

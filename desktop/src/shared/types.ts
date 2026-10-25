@@ -64,7 +64,7 @@ export type TaskStatus =
   | 'failed'
 
 export interface AppSettings {
-  codex?: import('./codex').CodexSettings
+  codex?: import('@platform/codex/contract/codex').CodexSettings
   outputRoot: string
   formulaEnabled: boolean
   tableEnabled: boolean
@@ -242,7 +242,7 @@ export interface WindowState {
 }
 
 export interface CopilotixDesktopApi {
-  codex: import('./codex').CodexApi
+  codex: import('@platform/codex/contract/codex').CodexApi
   figureInsight: {
     get(request: import('./figureInsight').FigureInsightRequest): Promise<import('./figureInsight').FigureInsightState>
     generate(request: import('./figureInsight').FigureInsightRequest): Promise<void>

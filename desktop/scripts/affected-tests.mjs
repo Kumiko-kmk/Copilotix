@@ -12,8 +12,8 @@ const ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: DESKTO
 
 /** Data safety, persistence, IPC origin and cancel/recovery regressions run on every change. */
 export const REQUIRED_UNIT_TESTS = [
-  'tests/ipcContracts.test.ts', 'tests/v2Database.test.ts', 'tests/sqliteJobRepository.test.ts',
-  'tests/jobScheduler.test.ts', 'tests/pathPolicy.test.ts', 'tests/libraryMaintenance.test.ts', 'tests/uninstallCleanup.test.ts'
+  'tests/ipcContracts.test.ts', 'tests/platform/v2Database.test.ts', 'tests/platform/sqliteJobRepository.test.ts',
+  'tests/platform/jobScheduler.test.ts', 'tests/platform/pathPolicy.test.ts', 'tests/libraryMaintenance.test.ts', 'tests/platform/uninstallCleanup.test.ts'
 ]
 /** Changes that can affect any test without appearing in its import graph. */
 const FULL_TRIGGERS = [
@@ -22,7 +22,7 @@ const FULL_TRIGGERS = [
   /^desktop\/scripts\/affected-tests\.mjs$/u
 ]
 /** Specs import only e2e helpers, so source paths map to the flows they exercise. */
-const E2E_ALL = [/^desktop\/e2e\/(?:helpers|launchPolicy)\.ts$/u, /^desktop\/src\/preload\//u, /^desktop\/src\/main\/index\.ts$/u, /^desktop\/src\/renderer\/(?:App|main)\.tsx$/u]
+const E2E_ALL = [/^desktop\/e2e\/(?:helpers|launchPolicy)\.ts$/u, /^desktop\/src\/preload\//u, /^desktop\/src\/(?:app|platform\/(?:ipc|rpc))\//u, /^desktop\/src\/main\/index\.ts$/u, /^desktop\/src\/renderer\/(?:App|main)\.tsx$/u]
 const E2E_MAP = [
   [/^desktop\/src\/renderer\/(?:components\/(?:Reader(?!Chat|Figure)|MarkdownPane|MarkdownMinimap|PdfPane|DocumentLifecycle)|reader(?!Figure))/u, ['reader', 'qa-fixes']],
   [/(?:ReaderFigure|readerFigureGroups|figureArtifact|figureInsight)/u, ['reader-figures']],

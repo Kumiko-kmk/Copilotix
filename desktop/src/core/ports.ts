@@ -46,6 +46,3 @@ export interface TaskComputePort {
   finalizeTranslation(taskId: string, jobId: string, signal?: AbortSignal): Promise<TranslationPlanFinalizeResult>
 }
 
-export interface PathPolicyPort {
-  resolveChild(root: string, candidate: string): string
-}

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { prepareReaderMarkdown, READER_MARKDOWN_FORMAT_VERSION } from '@shared/standardMarkdown'
+import { prepareReaderMarkdown, READER_MARKDOWN_FORMAT_VERSION } from '@platform/markdown/core/standardMarkdown'
 import { lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { unified } from 'unified'
@@ -52,8 +52,8 @@ import {
   type TableTranslationPlan,
   type TableTranslationUnit
 } from './tableTranslation'
-import { PathPolicy } from '@runtime/pathPolicy'
-import type { PathPolicyPort } from '@core/ports'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
+import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
 import type { TranslationJobBinding, V2TaskRepositoryCompat } from '../persistence/v2TaskRepositoryCompat'
 
 const processor = unified()

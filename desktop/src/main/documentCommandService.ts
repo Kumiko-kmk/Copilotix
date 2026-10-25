@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, rm } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import type { Job, JobRepositoryPort } from '@core/jobs'
-import type { PathPolicyPort, TaskComputePort } from '@core/ports'
+import type { Job, JobRepositoryPort } from '@platform/jobs/core/jobs'
+import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
+import type { TaskComputePort } from '@core/ports'
 import type { CopilotixTask } from '@shared/types'
 import type { ImportDocumentsRequest } from '@shared/ipcSchemas'
 import { trustedPdfMetadataTitle, type ImportFileOptions } from '@shared/pdfImport'
 import type { SettingsService } from './settingsService'
-import type { TaskLogger } from './logger'
+import type { TaskLogger } from '@platform/log/main/logger'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
-import type { JobScheduler } from './jobScheduler'
+import type { JobScheduler } from '@platform/jobs/main/jobScheduler'
 
 export interface ImportFailure {
   name: string

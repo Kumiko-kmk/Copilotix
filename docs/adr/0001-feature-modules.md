@@ -53,18 +53,18 @@ src/
 | `platform/jobs` | `core/jobs.ts`、`core/types.ts` 的作業型別、`jobScheduler`、`progressReporter`、`rpcJobRepository`、`coalescedRefresh`、`sqliteJobRepository` |
 | `platform/database` | `v2Database.ts`（schema 與 migration，含保留的 rag_* 表） |
 | `platform/files` | `runtime/pathPolicy.ts`、`core/ports.ts` 的 `PathPolicyPort` |
-| `platform/{log,network,assets,credentials,usage,uninstall}` | `logger`、`networkProxy`、`assetProtocol`、`credentialVault`、`usageAnalyticsService`（含其 schema）、main／utility 的 `uninstallCleanup` |
+| `platform/{log,network,assets,credentials,uninstall}` | `logger`、`networkProxy`、`assetProtocol`、`credentialVault`、main／utility 的 `uninstallCleanup` |
 | `platform/codex` | `runtime/codexRuntime.ts`、`codexConnection.ts`、`shared/codex.ts`、`chatMessages.ts` |
-| `platform/markdown` | `standardMarkdown`、`mathDelimiters`、`markdownBlocks`、`rehypeTableMath` |
+| `platform/markdown` | `standardMarkdown`、`mathDelimiters`、`rehypeTableMath` |
 | `platform/pdf` | `renderer/pdfDocumentCache.ts` |
 | `features/library` | `taskService`、`documentCommandService`、`documentProjection`、`documentSummary`、`rpcTaskRepository`、`rpcTaskCompute`、`taskRepositoryCompat`（main／utility）、`v2TaskRepositoryCompat`（拆）、`libraryAccessGate`、`libraryMaintenance`、`libraryCategories`（三處）、`librarySchemas`、`pdfImport`、`pdfPageRemoval`、`pdfInspection`、`titleNaming`、`paperProfile`、`tutorialSample`（三處）、`storageService`、`ipcSchemas.ts` 的文獻／任務 schema；renderer `LibraryPage`、`NewParsePage`、`TutorialPage`、`paperArchive/*`（`PaperArchiveScene` 拆）、`documentCache`、`documentStatus`、`readerPageLoader`、首頁元件與 `homeCipher`／`homeWave`、`ImportProgress`、`WorkflowSteps`、`DocumentLifecycleActions` |
-| `features/parsing` | `parserClient`、`fileUploader`、`parseJobRunner`、`core/blockMapping`、`textLayerRepair`、`pdfTextLayer`、`useTextLayerRepair`、`figureArtifacts`、`figureArtifactStore`、`types.ts` 的塊映射型別 |
+| `features/parsing` | `parserClient`、`fileUploader`、`parseJobRunner`、`core/blockMapping`、`markdownBlocks`（依賴塊映射型別）、`textLayerRepair`、`pdfTextLayer`、`useTextLayerRepair`、`figureArtifacts`、`figureArtifactStore`、`types.ts` 的塊映射型別 |
 | `features/translation` | `main/translation/*`、`translationJobRunner`、`translationPlanProtocol`、`providerPolicy`、`markdownTranslationPlan`（拆）、`tableTranslation`、`core/ports.ts` 的 `TaskComputePort` |
 | `features/reader` | `readerDocument`、`markdownEdits`、`runtime/markdownEditsFile`、`markdownEditStore`、`readerAnnotations`（shared／renderer）、`annotationMutations`、`readerNotes`、`readerNoteStore`、`useReaderNotes`、`figureDisplay`、`figureDisplayStore`、`readerFigureDisplay`、`readerFigureGroups`、`readerFigureLayout`、`readerFigureMosaic`、`paperSelectionText`、`artifactService`、`readerLayout`、`readerScrollSync`、`readerCitations`、`readerReferenceSections`、`readerPerformance`、`pdfRenderScheduler`、`useFigureArtifacts`、`ReaderPage`、`MarkdownPane`（拆）、`PdfPane`（拆）、`ReaderWorkbench`（拆）、`ReaderViews`、`MarkdownMinimap`（拆）、`SafeMarkdown`、`Reader*` 元件、`BlockContextMenu` |
 | `features/chat` | `main/chat/{chatProvider,modelGateway,paperChatService,paperChatIpc}`、`paperChatSchemas`、`paperChatStorageSchemas`、`paperChatFigures`、`chatResultMetadata`、`figureMentions`、`ragSchemas`、`paperChatStore`、`paperChatFigureStore`、`paperContextBuilder`、問答索引（`ragContentIndexService`、`structureAwareChunker`、`sqliteRagRepository`、`ragContentIndexJobRunner`、`rpcRagContentIndexer`）、`ReaderChatPanel`、`usePaperChat*`、`paperChat.css` |
 | `features/insight` | `main/chat/{paperInsight*,figureInsight*}`、`paperInsight`、`paperBrief/*`、`figureInsight`、`figureInsightPrompt`、`paperInsightStore`、`figureInsightStore`、`usePaperInsight`、`PaperInsightActions` |
 | `features/zotero` | `main/zotero/*`、`shared/zotero.ts`、`ZoteroImportDialog`、`ZoteroExportButton`、`zoteroImport.css` |
-| `features/settings` | `settingsService`、`constants.ts` 的預設設定、`ipcSchemas.ts`／`types.ts` 的設定與憑據型別、`SettingsPage`（拆）、`ThemeSettings`、`CodexSettingsCard`、`ServiceCard`、`PageBrand`、`theme.ts`、`settingsNavigation`、`storageInfoClient`、`codexStatusClient` |
+| `features/settings` | `settingsService`、`usageAnalyticsService`（含其 schema；依賴任務與服務商型別，故不入平台）、`constants.ts` 的預設設定、`ipcSchemas.ts`／`types.ts` 的設定與憑據型別、`SettingsPage`（拆）、`ThemeSettings`、`CodexSettingsCard`、`ServiceCard`、`PageBrand`、`theme.ts`、`settingsNavigation`、`storageInfoClient`、`codexStatusClient` |
 
 問答檢索索引（`rag-content-index` 作業、`sqliteRagRepository`）經 `chat:ensure-index` → 作業 → `paperContextBuilder` 仍是問答上下文的來源，歸入 chat；作業類型名、Core RPC 名與 rag_* 表保持原名。
 

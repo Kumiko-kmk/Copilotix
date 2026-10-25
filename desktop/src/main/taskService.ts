@@ -1,16 +1,17 @@
 import { EventEmitter } from 'node:events'
-import type { Job, JobRepositoryPort } from '@core/jobs'
-import type { PathPolicyPort, TaskComputePort } from '@core/ports'
+import type { Job, JobRepositoryPort } from '@platform/jobs/core/jobs'
+import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
+import type { TaskComputePort } from '@core/ports'
 import type { CopilotixTask } from '@shared/types'
 import type { ImportDocumentsRequest, CacheDocumentFigureRequest } from '@shared/ipcSchemas'
 import type { ImportFileOptions } from '@shared/pdfImport'
 import type { SettingsService } from './settingsService'
-import type { TaskLogger } from './logger'
-import { PathPolicy } from '@runtime/pathPolicy'
+import type { TaskLogger } from '@platform/log/main/logger'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { ArtifactService } from './artifactService'
 import { DocumentCommandService, type ImportPathsResult } from './documentCommandService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
-import type { JobScheduler } from './jobScheduler'
+import type { JobScheduler } from '@platform/jobs/main/jobScheduler'
 
 const silentLogger: TaskLogger = { info: () => undefined, error: () => undefined }
 

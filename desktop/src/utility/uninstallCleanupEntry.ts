@@ -1,4 +1,4 @@
-import { executeUninstallCleanup, prepareUninstallCleanup, type UninstallCleanupOptions, type UninstallCleanupPlan } from './uninstallCleanup'
+import { executeUninstallCleanup, prepareUninstallCleanup, type UninstallCleanupOptions, type UninstallCleanupPlan } from '@platform/uninstall/utility/uninstallCleanup'
 
 const port = process.parentPort
 if (!port) throw new Error('Uninstall utility parent port is unavailable')

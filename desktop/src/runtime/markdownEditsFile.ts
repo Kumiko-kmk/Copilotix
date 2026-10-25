@@ -3,7 +3,7 @@ import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { MARKDOWN_EDITS_FILE, MARKDOWN_EDITS_MAX_BYTES, emptyMarkdownEdits, markdownEditsFileSchema, type MarkdownEditsFile } from '@shared/markdownEdits'
-import { PathPolicy } from './pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 
 const policy = new PathPolicy()
 const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException)?.code === 'ENOENT'

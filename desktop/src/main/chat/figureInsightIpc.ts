@@ -1,6 +1,6 @@
 import { figureInsightRequestSchema, figureInsightStateSchema, figureInsightCancelSchema } from '@shared/figureInsight'
-import { voidResponseSchema } from '@shared/ipcSchemas'
-import { registerValidatedHandler, type IpcValidationOptions } from '../ipc'
+import { voidResponseSchema } from '@platform/ipc/contract/schemas'
+import { registerValidatedHandler, type IpcValidationOptions } from '@platform/ipc/main/ipc'
 import type { FigureInsightService } from './figureInsightService'
 
 export function registerFigureInsightHandlers(service: FigureInsightService, options: IpcValidationOptions): void {
