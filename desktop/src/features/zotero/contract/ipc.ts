@@ -9,7 +9,7 @@ import {
   zoteroItemsPageSchema,
   zoteroItemsRequestSchema,
   type ZoteroDesktopApi
-} from '@shared/zotero'
+} from './zotero'
 
 export const zoteroChannels = {
   catalog: invokeChannel('zotero:catalog', zoteroCatalogRequestSchema, zoteroCatalogSchema),

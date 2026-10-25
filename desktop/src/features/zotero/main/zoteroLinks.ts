@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { zoteroExportRecordSchema, zoteroLinkFileSchema, type ZoteroExportRecord, type ZoteroLink, type ZoteroLinkFile } from '@shared/zotero'
+import { zoteroExportRecordSchema, zoteroLinkFileSchema, type ZoteroExportRecord, type ZoteroLink, type ZoteroLinkFile } from '../contract/zotero'
 
 /**
  * `<document>/zotero/link.v1.json` records which Zotero items a paper came from. It lives in the

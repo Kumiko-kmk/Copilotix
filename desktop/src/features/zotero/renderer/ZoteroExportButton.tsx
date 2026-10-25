@@ -1,7 +1,7 @@
 import React from 'react'
 import { ExportOutlined } from '@ant-design/icons'
 import { Button, Modal, type message } from 'antd'
-import type { ZoteroExportResult } from '@shared/zotero'
+import type { ZoteroExportResult } from '../contract/zotero'
 
 /**
  * Sends the paper to the running Zotero: a linked paper gets a note pointing at its Zotero item,

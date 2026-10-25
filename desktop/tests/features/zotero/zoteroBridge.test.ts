@@ -3,12 +3,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { readLocalApiSnapshot, readSqliteSnapshot, ZoteroUnavailableError, type ZoteroSnapshot } from '../src/main/zotero/zoteroCatalog'
-import { ZoteroImportService } from '../src/main/zotero/zoteroImportService'
-import { addZoteroLink, readZoteroExports, readZoteroLinks, zoteroLinkPath } from '../src/main/zotero/zoteroLinks'
-import { createZoteroConnector, type ZoteroConnector, type ZoteroConnectorItem } from '../src/main/zotero/zoteroConnector'
-import { ZoteroExportService, type ZoteroExportContent } from '../src/main/zotero/zoteroExportService'
-import { locateZoteroProfile, type ZoteroProfile } from '../src/main/zotero/zoteroProfile'
+import { readLocalApiSnapshot, readSqliteSnapshot, ZoteroUnavailableError, type ZoteroSnapshot } from '../../../src/features/zotero/main/zoteroCatalog'
+import { ZoteroImportService } from '../../../src/features/zotero/main/zoteroImportService'
+import { addZoteroLink, readZoteroExports, readZoteroLinks, zoteroLinkPath } from '../../../src/features/zotero/main/zoteroLinks'
+import { createZoteroConnector, type ZoteroConnector, type ZoteroConnectorItem } from '../../../src/features/zotero/main/zoteroConnector'
+import { ZoteroExportService, type ZoteroExportContent } from '../../../src/features/zotero/main/zoteroExportService'
+import { locateZoteroProfile, type ZoteroProfile } from '../../../src/features/zotero/main/zoteroProfile'
 
 let root: string
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'copilotix-zotero-')) })

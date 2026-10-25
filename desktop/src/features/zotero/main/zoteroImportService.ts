@@ -10,8 +10,8 @@ import {
   type ZoteroImportResult,
   type ZoteroItemsPage,
   type ZoteroItemsRequest
-} from '@shared/zotero'
-import type { ImportPathsResult } from '../documentCommandService'
+} from '../contract/zotero'
+import type { ImportPathsResult } from '@main/documentCommandService'
 import type { ZoteroEntry, ZoteroSnapshot } from './zoteroCatalog'
 import { ZoteroUnavailableError } from './zoteroCatalog'
 import { addZoteroLink, readZoteroLinks } from './zoteroLinks'

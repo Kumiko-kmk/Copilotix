@@ -9,7 +9,7 @@ import { createReaderApi, type ReaderDesktopApi } from '@features/reader/contrac
 import { createSettingsApi, type SettingsDesktopApi } from '@features/settings/contract/ipc'
 import { createTranslationApi, type TranslationDesktopApi } from '@features/translation/contract/ipc'
 import { createZoteroApi } from '@features/zotero/contract/ipc'
-import type { ZoteroDesktopApi } from '@shared/zotero'
+import type { ZoteroDesktopApi } from '@features/zotero/contract/zotero'
 import { createWindowApi, type WindowDesktopApi } from './window'
 
 /** `window.copilotix`: the only privileged surface of the renderer, composed from each module's contract. */

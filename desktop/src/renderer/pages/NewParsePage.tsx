@@ -11,7 +11,7 @@ import { HomeBackdrop, UploadGlyph } from '../components/HomeScene'
 import { HomeGreeting } from '../components/HomeWidgets'
 import ImportProgress from '../components/ImportProgress'
 import type { PdfFileInspection } from '../pdfInspection'
-import ZoteroImportDialog from '../components/ZoteroImportDialog'
+import { ZoteroImportDialog } from '@features/zotero/renderer'
 
 interface PendingPdf {
   key: string

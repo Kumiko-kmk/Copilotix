@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { copyFile, mkdir, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { ZoteroSource } from '@shared/zotero'
+import type { ZoteroSource } from '../contract/zotero'
 import type { ZoteroProfile } from './zoteroProfile'
 
 export interface ZoteroPdf {

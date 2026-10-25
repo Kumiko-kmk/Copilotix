@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import type { ZoteroExportRequest, ZoteroExportResult, ZoteroLink } from '@shared/zotero'
+import type { ZoteroExportRequest, ZoteroExportResult, ZoteroLink } from '../contract/zotero'
 import type { ZoteroConnector } from './zoteroConnector'
 import { addZoteroExport, readZoteroExports, readZoteroLinks } from './zoteroLinks'
 
