@@ -2,8 +2,8 @@ import { z } from 'zod'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { PaperChatProvider } from '@shared/paperChatSchemas'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
-import type { MultimodalChatMessage } from '@shared/chatMessages'
-export type { ChatMessage, ChatContentPart } from '@shared/chatMessages'
+import type { MultimodalChatMessage } from '@platform/codex/contract/chatMessages'
+export type { ChatMessage, ChatContentPart } from '@platform/codex/contract/chatMessages'
 
 export type ChatFetcher = (url: string, init: RequestInit) => Promise<Response>
 export class ChatProviderError extends Error {

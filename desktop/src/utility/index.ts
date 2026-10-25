@@ -1,5 +1,6 @@
-import { createCoreUtilityRuntime } from './coreUtilityRuntime'
+import { createCoreUtilityRuntime } from '@platform/rpc/utility/coreUtilityRuntime'
 import { createUtilityOperationHandlers } from './core/utilityOperations'
+import { coreProtocol } from '@app/contract/coreRpc'
 
 // Electron exposes the utility IPC endpoint on the child process object.  The
 // cross-process `electron` module does not expose `parentPort` in this context.
@@ -9,6 +10,7 @@ if (!parentPort) throw new Error('Core utility parent port is unavailable')
 
 const persistence = createUtilityOperationHandlers()
 createCoreUtilityRuntime(parentPort, {
+  protocol: coreProtocol,
   handlers: persistence.handlers,
   onDrain: persistence.flush,
   onShutdown: persistence.close

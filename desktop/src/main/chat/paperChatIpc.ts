@@ -1,7 +1,7 @@
 import { paperChatAskRequestSchema, paperChatAskResultSchema, paperChatCancelRequestSchema, paperChatCancelResultSchema, paperChatStatusRequestSchema, paperChatStatusSchema, type PaperChatStatus } from '@shared/paperChatSchemas'
 import { ragStreamEventSchema } from '@shared/ragSchemas'
 import { paperChatDeleteTurnSchema, paperChatDeletedSchema, paperChatDocumentRequestSchema, paperChatLoadRequestSchema, paperChatPageSchema, paperChatSaveSessionSchema, paperChatSessionSchema, paperChatSavedSchema, paperChatClearedSchema } from '@shared/paperChatStorageSchemas'
-import { registerValidatedHandler, sendValidatedEvent, type IpcValidationOptions } from '../ipc'
+import { registerValidatedHandler, sendValidatedEvent, type IpcValidationOptions } from '@platform/ipc/main/ipc'
 import type { PaperChatService } from './paperChatService'
 
 export function registerPaperChatHandlers(service: PaperChatService, ensureIndex: (documentId: string) => Promise<PaperChatStatus>, options: IpcValidationOptions): void {

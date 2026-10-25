@@ -1,5 +1,5 @@
 import type { CopilotixTask } from '@shared/types'
-import type { UtilitySupervisor } from './utilitySupervisor'
+import type { AppCoreRequester } from '@app/contract/coreRpc'
 import type { NormalizeParserOutputResult, TaskComputePort } from '@core/ports'
 import type {
   TranslationPlanFinalizeResult,
@@ -18,7 +18,7 @@ export const COMPUTE_RPC_TIMEOUT_MS = 10 * 60_000
 
 /** Main-side compute proxy; all heavy file/hash/mapping work remains utility-owned. */
 export class RpcTaskCompute implements TaskComputePort {
-  constructor(private readonly supervisor: UtilitySupervisor) {}
+  constructor(private readonly supervisor: AppCoreRequester) {}
 
   async hashFile(path: string): Promise<string> {
     const result = await this.supervisor.request('compute:hash-file', { path }, { timeoutMs: COMPUTE_RPC_TIMEOUT_MS })

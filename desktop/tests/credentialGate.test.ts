@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '../src/shared/constants'
 import { type AppSettings, type CopilotixTask } from '../src/shared/types'
-import { type Job } from '../src/core/jobs'
+import { type Job } from '../src/platform/jobs/core/jobs'
 import { ParseJobRunner } from '../src/main/parseJobRunner'
-import { PathPolicy } from '../src/runtime/pathPolicy'
+import { PathPolicy } from '../src/platform/files/runtime/pathPolicy'
 import { ParserApiError } from '../src/main/parserClient'
 import { TranslationJobRunner } from '../src/main/translationJobRunner'
 import { executableProviderOrder, normalizeEnabledProviders, normalizeProviderOrder } from '../src/shared/providerPolicy'
-import { refreshNetworkProxy } from '../src/main/networkProxy'
+import { refreshNetworkProxy } from '../src/platform/network/main/networkProxy'
 
 describe("credentialGate", () => {
   const task: CopilotixTask = {

@@ -10,7 +10,7 @@ import { DEFAULT_SETTINGS } from '@shared/constants'
 import { paperInsightContentSchema, paperInsightRecordSchema, paperInsightRequestSchema, paperInsightSchema, paperInsightStateSchema, type PaperInsight, type PaperInsightState } from '@shared/paperInsight'
 import { PaperInsightService, loadFullBriefContext, type PaperInsightDependencies } from '../src/main/chat/paperInsightService'
 import { PaperInsightStore } from '../src/utility/core/persistence/paperInsightStore'
-import { turnError } from '../src/runtime/codexRuntime'
+import { turnError } from '../src/platform/codex/runtime/codexRuntime'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const fs = await importOriginal<typeof import('node:fs/promises')>()

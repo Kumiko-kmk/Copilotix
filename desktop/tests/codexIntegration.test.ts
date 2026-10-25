@@ -4,8 +4,8 @@ import { normalizeEnabledProviders, normalizeProviderOrder, executableProviderOr
 import { paperChatSessionSchema } from '@shared/paperChatStorageSchemas'
 import { ModelGateway } from '../src/main/chat/modelGateway'
 import type { ChatProvider } from '../src/main/chat/chatProvider'
-import type { CodexRuntime } from '../src/runtime/codexRuntime'
-import { V2Database, V2_MIGRATIONS } from '../src/utility/core/persistence/v2Database'
+import type { CodexRuntime } from '../src/platform/codex/runtime/codexRuntime'
+import { V2Database, V2_MIGRATIONS } from '../src/platform/database/utility/v2Database'
 
 describe('Codex integration boundaries', () => {
   it('preserves old ordering without enabling Codex and falls back only to enabled providers', () => {

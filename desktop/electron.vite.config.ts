@@ -10,14 +10,14 @@ export default defineConfig({
         exclude: ['p-queue', 'remark-gfm', 'remark-math', 'remark-parse', 'remark-stringify', 'unified', 'uuid', 'zod']
       })
     ],
-    resolve: { alias: { '@shared': resolve('src/shared'), '@core': resolve('src/core'), '@runtime': resolve('src/runtime'), '@main': resolve('src/main') } }
+    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features'), '@shared': resolve('src/shared'), '@core': resolve('src/core'), '@runtime': resolve('src/runtime'), '@main': resolve('src/main') } }
   },
   preload: {
     plugins: [externalizeDepsPlugin({ exclude: ['zod'] })],
-    resolve: { alias: { '@shared': resolve('src/shared') } }
+    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features'), '@shared': resolve('src/shared') } }
   },
   renderer: {
-    resolve: { alias: { '@shared': resolve('src/shared'), '@renderer': resolve('src/renderer') } },
+    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features'), '@shared': resolve('src/shared'), '@renderer': resolve('src/renderer') } },
     // The paper archive embeds its cassette model with `?inline`.
     assetsInclude: ['**/*.glb'],
     plugins: [react()]

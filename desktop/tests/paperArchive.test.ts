@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-vi.mock('../src/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
+vi.mock('../src/platform/pdf/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
 import { loadDetailPage, type DetailPage } from '../src/renderer/paperArchive/detailPage'
 import { type DocumentSummary } from '../src/shared/ipcSchemas'
 import { ArchiveMomentum, damp, settlingWave, SHOULDER_PEAK } from '../src/renderer/paperArchive/archiveMotion'

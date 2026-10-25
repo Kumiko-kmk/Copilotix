@@ -10,10 +10,10 @@ import type { BriefContextResult, BriefAnchor } from '@shared/paperBrief/contrac
 import { paperInsightStateSchema, paperInsightRequestSchema, type PaperInsightState } from '@shared/paperInsight'
 import { resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
 import type { AppSettings } from '@shared/types'
-import type { Job } from '@core/types'
+import type { Job } from '@platform/jobs/core/jobs'
 import { ChatProviderError } from './chatProvider'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
-import { CodexGenerationError, codexFailure } from '@runtime/codexRuntime'
+import { CodexGenerationError, codexFailure } from '@platform/codex/runtime/codexRuntime'
 
 export async function loadFullBriefContext(documentId: string, signal: AbortSignal,
   source: () => Promise<BriefSource>): Promise<BriefContextResult> {

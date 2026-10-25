@@ -20,27 +20,15 @@ import { libraryCoreRequestSchema } from '@shared/librarySchemas'
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { prepareReaderMarkdown, isLocalMarkdownImage } from '@shared/standardMarkdown'
+import { prepareReaderMarkdown, isLocalMarkdownImage } from '@platform/markdown/core/standardMarkdown'
 import { dirname, extname, isAbsolute, join, relative } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { CoreListCursor, CoreOperation } from '@shared/coreRpcSchemas'
+import type { CoreListCursor } from '@shared/coreRpcSchemas'
+import type { CoreOperation, CoreOperationRegistryShape } from '@app/contract/coreRpc'
 import {
   CORE_LIST_PAGE_MAX_ROWS,
-  coreDatabaseInitPayloadSchema,
   coreListPagePayloadSchema,
-  coreJobEnqueuePayloadSchema,
-  coreJobIdPayloadSchema,
-  coreJobListPayloadSchema,
-  coreJobClaimPayloadSchema,
-  coreJobHeartbeatPayloadSchema,
-  coreJobProgressPayloadSchema,
-  coreJobCompletePayloadSchema,
-  coreJobFailOrRetryPayloadSchema,
-  coreJobCancelPayloadSchema,
-  coreJobManualRetryPayloadSchema,
-  coreJobRecoverExpiredPayloadSchema,
-  coreJobEventsPayloadSchema,
   coreSettingsMigrationPayloadSchema,
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
@@ -53,6 +41,21 @@ import {
   coreTranslationPlanFailPayloadSchema,
   coreTranslationPlanFinalizePayloadSchema
 } from '@shared/coreRpcSchemas'
+import { coreDatabaseInitPayloadSchema } from '@platform/rpc/contract/protocol'
+import {
+  coreJobEnqueuePayloadSchema,
+  coreJobIdPayloadSchema,
+  coreJobListPayloadSchema,
+  coreJobClaimPayloadSchema,
+  coreJobHeartbeatPayloadSchema,
+  coreJobProgressPayloadSchema,
+  coreJobCompletePayloadSchema,
+  coreJobFailOrRetryPayloadSchema,
+  coreJobCancelPayloadSchema,
+  coreJobManualRetryPayloadSchema,
+  coreJobRecoverExpiredPayloadSchema,
+  coreJobEventsPayloadSchema
+} from '@platform/jobs/contract/rpc'
 import type { BlockMapping, CopilotixTask } from '@shared/types'
 import { alignMarkdownBlocks } from '@shared/markdownBlocks'
 import { appSettingsSchema } from '@shared/ipcSchemas'
@@ -62,17 +65,17 @@ import { displayPaperTitle, extractPaperTitle } from '@shared/titleNaming'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '@core/blockMapping'
 import { applyTextLayerRepairs, findTextLayerCandidates, planTextLayerRepairs, TEXT_LAYER_REPAIR_VERSION, type TextLayerRepairReport } from '@shared/textLayerRepair'
 import { readPdfTextLayer } from './compute/pdfTextLayer'
-import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '../coreUtilityRuntime'
-import { V2Database } from './persistence/v2Database'
+import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '@platform/rpc/utility/coreUtilityRuntime'
+import { V2Database } from '@platform/database/utility/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
-import { SqliteJobRepository, SqliteJobRepositoryError } from './persistence/sqliteJobRepository'
+import { SqliteJobRepository, SqliteJobRepositoryError } from '@platform/jobs/utility/sqliteJobRepository'
 import { SqliteRagRepository, SqliteRagRepositoryError } from './persistence/sqliteRagRepository'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
 import { withoutFirstPage } from './compute/pdfPageRemoval'
 import { RagContentIndexError, RagContentIndexService } from './compute/ragContentIndexService'
 
-type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
+type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler<CoreOperationRegistryShape>>>
 
 interface UtilityPersistenceState {
   database?: V2Database
@@ -357,7 +360,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     }
   }
 
-  for (const [operation, handler] of Object.entries(handlers) as Array<[CoreOperation, CoreUtilityOperationHandler]>) {
+  for (const [operation, handler] of Object.entries(handlers) as Array<[CoreOperation, CoreUtilityOperationHandler<CoreOperationRegistryShape>]>) {
     const lane = operationLane(operation)
     if (!lane) continue
     handlers[operation] = (request, signal) => runOnLane(lane, () => handler(request, signal)).catch((error: unknown) => {

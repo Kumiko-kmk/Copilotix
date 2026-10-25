@@ -1,7 +1,7 @@
 import React from 'react'
 import { useCodexStatus, refreshCodexStatus } from '../codexStatusClient'
 import { Button, Input, Select } from 'antd'
-import { DEFAULT_CODEX_SETTINGS, type CodexSettings, type CodexStatus } from '@shared/codex'
+import { DEFAULT_CODEX_SETTINGS, type CodexSettings, type CodexStatus } from '@platform/codex/contract/codex'
 import { ServiceCard, type ServiceState } from './ServiceCard'
 
 const STATE: Record<CodexStatus['state'], { state: ServiceState; label: string }> = {

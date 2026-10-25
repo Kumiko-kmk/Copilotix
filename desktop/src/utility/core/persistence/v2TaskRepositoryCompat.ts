@@ -4,7 +4,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import type { StatementSync } from 'node:sqlite'
 import { join, relative } from 'node:path'
 import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
-import type { PathPolicyPort } from '@core/ports'
+import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
 import type {
   AppSettings,
   CopilotixTask,
@@ -25,10 +25,10 @@ import {
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { normalizeEnabledProviders, normalizeProviderOrder } from '@shared/providerPolicy'
 import type { ArtifactReference } from './taskRepositoryCompat'
-import { PathPolicy, resolveLexicalWithinRoot } from '@runtime/pathPolicy'
-import { V2Database } from './v2Database'
+import { PathPolicy, resolveLexicalWithinRoot } from '@platform/files/runtime/pathPolicy'
+import { V2Database } from '@platform/database/utility/v2Database'
 import { projectDocumentSummary } from '@shared/documentSummary'
-import { SqliteJobRepository } from './sqliteJobRepository'
+import { SqliteJobRepository } from '@platform/jobs/utility/sqliteJobRepository'
 
 export interface CompatDocumentRow {
   id: string

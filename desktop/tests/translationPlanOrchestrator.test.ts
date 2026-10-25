@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TaskComputePort } from '../src/core/ports'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { TranslationCredentialError, TranslationHttpError, type TranslationProvider } from '../src/main/translation/providers'
 import { TranslationPlanOrchestrator, withRetry } from '../src/main/translation/translationPlanOrchestrator'
 import type {

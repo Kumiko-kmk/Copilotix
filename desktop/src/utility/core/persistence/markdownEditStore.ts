@@ -7,7 +7,7 @@ import { blockMappingSchema } from '@shared/ipcSchemas'
 import { alignMarkdownBlocks } from '@shared/markdownBlocks'
 import { readerContentMappings } from '@shared/readerDocument'
 import { isIdentity, isPermutation, markdownEditRequestSchema, resolveMarkdownEdits, validOrder, type MarkdownEditEntry, type MarkdownEditRequest, type MarkdownEditsFile } from '@shared/markdownEdits'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { readMarkdownEditsFile, writeMarkdownEditsFile } from '@runtime/markdownEditsFile'
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')

@@ -1,6 +1,6 @@
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { detectRepositoryCoverPage, trustedPdfMetadataTitle, type CoverPageFinding } from '@shared/pdfImport'
-import { pdfWorker } from './pdfDocumentCache'
+import { pdfWorker } from '@platform/pdf/renderer/pdfDocumentCache'
 
 /** Larger files are imported without a preview rather than copied into memory here. */
 const MAX_INSPECTED_BYTES = 120 * 1024 * 1024

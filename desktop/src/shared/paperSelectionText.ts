@@ -1,7 +1,7 @@
 import { renderToString } from 'katex'
 import { parseFragment } from 'parse5'
 import { parseMarkdownAst } from '@shared/markdownBlocks'
-import { splitMarkdownMath } from '@shared/mathDelimiters'
+import { splitMarkdownMath } from '@platform/markdown/core/mathDelimiters'
 
 interface MarkdownNode { type: string; value?: string; children?: MarkdownNode[] }
 interface HtmlNode { nodeName: string; tagName?: string; value?: string; childNodes?: HtmlNode[] }

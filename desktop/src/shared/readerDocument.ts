@@ -1,6 +1,6 @@
 import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from './markdownBlocks'
 import type { BlockMapping, TranslatedMarkdownBlock, TranslationProviderId } from './types'
-import { prepareReaderMarkdown } from './standardMarkdown'
+import { prepareReaderMarkdown } from '@platform/markdown/core/standardMarkdown'
 import { inReadingOrder, type ResolvedMarkdownEdits } from './markdownEdits'
 
 export type ReaderBlockRole =

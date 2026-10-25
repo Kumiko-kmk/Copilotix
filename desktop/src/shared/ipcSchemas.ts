@@ -1,5 +1,5 @@
 import { resolvedMarkdownEditsSchema } from './markdownEdits'
-import { codexSettingsSchema, DEFAULT_CODEX_SETTINGS } from './codex'
+import { codexSettingsSchema, DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { paperChatProviderSchema, qwenChatModelSchema, deepseekChatModelSchema } from './paperChatSchemas'
 import { z } from 'zod'
 import type {
@@ -18,7 +18,6 @@ import type {
   TranslatedMarkdownBlock,
   WindowState
 } from './types'
-import type { IpcError } from './ipc'
 
 const noNul = (value: string): boolean => !value.includes('\0')
 const hasControlCharacters = (value: string): boolean => {
@@ -198,9 +197,6 @@ export const translatedMarkdownBlockSchema: z.ZodType<TranslatedMarkdownBlock> =
 export const windowActionSchema = z.enum(['minimize', 'toggle-maximize', 'close'])
 export const windowStateSchema: z.ZodType<WindowState> = z.object({ maximized: z.boolean() }).strict()
 
-export const noRequestSchema = z.undefined()
-export const outputDirectorySchema = z.string().max(32_768).nullable()
-
 export const storageCategorySchema = z.object({
   kind: z.enum(['source', 'image', 'translation', 'other']),
   fileCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
@@ -234,22 +230,6 @@ export const usageAnalyticsSchema = z.object({
   days: z.array(usageAnalyticsDaySchema).min(1).max(366)
 }).strict()
 export type UsageAnalytics = z.infer<typeof usageAnalyticsSchema>
-export const voidResponseSchema = z.undefined()
-
-export const ipcErrorSchema: z.ZodType<IpcError> = z.object({
-  code: z.string().min(1).max(128),
-  message: z.string().min(1).max(32_768),
-  retryable: z.boolean(),
-  traceId: z.string().max(512).optional()
-}).strict()
-
-export function ipcEnvelopeSchema<T extends z.ZodType>(valueSchema: T) {
-  return z.discriminatedUnion('ok', [
-    z.object({ ok: z.literal(true), value: valueSchema }).strict(),
-    z.object({ ok: z.literal(false), error: ipcErrorSchema }).strict()
-  ])
-}
-
 /*
  * Document IPC contracts
  *

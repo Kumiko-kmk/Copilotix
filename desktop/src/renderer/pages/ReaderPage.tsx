@@ -28,7 +28,7 @@ import type {
   ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
 import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView, ReaderChatSelection } from '@shared/types'
-import { IpcClientError } from '@shared/ipc'
+import { IpcClientError } from '@platform/ipc/contract/envelope'
 import { buildAnnotationDiff, replayAnnotationDiff } from '../annotationMutations'
 import ReaderWorkbench from '../components/ReaderWorkbench'
 import DocumentLifecycleActions from '../components/DocumentLifecycleActions'

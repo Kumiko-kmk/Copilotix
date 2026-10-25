@@ -7,7 +7,7 @@ import type { CopilotixTask, AppSettings } from '../src/shared/types'
 import { FigureInsightStore } from '../src/utility/core/persistence/figureInsightStore'
 import { FigureInsightService } from '../src/main/chat/figureInsightService'
 import { ChatProvider } from '../src/main/chat/chatProvider'
-import { WindowsCredentialVault } from '../src/main/credentialVault'
+import { WindowsCredentialVault } from '../src/platform/credentials/main/credentialVault'
 import { figureInsightContentSchema, type FigureInsightDescriptor, type FigureInsightRequest, type FigureInsightState } from '../src/shared/figureInsight'
 
 // Explicit live-test entry. Preflight is read-only; --execute sends images and saves results.

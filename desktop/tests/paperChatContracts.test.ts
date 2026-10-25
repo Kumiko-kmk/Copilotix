@@ -5,11 +5,12 @@ import { DEFAULT_SETTINGS } from '@shared/constants'
 import { paperChatAskRequestSchema, paperContextRequestSchema, paperContextResultSchema } from '@shared/paperChatSchemas'
 import { appSettingsSchema, settingsUpdateSchema } from '@shared/ipcSchemas'
 import { paperChatSessionSchema, paperChatTurnSchema } from '@shared/paperChatStorageSchemas'
-import { coreRequestSchema, validateCoreOperationResult, serializeCoreMessage, makeCoreEvent } from '@shared/coreRpcSchemas'
-import { CoreClient } from '@core/coreClient'
+import { coreProtocol, coreRequestSchema, validateCoreOperationResult, serializeCoreMessage } from '@app/contract/coreRpc'
+import { makeCoreEvent } from '@platform/rpc/contract/protocol'
+import { CoreClient } from '@platform/rpc/main/coreClient'
 import { registerPaperChatHandlers } from '../src/main/chat/paperChatIpc'
 import { PaperChatService } from '../src/main/chat/paperChatService'
-import type { IpcInvokeEventLike } from '../src/main/ipc'
+import type { IpcInvokeEventLike } from '../src/platform/ipc/main/ipc'
 
 const doc = '10000000-0000-4000-8000-000000000001'
 const request = { documentId: doc, question: 'question', pinned: [], history: [] }
@@ -85,7 +86,7 @@ describe('paper chat wire contracts', () => {
     try {
       let receive!: (s: string) => void
       const sent: string[] = []
-      const client = new CoreClient({ send: (s) => { sent.push(s) }, onMessage: (fn) => { receive = fn; return () => undefined } })
+      const client = new CoreClient({ send: (s) => { sent.push(s) }, onMessage: (fn) => { receive = fn; return () => undefined } }, coreProtocol)
       receive(serializeCoreMessage(makeCoreEvent('ready')))
       const controller = new AbortController()
       const pending = client.request('chat:build-context', { documentId: doc, question: 'q', pinned: [], budgetChars: 48000 }, { signal: controller.signal })

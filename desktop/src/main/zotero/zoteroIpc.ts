@@ -8,7 +8,7 @@ import {
   zoteroItemsPageSchema,
   zoteroItemsRequestSchema
 } from '@shared/zotero'
-import { registerValidatedHandler, type IpcValidationOptions } from '../ipc'
+import { registerValidatedHandler, type IpcValidationOptions } from '@platform/ipc/main/ipc'
 import type { TaskRepositoryCompat } from '../taskRepositoryCompat'
 import type { TaskService } from '../taskService'
 import { readLocalApiFileUrl, readLocalApiSnapshot, readSqliteSnapshot } from './zoteroCatalog'

@@ -9,17 +9,18 @@ import type {
   JobCheckpoint,
   JobRunnerError,
   JobRunnerResult
-} from '@core/jobs'
-import { JobRunnerError as RunnerError } from '@core/jobs'
-import type { PathPolicyPort, TaskComputePort } from '@core/ports'
+} from '@platform/jobs/core/jobs'
+import { JobRunnerError as RunnerError } from '@platform/jobs/core/jobs'
+import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
+import type { TaskComputePort } from '@core/ports'
 import type { AppSettings, CopilotixTask } from '@shared/types'
-import type { CredentialVault } from './credentialVault'
-import type { TaskLogger } from './logger'
+import type { CredentialVault } from '@platform/credentials/main/credentialVault'
+import type { TaskLogger } from '@platform/log/main/logger'
 import { ParserApiError, type ParserClient, type BatchResult, type BatchSubmission } from './parserClient'
 import type { SettingsService } from './settingsService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
-import type { JobRepositoryPort } from '@core/jobs'
-import { ProgressReporter } from './progressReporter'
+import type { JobRepositoryPort } from '@platform/jobs/core/jobs'
+import { ProgressReporter } from '@platform/jobs/main/progressReporter'
 import type { UsageAnalyticsRecorder } from './usageAnalyticsService'
 
 const DEFAULT_PARSE_PIPELINE_CONCURRENCY = Object.freeze({

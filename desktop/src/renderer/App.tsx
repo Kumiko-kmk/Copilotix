@@ -1,5 +1,5 @@
 import React from 'react'
-import { DEFAULT_CODEX_SETTINGS } from '@shared/codex'
+import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { refreshCodexStatus } from './codexStatusClient'
 import { loadStorageInfo } from './storageInfoClient'
 import { loadReaderPage, loadedReaderPage } from './readerPageLoader'

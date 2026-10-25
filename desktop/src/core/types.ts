@@ -1,52 +1,8 @@
 import type { CitationLocator } from '@shared/ragSchemas'
 
-export type JsonObject = Record<string, unknown>
-
 export type DocumentId = string
 export type DocumentTranslationProvider = 'qwen' | 'deepseek' | 'bing' | 'transmart' | 'codex'
 
-/**
- * Durable work kinds.  The chat index job shares the job table and state
- * machine with the foreground document jobs; it is not projected into
- * DocumentWorkflowStatus.  `rag-embed`/`rag-delete` belong to the abandoned
- * semantic-index plan and stay only because the jobs table CHECK constraint
- * still allows them.
- */
-export type JobKind = 'parse' | 'translate' | 'rag-content-index' | 'rag-embed' | 'rag-delete'
-export type JobStatus = 'queued' | 'running' | 'retry-wait' | 'succeeded' | 'partial' | 'failed' | 'cancelled'
-
-export interface Job {
-  id: string
-  documentId: DocumentId
-  kind: JobKind
-  status: JobStatus
-  progress: number
-  dependsOnJobId: string | null
-  priority: number
-  attempt: number
-  maxAttempts: number
-  payload: JsonObject
-  checkpoint: JsonObject
-  availableAt: string
-  leaseOwner: string | null
-  leaseExpiresAt: string | null
-  errorCode: string | null
-  errorMessage: string | null
-  startedAt: string | null
-  finishedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface JobEvent {
-  id: string
-  jobId: string
-  sequence: number
-  fromState: JobStatus | null
-  toState: JobStatus
-  detail: JsonObject
-  createdAt: string
-}
 
 export type ArtifactKind =
   | 'source_pdf'

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
-import { V2Database } from '../src/utility/core/persistence/v2Database'
+import { V2Database } from '../src/platform/database/utility/v2Database'
 import { manageLibrary, verifyBackup } from '../src/utility/core/libraryMaintenance'
 
 const connections: V2Database[] = []

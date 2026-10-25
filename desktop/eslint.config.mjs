@@ -7,6 +7,11 @@ const testFiles = ['tests/**/*.ts', 'tests/**/*.tsx']
 const configFiles = ['electron.vite.config.ts', 'utility.vite.config.ts', 'vitest.config.ts', 'playwright.config.ts']
 const typedFiles = [...sourceFiles, ...testFiles, ...configFiles]
 
+/** Files of process layers in app/, platform/<concern>/ and features/<name>/ (ADR-0001). */
+const layerFiles = (...layers) => layers.flatMap(layer => ['app', 'platform/*', 'features/*'].map(unit => `src/${unit}/${layer}/**/*.{ts,tsx}`))
+/** Alias imports that reach into those layers. */
+const layerImports = (...layers) => layers.flatMap(layer => [`@app/${layer}/**`, `@platform/*/${layer}/**`, `@features/*/${layer}/**`])
+
 export default tseslint.config(
   {
     ignores: ['out/**', 'release/**', 'node_modules/**', 'dist/**']
@@ -28,13 +33,13 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/core/**/*.ts'],
+    files: ['src/core/**/*.ts', ...layerFiles('core', 'contract')],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
-            { group: ['@main/*', '@renderer/*', '@runtime/*', 'electron', 'node:*'], message: 'Core code cannot depend on a runtime layer.' }
+            { group: ['@main/*', '@renderer/*', '@runtime/*', ...layerImports('main', 'preload', 'renderer', 'runtime', 'utility'), 'electron', 'node:*'], message: 'Core code cannot depend on a runtime layer.' }
           ]
         }
       ]
@@ -54,38 +59,38 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/preload/**/*.ts'],
+    files: ['src/preload/**/*.ts', ...layerFiles('preload')],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
-            { group: ['@main/*', '@renderer/*', '@runtime/*'], message: 'Preload may depend on shared contracts, not main, renderer or runtime modules.' }
+            { group: ['@main/*', '@renderer/*', '@runtime/*', ...layerImports('main', 'renderer', 'runtime', 'utility')], message: 'Preload may depend on shared contracts, not main, renderer or runtime modules.' }
           ]
         }
       ]
     }
   },
   {
-    files: ['src/renderer/**/*.ts', 'src/renderer/**/*.tsx'],
+    files: ['src/renderer/**/*.ts', 'src/renderer/**/*.tsx', ...layerFiles('renderer')],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
-            { group: ['@main/*', '@runtime/*', 'electron', 'node:*'], message: 'Renderer must use the preload API for privileged work.' }
+            { group: ['@main/*', '@runtime/*', ...layerImports('main', 'preload', 'runtime', 'utility'), 'electron', 'node:*'], message: 'Renderer must use the preload API for privileged work.' }
           ]
         }
       ]
     }
   },
   {
-    files: ['src/main/**/*.ts'],
+    files: ['src/main/**/*.ts', ...layerFiles('main')],
     rules: {
       'no-restricted-imports': [
         'error',
         {
-          patterns: [{ group: ['@renderer/*'], message: 'Main cannot depend on renderer modules.' }]
+          patterns: [{ group: ['@renderer/*', ...layerImports('renderer')], message: 'Main cannot depend on renderer modules.' }]
         }
       ]
     }

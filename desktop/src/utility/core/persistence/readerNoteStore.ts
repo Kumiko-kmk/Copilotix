@@ -3,7 +3,7 @@ import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { READER_NOTES_MAX, READER_NOTES_MAX_BYTES, readerNoteSchema, type ReaderNote, type ReaderNotes } from '@shared/readerNotes'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 
 const FILE = 'notes.v1.json'
 const notesFileSchema = z.object({ version: z.literal(1), documentId: z.string(), notes: z.array(readerNoteSchema).max(READER_NOTES_MAX) }).strict()

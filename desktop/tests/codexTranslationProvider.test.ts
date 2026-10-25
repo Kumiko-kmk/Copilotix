@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { CodexTranslationProvider } from '../src/main/translation/codexTranslationProvider'
-import type { CodexRuntime } from '../src/runtime/codexRuntime'
+import type { CodexRuntime } from '../src/platform/codex/runtime/codexRuntime'
 import type { PlainTranslationRequest } from '@shared/translationPlanProtocol'
 import { flattenSegments } from '@shared/translationPlanProtocol'
 import { buildTableTranslationPlan } from '../src/utility/core/compute/tableTranslation'

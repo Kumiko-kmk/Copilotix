@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { CodexSettings, CodexStatus } from '@shared/codex'
+import type { CodexSettings, CodexStatus } from '@platform/codex/contract/codex'
 const statuses = new Map<string, CodexStatus>()
 const listeners = new Set<() => void>()
 const pending = new Map<string, Promise<CodexStatus>>()

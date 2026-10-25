@@ -1,4 +1,4 @@
-import { acquirePdfDocument } from '../pdfDocumentCache'
+import { acquirePdfDocument } from '@platform/pdf/renderer/pdfDocumentCache'
 
 /** The first page as shown behind the frosted cover, plus the page count when it is a PDF. */
 export interface DetailPage {

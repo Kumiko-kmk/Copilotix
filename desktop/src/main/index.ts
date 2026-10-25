@@ -1,7 +1,7 @@
 import { markdownEditRequestSchema, markdownEditResultSchema } from '@shared/markdownEdits'
-import { CodexRuntime } from '@runtime/codexRuntime'
+import { CodexRuntime } from '@platform/codex/runtime/codexRuntime'
 import { ModelGateway } from './chat/modelGateway'
-import { codexProbeSchema, codexStatusSchema, DEFAULT_CODEX_SETTINGS } from '@shared/codex'
+import { codexProbeSchema, codexStatusSchema, DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { paperChatImageInput } from '@shared/paperChatFigures'
 import { PaperInsightService, loadFullBriefContext } from './chat/paperInsightService'
 import { FigureInsightService } from './chat/figureInsightService'
@@ -41,16 +41,16 @@ import {
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
 import { RpcTaskRepository } from './rpcTaskRepository'
 import { RpcTaskCompute } from './rpcTaskCompute'
-import { credentialServiceForRuntime, WindowsCredentialVault } from './credentialVault'
+import { credentialServiceForRuntime, WindowsCredentialVault } from '@platform/credentials/main/credentialVault'
 import { SettingsService } from './settingsService'
 import { OfficialParserClient } from './parserClient'
 import { ElectronFileUploader } from './fileUploader'
-import { createAssetResponse } from './assetProtocol'
+import { createAssetResponse } from '@platform/assets/main/assetProtocol'
 import { TaskService } from './taskService'
-import { JsonLineLogger } from './logger'
+import { JsonLineLogger } from '@platform/log/main/logger'
 import { probeOpenAiCompatibleCredential } from './translation/providers'
-import { refreshNetworkProxy } from './networkProxy'
-import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike } from './ipc'
+import { refreshNetworkProxy } from '@platform/network/main/networkProxy'
+import { registerValidatedHandler, sendValidatedEvent, type IpcInvokeEventLike } from '@platform/ipc/main/ipc'
 import {
   cacheDocumentFigureRequestSchema,
   cacheDocumentFigureResultSchema,
@@ -58,16 +58,14 @@ import {
   appSettingsSchema,
   credentialValidationRequestSchema,
   credentialValidationResultSchema,
-  noRequestSchema,
-  outputDirectorySchema,
   settingsSaveResultSchema,
   settingsUpdateSchema,
   storageInfoSchema,
   usageAnalyticsSchema,
-  voidResponseSchema,
   windowActionSchema,
   windowStateSchema
 } from '@shared/ipcSchemas'
+import { noRequestSchema, outputDirectorySchema, voidResponseSchema } from '@platform/ipc/contract/schemas'
 import {
   deleteDocumentRequestSchema,
   documentChangeEventSchema,
@@ -87,21 +85,22 @@ import {
 import type { WindowState } from '@shared/types'
 import { computeDocumentChange, projectDocumentDetails } from './documentProjection'
 import { projectDocumentSummary } from '@shared/documentSummary'
-import { createCoalescedRefresh } from './coalescedRefresh'
-import { UtilitySupervisor } from './utilitySupervisor'
-import { forkUtilityProcess } from './electronUtilityFork'
-import { RpcJobRepository } from './rpcJobRepository'
-import { JobScheduler } from './jobScheduler'
+import { createCoalescedRefresh } from '@platform/jobs/main/coalescedRefresh'
+import { UtilitySupervisor } from '@platform/rpc/main/utilitySupervisor'
+import { coreProtocol, type CoreOperationRegistryShape } from '@app/contract/coreRpc'
+import { forkUtilityProcess } from '@platform/rpc/main/electronUtilityFork'
+import { RpcJobRepository } from '@platform/jobs/main/rpcJobRepository'
+import { JobScheduler } from '@platform/jobs/main/jobScheduler'
 import { ParseJobRunner } from './parseJobRunner'
 import { TranslationJobRunner } from './translationJobRunner'
 import { RagContentIndexJobRunner } from './ragContentIndexJobRunner'
 import { RpcRagContentIndexer } from './rpcRagContentIndexer'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { formatPackagedSmokeMarker, shouldRunPackagedSmoke } from '@shared/packagedSmoke'
 import { inspectStorage } from './storageService'
-import { resolveUtilityEntryPath } from './utilityEntryPath'
+import { resolveUtilityEntryPath } from '@platform/rpc/main/utilityEntryPath'
 import { UsageAnalyticsService } from './usageAnalyticsService'
-import { runUninstallCleanup, UNINSTALL_CLEANUP_ARG } from './uninstallCleanup'
+import { runUninstallCleanup, UNINSTALL_CLEANUP_ARG } from '@platform/uninstall/main/uninstallCleanup'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -109,7 +108,7 @@ let isQuitting = false
 let repository: TaskRepositoryCompat | null = null
 let documentRevision = 0
 let documentSummaries = new Map<string, DocumentSummary>()
-let utilitySupervisor: UtilitySupervisor | null = null
+let utilitySupervisor: UtilitySupervisor<CoreOperationRegistryShape> | null = null
 let utilityShutdownPromise: Promise<void> | null = null
 let codex: CodexRuntime | null = null
 let paperChat: PaperChatService | null = null
@@ -134,6 +133,7 @@ async function bootstrap(): Promise<void> {
   await app.whenReady()
   startupPhase = 'core-start'
   utilitySupervisor = new UtilitySupervisor({
+    protocol: coreProtocol,
     entryPath: resolveUtilityEntryPath({
       isPackaged: app.isPackaged,
       bundleDirectory: __dirname,
@@ -607,7 +607,7 @@ function registerIpc(
     else await tasks.exportMarkdown(task.id, request.kind, result.filePath)
     return { saved: true }
   }, validationOptions)
-  const requireNotesUtility = (): UtilitySupervisor => {
+  const requireNotesUtility = (): UtilitySupervisor<CoreOperationRegistryShape> => {
     if (!utilitySupervisor || !repository) throw new Error('数据库尚未初始化')
     return utilitySupervisor
   }
@@ -688,11 +688,12 @@ function startNormalApp(): void {
 
 async function runPackagedSmoke(): Promise<void> {
   let smokeRoot: string | undefined
-  let supervisor: UtilitySupervisor | undefined
+  let supervisor: UtilitySupervisor<CoreOperationRegistryShape> | undefined
   try {
     await app.whenReady()
     smokeRoot = await mkdtemp(join(app.getPath('temp'), 'copilotix-packaged-smoke-'))
     supervisor = new UtilitySupervisor({
+      protocol: coreProtocol,
       entryPath: resolveUtilityEntryPath({
         isPackaged: app.isPackaged,
         bundleDirectory: __dirname,

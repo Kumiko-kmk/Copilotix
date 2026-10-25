@@ -10,7 +10,7 @@ import {
   type FigureDisplayChoices,
   type FigureDisplaySetRequest
 } from '@shared/figureDisplay'
-import { registerValidatedHandler, type IpcValidationOptions } from './ipc'
+import { registerValidatedHandler, type IpcValidationOptions } from '@platform/ipc/main/ipc'
 
 /**
  * Reader figure display choices, one small JSON file in each document folder. It is backed up,

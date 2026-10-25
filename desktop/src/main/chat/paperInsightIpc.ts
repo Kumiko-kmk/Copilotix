@@ -1,6 +1,6 @@
 import { paperInsightRequestSchema, paperInsightStateSchema, paperInsightCancelSchema } from '@shared/paperInsight'
-import { voidResponseSchema } from '@shared/ipcSchemas'
-import { registerValidatedHandler, type IpcValidationOptions } from '../ipc'
+import { voidResponseSchema } from '@platform/ipc/contract/schemas'
+import { registerValidatedHandler, type IpcValidationOptions } from '@platform/ipc/main/ipc'
 import type { PaperInsightService } from './paperInsightService'
 
 export function registerPaperInsightHandlers(service: PaperInsightService, options: IpcValidationOptions): void {

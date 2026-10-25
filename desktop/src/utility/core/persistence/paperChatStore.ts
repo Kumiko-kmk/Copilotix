@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { ragWireByteLength } from '@shared/ragSchemas'
 import { PAPER_CHAT_MAX_BYTES } from '@shared/paperChatSchemas'
 import { emptyPaperChatSession, paperChatCursorSchema, paperChatSessionSchema, paperChatTurnSchema, type PaperChatDeleteTurnRequest, type PaperChatPage, type PaperChatSession, type StoredPaperChatTurn } from '@shared/paperChatStorageSchemas'
-import { PathPolicy } from '@runtime/pathPolicy'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 
 const turnFileSchema = z.object({ version: z.literal(1), documentId: z.string(), turn: paperChatTurnSchema }).strict()
 const sessionFileSchema = z.object({ version: z.literal(1), documentId: z.string(), session: paperChatSessionSchema }).strict()

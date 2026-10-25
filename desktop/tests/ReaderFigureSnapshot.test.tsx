@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { renderDocumentRegion, figurePixelSize, FIGURE_MAX_PIXELS, FIGURE_MAX_EDGE } from '../src/renderer/components/ReaderFigureSnapshot'
 
-vi.mock('../src/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
+vi.mock('../src/platform/pdf/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
 
 afterEach(() => vi.restoreAllMocks())
 

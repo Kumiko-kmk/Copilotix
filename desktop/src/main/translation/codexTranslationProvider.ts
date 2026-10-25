@@ -1,5 +1,5 @@
 import type { TranslationProvider } from './providers'
-import type { CodexRuntime } from '@runtime/codexRuntime'
+import type { CodexRuntime } from '@platform/codex/runtime/codexRuntime'
 import { flattenSegments, parseTableTranslationResponse, validateTableTranslationResponse, type TableTranslationRequest, type TableTranslationResponse } from '@shared/translationPlanProtocol'
 import type { ProviderTokenUsage } from '../usageAnalyticsService'
 import { plainTranslationResponseSchema, type PlainTranslationRequest, type PlainTranslationResponse } from '@shared/translationPlanProtocol'

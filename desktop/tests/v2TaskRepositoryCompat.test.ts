@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { CompatDocumentRow, CompatJobRow } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
 import { projectCompatTask, V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import { V2Database } from '../src/utility/core/persistence/v2Database'
+import { V2Database } from '../src/platform/database/utility/v2Database'
 import type { CopilotixTask, ReaderAnnotation } from '@shared/types'
 
 const roots: string[] = []

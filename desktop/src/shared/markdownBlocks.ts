@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkStringify from 'remark-stringify'
 import type { BlockMapping, TranslationProviderId } from './types'
-import { resolveMarkdownReferences } from './standardMarkdown'
+import { resolveMarkdownReferences } from '@platform/markdown/core/standardMarkdown'
 
 const processor = unified()
   .use(remarkParse)

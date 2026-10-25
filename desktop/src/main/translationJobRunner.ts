@@ -1,17 +1,17 @@
 import { CodexTranslationProvider } from './translation/codexTranslationProvider'
-import type { CodexRuntime } from '@runtime/codexRuntime'
-import type { JobRunner, JobRunnerInput, JobRunnerResult } from '@core/jobs'
-import { JobRunnerError } from '@core/jobs'
+import type { CodexRuntime } from '@platform/codex/runtime/codexRuntime'
+import type { JobRunner, JobRunnerInput, JobRunnerResult } from '@platform/jobs/core/jobs'
+import { JobRunnerError } from '@platform/jobs/core/jobs'
 import type { TaskComputePort } from '@core/ports'
 import { createTranslationProviders } from './translation/providers'
 import { executableProviderOrder } from '@shared/providerPolicy'
 import { runTranslationPlan } from './translation/translationPlanOrchestrator'
-import type { CredentialVault } from './credentialVault'
+import type { CredentialVault } from '@platform/credentials/main/credentialVault'
 import type { SettingsService } from './settingsService'
 import type { TaskRepositoryCompat } from './taskRepositoryCompat'
-import type { TaskLogger } from './logger'
+import type { TaskLogger } from '@platform/log/main/logger'
 import { ArtifactService } from './artifactService'
-import { ProgressReporter } from './progressReporter'
+import { ProgressReporter } from '@platform/jobs/main/progressReporter'
 import type { UsageAnalyticsRecorder } from './usageAnalyticsService'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -23,7 +23,7 @@ export interface TranslationJobRunnerOptions {
   vault: CredentialVault
   fetcher: Fetcher
   compute: TaskComputePort
-  pathPolicy: import('@core/ports').PathPolicyPort
+  pathPolicy: import('@platform/files/contract/pathPolicyPort').PathPolicyPort
   logger?: TaskLogger
   artifacts?: ArtifactService
   usageAnalytics?: UsageAnalyticsRecorder

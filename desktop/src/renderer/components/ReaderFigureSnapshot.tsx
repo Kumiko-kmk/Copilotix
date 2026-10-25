@@ -1,6 +1,6 @@
 import React from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { acquirePdfDocument } from '../pdfDocumentCache'
+import { acquirePdfDocument } from '@platform/pdf/renderer/pdfDocumentCache'
 import type { ReaderFigureGroup } from '@shared/readerFigureGroups'
 
 export type FigureRenderState = 'pending' | 'ready' | 'failed'

@@ -13,9 +13,9 @@ import { resolveReaderEdits } from '../src/main/artifactService'
 import { applyChunkEdits } from '../src/utility/core/paperContextBuilder'
 import { MarkdownEditStore } from '../src/utility/core/persistence/markdownEditStore'
 import { MarkdownTranslationPlanManager } from '../src/utility/core/compute/markdownTranslationPlan'
-import { V2Database } from '../src/utility/core/persistence/v2Database'
+import { V2Database } from '../src/platform/database/utility/v2Database'
 import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import { SqliteJobRepository } from '../src/utility/core/persistence/sqliteJobRepository'
+import { SqliteJobRepository } from '../src/platform/jobs/utility/sqliteJobRepository'
 
 const DOC = '11111111-1111-4111-8111-111111111111'
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex')
