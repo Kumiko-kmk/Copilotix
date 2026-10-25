@@ -3,16 +3,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { TaskComputePort } from '../src/core/ports'
+import type { TaskComputePort } from '../../../src/core/ports'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
-import { TranslationCredentialError, TranslationHttpError, type TranslationProvider } from '../src/main/translation/providers'
-import { TranslationPlanOrchestrator, withRetry } from '../src/main/translation/translationPlanOrchestrator'
+import { TranslationCredentialError, TranslationHttpError, type TranslationProvider } from '../../../src/features/translation/main/providers'
+import { TranslationPlanOrchestrator, withRetry } from '../../../src/features/translation/main/translationPlanOrchestrator'
 import type {
   PlainTranslationRequest,
   TranslationPlanCounts,
   TranslationPlanMutationResult,
   TranslationPlanWorkDescriptor
-} from '@shared/translationPlanProtocol'
+} from '@features/translation/contract/translationPlanProtocol'
 import type { CopilotixTask, TranslationProviderId } from '@shared/types'
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111'

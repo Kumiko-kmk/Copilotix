@@ -8,7 +8,7 @@ import {
   validateTableTranslationResponse,
   type TableTranslationRequest,
   type TableTranslationResponse
-} from '@shared/translationPlanProtocol'
+} from '../contract/translationPlanProtocol'
 import type { ProviderTokenUsage } from '@features/settings/main'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -30,7 +30,7 @@ export interface TranslationProvider {
   readonly credentialName?: CredentialName
   isAvailable(): Promise<boolean>
   translate(text: string, signal?: AbortSignal): Promise<string>
-  translatePlain?(request: import('@shared/translationPlanProtocol').PlainTranslationRequest, signal: AbortSignal): Promise<import('@shared/translationPlanProtocol').PlainTranslationResponse>
+  translatePlain?(request: import('../contract/translationPlanProtocol').PlainTranslationRequest, signal: AbortSignal): Promise<import('../contract/translationPlanProtocol').PlainTranslationResponse>
   translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse>
 }
 

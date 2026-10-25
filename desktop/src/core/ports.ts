@@ -4,7 +4,7 @@ import type {
   TranslationPlanListResult,
   TranslationPlanMutationResult,
   TranslationPlanOpenResult
-} from '@shared/translationPlanProtocol'
+} from '@features/translation/contract/translationPlanProtocol'
 
 /**
  * Ports shared by Main and Utility. Only contracts with a production

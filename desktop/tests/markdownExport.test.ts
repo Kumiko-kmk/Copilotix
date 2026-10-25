@@ -8,7 +8,7 @@ import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import type { TaskRepositoryCompat } from '../src/main/taskRepositoryCompat'
 import type { TaskComputePort } from '../src/core/ports'
 import type { CopilotixTask } from '../src/shared/types'
-import { LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION, TRANSLATION_PIPELINE_VERSION, TABLE_TRANSLATION_PROTOCOL } from '../src/shared/translationPlanProtocol'
+import { LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION, TRANSLATION_PIPELINE_VERSION, TABLE_TRANSLATION_PROTOCOL } from '../src/features/translation/contract/translationPlanProtocol'
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'copilotix-markdown-export-'))

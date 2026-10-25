@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { TranslationProviderId } from './types'
+import type { TranslationProviderId } from '@shared/types'
 
 /** Versions are part of the on-disk plan identity. Do not change casually. */
 export const LEGACY_TRANSLATION_PIPELINE_VERSION = 'markdown-logical-block-v4-table-json-v2-references' as const

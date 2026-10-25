@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { normalizeEnabledProviders, normalizeProviderOrder, executableProviderOrder } from '@shared/providerPolicy'
+import { normalizeEnabledProviders, normalizeProviderOrder, executableProviderOrder } from '@features/translation/contract/providerPolicy'
 import { paperChatSessionSchema } from '@features/chat/contract/paperChatStorageSchemas'
 import { ModelGateway } from '../src/features/chat/main/modelGateway'
 import type { ChatProvider } from '../src/features/chat/main/chatProvider'

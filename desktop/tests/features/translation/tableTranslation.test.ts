@@ -3,14 +3,14 @@ import {
   applyTableTranslation,
   buildTableTranslationPlan,
   buildTableTranslationUnits
-} from '../src/utility/core/compute/tableTranslation'
+} from '../../../src/features/translation/utility/tableTranslation'
 import {
   flattenSegments,
   parseTableTranslationResponse,
   validateTableTranslationResponse,
   type TableTranslationRequest,
   type TableTranslationResponse
-} from '@shared/translationPlanProtocol'
+} from '@features/translation/contract/translationPlanProtocol'
 import type { BlockMapping } from '@shared/types'
 
 function block(sourceIndex: number, markdown: string, mappingIds: string[] = []) {

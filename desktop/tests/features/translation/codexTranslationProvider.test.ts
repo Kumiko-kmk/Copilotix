@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest'
-import { CodexTranslationProvider } from '../src/main/translation/codexTranslationProvider'
-import type { CodexRuntime } from '../src/platform/codex/runtime/codexRuntime'
-import type { PlainTranslationRequest } from '@shared/translationPlanProtocol'
-import { flattenSegments } from '@shared/translationPlanProtocol'
-import { buildTableTranslationPlan } from '../src/utility/core/compute/tableTranslation'
+import { CodexTranslationProvider } from '../../../src/features/translation/main/codexTranslationProvider'
+import type { CodexRuntime } from '../../../src/platform/codex/runtime/codexRuntime'
+import type { PlainTranslationRequest } from '@features/translation/contract/translationPlanProtocol'
+import { flattenSegments } from '@features/translation/contract/translationPlanProtocol'
+import { buildTableTranslationPlan } from '../../../src/features/translation/utility/tableTranslation'
 const request: PlainTranslationRequest = { protocol: 'copilotix-translation-plain-v1', unitId: '11111111-1111-4111-8111-111111111111', sourceHash: 'a'.repeat(64), targetLanguage: 'zh-CN', segments: [{ id: 'one', text: 'First segment' }, { id: 'two', text: 'Second segment' }] }
 it('translates all segments of one paragraph in one correlated model request', async () => {
   const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: 'copilotix-translation-segments-v1', translations: sent.segments.map((s: { id: string }) => ({ id: s.id, text: '译文' })) })); return null })

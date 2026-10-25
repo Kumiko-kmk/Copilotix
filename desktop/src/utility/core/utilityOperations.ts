@@ -24,12 +24,6 @@ import {
   coreDocumentMetadataPayloadSchema,
   coreImportPdfPayloadSchema,
   coreRepairTextLayerPayloadSchema,
-  coreTranslationPlanOpenPayloadSchema,
-  coreTranslationPlanListPayloadSchema,
-  coreTranslationPlanCachePayloadSchema,
-  coreTranslationPlanApplyPayloadSchema,
-  coreTranslationPlanFailPayloadSchema,
-  coreTranslationPlanFinalizePayloadSchema
 } from '@shared/coreRpcSchemas'
 import { coreDatabaseInitPayloadSchema } from '@platform/rpc/contract/protocol'
 import {
@@ -60,7 +54,7 @@ import { V2Database } from '@platform/database/utility/v2Database'
 import { V2TaskRepositoryCompat } from './persistence/v2TaskRepositoryCompat'
 import { SqliteJobRepository, SqliteJobRepositoryError } from '@platform/jobs/utility/sqliteJobRepository'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
-import { MarkdownTranslationPlanManager } from './compute/markdownTranslationPlan'
+import { createTranslationOperations, MarkdownTranslationPlanManager } from '@features/translation/utility'
 import { withoutFirstPage } from './compute/pdfPageRemoval'
 
 type UtilityHandlerMap = Partial<Record<CoreOperation, CoreUtilityOperationHandler>>
@@ -151,6 +145,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     edits: editStore,
     figureInsightStore
   })
+  const translation = createTranslationOperations(requireTranslationPlanManager)
   const handlers: UtilityHandlerMap = {
     ...insight.handlers,
     // Reads every paper's text on first use: compute lane, so quick data requests are not held up.
@@ -291,37 +286,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
       await rebuildMappings(payload.taskId, payload.outputDir, requireRepository())
       return { rebuilt: true }
     },
-    'compute:translation-plan-open': async (request) => {
-      const payload = coreTranslationPlanOpenPayloadSchema.parse(request.payload)
-      return requireTranslationPlanManager().open(payload.taskId, payload.jobId)
-    },
-    'compute:translation-plan-list': async (request) => {
-      const payload = coreTranslationPlanListPayloadSchema.parse(request.payload)
-      return requireTranslationPlanManager().listWork(payload.taskId, payload.jobId, payload.cursor, payload.limit)
-    },
-    'compute:translation-plan-cache': async (request) => {
-      const payload = coreTranslationPlanCachePayloadSchema.parse(request.payload)
-      return requireTranslationPlanManager().tryCache(payload.taskId, payload.jobId, payload.unitId, payload.provider, payload.model)
-    },
-    'compute:translation-plan-apply': async (request) => {
-      const payload = coreTranslationPlanApplyPayloadSchema.parse(request.payload)
-      return requireTranslationPlanManager().apply(
-        payload.taskId,
-        payload.jobId,
-        payload.unitId,
-        payload.responsePath,
-        payload.provider ?? null,
-        payload.model ?? null
-      )
-    },
-    'compute:translation-plan-fail': async (request) => {
-      const payload = coreTranslationPlanFailPayloadSchema.parse(request.payload)
-      return requireTranslationPlanManager().fail(payload.taskId, payload.jobId, payload.unitId, payload.error)
-    },
-    'compute:translation-plan-finalize': async (request) => {
-      const payload = coreTranslationPlanFinalizePayloadSchema.parse(request.payload)
-      return requireTranslationPlanManager().finalize(payload.taskId, payload.jobId)
-    }
+    ...translation.handlers
   }
 
   for (const [operation, handler] of Object.entries(handlers) as Array<[CoreOperation, CoreUtilityOperationHandler]>) {

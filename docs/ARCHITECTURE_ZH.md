@@ -64,6 +64,8 @@ main ──▶ runtime ──▶ core ◀── runtime ◀── utility
 
 ### 3.2 模块表
 
+> 1.3.0 正按 [ADR-0001](adr/0001-feature-modules.md) 把代码迁入 `src/{app,platform,features}/`（进度见 [milestone](MILESTONE_1_3_ZH.md)），各模块入口以其 `README.md` 为准；下表的旧路径在 M6 重写本文时更新。
+
 | 模块 | 主要文件 | 职责与边界 |
 |---|---|---|
 | 跨层契约 | `shared/ipcSchemas.ts`、`types.ts`、`coreRpcSchemas.ts`、`ragSchemas.ts`、`paperChat*Schemas.ts`、`paperInsight.ts`、`figureInsight.ts`、`librarySchemas.ts`、`libraryCategories.ts`、`translationPlanProtocol.ts` | 所有 IPC／RPC／磁盘 JSON 的 Zod 契约；`documentSummary.ts` 是文档摘要唯一投影 |

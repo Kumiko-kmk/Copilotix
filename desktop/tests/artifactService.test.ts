@@ -9,7 +9,7 @@ import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { ArtifactService, shouldIncludeResultZipEntry } from '../src/main/artifactService'
 import type { TaskRepositoryCompat } from '../src/main/taskRepositoryCompat'
 import { alignMarkdownBlocks, MARKDOWN_MAPPING_ALGORITHM_VERSION } from '../src/shared/markdownBlocks'
-import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/shared/translationPlanProtocol'
+import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/features/translation/contract/translationPlanProtocol'
 import type { CopilotixTask } from '../src/shared/types'
 
 describe('result archive filtering', () => {

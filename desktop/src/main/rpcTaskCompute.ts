@@ -6,7 +6,7 @@ import type {
   TranslationPlanListResult,
   TranslationPlanMutationResult,
   TranslationPlanOpenResult
-} from '@shared/translationPlanProtocol'
+} from '@features/translation/contract/translationPlanProtocol'
 import type { TranslationProviderId } from '@shared/types'
 
 /**

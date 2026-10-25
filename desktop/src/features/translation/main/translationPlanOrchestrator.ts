@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import PQueue from 'p-queue'
-import type { TranslationPlanFinalizeResult, TranslationPlanCounts, TranslationPlanMutationResult, TranslationPlanRequest, TranslationPlanResponse, TranslationPlanWorkDescriptor, PlainTranslationResponse, TableTranslationResponse } from '@shared/translationPlanProtocol'
+import type { TranslationPlanFinalizeResult, TranslationPlanCounts, TranslationPlanMutationResult, TranslationPlanRequest, TranslationPlanResponse, TranslationPlanWorkDescriptor, PlainTranslationResponse, TableTranslationResponse } from '../contract/translationPlanProtocol'
 import {
   plainTranslationRequestSchema,
   plainTranslationResponseSchema,
@@ -14,7 +14,7 @@ import {
   translationPlanOpenResultSchema,
   translationPlanResponseEnvelopeSchema,
   validateTableTranslationResponse
-} from '@shared/translationPlanProtocol'
+} from '../contract/translationPlanProtocol'
 import type { CredentialName, CopilotixTask, TranslationProviderId } from '@shared/types'
 import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
 import type { TaskComputePort } from '@core/ports'

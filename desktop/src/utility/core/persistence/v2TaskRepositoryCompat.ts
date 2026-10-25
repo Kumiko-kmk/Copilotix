@@ -23,7 +23,7 @@ import {
   type ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { normalizeEnabledProviders, normalizeProviderOrder } from '@shared/providerPolicy'
+import { normalizeEnabledProviders, normalizeProviderOrder } from '@features/translation/contract/providerPolicy'
 import type { ArtifactReference } from './taskRepositoryCompat'
 import { PathPolicy, resolveLexicalWithinRoot } from '@platform/files/runtime/pathPolicy'
 import { V2Database } from '@platform/database/utility/v2Database'

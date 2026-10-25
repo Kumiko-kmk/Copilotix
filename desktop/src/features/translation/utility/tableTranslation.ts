@@ -16,7 +16,7 @@ import {
   type TablePayload,
   type TableTranslationRequest,
   type TableTranslationResponse
-} from '@shared/translationPlanProtocol'
+} from '../contract/translationPlanProtocol'
 
 export interface TableTranslationSourceBlock {
   sourceIndex: number

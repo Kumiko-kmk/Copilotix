@@ -53,7 +53,7 @@
 - [x] M1 規則
 - [x] M2 平台層
 - [x] M3 中樞拆分
-- [ ] M4 逐模組遷移：~~zotero~~ · ~~settings~~ · ~~insight~~ · ~~chat~~ · translation · parsing · library · reader
+- [ ] M4 逐模組遷移：~~zotero~~ · ~~settings~~ · ~~insight~~ · ~~chat~~ · ~~translation~~ · parsing · library · reader
 - [ ] M5 收尾
 
 ### 依賴基線（M1，2026-10-25）
@@ -84,6 +84,7 @@
 
 （各階段完成後在此記錄日期、提交與證據入口，一行一項。）
 
+- 2026-10-25 M4 translation：服務商、計劃編排、作業、計劃協定、Utility 計劃與表格翻譯 13 檔移入 `features/translation`；Core RPC 聲明與 Utility handler 歸模組；`markdownTranslationPlan.ts` 1361→975 行（型別、常量與純函式拆至 `planModel.ts`，其餘為狀態機，README 註明例外）；`feature-boundary-translation` 改 error。門禁同前（847 通過、E2E 僅既有 minimap 失敗）。
 - 2026-10-25 M4 chat：問答服務、模型閘道、Utility 存儲、檢索索引（RAG 殘留確認仍為問答上下文來源，整體歸入 chat，作業名與 rag_* 表不變）、契約與 renderer 共 32 檔移入 `features/chat`；chat 的 Core RPC 聲明與 Utility handler 歸模組；`sqliteRagRepository.ts` 656 行拆為 repository（290）＋ `ragRecords.ts`（394，型別、行映射與校驗）；`feature-boundary-chat` 改 error。門禁同前（847 通過、E2E 僅既有 minimap 失敗）。utility smoke 首次失敗：bundle 佈局改變後，Node 回顯的拋錯源碼行（一整行壓縮代碼，含 pdf-lib 的 "TypeError" 字樣）被誤判為執行期錯誤；`utility-bundle-smoke.mjs` 改為忽略該回顯段，只檢查診斷輸出，並補兩條斷言。
 - 2026-10-25 M4 insight：檔案卡與圖片解讀的 Main 服務、Utility 存儲、`paperBrief/`、契約與 renderer 共 22 檔移入 `features/insight`；insight 的 Core RPC 聲明移入 `contract/rpc.ts`，Utility handler 移入 `utility/operations.ts`（`utilityOperations.ts` 只展開）；`CoreUtilityOperationHandler` 去掉泛型（handler 自行校驗 payload，型別上不再依附單一註冊表）；拆掉 `lengths` ↔ `schema` 循環（`ARCHIVE_LENGTHS` 移至 `archiveLengths.ts`）；`feature-boundary-insight` 改 error。門禁同前（847 通過、E2E 僅既有 minimap 失敗）；deps 5 warn（1 循環＋4 個 app-is-root）。
 - 2026-10-25 M4 settings：設定、用量、存儲服務與設定頁、主題、Codex 狀態等 12 個檔案移入 `features/settings/{main,renderer}`，外部引用改走 layer index；`SettingsPage.tsx` 739→587 行（面板拆至 `SettingsDashboards.tsx`）；`feature-boundary-settings` 改 error。門禁同前（847 通過、E2E 僅既有 minimap 失敗）。

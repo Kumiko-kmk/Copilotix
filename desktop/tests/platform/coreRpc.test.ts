@@ -20,7 +20,7 @@ import {
 import {
   translationPlanResponseEnvelopeSchema,
   translationPlanWorkDescriptorSchema
-} from '@shared/translationPlanProtocol'
+} from '@features/translation/contract/translationPlanProtocol'
 
 const requestId = '00000000-0000-4000-8000-000000000001'
 

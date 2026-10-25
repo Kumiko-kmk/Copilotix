@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { createTranslationProviders, probeOpenAiCompatibleCredential } from '@main/translation/providers'
-import { buildTableTranslationPlan } from '../src/utility/core/compute/tableTranslation'
+import { createTranslationProviders, probeOpenAiCompatibleCredential } from '@features/translation/main/providers'
+import { buildTableTranslationPlan } from '../../../src/features/translation/utility/tableTranslation'
 import {
   flattenSegments,
   type TableTranslationRequest
-} from '@shared/translationPlanProtocol'
+} from '@features/translation/contract/translationPlanProtocol'
 import type { CredentialVault } from '@platform/credentials/main/credentialVault'
 
 const vault: CredentialVault = {

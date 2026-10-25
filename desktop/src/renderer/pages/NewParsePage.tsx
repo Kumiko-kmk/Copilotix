@@ -3,7 +3,7 @@ import { ArrowRightOutlined, FilePdfOutlined, LoadingOutlined } from '@ant-desig
 import { Alert, Button, Checkbox, Modal, Radio, Tag, message } from 'antd'
 import { MAX_PDF_BYTES, MAX_PDF_PAGES } from '@shared/constants'
 import { MAX_PDF_CROP_BYTES, type ImportFileOptions } from '@shared/pdfImport'
-import { TRANSLATION_PROVIDER_LABELS, executableProviderOrder } from '@shared/providerPolicy'
+import { TRANSLATION_PROVIDER_LABELS, executableProviderOrder } from '@features/translation/contract/providerPolicy'
 import type { AppSettings, TranslationProviderId } from '@shared/types'
 import type { DocumentSummary } from '@shared/ipcSchemas'
 import CopilotixWordmark from '../components/CopilotixWordmark'
