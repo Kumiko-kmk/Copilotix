@@ -1,7 +1,7 @@
 import type { IpcRegistrar } from '@platform/ipc/main/ipc'
 import { figureInsightChannels, paperInsightChannels } from '../contract/ipc'
-import type { FigureInsightService } from '@main/chat/figureInsightService'
-import type { PaperInsightService } from '@main/chat/paperInsightService'
+import type { FigureInsightService } from './figureInsightService'
+import type { PaperInsightService } from './paperInsightService'
 
 export function registerPaperInsightHandlers(service: PaperInsightService, ipc: IpcRegistrar): void {
   ipc.handle(paperInsightChannels.get, (_event, request) => service.get(request.documentId))

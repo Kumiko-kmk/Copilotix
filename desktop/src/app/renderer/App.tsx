@@ -31,7 +31,7 @@ type View = { name: ReaderOrigin | 'settings' } | { name: 'reader'; documentId: 
 
 export default function App(): React.JSX.Element {
   const queryClient = useQueryClient()
-  const insights = React.useMemo<import('@shared/paperInsight').PaperInsightSource>(() => ({
+  const insights = React.useMemo<import('@features/insight/contract/paperInsight').PaperInsightSource>(() => ({
     get: (documentId) => window.copilotix.paperInsight.get({ documentId }),
     cancel: (documentId) => window.copilotix.paperInsight.cancel({ documentId }),
     generate: (documentId) => window.copilotix.paperInsight.generate({ documentId }),

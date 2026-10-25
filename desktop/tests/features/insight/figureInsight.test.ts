@@ -2,10 +2,10 @@ import { createHash, randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { FIGURE_INSIGHT_PROMPT_VERSION, figureInsightContentSchema, figureInsightRequestSchema, resolveFigureInsightModel,
-  type FigureInsightDescriptor, type FigureInsightState, type FigureInsightSave } from '@shared/figureInsight'
-import { buildFigureInsightMessages } from '@shared/figureInsightPrompt'
-import { FigureInsightService, type FigureInsightDependencies } from '../src/main/chat/figureInsightService'
-import { ChatProvider } from '../src/main/chat/chatProvider'
+  type FigureInsightDescriptor, type FigureInsightState, type FigureInsightSave } from '@features/insight/contract/figureInsight'
+import { buildFigureInsightMessages } from '@features/insight/core/figureInsightPrompt'
+import { FigureInsightService, type FigureInsightDependencies } from '../../../src/features/insight/main/figureInsightService'
+import { ChatProvider } from '../../../src/main/chat/chatProvider'
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2l1sAAAAASUVORK5CYII=', 'base64')
 const digest = createHash('sha256').update(png).digest('hex')

@@ -4,11 +4,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve, join, relative, isAbsolute } from 'node:path'
 import { DEFAULT_SETTINGS } from '../src/shared/constants'
 import type { CopilotixTask, AppSettings } from '../src/shared/types'
-import { FigureInsightStore } from '../src/utility/core/persistence/figureInsightStore'
-import { FigureInsightService } from '../src/main/chat/figureInsightService'
+import { FigureInsightStore } from '../src/features/insight/utility/figureInsightStore'
+import { FigureInsightService } from '../src/features/insight/main/figureInsightService'
 import { ChatProvider } from '../src/main/chat/chatProvider'
 import { WindowsCredentialVault } from '../src/platform/credentials/main/credentialVault'
-import { figureInsightContentSchema, type FigureInsightDescriptor, type FigureInsightRequest, type FigureInsightState } from '../src/shared/figureInsight'
+import { figureInsightContentSchema, type FigureInsightDescriptor, type FigureInsightRequest, type FigureInsightState } from '../src/features/insight/contract/figureInsight'
 
 // Explicit live-test entry. Preflight is read-only; --execute sends images and saves results.
 const execute = process.argv.includes('--execute')

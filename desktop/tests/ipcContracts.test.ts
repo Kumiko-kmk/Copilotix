@@ -11,8 +11,8 @@ import { z } from 'zod'
 import { computeDocumentChange } from '../src/main/documentProjection'
 import { randomUUID } from 'node:crypto'
 import { registerPaperInsightHandlers } from '../src/features/insight/main/ipc'
-import { type PaperInsightService } from '../src/main/chat/paperInsightService'
-import { paperInsightChangedSchema } from '../src/shared/paperInsight'
+import { type PaperInsightService } from '../src/features/insight/main/paperInsightService'
+import { paperInsightChangedSchema } from '../src/features/insight/contract/paperInsight'
 
 describe("ipcContracts", () => {
   describe('IPC contracts', () => {

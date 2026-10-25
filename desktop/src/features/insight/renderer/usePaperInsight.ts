@@ -1,5 +1,5 @@
 import React from 'react'
-import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
+import type { PaperInsightSource, PaperInsightState } from '../contract/paperInsight'
 
 /** Keeps the saved card readable while a replacement is generated. */
 export function usePaperInsight(documentId: string, source?: PaperInsightSource) {

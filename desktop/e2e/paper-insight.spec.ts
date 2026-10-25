@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
-import { backgroundPoints } from '../src/shared/paperBrief/background'
+import { backgroundPoints } from '../src/features/insight/core/paperBrief/background'
 
 test('archive insight uses validated settings, provider HTTP and durable local storage', async ({}, testInfo) => {
   // Provider validation, generation, archive reload and durable recovery share this case.

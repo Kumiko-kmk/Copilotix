@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { PaperInsightSource, PaperInsightState } from '@shared/paperInsight'
+import type { PaperInsightSource, PaperInsightState } from '@features/insight/contract/paperInsight'
 import { useArchivePreparation } from '../src/renderer/paperArchive/useArchivePreparation'
 import type { ArchivePaper } from '../src/renderer/paperArchive/archiveShelves'
 const mocks = vi.hoisted(() => ({ data: undefined as unknown, crop: vi.fn(), cover: vi.fn(async () => ({ canvas: {}, pages: 1 })) }))

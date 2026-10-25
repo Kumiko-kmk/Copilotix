@@ -11,7 +11,7 @@
 - `takeaway`：目標 50–90 字元，存儲硬上限 160 字元，指出核心理解與邊界。目標字數不強制補足；只有超過硬上限或 schema 錯誤才修復。
 - 純公式／推導圖片：`displayWeight: 0` 且兩個文字字段為空。混合流程／架構圖仍解釋機制，不轉錄或推導其中公式。不可讀圖片零分，文字可簡述無法可靠解讀。
 
-模型格式/schema 失敗最多修復一次；第二次仍不合法則失敗，不保存無效結果。字段與提示詞入口：`desktop/src/shared/figureInsight.ts`、`figureInsightPrompt.ts`。改提示詞時更新 `FIGURE_INSIGHT_PROMPT_VERSION`。
+模型格式/schema 失敗最多修復一次；第二次仍不合法則失敗，不保存無效結果。字段與提示詞入口：`desktop/src/features/insight/contract/figureInsight.ts`、`core/figureInsightPrompt.ts`。改提示詞時更新 `FIGURE_INSIGHT_PROMPT_VERSION`。
 
 ## 圖片及上下文
 
@@ -57,7 +57,7 @@ unsubscribe()
 
 狀態為 `missing / generating / ready / unavailable / failed`；ready 附 `record`、`stale`。事件訂閱應在 generate 前建立，並按雙 ID 過濾。重開窗口用 get 恢復磁盤結果。封面候選可依 `record.content.displayWeight` 排序；圖片使用相對 `record.figure.imagePath`，PDF 定位用 `pageIndex`、`cropBox`，不得讓模型生成路径或坐标。
 
-Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RPC：`figureInsight:get / save` 及 `compute:figure-insight-descriptor`。流程入口：`main/chat/figureInsightService.ts`、`utility/core/persistence/figureInsightStore.ts`；IPC 註冊與生命週期在 `main/index.ts`。
+Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RPC：`figureInsight:get / save` 及 `compute:figure-insight-descriptor`。流程入口：`features/insight/main/figureInsightService.ts`、`utility/figureInsightStore.ts`；IPC 在 `features/insight/{contract,main}/ipc.ts`，組裝與生命週期在 `app/main/bootstrap.ts`。
 
 ## 閱讀器整圖邊界
 

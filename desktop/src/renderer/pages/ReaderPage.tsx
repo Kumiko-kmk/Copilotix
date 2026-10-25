@@ -35,7 +35,7 @@ import DocumentLifecycleActions from '../components/DocumentLifecycleActions'
 import { translationCount } from '../documentStatus'
 import { useTextLayerRepair } from '../useTextLayerRepair'
 import { ZoteroExportButton } from '@features/zotero/renderer'
-import type { PaperInsightSource } from '@shared/paperInsight'
+import type { PaperInsightSource } from '@features/insight/contract/paperInsight'
 import { useReaderViews, type ReaderChatOptions, type ReaderViewsInput } from '../components/ReaderViews'
 import {
   activeSyncedViews,

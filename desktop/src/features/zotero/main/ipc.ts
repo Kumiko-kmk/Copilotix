@@ -7,7 +7,7 @@ import { ZoteroImportService } from './zoteroImportService'
 import { createZoteroConnector } from './zoteroConnector'
 import { ZoteroExportService } from './zoteroExportService'
 import { extractPaperProfile } from '@shared/paperProfile'
-import type { PaperInsightState } from '@shared/paperInsight'
+import type { PaperInsightState } from '@features/insight/contract/paperInsight'
 import type { ReaderNotes } from '@shared/readerNotes'
 import { locateZoteroProfile } from './zoteroProfile'
 

@@ -1,7 +1,7 @@
 import { eventChannel, invokeChannel, type IpcBridge } from '@platform/ipc/contract/channels'
 import { voidResponseSchema } from '@platform/ipc/contract/schemas'
-import { paperInsightCancelSchema, paperInsightChangedSchema, paperInsightRequestSchema, paperInsightStateSchema, type PaperInsightState } from '@shared/paperInsight'
-import { figureInsightCancelSchema, figureInsightChangedSchema, figureInsightRequestSchema, figureInsightStateSchema, type FigureInsightRequest, type FigureInsightState } from '@shared/figureInsight'
+import { paperInsightCancelSchema, paperInsightChangedSchema, paperInsightRequestSchema, paperInsightStateSchema, type PaperInsightState } from './paperInsight'
+import { figureInsightCancelSchema, figureInsightChangedSchema, figureInsightRequestSchema, figureInsightStateSchema, type FigureInsightRequest, type FigureInsightState } from './figureInsight'
 
 export const paperInsightChannels = {
   get: invokeChannel('paperInsight:get', paperInsightRequestSchema, paperInsightStateSchema),

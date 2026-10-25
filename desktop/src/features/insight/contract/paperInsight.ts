@@ -3,9 +3,9 @@
  * Validated contract between the renderer and Main/Utility (see AGENTS.md §13). Only paper content goes in; no import metadata.
  */
 import { z } from 'zod'
-import { paperBriefSchema } from './paperBrief/schema'
-import { briefAnchorsSchema } from './paperBrief/contracts'
-import { paperChatProviderSchema, PAPER_CHAT_MODELS, supportedChatModelSchema } from './paperChatSchemas'
+import { paperBriefSchema } from '../core/paperBrief/schema'
+import { briefAnchorsSchema } from '../core/paperBrief/contracts'
+import { paperChatProviderSchema, PAPER_CHAT_MODELS, supportedChatModelSchema } from '@shared/paperChatSchemas'
 
 const text = (max: number) => z.string().trim().min(1).max(max).refine((value) => ![...value].some((char) => char.charCodeAt(0) < 32 && !'\t\n\r'.includes(char)))
 export const PAPER_INSIGHT_MAX_BYTES = 128 * 1024

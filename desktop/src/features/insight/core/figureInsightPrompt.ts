@@ -1,4 +1,4 @@
-import { FIGURE_INSIGHT_PROMPT_VERSION, type FigureInsightDescriptor } from './figureInsight'
+import { FIGURE_INSIGHT_PROMPT_VERSION, type FigureInsightDescriptor } from '../contract/figureInsight'
 import type { MultimodalChatMessage } from '@platform/codex/contract/chatMessages'
 
 export { FIGURE_INSIGHT_PROMPT_VERSION }

@@ -1,6 +1,6 @@
 # Paper Brief v2 維護契約
 
-授權、取消、併發與保存見 [AI 檔案卡](PAPER_INSIGHT_ZH.md)。欄位以 `shared/paperBrief/schema.ts` 為準，四部分字數以 `lengths.ts` 的 `ARCHIVE_LENGTHS` 為唯一來源，提示詞與新輸出校驗共用。
+授權、取消、併發與保存見 [AI 檔案卡](PAPER_INSIGHT_ZH.md)。欄位以 `features/insight/core/paperBrief/schema.ts` 為準，四部分字數以 `archiveLengths.ts` 的 `ARCHIVE_LENGTHS`（由 `lengths.ts` 轉出）為唯一來源，提示詞與新輸出校驗共用。
 
 ## 四部分分析
 

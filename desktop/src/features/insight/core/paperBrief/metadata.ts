@@ -1,4 +1,4 @@
-import { cleanInline, extractPaperProfile } from '../paperProfile'
+import { cleanInline, extractPaperProfile } from '@shared/paperProfile'
 import type { BriefContext } from './context'
 import type { PaperMetadata } from './schema'
 

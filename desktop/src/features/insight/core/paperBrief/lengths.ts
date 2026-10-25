@@ -8,14 +8,11 @@
  */
 import type { PaperBriefContent } from './schema'
 import { backgroundPoints } from './background'
+import { ARCHIVE_LENGTHS } from './archiveLengths'
+
+export { ARCHIVE_LENGTHS }
 
 type Range = readonly [min: number, max: number]
-
-export const ARCHIVE_LENGTHS = {
-  abstract: [200, 300], background: [300, 420], backgroundPoint: [100, 140],
-  conclusions: [300, 420], conclusion: [100, 140],
-  discussion: [300, 420], discussionPart: [100, 140]
-} as const satisfies Record<string, Range>
 
 export const BRIEF_LENGTHS = {
   tldr: [40, 70], // detail subtitle, two lines

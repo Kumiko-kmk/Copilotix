@@ -1,7 +1,7 @@
 import React from 'react'
 import { Button, Dropdown, type MenuProps } from 'antd'
-import type { PaperInsightSource } from '@shared/paperInsight'
-import { usePaperInsight } from '../usePaperInsight'
+import type { PaperInsightSource } from '../contract/paperInsight'
+import { usePaperInsight } from './usePaperInsight'
 
 export default function PaperInsightActions(props: {
   documentId: string

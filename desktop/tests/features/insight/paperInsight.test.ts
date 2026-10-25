@@ -1,16 +1,16 @@
-import { briefContent, briefGeneration } from './fixtures/paperBrief'
-import { assembleBrief, buildBriefContext, buildFullBriefContext, PAPER_BRIEF_REQUEST } from '@shared/paperBrief'
-import type { BriefContextResult } from '@shared/paperBrief/contracts'
+import { briefContent, briefGeneration } from '../../fixtures/paperBrief'
+import { assembleBrief, buildBriefContext, buildFullBriefContext, PAPER_BRIEF_REQUEST } from '@features/insight/core/paperBrief'
+import type { BriefContextResult } from '@features/insight/core/paperBrief/contracts'
 import { randomUUID, createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import { paperInsightContentSchema, paperInsightRecordSchema, paperInsightRequestSchema, paperInsightSchema, paperInsightStateSchema, type PaperInsight, type PaperInsightState } from '@shared/paperInsight'
-import { PaperInsightService, loadFullBriefContext, type PaperInsightDependencies } from '../src/main/chat/paperInsightService'
-import { PaperInsightStore } from '../src/utility/core/persistence/paperInsightStore'
-import { turnError } from '../src/platform/codex/runtime/codexRuntime'
+import { paperInsightContentSchema, paperInsightRecordSchema, paperInsightRequestSchema, paperInsightSchema, paperInsightStateSchema, type PaperInsight, type PaperInsightState } from '@features/insight/contract/paperInsight'
+import { PaperInsightService, loadFullBriefContext, type PaperInsightDependencies } from '../../../src/features/insight/main/paperInsightService'
+import { PaperInsightStore } from '../../../src/features/insight/utility/paperInsightStore'
+import { turnError } from '../../../src/platform/codex/runtime/codexRuntime'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const fs = await importOriginal<typeof import('node:fs/promises')>()

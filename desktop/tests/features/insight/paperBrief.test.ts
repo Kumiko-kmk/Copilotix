@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { briefGeneration } from './fixtures/paperBrief'
-import { buildFullBriefContext } from '../src/shared/paperBrief/context'
-import { briefContextResultSchema } from '../src/shared/paperBrief/contracts'
-import { groundPaperMetadata, localPaperMetadata } from '../src/shared/paperBrief/metadata'
+import { briefGeneration } from '../../fixtures/paperBrief'
+import { buildFullBriefContext } from '../../../src/features/insight/core/paperBrief/context'
+import { briefContextResultSchema } from '../../../src/features/insight/core/paperBrief/contracts'
+import { groundPaperMetadata, localPaperMetadata } from '../../../src/features/insight/core/paperBrief/metadata'
 import {
   BRIEF_BUDGETS,
   assembleBrief,
@@ -18,7 +18,7 @@ import {
   parseBriefResponse,
   PAPER_BRIEF_MAX_REQUEST_BYTES,
   type PaperBriefContent
-} from '../src/shared/paperBrief'
+} from '../../../src/features/insight/core/paperBrief'
 
 const PAPER = [
   'Provided proper attribution is provided, Google grants permission to reproduce tables.',

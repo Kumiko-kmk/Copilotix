@@ -11,7 +11,7 @@
  * Design notes: docs/PAPER_BRIEF_ZH.md.
  */
 import { z } from 'zod'
-import { ARCHIVE_LENGTHS } from './lengths'
+import { ARCHIVE_LENGTHS } from './archiveLengths'
 
 export const PAPER_BRIEF_SCHEMA_VERSION = 2
 
