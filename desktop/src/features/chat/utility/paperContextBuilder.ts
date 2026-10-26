@@ -2,9 +2,9 @@ import type { RagChunk } from '@core/types'
 import { PAPER_CHAT_MAX_BYTES, paperContextRequestSchema, paperContextResultSchema, type PaperContext, type PaperContextRequest, type PaperEvidence } from '../contract/paperChatSchemas'
 import { ragWireByteLength } from '../contract/ragSchemas'
 import type { SqliteRagRepository } from './sqliteRagRepository'
-import { paperSelectionText } from '@shared/paperSelectionText'
+import { paperSelectionText } from '@features/reader/core'
 import { captionFigureKey, mentionsFigure } from '../contract/figureMentions'
-import type { MarkdownEditsFile } from '@shared/markdownEdits'
+import type { MarkdownEditsFile } from '@features/reader/contract/markdownEdits'
 
 export class PaperContextError extends Error {
   constructor(readonly code: string, message: string, readonly retryable = false) { super(message) }

@@ -1,3 +1,4 @@
+import { loadFigureArtifacts } from '@features/reader/renderer'
 import React from 'react'
 import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
@@ -216,7 +217,7 @@ export async function renderSpread(documentId: string, data: DocumentDetails, re
   signal.throwIfAborted()
   onFirstPage(page)
   const [{ buildReaderFigureGeometries }, { ensureFigureArtifacts }] = await Promise.all([
-    import('@shared/readerFigureGroups'), import('@renderer/useFigureArtifacts')
+    import('@features/reader/core'), loadFigureArtifacts()
   ])
   signal.throwIfAborted()
   const geometries = buildReaderFigureGeometries(data.mappings, data.layoutJson)

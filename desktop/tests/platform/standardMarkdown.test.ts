@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { normalizeMarkdown, prepareReaderMarkdown, isLocalMarkdownImage } from '../../src/platform/markdown/core/standardMarkdown'
 import { splitMarkdownMath } from '../../src/platform/markdown/core/mathDelimiters'
-import { projectFigureMarkdown, type FigureArtifact } from '../../src/shared/figureArtifacts'
+import { projectFigureMarkdown, type FigureArtifact } from '../../src/features/reader/core/figureArtifacts'
 
 describe("standardMarkdown", () => {
   const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath)

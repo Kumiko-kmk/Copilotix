@@ -1,4 +1,4 @@
-import type { ResolvedMarkdownEdits } from './markdownEdits'
+import type { ResolvedMarkdownEdits } from '@features/reader/contract/markdownEdits'
 
 export type TranslationProviderId = 'qwen' | 'deepseek' | 'bing' | 'transmart' | 'codex'
 

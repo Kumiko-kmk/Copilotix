@@ -1,0 +1,5 @@
+export { paperSelectionText } from './paperSelectionText'
+export { applyReaderAnnotationOperation, resolveReaderAnnotation } from './readerAnnotations'
+export { readerContentMappings } from './readerDocument'
+export { buildReaderFigureGeometries } from './readerFigureGroups'
+export type { ReaderFigureGeometry } from './readerFigureGroups'

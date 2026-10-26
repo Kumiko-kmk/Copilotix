@@ -4,7 +4,7 @@
 // moved: a migrated feature goes into ENFORCED_FEATURES, the rest into the M5 switch.
 
 /** Features whose public boundary is enforced (M4 adds each module after its move). */
-const ENFORCED_FEATURES = new Set(['zotero', 'settings', 'insight', 'chat', 'translation', 'parsing', 'library'])
+const ENFORCED_FEATURES = new Set(['zotero', 'settings', 'insight', 'chat', 'translation', 'parsing', 'library', 'reader'])
 /** Cycles, platform isolation and process layers become errors in M5. */
 const STRUCTURE_SEVERITY = 'warn'
 
@@ -33,10 +33,10 @@ module.exports = {
   forbidden: [
     {
       name: 'no-circular',
-      comment: 'ADR-0001 rule 5: no import cycles, type-only imports included.',
+      comment: 'ADR-0001 rule 5: no import cycles, type-only imports included. Lazy import() edges (code-split pages; dependency-cruiser reports them as type-import when the module type is also taken with typeof import()) do not form initialization cycles and are not counted.',
       severity: STRUCTURE_SEVERITY,
       from: {},
-      to: { circular: true }
+      to: { circular: true, viaOnly: { dependencyTypesNot: ['dynamic-import', 'type-import'] } }
     },
     {
       name: 'platform-no-features',

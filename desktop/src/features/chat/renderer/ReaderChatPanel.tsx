@@ -8,7 +8,7 @@ import type { BlockSelection } from '@shared/types'
 import type { PaperChatFigurePin, PaperChatTurnFigure } from '../contract/paperChatFigures'
 import { turnFigurePins, type PaperChatController, type PaperChatTurn } from './usePaperChat'
 import { usePaperChatRouting, type PaperChatRouting } from './usePaperChatRouting'
-import SafeMarkdown, { resolveAsset } from '@renderer/components/SafeMarkdown'
+import { SafeMarkdown, resolveAsset } from '@features/reader/renderer'
 import './paperChat.css'
 
 const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek', codex: 'Codex' }

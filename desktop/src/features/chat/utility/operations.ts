@@ -1,6 +1,6 @@
 import type { CoreUtilityOperationHandler } from '@platform/rpc/utility/coreUtilityRuntime'
 import type { FigureInsightStore } from '@features/insight/utility'
-import type { MarkdownEditStore } from '../../../utility/core/persistence/markdownEditStore'
+import type { MarkdownEditStore } from '@features/reader/utility'
 import type { V2TaskRepositoryCompat } from '@features/library/utility'
 import { paperChatFigureRequestSchema } from '../contract/paperChatFigures'
 import { paperChatStatusRequestSchema, paperContextRequestSchema } from '../contract/paperChatSchemas'

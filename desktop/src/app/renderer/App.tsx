@@ -1,7 +1,8 @@
 import React from 'react'
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { refreshCodexStatus, loadStorageInfo, SettingsPage } from '@features/settings/renderer'
-import { loadReaderPage, loadedReaderPage } from '@renderer/readerPageLoader'
+// Direct import: the reader barrel re-exports Markdown rendering (KaTeX CSS) that must stay in the lazy reader chunk.
+import { loadReaderPage, loadedReaderPage } from '@features/reader/renderer/readerPageLoader'
 import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'

@@ -9,7 +9,7 @@ import type { AppSettings, ReaderChatSelection } from '@shared/types'
 import type { Citation, RagStreamEvent } from '@features/chat/contract/ragSchemas'
 import { usePaperChat } from '../../../src/features/chat/renderer/usePaperChat'
 import ReaderChatPanel, { ReaderChatToolbar } from '../../../src/features/chat/renderer/ReaderChatPanel'
-import SafeMarkdown from '../../../src/renderer/components/SafeMarkdown'
+import SafeMarkdown from '../../../src/features/reader/renderer/components/SafeMarkdown'
 import React from 'react'
 
 const doc = '10000000-0000-4000-8000-000000000001'

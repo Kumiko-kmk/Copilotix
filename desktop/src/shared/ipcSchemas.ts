@@ -1,4 +1,4 @@
-import { resolvedMarkdownEditsSchema } from './markdownEdits'
+import { resolvedMarkdownEditsSchema } from '@features/reader/contract/markdownEdits'
 import { codexSettingsSchema, DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { paperChatProviderSchema, qwenChatModelSchema, deepseekChatModelSchema } from '@features/chat/contract/paperChatSchemas'
 import { z } from 'zod'

@@ -14,7 +14,7 @@ const scene = vi.hoisted(() => ({
   fail: false
 }))
 const loader = vi.hoisted(() => ({ loadReaderPage: vi.fn(async () => ({ default: () => null })) }))
-vi.mock('../../../src/renderer/readerPageLoader', () => loader)
+vi.mock('../../../src/features/reader/renderer/readerPageLoader', () => loader)
 // Exercise the real detail markup and keyboard handlers without document/PDF I/O.
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: true }), useQueryClient: () => ({}) }))
 vi.mock('../../../src/features/library/renderer/archive/useArchivePreparation', () => ({ useArchivePreparation: (paper: DocumentSummary | null) => ({ ready: paper?.workflow.status === 'completed', progress: paper?.workflow.progress ?? 0, waiting: paper?.workflow.status === 'completed' ? null : 'workflow' }) }))

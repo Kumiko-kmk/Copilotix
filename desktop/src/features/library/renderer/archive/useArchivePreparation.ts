@@ -1,7 +1,8 @@
+import { loadFigureArtifacts } from '@features/reader/renderer'
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { PaperInsightSource, PaperInsightState } from '@features/insight/contract/paperInsight'
-import { buildReaderFigureGeometries, type ReaderFigureGeometry } from '@shared/readerFigureGroups'
+import { buildReaderFigureGeometries, type ReaderFigureGeometry } from '@features/reader/core'
 import type { ArchivePaper } from './archiveShelves'
 
 /**
@@ -57,7 +58,7 @@ export function useArchivePreparation(paper: ArchivePaper | null, source?: Paper
       return () => controller.abort()
     }
     const geometries = JSON.parse(geometryJson) as ReaderFigureGeometry[]
-    void import('@renderer/useFigureArtifacts').then(({ ensureFigureArtifacts }) => ensureFigureArtifacts(id, pdfUrl, geometries, controller.signal,
+    void loadFigureArtifacts().then(({ ensureFigureArtifacts }) => ensureFigureArtifacts(id, pdfUrl, geometries, controller.signal,
       (available, failed, total) => { if (!controller.signal.aborted) setFigures({ key: figureKey, done: false, ratio: total ? (available + failed) / total : 1 }) },
       () => { if (!controller.signal.aborted) setRenderingKey(figureKey) }))
       .then(result => { if (!controller.signal.aborted) setFigures({ key: figureKey, done: result.failed === 0, ratio: result.failed ? 0.99 : 1 }) })

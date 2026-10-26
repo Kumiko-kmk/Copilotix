@@ -1,5 +1,5 @@
 import React from 'react'
-import SafeMarkdown from '@renderer/components/SafeMarkdown'
+import { SafeMarkdown } from '@features/reader/renderer'
 import { prepareReaderMarkdown } from '@platform/markdown/core/standardMarkdown'
 import { remarkArchiveVariables } from './archiveVariables'
 

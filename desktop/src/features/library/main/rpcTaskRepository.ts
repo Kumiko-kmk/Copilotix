@@ -5,14 +5,13 @@ import type {
   MutateReaderAnnotationsRequest,
   ReaderAnnotationSnapshot
 } from '@shared/ipcSchemas'
-import type { CoreListCursor } from '../contract/rpc'
+import type { CoreListCursor, LibraryOperations } from '../contract/rpc'
 import type { CoreRequester, PlatformOperations } from '@platform/rpc/contract/protocol'
 import type { SettingsOperations } from '@features/settings/contract/rpc'
-import type { featureOperations } from '@shared/coreRpcSchemas'
-import type { LibraryOperations } from '../contract/rpc'
+import type { ReaderOperations } from '@features/reader/contract/rpc'
 
-/** Operations the repository facade calls; annotations are the reader's (declared with the legacy registry until M4 reader). */
-type RepositoryOperations = PlatformOperations & LibraryOperations & SettingsOperations & typeof featureOperations
+/** Operations the repository facade calls: its own, settings persistence and the reader's annotations. */
+type RepositoryOperations = PlatformOperations & LibraryOperations & SettingsOperations & ReaderOperations
 import type { DocumentMetadataPatch, TaskRepositoryCompat } from '../contract/taskRepository'
 
 /**

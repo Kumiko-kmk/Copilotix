@@ -26,7 +26,7 @@ const FULL_TRIGGERS = [
 /** Specs import only e2e helpers, so source paths map to the flows they exercise. */
 const E2E_ALL = [/^desktop\/e2e\/(?:helpers|launchPolicy)\.ts$/u, /^desktop\/src\/(?:app|platform\/(?:ipc|rpc))\//u]
 const E2E_MAP = [
-  [/^desktop\/src\/renderer\/(?:components\/(?:Reader(?!Chat|Figure)|MarkdownPane|MarkdownMinimap|PdfPane|DocumentLifecycle)|reader(?!Figure))/u, ['reader', 'qa-fixes']],
+  [/^desktop\/src\/features\/reader\/renderer\/(?:components\/(?:Reader(?!Chat|Figure)|MarkdownPane|MarkdownBlockView|markdownPane|useMarkdownFigures|MarkdownMinimap|minimap|PdfPane|PdfPageView|pdfLayout|Workbench|workbench|DocumentLifecycle)|reader(?!Figure))/u, ['reader', 'qa-fixes']],
   [/(?:ReaderFigure|readerFigureGroups|figureArtifact|figureInsight)/u, ['reader-figures']],
   [/(?:ReaderChatPanel|paperChat|\/rag)/u, ['paper-chat']],
   [/(?:paperArchive|library\/renderer\/archive\/|LibraryPage|ArchiveDetail|ArchiveText|lineRedaction|libraryCategories|useArchivePreparation)/u, ['paper-archive', 'archive-layout', 'archive-math']],

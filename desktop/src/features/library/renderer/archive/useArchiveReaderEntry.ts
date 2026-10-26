@@ -1,5 +1,5 @@
 import React from 'react'
-import { loadReaderPage } from '@renderer/readerPageLoader'
+import { loadReaderPage } from '@features/reader/renderer'
 import type { PaperArchiveScene } from './PaperArchiveScene'
 
 /** One cancellable entry for the cover, button and keyboard; nothing is persisted. */

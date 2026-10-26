@@ -6,8 +6,8 @@ import { useArchivePreparation } from '../../../src/features/library/renderer/ar
 import type { ArchivePaper } from '../../../src/features/library/renderer/archive/archiveShelves'
 const mocks = vi.hoisted(() => ({ data: undefined as unknown, crop: vi.fn(), cover: vi.fn(async () => ({ canvas: {}, pages: 1 })) }))
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mocks.data }) }))
-vi.mock('@shared/readerFigureGroups', () => ({ buildReaderFigureGeometries: () => [{ id: 'figure', status: 'complete' }] }))
-vi.mock('../../../src/renderer/useFigureArtifacts', () => ({ ensureFigureArtifacts: mocks.crop }))
+vi.mock('@features/reader/core/readerFigureGroups', () => ({ buildReaderFigureGeometries: () => [{ id: 'figure', status: 'complete' }] }))
+vi.mock('../../../src/features/reader/renderer/useFigureArtifacts', () => ({ ensureFigureArtifacts: mocks.crop }))
 vi.mock('../../../src/features/library/renderer/archive/ArchiveDetail', () => ({ renderSpread: mocks.cover }))
 vi.mock('../../../src/features/library/renderer/archive/detailPage', () => ({ loadDetailPage: (_key: string, create: () => Promise<unknown>) => create(), firstPageRenderer: () => vi.fn() }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })

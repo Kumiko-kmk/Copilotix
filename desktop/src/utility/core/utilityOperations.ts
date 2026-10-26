@@ -1,9 +1,6 @@
 import { createLibraryOperations, assertLibraryIdle, manageLibrary, V2TaskRepositoryCompat } from '@features/library/utility'
 import { createInsightOperations } from '@features/insight/utility'
-import { MarkdownEditStore } from './persistence/markdownEditStore'
-import { markdownEditRequestSchema } from '@shared/markdownEdits'
-import { ReaderNoteStore } from './persistence/readerNoteStore'
-import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema } from '@shared/readerNotes'
+import { createReaderOperations } from '@features/reader/utility'
 import { createChatOperations, PaperContextError, RagContentIndexError, RagContentIndexService, SqliteRagRepository, SqliteRagRepositoryError } from '@features/chat/utility'
 import { libraryCoreRequestSchema } from '@features/library/contract/librarySchemas'
 import { mkdir } from 'node:fs/promises'
@@ -109,8 +106,8 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     }
     return state.translationPlanManager
   }
-  const noteStore = new ReaderNoteStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
-  const editStore = new MarkdownEditStore((id) => requireRepository().getTask(id)?.outputDir ?? null)
+  const reader = createReaderOperations(requireRepository)
+  const editStore = reader.editStore
   const insight = createInsightOperations(requireRepository)
   const { insightStore, figureInsightStore } = insight
   const library = createLibraryOperations({ repository: requireRepository, outputRoot: () => state.outputRoot, insightStore })
@@ -127,10 +124,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     ...insight.handlers,
     ...library.handlers,
     ...chat.handlers,
-    'markdown-edits:apply': (request) => editStore.apply(markdownEditRequestSchema.parse(request.payload)),
-    'notes:list': (request) => noteStore.list(readerNotesRequestSchema.parse(request.payload).documentId),
-    'notes:upsert': (request) => { const { documentId, note } = readerNoteUpsertSchema.parse(request.payload); return noteStore.upsert(documentId, note) },
-    'notes:delete': (request) => { const { documentId, noteId } = readerNoteDeleteSchema.parse(request.payload); return noteStore.delete(documentId, noteId) },
+    ...reader.handlers,
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {
       if (!state.databasePath) throw new Error('文档库尚未初始化')
@@ -210,11 +204,6 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'jobs:manual-retry': (request) => requireJobRepository().manualRetry(coreJobManualRetryPayloadSchema.parse(request.payload)),
     'jobs:recover-expired': (request) => requireJobRepository().recoverExpired(coreJobRecoverExpiredPayloadSchema.parse(request.payload)),
     'jobs:list-events': (request) => requireJobRepository().listEvents(coreJobEventsPayloadSchema.parse(request.payload).jobId),
-    'annotations:list-snapshot': (request) => {
-      const payload = request.payload as Parameters<V2TaskRepositoryCompat['listDocumentAnnotations']>[0]
-      return requireRepository().listDocumentAnnotations(payload)
-    },
-    'annotations:mutate': (request) => requireRepository().mutateDocumentAnnotations((request.payload as { request: Parameters<V2TaskRepositoryCompat['mutateDocumentAnnotations']>[0] }).request),
     ...parsing.handlers,
     ...translation.handlers
   }

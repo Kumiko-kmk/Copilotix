@@ -2,7 +2,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import ArchiveText from '../../../src/features/library/renderer/archive/ArchiveText'
-import SafeMarkdown from '../../../src/renderer/components/SafeMarkdown'
+import SafeMarkdown from '../../../src/features/reader/renderer/components/SafeMarkdown'
 import BriefContent from '../../../src/features/library/renderer/archive/BriefContent'
 import { briefContent } from '../../fixtures/paperBrief'
 import type { PaperBrief } from '../../../src/features/insight/core/paperBrief/schema'

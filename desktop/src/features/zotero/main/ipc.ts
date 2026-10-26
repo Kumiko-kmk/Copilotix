@@ -8,7 +8,7 @@ import { createZoteroConnector } from './zoteroConnector'
 import { ZoteroExportService } from './zoteroExportService'
 import { extractPaperProfile } from '@features/library/core'
 import type { PaperInsightState } from '@features/insight/contract/paperInsight'
-import type { ReaderNotes } from '@shared/readerNotes'
+import type { ReaderNotes } from '@features/reader/contract/readerNotes'
 import { locateZoteroProfile } from './zoteroProfile'
 
 export function registerZoteroHandlers(service: ZoteroImportService, ipc: IpcRegistrar): void {

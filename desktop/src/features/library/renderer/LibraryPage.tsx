@@ -6,7 +6,7 @@ import type { PaperInsightSource, PaperInsightState } from '@features/insight/co
 import type { LibraryCategories } from '../contract/libraryCategories'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from './archive/PaperArchiveScene'
 import { useArchiveReaderEntry } from './archive/useArchiveReaderEntry'
-import { loadReaderPage } from '@renderer/readerPageLoader'
+import { loadReaderPage } from '@features/reader/renderer'
 import ArchiveText from './archive/ArchiveText'
 import ArchiveDetail, { type ArchiveMorph } from './archive/ArchiveDetail'
 import ArchiveProgressRing from './archive/ArchiveProgressRing'

@@ -21,12 +21,11 @@ import { registerFigureInsightHandlers, registerPaperInsightHandlers, FigureInsi
 import { libraryChannels } from '@features/library/contract/ipc'
 import { DocumentFeed, registerLibraryIpc, registerTaskNotifications, RpcTaskCompute, RpcTaskRepository, TaskService } from '@features/library/main'
 import { registerParsingIpc, ElectronFileUploader, ParseJobRunner, OfficialParserClient } from '@features/parsing/main'
-import { registerReaderIpc, type ReaderIpcDeps } from '@features/reader/main/ipc'
+import { registerReaderIpc, type ReaderIpcDeps, FigureDisplayStore } from '@features/reader/main'
 import { registerSettingsIpc, SettingsService, UsageAnalyticsService } from '@features/settings/main'
 import { registerTranslationIpc, probeOpenAiCompatibleCredential, TranslationJobRunner } from '@features/translation/main'
 import { createZoteroExportService, createZoteroImportService, registerZoteroExportHandler, registerZoteroHandlers } from '@features/zotero/main'
 import { paperChatImageInput } from '@features/chat/contract/paperChatFigures'
-import { FigureDisplayStore } from '@main/figureDisplayStore'
 import { coreProtocol } from '../contract/coreRpc'
 import { appShell, libraryGate, services, startup } from './services'
 import { registerWindowIpc } from './window'
@@ -246,7 +245,8 @@ export async function bootstrap(): Promise<void> {
     notes,
     annotations: () => repository,
     applyEdit: (request) => utility.request('markdown-edits:apply', request, { timeoutMs: 30_000 }),
-    resolvedEdits: (documentId) => tasks.resolvedEdits(documentId)
+    resolvedEdits: (documentId) => tasks.resolvedEdits(documentId),
+    cacheFigure: (request) => tasks.cacheFigure(request)
   })
   registerZoteroExportHandler(createZoteroExportService({
     repository,

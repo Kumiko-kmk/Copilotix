@@ -10,7 +10,7 @@ import type { CredentialVault } from '@platform/credentials/main/credentialVault
 import type { SettingsService, UsageAnalyticsRecorder } from '@features/settings/main'
 import type { TaskRepositoryCompat } from '@features/library/contract/taskRepository'
 import type { TaskLogger } from '@platform/log/main/logger'
-import { ArtifactService } from '@main/artifactService'
+import { ArtifactService } from '@features/reader/main'
 import { ProgressReporter } from '@platform/jobs/main/progressReporter'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
