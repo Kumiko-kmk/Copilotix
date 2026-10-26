@@ -1,6 +1,6 @@
 /**
  * AI-generated structured reading of one paper, shown in the archive detail view.
- * Validated contract between the renderer and Main/Utility (see AGENTS.md §13). Only paper content goes in; no import metadata.
+ * Validated contract between the renderer and Main/Utility (see features/library/README.md 契約). Only paper content goes in; no import metadata.
  */
 import { z } from 'zod'
 import { paperBriefSchema } from '../core/paperBrief/schema'

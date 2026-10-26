@@ -6,7 +6,7 @@
 
 | 项目 | 当前基线 |
 |---|---|
-| 适用分支 | 当前工作分支见根 `AGENTS.md` |
+| 适用分支 | `master` |
 | Desktop 版本 | 以 `desktop/package.json` 为准 |
 | Electron | `44.1.1` |
 | Node.js | `24.19.0`（`.node-version` 与 CI 一致） |
@@ -372,3 +372,11 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 普通 ChatGPT 聊天接入分析（2026-10-14，尚未实现）：可用 OpenAI Responses API 请求聊天模型（chat-latest 为 ChatGPT 当前 Instant 别名），也可按 Sign in with ChatGPT 的本地／开源应用授权流程请求账户目录中的可用模型；两者均不要求经过 Codex agent。订阅接入仍取决于实际资格与模型目录，不能直接使用 ChatGPT backend-api 或假设已有 Codex 登录代表获得所有聊天模型权限。
 来源：[chat-latest](https://developers.openai.com/api/docs/models/chat-latest)、[订阅推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)、[预览限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)。订阅路线当前不支持图片生成、Code Interpreter、文件搜索等托管工具；标准平台 API 可另接对应工具。API 不返回 ChatGPT 客户端的完整呈现树；模型接口切换与富内容 UI 是两项工作。
 当前 Chat 已支持 Markdown 文本、标题、列表、表格及 KaTeX 公式；图示四宫格可由结构化 JSON 与本地组件复现，来源胶囊需要返回的引用元信息与独立组件。当前回答中的图片和外链仅显示文本，未加载图片；图片需增加验证、资源下载／持久化与受控展示，生成图片还需独立工具。交互图表／地图／视频／音频／Canvas 等需对应资源和组件，不能靠文本回答自动保持 ChatGPT 原格式。本次仅修改页签、公式渲染和隐藏用时，保留既有 Codex 路由。
+
+## 契約（2026-10-26 自 AGENTS.md 遷入）
+
+### 平台層執行契約（原 AGENTS §7）
+
+- Core RPC 只保留 Main 實際調用的 operation；完整註冊表在 `desktop/src/app/contract/coreRpc.ts`（由平台、作業與功能各自聲明的 operation 組合），Main／Utility 經構造參數取得綁定的 protocol，`platform/` 不認識具體功能；新增能力採「Utility 生成 descriptor，Main 只傳 ID 與小結果」。可能隨文庫增長的列表一律分頁；`tasks:list`／`documents:list` 採 keyset `{ after? } → { items, next }`，每頁 ≤200 行、≤512 KiB。
+- Utility SQLite operation 分 data、compute（`compute:*`）及獨佔生命週期（init／flush／close／library）通道；事務回調內不得 await。Main compute 用 `COMPUTE_RPC_TIMEOUT_MS` 與作業 signal 取消。
+- JobScheduler 的 `job-changed(job)`／`job-notification(job)` 用 `job.documentId` 定位文檔；Main 高頻事件經 `createCoalescedRefresh` 合併刷新。Reader 給 MarkdownPane 的 blocks／annotations 用 `useMemo` 保持引用穩定。

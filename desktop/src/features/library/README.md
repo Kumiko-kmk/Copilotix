@@ -23,3 +23,26 @@
 
 - `utility/v2TaskRepositoryCompat.ts`（1064 行）：一個持有預備語句與事務的 SQLite 倉庫類；行型別、限制與投影已拆至 `compatRecords.ts`。按表拆類需重新劃分事務邊界，留待功能分支。
 - `renderer/archive/PaperArchiveScene.ts`（1520 行）：Three.js 場景類，渲染迴圈、材質池、相機與詳情動畫共用同一份可變狀態；常量、調色盤與型別已拆至 `archiveSceneConfig.ts`。
+
+## 契約（2026-10-26 自 AGENTS.md 遷入）
+
+### 2. 文檔格式接口（PDF / Markdown）
+
+- 現階段導入、解析、閱讀正式支持 PDF。列表僅按 `originalName` 顯示 `.md`／`.markdown` 為 Markdown，其餘舊記錄兼容顯示 PDF。
+- 正式接入 Markdown 時，在 IPC、Core RPC、資料庫及 migration 加入 `sourceFormat: 'pdf' | 'markdown'` 並回填舊資料，不得長期依賴副檔名推斷。
+- Markdown 導入接受 UTF-8 `.md`／`.markdown`（`text/markdown`），經 PathPolicy 原子落盤及摘要校驗，不走 PDF 上傳／解析器；在標準化邊界產生 canonical Markdown artifact。
+- 保持 PDF／舊資料可讀，維護重複判定、狀態投影、刪除／重試、artifact revision 及恢復測試。
+
+### 4. 文檔庫維護契約
+
+- 維護經 Main 原生選目錄與確認、IPC 維護鎖、Utility 持久化隊列；活動任務期間不可切庫。
+- manifest v1、schema_migrations 與 SQLite 結構共同約束兼容。恢復先校驗並保留舊庫；遷移複製完成後才事務切換路徑，不自動刪除舊文檔目錄。
+- API Key 不進備份。實現、恢復語義與回歸項見 `docs/LIBRARY_MANAGEMENT_ZH.md`。
+
+### 13. 文庫頁與 AI 解讀
+
+文庫資訊、互動、動畫與渲染契約統一見 [介面規範](docs/UI_PREFERENCES_ZH.md#文庫頁與-ai-解讀)。生成、存儲、兼容與恢復仍以各專項文檔為準；修改時先讀相關契約，不在本入口重複參數與歷史驗收紀錄。
+
+### 首頁背景（原 AGENTS §12）
+
+- 首頁背景使用 `homeCipher.ts`／`homeWave.ts`；已選定方案與文庫渲染契約見 [介面規範](docs/UI_PREFERENCES_ZH.md)。舊原型與候選方案由 Git 歷史保留。

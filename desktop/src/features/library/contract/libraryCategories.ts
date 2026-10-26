@@ -1,7 +1,7 @@
 /**
  * Library categories: papers grouped by what they are about, for the 文库 columns. Computed in
  * the Utility from local text (no model call) and named from the AI file cards when papers have
- * them. Paged like every list that grows with the library (AGENTS.md §7).
+ * them. Paged like every list that grows with the library (docs/ARCHITECTURE_ZH.md 平台層執行契約).
  */
 import { z } from 'zod'
 

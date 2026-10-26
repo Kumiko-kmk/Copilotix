@@ -21,3 +21,9 @@
 ## 測試
 
 `tests/features/zotero/`（`pnpm desktop:test --module zotero`）。
+
+## 契約（2026-10-26 自 AGENTS.md 遷入）
+
+### 橋接摘要（原 AGENTS §12）
+
+- Zotero 橋接（只在本機）：首頁「从 Zotero 导入」先讀本機只讀 API，失敗則讀 `zotero.sqlite` 唯讀副本；renderer 只傳條目 key，PDF 走既有 importPaths 按雜湊去重；條目關聯存文獻目錄 `zotero/link.v1.json`（無 migration）。閱讀器「导出到 Zotero」經本機連接器：Zotero 來源的論文建帶 `zotero://select` 連結的獨立筆記（連接器不能寫既有條目），其他論文建條目＋PDF＋子筆記，記錄存 `zotero/export.v1.json`。契約與驗證見 [Zotero 橋接](docs/ZOTERO_BRIDGE_ZH.md)。

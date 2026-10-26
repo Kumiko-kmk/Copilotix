@@ -1,6 +1,6 @@
 # translation
 
-Markdown 翻譯：可恢復的翻譯計劃（Utility）、服務商與回退策略（Main）、翻譯作業與閱讀器「重新翻譯」。格式、計劃版本與兼容見 [Markdown 格式](../../../../docs/MARKDOWN_FORMAT_ZH.md)、[AGENTS.md §11](../../../../AGENTS.md)。
+Markdown 翻譯：可恢復的翻譯計劃（Utility）、服務商與回退策略（Main）、翻譯作業與閱讀器「重新翻譯」。格式、計劃版本與兼容見 [Markdown 格式](../../../../docs/MARKDOWN_FORMAT_ZH.md)、下方「契約」。
 
 ## 公開 API
 
@@ -20,3 +20,10 @@ Markdown 翻譯：可恢復的翻譯計劃（Utility）、服務商與回退策�
 ## 例外
 
 `utility/markdownTranslationPlan.ts`（975 行）超過 600 行：它是單一的可恢復狀態機（計劃、單元、元資料與原子提交共用同一份記憶體狀態與寫入序列），純函式與型別已拆至 `planModel.ts`；再拆需重新劃分狀態擁有權，屬行為風險，留待功能分支。
+
+## 契約（2026-10-26 自 AGENTS.md 遷入）
+
+### 11. 豐富閱讀與標準導出分離
+
+- 解析、翻譯與閱讀保留 HTML／LaTeX 豐富結構，不展平合併表格。`prepareReaderMarkdown` 僅非結構性準備／圖片路徑修正；`normalizeMarkdown` 僅導出投影，不回寫源資料。
+- 新翻譯計劃 v6，兼容合法 v4/v5/v6 manifest；v5 平面表格不可自動恢復，不自動重解析／重翻譯。映射、標註、資源及原子發布契約不變，詳見上述格式文檔。

@@ -90,3 +90,25 @@ PDF 会上传到 Parser 服务返回的预签名地址；待翻译文本会发�
 ## 協作
 
 遵循根 [AGENTS.md](../AGENTS.md)，不在此複製 owner、worktree、交付紀錄或授權規則。
+
+## 契約（2026-10-26 自 AGENTS.md 遷入）
+
+### 8. 遠端 CI 與驗證邊界
+
+- 修改 → 本地 commit → 按需本地 build／交付；未授權不 push，未跑完整 CI 如實說明。授權上傳後檢查最新提交的 Actions，合併前 `build` 必須成功，PR 另須通過最新合併結果檢查；舊成功、跳過、取消皆不可替代。
+- `.github/workflows/desktop-windows.yml` 覆蓋 master push、所有 PR、`desktop-v*` tag 及手動觸發；功能分支開 PR 後由合併結果檢查，避免同一提交重跑 push／PR。未開 PR 的分支可手動驗證；新分支須包含最新工作流。只 commit 不會觸發 Actions。
+- 保留必需檢查名稱 `build`。完整驗證時 Electron E2E 在與 `build` 並行的三個 `e2e` 矩陣 job 執行，最短的第 1 片先執行完整單元／UI／發布腳本回歸與覆蓋率；`build` 顯式安裝 Electron 後構建，打包後只跑 packaged smoke。publish 同時依賴 build 和全部 e2e（含覆蓋率），任一失敗不可發布。一般 master push／PR 執行 frozen-lockfile、lint、typecheck、模組依賴規則（`desktop:deps`，ADR-0001）、受影響單元測試（相對 PR 目標或上一個 master 提交）＋必跑安全集、四 bundle 和 smoke＋按路徑映射的受影響 E2E（2026-10-22 使用者要求只測改動部分；CI 選擇邏輯尚未在遠端驗證）；不預設打包、跑全套 UI／覆蓋率或安裝。`desktop-v*` tag 或手動勾選 `full_validation` 才跑覆蓋率、全部 Electron E2E、打包／安裝生命週期及下載校驗；tag 的版本、許可、簽章與打包內建安全校驗仍必需。
+- `Copilotix-Windows-x64-Bundle` 供安裝驗收；`Copilotix-Windows-verification-reports` 保存 build 的 JUnit、Playwright HTML 與安裝驗收證據；`Copilotix-Windows-e2e-reports-<n>` 保存各片 Playwright HTML／失敗證據，第 1 片另存完整回歸 JUnit 與覆蓋率摘要。CI 未過不可稱已驗證包；CI 無個人 API 憑據，付費模型、視覺及硬體差異仍須真人驗收。
+
+### 9. CI 與夾具維護
+
+- Vitest 預設 ≤2 workers，Windows Playwright 單 worker；JUnit 放 `desktop/unit-test-results`。`desktop:test`／`desktop:test:e2e:affected` 由 `scripts/affected-tests.mjs` 選擇受影響用例（三類測試檔都按 import 圖，E2E 按路徑映射），必跑安全集、全量觸發條件與映射見 [開發文檔](docs/DESKTOP_DEVELOPMENT_ZH.md#测试与实际门禁)；`desktop:test:full`、`desktop:test:e2e:full`、tag 與 `full_validation` 仍為全量，發布前必須全量通過。新增資料安全類測試檔時同步加入必跑集。新測試按功能加入現有套件，不為簡單 getter、動畫常數、CSS 或資料形狀再建文件。
+- Windows 原子 rename 對 EPERM／EACCES／EBUSY 最多約 6.3 秒有界重試；永久錯誤 exit 1，不用 copy／delete 替代。packaged smoke 前須有 Setup、uninstaller、release-manifest、ZIP；其餘 E2E 只需 bundle。
+- E2E 分片按 `desktop/playwright.config.ts` 的 `E2E_SHARDS` 實測時長分配（各單 worker），最後一片收下未列出的 spec；`COPILOTIX_E2E_SHARD` 為 `n/總數`，總數須與清單和工作流 matrix 一致，否則報錯。某片明顯變長時按 CI 日誌重新分配。
+- 僅「未打包＋NODE_ENV=test＋COPILOTIX_E2E_USER_DATA」用獨立 native vault service；夾具只清理自身六種 account，不碰真人憑據。問答 E2E 經真實設定 IPC 存假 Key，僅 mock provider HTTP。
+- 任務管理頁與首頁「繼續閱讀」已移除；閱讀器一般經 `openPaperFromLibrary`（文庫搜尋 → 結果 `data-document-id` → 瀏覽面板「打开阅读」，無 WebGL 時結果直接開啟）進入，等 reader-header（≤30 秒）及 Markdown ready 再互動，error 不算 ready；不加全局 retry／timeout 或降低斷言。從文庫進入的 Reader 返回文庫。
+- 縮略圖截圖用直角 app-shell 與完整 CSS 像素裁切，channel delta ≤1、changedRatio ≤0.001；失敗保留 expected／actual PNG。
+
+### 文檔與驗收（原 AGENTS §12）
+
+- README／Wiki 源在 `docs/wiki/`，不會隨目錄提交自動發布；遠端上傳須另獲授權。真人模型／視覺驗收不能以 mock 或歷史 CI 替代。
