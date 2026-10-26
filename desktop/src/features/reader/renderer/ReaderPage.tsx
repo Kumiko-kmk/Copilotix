@@ -18,13 +18,9 @@ import { useReaderNotes } from './useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Space, Spin, Typography, message } from 'antd'
-import type {
-  DocumentAnnotation,
-  DocumentDetails,
-  ListReaderAnnotationsRequest,
-  ReaderAnnotationSnapshot
-} from '@shared/ipcSchemas'
-import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView, ReaderChatSelection } from '@shared/types'
+import type { DocumentAnnotation, ListReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '../contract/readerSchemas'
+import type { DocumentDetails } from '@features/library/contract/documentSchemas'
+import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView, ReaderChatSelection } from '../contract/readerTypes'
 import { IpcClientError } from '@platform/ipc/contract/envelope'
 import { buildAnnotationDiff, replayAnnotationDiff } from './annotationMutations'
 import ReaderWorkbench from './components/ReaderWorkbench'

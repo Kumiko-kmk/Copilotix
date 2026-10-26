@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { documentAnnotationViewSchema, mutateReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema } from '@shared/ipcSchemas'
+import { documentAnnotationViewSchema, mutateReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema } from './readerSchemas'
 import { coreIdSchema } from '@platform/rpc/contract/protocol'
 import { markdownEditRequestSchema, markdownEditResultSchema } from './markdownEdits'
 import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema } from './readerNotes'

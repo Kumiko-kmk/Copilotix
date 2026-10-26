@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { AppSettings, HealthResult, SettingsUpdate } from '@shared/types'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
+import type { AppSettings, SettingsUpdate } from '@features/settings/contract/settingsTypes'
+import type { HealthResult } from '@features/library/contract/documentTypes'
 import type { CredentialAccount, CredentialVault } from '../../../src/platform/credentials/main/credentialVault'
 import { maskCredential, SettingsService, TRANSLATION_CREDENTIAL_RESET_MIGRATION, type SettingsRepositoryPort } from '../../../src/features/settings/main/settingsService'
 

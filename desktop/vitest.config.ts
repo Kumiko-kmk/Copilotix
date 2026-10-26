@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  resolve: { alias: { '@app': resolve(__dirname, 'src/app'), '@platform': resolve(__dirname, 'src/platform'), '@features': resolve(__dirname, 'src/features'), '@shared': resolve(__dirname, 'src/shared'), '@core': resolve(__dirname, 'src/core'), '@runtime': resolve(__dirname, 'src/runtime'), '@main': resolve(__dirname, 'src/main'), '@renderer': resolve(__dirname, 'src/renderer') } },
+  resolve: { alias: { '@app': resolve(__dirname, 'src/app'), '@platform': resolve(__dirname, 'src/platform'), '@features': resolve(__dirname, 'src/features') } },
   // Mirrors the renderer config: the paper archive embeds its cassette model with `?inline`.
   assetsInclude: ['**/*.glb'],
   test: {
@@ -21,20 +21,9 @@ export default defineConfig({
       reporter: ['text', 'json-summary', 'html'],
       reportsDirectory: './coverage',
       include: [
-        'src/main/**/*.ts',
-        'src/main/**/*.tsx',
-        'src/core/**/*.ts',
-        'src/core/**/*.tsx',
-        'src/runtime/**/*.ts',
-        'src/shared/**/*.ts',
-        'src/shared/**/*.tsx',
-        // ADR-0001 layout: the same process layers as above.
         'src/{app,platform/*,features/*}/{main,core,runtime,contract}/**/*.{ts,tsx}'
       ],
       exclude: [
-        'src/renderer/**',
-        'src/preload/**',
-        'src/utility/**',
         'src/{app,platform/*,features/*}/{renderer,preload,utility}/**',
         'tests/**',
         'e2e/**',
@@ -49,11 +38,10 @@ export default defineConfig({
         'src/app/main/**',
         'src/platform/rpc/main/electronUtilityFork.ts',
         // These files are type-only contracts after TypeScript erasure.
-        'src/core/ports.ts',
         'src/platform/files/contract/pathPolicyPort.ts',
-        'src/core/types.ts',
-        'src/shared/types.ts',
-        'src/main/taskRepositoryCompat.ts'
+        'src/features/library/contract/{artifacts,documentTypes,taskCompute,taskRepository}.ts',
+        'src/features/translation/contract/{translationBatch,translationTypes}.ts',
+        'src/features/{chat/contract/ragChunk,settings/contract/settingsTypes,parsing/contract/blocks,reader/contract/readerTypes}.ts'
       ],
       thresholds: {
         lines: 80,

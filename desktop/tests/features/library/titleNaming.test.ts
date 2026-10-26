@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BlockMapping } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 import { displayPaperTitle, extractPaperTitle, MAX_TITLE_STEM_LENGTH, sanitizeTitleStem, titleFileName } from '@features/library/core/titleNaming'
 import { detectRepositoryCoverPage, trustedPdfMetadataTitle } from '@features/library/contract/pdfImport'
 

@@ -1,4 +1,4 @@
-import type { ArtifactKind } from '@core/types'
+import type { ArtifactKind } from '../contract/artifacts'
 
 /** Persistence-side artifact reference; it is never exposed as a renderer DTO. */
 export interface ArtifactReference {

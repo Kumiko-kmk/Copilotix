@@ -1,4 +1,4 @@
-import type { TranslationProviderId } from '@shared/types'
+import type { TranslationProviderId } from './translationTypes'
 
 export const TRANSLATION_PROVIDER_IDS = ['qwen', 'deepseek', 'bing', 'transmart', 'codex'] as const satisfies readonly TranslationProviderId[]
 

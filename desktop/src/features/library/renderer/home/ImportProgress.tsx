@@ -1,6 +1,6 @@
 import React from 'react'
 import { AppstoreOutlined, CloseOutlined, ReadOutlined } from '@ant-design/icons'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '../../contract/documentSchemas'
 import { originalAvailable } from '../documentStatus'
 import WorkflowSteps from '../WorkflowSteps'
 

@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { AppSettings, SettingsUpdate } from '@shared/types'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
+import type { AppSettings, SettingsUpdate } from '@features/settings/contract/settingsTypes'
 import App from '../../src/app/renderer/App'
 
 vi.mock('../../src/app/renderer/WindowControls', () => ({ default: () => null }))

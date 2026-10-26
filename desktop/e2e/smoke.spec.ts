@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { PACKAGED_SMOKE_ARG, validatePackagedSmokeOutput } from '../src/shared/packagedSmoke.mjs'
+import { PACKAGED_SMOKE_ARG, validatePackagedSmokeOutput } from '../src/app/contract/packagedSmoke.mjs'
 import { createE2EWorkspace, launchElectron } from './helpers'
-import { MAX_PDF_PAGES } from '../src/shared/constants'
+import { MAX_PDF_PAGES } from '../src/features/library/contract/pdfLimits'
 
 const desktopPackage = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as {
   version: string

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { cachedStorageInfo, loadStorageInfo } from '../../../src/features/settings/renderer/storageInfoClient'
-import type { DocumentChangeEvent, DocumentSummary, StorageInfo } from '@shared/ipcSchemas'
+import type { DocumentChangeEvent, DocumentSummary } from '@features/library/contract/documentSchemas'
+import type { StorageInfo } from '@features/settings/contract/settingsSchemas'
 import {
   applyDocumentChange,
   getDocumentRefreshPlan,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BlockMapping } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 import { DEFAULT_CHUNK_HARD_MAX_TOKENS, estimateTokens, structureAwareChunk, STRUCTURE_AWARE_CHUNKER_FINGERPRINT } from '../../../src/features/chat/utility/structureAwareChunker'
 
 function mapping(id: string, order: number, sourceText: string, type = 'text'): BlockMapping {

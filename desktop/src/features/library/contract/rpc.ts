@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { documentSummarySchema, copilotixTaskSchema } from '@shared/ipcSchemas'
+import { documentSummarySchema, copilotixTaskSchema } from './documentSchemas'
 import { coreHashSchema, coreIdSchema, coreJsonValueSchema, corePathSchema, coreTimestampSchema, emptyPayloadSchema, noNul } from '@platform/rpc/contract/protocol'
 import { libraryCategoriesPageSchema, libraryCategoriesRequestSchema } from './libraryCategories'
 import { libraryCoreRequestSchema, libraryResultSchema } from './librarySchemas'

@@ -2,7 +2,8 @@
 
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BlockMapping, BlockSelection } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
+import type { BlockSelection } from '@features/reader/contract/readerTypes'
 
 const { getDocumentMock } = vi.hoisted(() => ({ getDocumentMock: vi.fn() }))
 

@@ -4,7 +4,7 @@
 
 ## 公開 API
 
-- `contract/`：問答請求、串流事件（`ragSchemas`）、存儲、圖片與引用 schema；`ipc.ts` 的 `paperChatChannels`／`createPaperChatApi`；`rpc.ts` 的 `chatOperations`。
+- `contract/`：問答請求、串流事件（`ragSchemas`）、存儲、圖片與引用 schema，檢索索引的切塊型別（`ragChunk.ts`）；`ipc.ts` 的 `paperChatChannels`／`createPaperChatApi`；`rpc.ts` 的 `chatOperations`。
 - `main/index.ts`：`PaperChatService`、`ChatProvider`（OpenAI 相容 HTTP）、`ModelGateway`（Qwen／DeepSeek 與 Codex 的統一串流入口，檔案卡與圖片解讀也經它調用模型）、`registerPaperChatHandlers`、索引作業 `RagContentIndexJobRunner`／`RpcRagContentIndexer`。
 - `utility/index.ts`：`createChatOperations`（Utility handler）、`SqliteRagRepository`、`RagContentIndexService` 與其錯誤類（Utility 組裝與錯誤映射用）。
 - `renderer/index.ts`：`ReaderChatPanel`、`ReaderChatToolbar`、`usePaperChat`、`usePaperChatRouting`。

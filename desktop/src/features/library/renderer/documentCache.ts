@@ -1,4 +1,4 @@
-import type { DocumentChangeEvent, DocumentDetails, DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentChangeEvent, DocumentDetails, DocumentSummary } from '../contract/documentSchemas'
 
 export interface DocumentListCache {
   revision: number

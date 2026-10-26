@@ -17,11 +17,11 @@ import { DocumentCommandService } from '../../../src/features/library/main/docum
 import { MarkdownTranslationPlanManager } from '../../../src/features/translation/utility/markdownTranslationPlan'
 import { type CredentialAccount, type CredentialVault } from '../../../src/platform/credentials/main/credentialVault'
 import { type BatchResult, type BatchSubmission, type ParserClient } from '../../../src/features/parsing/main/parserClient'
-import { type HealthResult, type CopilotixTask } from '../../../src/shared/types'
-import { type TaskComputePort } from '../../../src/core/ports'
+import { type HealthResult, type CopilotixTask } from '../../../src/features/library/contract/documentTypes'
+import { type TaskComputePort } from '../../../src/features/library/contract/taskCompute'
 import { type JobScheduler } from '../../../src/platform/jobs/main/jobScheduler'
 import { type TaskRepositoryCompat } from '../../../src/features/library/contract/taskRepository'
-import { fixtureTaskCompute } from '../../taskComputeFixture'
+import { fixtureTaskCompute } from './taskComputeFixture'
 
 describe("taskService", () => {
   const roots: string[] = []

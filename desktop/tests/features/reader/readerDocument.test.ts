@@ -5,7 +5,8 @@ import {
   buildTranslatedReaderBlocks,
   mergeReaderBlocks
 } from '@features/reader/core/readerDocument'
-import type { BlockMapping, TranslatedMarkdownBlock } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
+import type { TranslatedMarkdownBlock } from '@features/translation/contract/translationTypes'
 
 describe('reader document model', () => {
   it('preserves rich original and translated tables without changing annotation identities or source indexes', () => {

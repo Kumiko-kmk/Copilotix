@@ -1,7 +1,7 @@
 import React from 'react'
 import { Alert, Button, Checkbox, Empty, Input, Modal, Spin, message } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
-import type { AppSettings } from '@shared/types'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
 import { ZOTERO_IMPORT_MAX, type ZoteroCatalog, type ZoteroCollection, type ZoteroItem } from '../contract/zotero'
 import './zoteroImport.css'
 

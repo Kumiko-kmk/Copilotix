@@ -1,6 +1,6 @@
 import React from 'react'
 import { HighlightOutlined, MessageOutlined, UnderlineOutlined } from '@ant-design/icons'
-import type { HighlightColor } from '@shared/types'
+import type { HighlightColor } from '../../contract/readerTypes'
 import { READER_HIGHLIGHT_COLORS } from '../../core/readerAnnotations'
 import type { ReaderTextSelection } from '../readerAnnotations'
 import { QuillIcon } from './ReaderNotes'

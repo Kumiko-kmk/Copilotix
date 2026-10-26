@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LAYOUT_STORAGE_KEY, activateView, activeSyncedViews, adjacentGroup, ensureReadingView, toggleSync, defaultReaderLayout, equalizeSplit, groupOfView, hideView, listGroups, loadReaderLayout, moveView, normalizeLayout, resizeSplit, revealView, splitView, visibleViews, type LayoutSplit, type ReaderLayout } from '../../../src/features/reader/renderer/readerLayout'
-import { type BlockMapping } from '../../../src/shared/types'
+import { type BlockMapping } from '../../../src/features/parsing/contract/blocks'
 import { pdfSyncPosition } from '../../../src/features/reader/renderer/components/PdfPane'
 import { createScrollSyncHub, trackScrollIntent } from '../../../src/features/reader/renderer/readerScrollSync'
 

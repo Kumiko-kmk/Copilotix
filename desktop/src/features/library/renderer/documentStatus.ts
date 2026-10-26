@@ -1,4 +1,4 @@
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '../contract/documentSchemas'
 
 export type WorkflowStatus = DocumentSummary['workflow']['status']
 type Workflow = DocumentSummary['workflow']

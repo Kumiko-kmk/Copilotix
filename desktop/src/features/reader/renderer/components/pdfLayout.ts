@@ -1,4 +1,4 @@
-import type { BlockBox, BlockMapping } from '@shared/types'
+import type { BlockBox, BlockMapping } from '@features/parsing/contract/blocks'
 import { clampFraction } from '../readerScrollSync'
 
 /** PDF page layout, scroll anchoring, sync positions, canvas sizing and merge connectors; no React. */

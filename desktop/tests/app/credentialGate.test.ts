@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '../src/shared/constants'
-import { type AppSettings, type CopilotixTask } from '../src/shared/types'
-import { type Job } from '../src/platform/jobs/core/jobs'
-import { ParseJobRunner } from '../src/features/parsing/main/parseJobRunner'
-import { PathPolicy } from '../src/platform/files/runtime/pathPolicy'
-import { ParserApiError } from '../src/features/parsing/main/parserClient'
-import { TranslationJobRunner } from '../src/features/translation/main/translationJobRunner'
-import { executableProviderOrder, normalizeEnabledProviders, normalizeProviderOrder } from '../src/features/translation/contract/providerPolicy'
-import { refreshNetworkProxy } from '../src/platform/network/main/networkProxy'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
+import { type AppSettings } from '@features/settings/contract/settingsTypes'
+import { type CopilotixTask } from '@features/library/contract/documentTypes'
+import { type Job } from '@platform/jobs/core/jobs'
+import { ParseJobRunner } from '@features/parsing/main/parseJobRunner'
+import { PathPolicy } from '@platform/files/runtime/pathPolicy'
+import { ParserApiError } from '@features/parsing/main/parserClient'
+import { TranslationJobRunner } from '@features/translation/main/translationJobRunner'
+import { executableProviderOrder, normalizeEnabledProviders, normalizeProviderOrder } from '@features/translation/contract/providerPolicy'
+import { refreshNetworkProxy } from '@platform/network/main/networkProxy'
 
 describe("credentialGate", () => {
   const task: CopilotixTask = {

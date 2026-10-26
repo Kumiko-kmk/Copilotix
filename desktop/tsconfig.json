@@ -15,12 +15,7 @@
     "paths": {
       "@app/*": ["src/app/*"],
       "@platform/*": ["src/platform/*"],
-      "@features/*": ["src/features/*"],
-      "@core/*": ["src/core/*"],
-      "@runtime/*": ["src/runtime/*"],
-      "@shared/*": ["src/shared/*"],
-      "@main/*": ["src/main/*"],
-      "@renderer/*": ["src/renderer/*"]
+      "@features/*": ["src/features/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "electron.vite.config.ts", "utility.vite.config.ts", "vitest.config.ts"]

@@ -13,7 +13,7 @@ import {
   type ListReaderAnnotationsRequest,
   type MutateReaderAnnotationsRequest,
   type ReaderAnnotationSnapshot
-} from '@shared/ipcSchemas'
+} from './readerSchemas'
 
 export const readerChannels = {
   figureDisplayGet: invokeChannel('reader-figure-display:get', figureDisplayRequestSchema, figureDisplayChoicesSchema),

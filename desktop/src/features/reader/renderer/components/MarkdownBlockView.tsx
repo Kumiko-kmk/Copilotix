@@ -1,7 +1,7 @@
 import SafeMarkdown from './SafeMarkdown'
 import React from 'react'
 import type { ReaderBlock } from '../../core/readerDocument'
-import type { BlockSelection } from '@shared/types'
+import type { BlockSelection } from '../../contract/readerTypes'
 import ReaderFigureSnapshot, { type FigureRenderState } from './ReaderFigureSnapshot'
 import ReaderFigureMosaic from './ReaderFigureMosaic'
 import { isEditableTarget } from './markdownPaneDom'

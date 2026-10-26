@@ -1,5 +1,7 @@
 import PQueue from 'p-queue'
-import type { AppSettings, CredentialName, HealthResult, TranslationProviderId } from '@shared/types'
+import type { AppSettings, CredentialName } from '@features/settings/contract/settingsTypes'
+import type { HealthResult } from '@features/library/contract/documentTypes'
+import type { TranslationProviderId } from '../contract/translationTypes'
 import type { CredentialVault } from '@platform/credentials/main/credentialVault'
 import {
   flattenSegments,

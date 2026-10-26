@@ -9,7 +9,7 @@ import { assembleBrief, buildBriefMessages, buildBriefRepairMessage, clipPreviou
 import type { BriefContextResult, BriefAnchor } from '../core/paperBrief/contracts'
 import { paperInsightStateSchema, paperInsightRequestSchema, type PaperInsightState } from '../contract/paperInsight'
 import { resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@features/chat/contract/paperChatSchemas'
-import type { AppSettings } from '@shared/types'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
 import type { Job } from '@platform/jobs/core/jobs'
 import { ChatProviderError } from '@features/chat/main'
 import type { ProviderTokenUsage } from '@features/settings/main'

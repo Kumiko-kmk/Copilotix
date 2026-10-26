@@ -4,7 +4,7 @@
 
 ## 公開 API
 
-- `contract/`：`ipc.ts`（`documents:*`、`library:*`、`tutorial:import-paper` 與 `documents:changed`／`documents:open` 事件，`createLibraryApi`）、`rpc.ts`（`libraryOperations`：`tasks:*`、`documents:*`、`artifacts:record-revision`、`compute:hash-file`、`compute:import-pdf`、`compute:library-categories`、`library:check|manage`；`CoreListCursor`）、`taskRepository.ts`（Main 側的 `TaskRepositoryCompat` 埠，設定與閱讀器也經它讀寫任務）、`librarySchemas`、`libraryCategories`、`pdfImport`、`tutorialSample`。文獻與任務 schema 仍在 `shared/ipcSchemas.ts`、`shared/types.ts`（M5 拆入）。
+- `contract/`：`ipc.ts`（`documents:*`、`library:*`、`tutorial:import-paper` 與 `documents:changed`／`documents:open` 事件，`createLibraryApi`）、`rpc.ts`（`libraryOperations`：`tasks:*`、`documents:*`、`artifacts:record-revision`、`compute:hash-file`、`compute:import-pdf`、`compute:library-categories`、`library:check|manage`；`CoreListCursor`）、`taskRepository.ts`（Main 側的 `TaskRepositoryCompat` 埠，設定與閱讀器也經它讀寫任務）、`taskCompute.ts`（`TaskComputePort`）、`documentSchemas.ts`／`documentTypes.ts`（文獻、導入與舊任務投影的 schema 與型別）、`artifacts.ts`（`DocumentId`、`ArtifactKind`）、`pdfLimits.ts`、`librarySchemas`、`libraryCategories`、`pdfImport`、`tutorialSample`。
 - `core/index.ts`：`extractPaperProfile`、`displayPaperTitle` 等標題與論文資訊提取（Zotero 與文庫頁共用）。
 - `main/index.ts`：`TaskService`（文獻指令的入口：導入、重試、刪除、導出、閱讀文件）、`RpcTaskRepository`、`RpcTaskCompute`、`DocumentFeed`、`LibraryAccessGate`、`registerLibraryIpc`、`registerTaskNotifications`。
 - `utility/index.ts`：`V2TaskRepositoryCompat`（SQLite 文獻倉庫）、`createLibraryOperations`、`assertLibraryIdle`／`manageLibrary`。

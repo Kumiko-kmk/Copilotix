@@ -1,5 +1,5 @@
 import { PDFDocument } from 'pdf-lib'
-import { MAX_PDF_BYTES } from '@shared/constants'
+import { MAX_PDF_BYTES } from '../contract/pdfLimits'
 import { MAX_PDF_CROP_BYTES } from '../contract/pdfImport'
 import { CoreUtilityOperationError } from '@platform/rpc/utility/coreUtilityRuntime'
 

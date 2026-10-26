@@ -10,8 +10,8 @@ import {
   usageAnalyticsSchema,
   type StorageInfo,
   type UsageAnalytics
-} from '@shared/ipcSchemas'
-import type { AppSettings, CredentialName, CredentialValidationResult, SettingsSaveResult, SettingsUpdate } from '@shared/types'
+} from './settingsSchemas'
+import type { AppSettings, CredentialName, CredentialValidationResult, SettingsSaveResult, SettingsUpdate } from './settingsTypes'
 
 export const settingsChannels = {
   get: invokeChannel('settings:get', noRequestSchema, appSettingsSchema),

@@ -22,7 +22,7 @@ import {
   type ImportDocumentsResult,
   type SaveDocumentAsRequest,
   type SaveDocumentAsResult
-} from '@shared/ipcSchemas'
+} from './documentSchemas'
 
 export const libraryChannels = {
   categories: invokeChannel('library:categories', libraryCategoriesRequestSchema, libraryCategoriesPageSchema),

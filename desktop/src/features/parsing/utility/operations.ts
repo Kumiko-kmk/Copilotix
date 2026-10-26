@@ -1,5 +1,5 @@
 import type { CoreUtilityOperationHandler } from '@platform/rpc/utility/coreUtilityRuntime'
-import type { CopilotixTask } from '@shared/types'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
 import type { V2TaskRepositoryCompat } from '@features/library/utility'
 import { coreRepairTextLayerPayloadSchema, type ParsingOperations } from '../contract/rpc'
 import { normalizeParserOutput, rebuildMappings, repairParsedTextLayer } from './parserOutput'

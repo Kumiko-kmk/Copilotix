@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { noNul } from '@platform/rpc/contract/protocol'
-import { translationProviderIdSchema } from '@shared/ipcSchemas'
+import { translationProviderIdSchema } from './translationSchemas'
 import {
   translationPlanFinalizeResultSchema,
   translationPlanListResultSchema,

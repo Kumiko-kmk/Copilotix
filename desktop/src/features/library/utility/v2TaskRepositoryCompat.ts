@@ -1,18 +1,22 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { resolvePaperChatModel } from '@features/chat/contract/paperChatSchemas'
 import type { StatementSync } from 'node:sqlite'
-import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
+import type { ArtifactKind } from '../contract/artifacts'
+import type { TranslationBatchBlock, TranslationBatchCommit } from '@features/translation/contract/translationBatch'
 import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
-import type { AppSettings, CopilotixTask, ReaderAnnotation, ReplaceReaderAnnotationsRequest, TranslationBlockRecord } from '@shared/types'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
+import type { CopilotixTask } from '../contract/documentTypes'
+import type { ReaderAnnotation, ReplaceReaderAnnotationsRequest } from '@features/reader/contract/readerTypes'
+import type { TranslationBlockRecord } from '@features/translation/contract/translationTypes'
 import {
   documentAnnotationSchema,
   mutateReaderAnnotationsRequestSchema,
   readerAnnotationSnapshotSchema,
-  type DocumentSummary,
   type MutateReaderAnnotationsRequest,
   type ReaderAnnotationSnapshot
-} from '@shared/ipcSchemas'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+} from '@features/reader/contract/readerSchemas'
+import { type DocumentSummary } from '../contract/documentSchemas'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { normalizeEnabledProviders, normalizeProviderOrder } from '@features/translation/contract/providerPolicy'
 import type { ArtifactReference } from './taskRepositoryCompat'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'

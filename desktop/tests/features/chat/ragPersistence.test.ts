@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { RagChunk } from '@core/types'
+import type { RagChunk } from '@features/chat/contract/ragChunk'
 import { V2Database } from '../../../src/platform/database/utility/v2Database'
 import { SqliteRagRepository } from '../../../src/features/chat/utility/sqliteRagRepository'
 

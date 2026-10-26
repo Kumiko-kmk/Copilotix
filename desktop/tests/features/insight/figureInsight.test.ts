@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { FIGURE_INSIGHT_PROMPT_VERSION, figureInsightContentSchema, figureInsightRequestSchema, resolveFigureInsightModel,
   type FigureInsightDescriptor, type FigureInsightState, type FigureInsightSave } from '@features/insight/contract/figureInsight'
 import { buildFigureInsightMessages } from '@features/insight/core/figureInsightPrompt'

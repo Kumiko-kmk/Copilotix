@@ -1,4 +1,4 @@
-import type { DocumentAnnotation } from '@shared/ipcSchemas'
+import type { DocumentAnnotation } from '../contract/readerSchemas'
 
 export interface AnnotationDiff {
   upserts: DocumentAnnotation[]

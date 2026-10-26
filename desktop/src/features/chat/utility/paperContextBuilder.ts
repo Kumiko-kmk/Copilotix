@@ -1,4 +1,4 @@
-import type { RagChunk } from '@core/types'
+import type { RagChunk } from '../contract/ragChunk'
 import { PAPER_CHAT_MAX_BYTES, paperContextRequestSchema, paperContextResultSchema, type PaperContext, type PaperContextRequest, type PaperEvidence } from '../contract/paperChatSchemas'
 import { ragWireByteLength } from '../contract/ragSchemas'
 import type { SqliteRagRepository } from './sqliteRagRepository'

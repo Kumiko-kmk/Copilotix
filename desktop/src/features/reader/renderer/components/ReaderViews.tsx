@@ -5,15 +5,15 @@ import { createPortal } from 'react-dom'
 import { Badge, Button, Tag } from 'antd'
 import { FilePdfOutlined, FileTextOutlined, MessageOutlined, TranslationOutlined } from '@ant-design/icons'
 import type { ReaderBlock } from '../../core/readerDocument'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 import type {
-  BlockMapping,
   BlockSelection,
   HighlightColor,
   ReaderAnnotation,
   ReaderAnnotationView,
-  ReaderChatSelection,
-} from '@shared/types'
-import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
+  ReaderChatSelection
+} from '../../contract/readerTypes'
+import type { DocumentWorkflowStatus } from '@features/library/contract/documentSchemas'
 import type { PaperInsightSource } from '@features/insight/contract/paperInsight'
 import MarkdownPane, { type MarkdownBlockMenu } from './MarkdownPane'
 import type { ReaderBlockMove } from './ReaderBlockReorder'

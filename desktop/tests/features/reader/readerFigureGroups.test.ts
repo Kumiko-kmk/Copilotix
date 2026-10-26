@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ReaderBlock } from '../../../src/features/reader/core/readerDocument'
-import type { BlockMapping } from '../../../src/shared/types'
+import type { BlockMapping } from '../../../src/features/parsing/contract/blocks'
 import {
   buildReaderFigureGeometries,
   buildReaderFigureGroups,

@@ -3,7 +3,7 @@ import type {
   ReaderAnnotation,
   ReaderAnnotationKind,
   ReaderAnnotationView
-} from '@shared/types'
+} from '../contract/readerTypes'
 
 export const READER_HIGHLIGHT_COLORS: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'purple']
 

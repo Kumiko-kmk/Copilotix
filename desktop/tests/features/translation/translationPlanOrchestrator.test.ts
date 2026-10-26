@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { TaskComputePort } from '../../../src/core/ports'
+import type { TaskComputePort } from '../../../src/features/library/contract/taskCompute'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { TranslationCredentialError, TranslationHttpError, type TranslationProvider } from '../../../src/features/translation/main/providers'
 import { TranslationPlanOrchestrator, withRetry } from '../../../src/features/translation/main/translationPlanOrchestrator'
@@ -13,7 +13,8 @@ import type {
   TranslationPlanMutationResult,
   TranslationPlanWorkDescriptor
 } from '@features/translation/contract/translationPlanProtocol'
-import type { CopilotixTask, TranslationProviderId } from '@shared/types'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
+import type { TranslationProviderId } from '@features/translation/contract/translationTypes'
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111'
 const JOB_ID = '22222222-2222-4222-8222-222222222222'

@@ -1,5 +1,5 @@
 import React from 'react'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '../contract/documentSchemas'
 import { workflowSteps, workflowSummaryText, type WorkflowStepState } from './documentStatus'
 
 const STATE_TEXT: Record<WorkflowStepState, string> = {

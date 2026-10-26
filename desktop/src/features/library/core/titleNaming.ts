@@ -1,4 +1,4 @@
-import type { BlockMapping } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 
 /** Maximum stem length used for both the task name and its output directory. */
 export const MAX_TITLE_STEM_LENGTH = 100

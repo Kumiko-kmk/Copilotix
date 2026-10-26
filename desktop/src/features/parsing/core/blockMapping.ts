@@ -1,4 +1,4 @@
-import type { BlockBox, BlockMapping } from '@shared/types'
+import type { BlockBox, BlockMapping } from '../contract/blocks'
 
 interface LayoutBlock {
   bbox?: unknown

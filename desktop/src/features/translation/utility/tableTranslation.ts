@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
-import type { BlockMapping } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 import type { AlignedMarkdownBlock } from '@features/parsing/core'
 import { splitMarkdownMath } from '@platform/markdown/core/mathDelimiters'
 import {

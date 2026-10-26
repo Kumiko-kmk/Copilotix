@@ -1,6 +1,6 @@
 import type { CoreUtilityOperationHandler } from '@platform/rpc/utility/coreUtilityRuntime'
 import { hashFile } from '@platform/files/utility/fileHash'
-import type { CopilotixTask } from '@shared/types'
+import type { CopilotixTask } from '../contract/documentTypes'
 import { libraryCategoriesRequestSchema } from '../contract/libraryCategories'
 import { coreDocumentMetadataPayloadSchema, coreImportPdfPayloadSchema, coreListPagePayloadSchema, type LibraryOperations } from '../contract/rpc'
 import { importPdf } from './importPdf'

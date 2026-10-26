@@ -1,7 +1,7 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, ExpandOutlined } from '@ant-design/icons'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '../contract/documentSchemas'
 import type { PaperInsightSource, PaperInsightState } from '@features/insight/contract/paperInsight'
 import type { LibraryCategories } from '../contract/libraryCategories'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from './archive/PaperArchiveScene'

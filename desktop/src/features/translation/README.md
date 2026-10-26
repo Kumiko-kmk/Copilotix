@@ -4,7 +4,7 @@ Markdown 翻譯：可恢復的翻譯計劃（Utility）、服務商與回退策�
 
 ## 公開 API
 
-- `contract/translationPlanProtocol.ts`：計劃描述、請求／回應 envelope、表格翻譯協定與版本常量（`TRANSLATION_PIPELINE_VERSION` 等）；`providerPolicy.ts`：服務商順序與啟用規則。
+- `contract/translationPlanProtocol.ts`：計劃描述、請求／回應 envelope、表格翻譯協定與版本常量（`TRANSLATION_PIPELINE_VERSION` 等）；`providerPolicy.ts`：服務商順序與啟用規則；`translationSchemas.ts`／`translationTypes.ts`：服務商 ID 與譯文塊的 schema、型別；`translationBatch.ts`：Utility 寫入的批次提交型別。
 - `contract/ipc.ts`：`documents:retranslate-edited`；`contract/rpc.ts`：`translationOperations`（`compute:translation-plan-*`）。
 - `main/index.ts`：`TranslationJobRunner`（`translate` 作業）、`probeOpenAiCompatibleCredential`（設定頁連接測試）、`registerTranslationIpc`。
 - `utility/index.ts`：`MarkdownTranslationPlanManager`、`createTranslationOperations`。
@@ -15,7 +15,7 @@ Markdown 翻譯：可恢復的翻譯計劃（Utility）、服務商與回退策�
 
 ## 測試
 
-`tests/features/translation/`（`pnpm desktop:test --module translation`）；跨模組的作業憑據門禁在 `tests/credentialGate.test.ts`。
+`tests/features/translation/`（`pnpm desktop:test --module translation`）；跨模組的作業憑據門禁在 `tests/app/credentialGate.test.ts`。
 
 ## 例外
 

@@ -4,7 +4,7 @@ import { ArrowUpOutlined, BorderOutlined, CloseOutlined, MoreOutlined } from '@a
 import { useQuery } from '@tanstack/react-query'
 import { resolvePaperChatModel, type PaperChatProvider } from '../contract/paperChatSchemas'
 import type { Citation } from '../contract/ragSchemas'
-import type { BlockSelection } from '@shared/types'
+import type { BlockSelection } from '@features/reader/contract/readerTypes'
 import type { PaperChatFigurePin, PaperChatTurnFigure } from '../contract/paperChatFigures'
 import { turnFigurePins, type PaperChatController, type PaperChatTurn } from './usePaperChat'
 import { usePaperChatRouting, type PaperChatRouting } from './usePaperChatRouting'

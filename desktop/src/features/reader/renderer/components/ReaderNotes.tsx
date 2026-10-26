@@ -2,7 +2,7 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import { Input } from 'antd'
 import { READER_NOTE_MAX_CHARS, type ReaderNote, type ReaderNoteAnchor } from '../../contract/readerNotes'
-import type { ReaderAnnotationView } from '@shared/types'
+import type { ReaderAnnotationView } from '../../contract/readerTypes'
 import {
   buildReaderNoteRanges,
   readerNoteAnchors,

@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '@features/library/contract/documentSchemas'
 import DocumentLifecycleActions from '../../../src/features/reader/renderer/components/DocumentLifecycleActions'
 
 afterEach(cleanup)

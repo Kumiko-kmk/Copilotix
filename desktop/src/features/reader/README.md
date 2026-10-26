@@ -4,7 +4,7 @@
 
 ## 公開 API
 
-- `contract/`：`ipc.ts`（`reader-figure-display:*`、`reader-notes:*`、`reader-annotations:*`、`documents:edit-markdown`、`documents:cache-figure`，`createReaderApi`）、`rpc.ts`（`readerOperations`：`notes:*`、`markdown-edits:apply`、`annotations:*`）、`markdownEdits`（編輯層 schema 與解析）、`readerNotes`、`figureDisplay`。
+- `contract/`：`ipc.ts`（`reader-figure-display:*`、`reader-notes:*`、`reader-annotations:*`、`documents:edit-markdown`、`documents:cache-figure`，`createReaderApi`）、`rpc.ts`（`readerOperations`：`notes:*`、`markdown-edits:apply`、`annotations:*`）、`markdownEdits`（編輯層 schema 與解析）、`readerNotes`、`figureDisplay`、`readerSchemas`／`readerTypes`（標註、圖片快取的 schema 與型別）。
 - `core/index.ts`：`readerContentMappings`、`buildReaderFigureGeometries`、`paperSelectionText`、標註重定位；翻譯、問答與文庫用它們讀取閱讀內容與圖片幾何。
 - `runtime/index.ts`：`readMarkdownEditsFile`（翻譯計劃讀取編輯層）。
 - `main/index.ts`：`ArtifactService`（閱讀文件、Markdown／ZIP 導出、裁圖）、`FigureDisplayStore`、`registerReaderIpc`。

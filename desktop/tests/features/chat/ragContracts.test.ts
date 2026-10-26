@@ -23,8 +23,8 @@ import {
   documentSummarySchema,
   documentWorkflowSchema,
   documentWorkflowStatusSchema
-} from '@shared/ipcSchemas'
-import type { DocumentWorkflowStatus } from '@shared/ipcSchemas'
+} from '@features/library/contract/documentSchemas'
+import type { DocumentWorkflowStatus } from '@features/library/contract/documentSchemas'
 
 const uuid = (number: number): string => `00000000-0000-4000-8000-${number.toString(16).padStart(12, '0')}`
 

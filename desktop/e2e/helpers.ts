@@ -7,7 +7,7 @@ import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/features/parsi
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/features/translation/contract/translationPlanProtocol'
 import { V2Database } from '../src/platform/database/utility/v2Database'
 import { V2TaskRepositoryCompat } from '../src/features/library/utility/v2TaskRepositoryCompat'
-import type { ArtifactKind } from '../src/core/types'
+import type { ArtifactKind } from '../src/features/library/contract/artifacts'
 import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from './launchPolicy'
 import { credentialServiceForRuntime, WindowsCredentialVault, type CredentialAccount } from '../src/platform/credentials/main/credentialVault'
 import {

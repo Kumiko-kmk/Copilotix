@@ -7,7 +7,7 @@ import { FIGURE_INSIGHT_MAX_REQUEST_BYTES, figureInsightContentSchema, figureIns
   type FigureInsightSave, type FigureInsightState } from '../contract/figureInsight'
 import { buildFigureInsightMessages } from '../core/figureInsightPrompt'
 import { resolvePaperChatProvider, type PaperChatProvider } from '@features/chat/contract/paperChatSchemas'
-import type { AppSettings } from '@shared/types'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
 import { abortable } from '@features/chat/main'
 import type { ProviderTokenUsage } from '@features/settings/main'
 

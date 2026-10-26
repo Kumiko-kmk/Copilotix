@@ -1,5 +1,5 @@
-import { documentSummarySchema, type DocumentSummary } from '@shared/ipcSchemas'
-import type { CopilotixTask } from '@shared/types'
+import { documentSummarySchema, type DocumentSummary } from '../contract/documentSchemas'
+import type { CopilotixTask } from '../contract/documentTypes'
 
 /**
  * Convert the internal task projection into the renderer-visible summary.

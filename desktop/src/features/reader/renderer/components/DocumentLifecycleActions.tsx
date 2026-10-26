@@ -1,7 +1,7 @@
 import React from 'react'
 import { DeleteOutlined, RedoOutlined } from '@ant-design/icons'
 import { Button, Checkbox, Modal, type message } from 'antd'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '@features/library/contract/documentSchemas'
 import { canRetry } from '@features/library/renderer'
 
 /** Retry and delete, which used to live in the task list: retry only while it can help, delete after confirmation. */

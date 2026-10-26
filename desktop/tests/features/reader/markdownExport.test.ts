@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { ArtifactService } from '../../../src/features/reader/main/artifactService'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import type { TaskRepositoryCompat } from '../../../src/features/library/contract/taskRepository'
-import type { TaskComputePort } from '../../../src/core/ports'
-import type { CopilotixTask } from '../../../src/shared/types'
+import type { TaskComputePort } from '../../../src/features/library/contract/taskCompute'
+import type { CopilotixTask } from '../../../src/features/library/contract/documentTypes'
 import { LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION, TRANSLATION_PIPELINE_VERSION, TABLE_TRANSLATION_PROTOCOL } from '../../../src/features/translation/contract/translationPlanProtocol'
 
 async function fixture() {

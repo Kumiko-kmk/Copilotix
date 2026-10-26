@@ -1,7 +1,10 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import type { ArtifactKind, TranslationBatchBlock, TranslationBatchCommit } from '@core/types'
-import type { CopilotixTask, ReplaceReaderAnnotationsRequest, TaskStatus, TranslationBlockRecord, TranslationProviderId } from '@shared/types'
+import type { ArtifactKind } from '../contract/artifacts'
+import type { TranslationBatchBlock, TranslationBatchCommit } from '@features/translation/contract/translationBatch'
+import type { CopilotixTask, TaskStatus } from '../contract/documentTypes'
+import type { ReplaceReaderAnnotationsRequest } from '@features/reader/contract/readerTypes'
+import type { TranslationBlockRecord, TranslationProviderId } from '@features/translation/contract/translationTypes'
 import { resolveLexicalWithinRoot } from '@platform/files/runtime/pathPolicy'
 import { V2Database } from '@platform/database/utility/v2Database'
 

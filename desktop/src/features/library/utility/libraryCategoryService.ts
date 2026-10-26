@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { LIBRARY_CATEGORY_PAGE_SIZE, type LibraryCategoriesPage } from '../contract/libraryCategories'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '../contract/documentSchemas'
 import { categoryTerms, classifyLibrary, type CategorySource, type ClassifiedCategory } from './libraryCategories'
 
 export interface CategoryStore {

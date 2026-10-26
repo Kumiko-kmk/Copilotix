@@ -4,8 +4,8 @@ import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
 import { V2Database } from '@platform/database/utility/v2Database'
 import { SqliteRagRepository, type RagContentRevisionRecord } from './sqliteRagRepository'
-import { blockMappingSchema } from '@shared/ipcSchemas'
-import type { BlockMapping } from '@shared/types'
+import { blockMappingSchema } from '@features/parsing/contract/blockSchemas'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 import { structureAwareChunk, type StructureAwareChunkInput } from './structureAwareChunker'
 
 export interface RagContentIndexRequest {

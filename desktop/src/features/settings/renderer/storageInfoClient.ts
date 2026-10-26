@@ -1,4 +1,4 @@
-import type { StorageInfo } from '@shared/ipcSchemas'
+import type { StorageInfo } from '../contract/settingsSchemas'
 const cache = new Map<string, { value?: StorageInfo; updated: number; pending?: Promise<StorageInfo> }>()
 export function cachedStorageInfo(root: string): StorageInfo | null { return cache.get(root)?.value ?? null }
 export function loadStorageInfo(root: string, force = false): Promise<StorageInfo> {

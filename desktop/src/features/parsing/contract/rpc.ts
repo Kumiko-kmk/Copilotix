@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { copilotixTaskSchema } from '@shared/ipcSchemas'
+import { copilotixTaskSchema } from '@features/library/contract/documentSchemas'
 import { coreIdSchema, corePathSchema, noNul } from '@platform/rpc/contract/protocol'
 
 export const coreNormalizeParserPayloadSchema = z.object({ task: copilotixTaskSchema, extractedDir: corePathSchema, jobId: coreIdSchema.optional() }).strict()

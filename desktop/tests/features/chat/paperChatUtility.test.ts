@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { paperChatPageSchema, paperChatSessionSchema } from '@features/chat/contract/paperChatStorageSchemas'
 import { paperChatStatusSchema, paperContextResultSchema } from '@features/chat/contract/paperChatSchemas'
 import { V2Database } from '../../../src/platform/database/utility/v2Database'
@@ -12,7 +12,7 @@ import { SqliteRagRepository } from '../../../src/features/chat/utility/sqliteRa
 import { SqliteJobRepository } from '../../../src/platform/jobs/utility/sqliteJobRepository'
 import { V2TaskRepositoryCompat } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
 import { RagContentIndexService } from '../../../src/features/chat/utility/ragContentIndexService'
-import { createUtilityOperationHandlers } from '../../../src/utility/core/utilityOperations'
+import { createUtilityOperationHandlers } from '../../../src/app/utility/operations'
 
 describe('paper chat Utility integration', () => {
   it('indexes an old document idempotently, builds bounded evidence through data RPC, and persists settings without migrations', async () => {

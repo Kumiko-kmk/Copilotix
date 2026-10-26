@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '@features/library/contract/documentSchemas'
 import type { DetailPhase, PaperArchiveSceneOptions } from '../../../src/features/library/renderer/archive/PaperArchiveScene'
 import { laneStep, paperAt, type ArchiveCell, type ArchiveShelf } from '../../../src/features/library/renderer/archive/archiveShelves'
 import LibraryPage from '../../../src/features/library/renderer/LibraryPage'

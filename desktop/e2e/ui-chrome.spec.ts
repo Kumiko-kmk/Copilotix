@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
-import { MAX_PDF_PAGES } from '../src/shared/constants'
+import { MAX_PDF_PAGES } from '../src/features/library/contract/pdfLimits'
 
 const MINIMAP_TRANSLATED_MARKDOWN = [
   '# 测试文档',

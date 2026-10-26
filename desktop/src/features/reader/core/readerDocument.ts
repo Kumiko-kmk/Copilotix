@@ -1,5 +1,6 @@
 import { alignMarkdownBlocks, splitMarkdownBlocks, type AlignedMarkdownBlock } from '@features/parsing/core'
-import type { BlockMapping, TranslatedMarkdownBlock, TranslationProviderId } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
+import type { TranslatedMarkdownBlock, TranslationProviderId } from '@features/translation/contract/translationTypes'
 import { prepareReaderMarkdown } from '@platform/markdown/core/standardMarkdown'
 import { inReadingOrder, type ResolvedMarkdownEdits } from '../contract/markdownEdits'
 

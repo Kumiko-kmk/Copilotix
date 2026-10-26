@@ -7,11 +7,11 @@ import type {
   CredentialStatus,
   CredentialValidation,
   CredentialValidationResult,
-  HealthResult,
   SettingsSaveResult,
   SettingsUpdate
-} from '@shared/types'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+} from '../contract/settingsTypes'
+import type { HealthResult } from '@features/library/contract/documentTypes'
+import { DEFAULT_SETTINGS } from '../contract/defaultSettings'
 import { resolvePaperChatModel } from '@features/chat/contract/paperChatSchemas'
 import type { TaskRepositoryCompat } from '@features/library/contract/taskRepository'
 

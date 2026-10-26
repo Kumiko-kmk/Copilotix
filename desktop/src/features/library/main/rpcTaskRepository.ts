@@ -1,10 +1,8 @@
-import type { ArtifactKind } from '@core/types'
-import type { AppSettings, CopilotixTask } from '@shared/types'
-import type {
-  DocumentSummary,
-  MutateReaderAnnotationsRequest,
-  ReaderAnnotationSnapshot
-} from '@shared/ipcSchemas'
+import type { ArtifactKind } from '../contract/artifacts'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
+import type { CopilotixTask } from '../contract/documentTypes'
+import type { DocumentSummary } from '../contract/documentSchemas'
+import type { MutateReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '@features/reader/contract/readerSchemas'
 import type { CoreListCursor, LibraryOperations } from '../contract/rpc'
 import type { CoreRequester, PlatformOperations } from '@platform/rpc/contract/protocol'
 import type { SettingsOperations } from '@features/settings/contract/rpc'

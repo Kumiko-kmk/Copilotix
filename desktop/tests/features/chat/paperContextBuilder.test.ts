@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import type { RagChunk } from '@core/types'
+import type { RagChunk } from '@features/chat/contract/ragChunk'
 import { PAPER_CHAT_MAX_BYTES, paperContextResultSchema, type PaperContextRequest } from '@features/chat/contract/paperChatSchemas'
 import { ragWireByteLength } from '@features/chat/contract/ragSchemas'
 import { PaperContextBuilder, rankPaperChunks, tokenizePaperQuery } from '../../../src/features/chat/utility/paperContextBuilder'

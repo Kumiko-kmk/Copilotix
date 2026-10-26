@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { V2Database } from '../../../src/platform/database/utility/v2Database'
 import { CompatDomainError, V2TaskRepositoryCompat } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
-import type { CopilotixTask } from '@shared/types'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
 
 const roots: string[] = []
 

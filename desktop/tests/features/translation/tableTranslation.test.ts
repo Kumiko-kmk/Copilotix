@@ -11,7 +11,7 @@ import {
   type TableTranslationRequest,
   type TableTranslationResponse
 } from '@features/translation/contract/translationPlanProtocol'
-import type { BlockMapping } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 
 function block(sourceIndex: number, markdown: string, mappingIds: string[] = []) {
   return { sourceIndex, markdown, mappingIds }

@@ -1,4 +1,4 @@
-import type { CopilotixTask } from '@shared/types'
+import type { CopilotixTask } from '../contract/documentTypes'
 import type { CoreRequester } from '@platform/rpc/contract/protocol'
 import type { ParsingOperations } from '@features/parsing/contract/rpc'
 import type { TranslationOperations } from '@features/translation/contract/rpc'
@@ -6,14 +6,14 @@ import type { LibraryOperations } from '../contract/rpc'
 
 /** Compute operations behind TaskComputePort: import (library), parser output (parsing) and translation plans. */
 type ComputeOperations = LibraryOperations & ParsingOperations & TranslationOperations
-import type { NormalizeParserOutputResult, TaskComputePort } from '@core/ports'
+import type { NormalizeParserOutputResult, TaskComputePort } from '../contract/taskCompute'
 import type {
   TranslationPlanFinalizeResult,
   TranslationPlanListResult,
   TranslationPlanMutationResult,
   TranslationPlanOpenResult
 } from '@features/translation/contract/translationPlanProtocol'
-import type { TranslationProviderId } from '@shared/types'
+import type { TranslationProviderId } from '@features/translation/contract/translationTypes'
 
 /**
  * Compute operations share one FIFO lane in the Utility, and a long paper can

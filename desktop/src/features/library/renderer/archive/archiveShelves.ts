@@ -1,4 +1,4 @@
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '../../contract/documentSchemas'
 import { ALL_PAPERS_NAME } from '../../contract/libraryCategories'
 
 export type ArchivePaper = Pick<DocumentSummary, 'id' | 'displayName' | 'originalName' | 'createdAt' | 'workflow'>

@@ -1,4 +1,4 @@
-import type { CopilotixTask } from '@shared/types'
+import type { CopilotixTask } from './documentTypes'
 import type {
   TranslationPlanFinalizeResult,
   TranslationPlanListResult,

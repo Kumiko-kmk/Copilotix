@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { UsageAnalyticsService } from '../../../src/features/settings/main/usageAnalyticsService'
-import type { CopilotixTask } from '@shared/types'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
 
 const temporaryDirectories: string[] = []
 

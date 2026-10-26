@@ -1,10 +1,6 @@
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
-import type { AppSettings } from './types'
+import type { AppSettings } from './settingsTypes'
 import { TRANSLATION_PROVIDER_IDS } from '@features/translation/contract/providerPolicy'
-
-export const PARSER_API_ORIGIN = 'https://mineru.net'
-export const MAX_PDF_BYTES = 200 * 1024 * 1024
-export const MAX_PDF_PAGES = 600
 
 export const DEFAULT_SETTINGS: AppSettings = {
   codex: DEFAULT_CODEX_SETTINGS,

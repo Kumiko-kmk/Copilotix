@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { paperInsightContentSchema, paperInsightRecordSchema, paperInsightRequestSchema, paperInsightSchema, paperInsightStateSchema, type PaperInsight, type PaperInsightState } from '@features/insight/contract/paperInsight'
 import { PaperInsightService, loadFullBriefContext, type PaperInsightDependencies } from '../../../src/features/insight/main/paperInsightService'
 import { PaperInsightStore } from '../../../src/features/insight/utility/paperInsightStore'

@@ -22,11 +22,11 @@
 
 ## 退出標準（全部達成才算完成）
 
-- [ ] 依賴規則（dependency-cruiser）以 **error** 模式通過，0 違規；CI 中執行。
+- [x] 依賴規則（dependency-cruiser）以 **error** 模式通過，0 違規；CI 中執行（遠端尚未跑過，見 M0）。
 - [x] `src/main/index.ts`（現 `src/app/main/index.ts`，76 行）≤ 150 行，只做組裝；各功能自行註冊 IPC。
-- [ ] 每個功能模組有 `index.ts` 公開入口與一頁 `README.md`（用途、公開 API、資料檔、測試入口）。
-- [ ] 非生成檔案 ≤ 600 行；例外須在模組 README 說明原因。
-- [ ] `pnpm desktop:test --module <name>` 可只跑單一模組；受影響測試選擇改按模組圖。
+- [x] 每個功能模組有 `index.ts` 公開入口（按層）與一頁 `README.md`（用途、公開 API、資料檔、測試入口）。
+- [x] 非生成檔案 ≤ 600 行；例外須在模組 README 說明原因（`PaperArchiveScene` 1520、`v2TaskRepositoryCompat` 1068、`markdownTranslationPlan` 972、`MarkdownPane` 701，均已註明）。
+- [x] `pnpm desktop:test --module <name>` 可只跑單一模組；受影響測試選擇改按模組圖。
 - [ ] 性能預算進入測試門禁：打開已處理論文至首屏 ≤ 1.5 s、編輯／刪除可見回應 ≤ 100 ms、捲動無 > 50 ms 長任務。
 - [ ] 遠端 `full_validation` CI 全綠；核心旅程 E2E（導入→解析→翻譯→閱讀→編輯／刪除→問答→導出 Zotero）通過。
 - [ ] 真實文庫走查一次（使用者或在隔離副本），結果記入下方「驗收紀錄」。
@@ -54,7 +54,7 @@
 - [x] M2 平台層
 - [x] M3 中樞拆分
 - [x] M4 逐模組遷移：zotero · settings · insight · chat · translation · parsing · library · reader
-- [ ] M5 收尾
+- [x] M5 收尾
 
 ### 依賴基線（M1，2026-10-25）
 
@@ -71,7 +71,7 @@
 - CI「只測受影響部分」的選擇邏輯尚未在遠端驗證。
 - 本機 E2E `reader.spec.ts`「keeps the complete minimap static across long-document jumps」穩定失敗（標題距捲動容器頂 15.45 px，期望 16±0.5），master 原樣即如此，疑與顯示縮放有關；待在 CI／其他機器確認。
 - 本機 E2E `reader.spec.ts`「renders a local PDF with range requests before parsing succeeds」間歇失敗（約半數）：Markdown 程式捲動後 PDF `scrollTop` 仍變化（811→545），疑為前一步 PDF 置中的平滑捲動未結束；重構前提交上同樣出現。
-- RAG 時期遺留：`sqliteRagRepository.ts`、`rag-content-index` 作業與相關 schema；需先確認問答索引是否仍依賴，再決定刪除或改名歸入 chat 模組（schema 4 的 rag_* 表為遷移兼容必須保留）。
+- RAG 時期遺留（結論：保留）：`sqliteRagRepository.ts`、`rag-content-index` 作業與 rag_* 表仍是問答上下文的檢索索引，已整體歸入 chat，作業名與表名不改（改名須改持久化契約）；`createContentRevision` 只被測試用來建立修訂，作為測試入口保留。
 
 ## 參考規範
 
@@ -85,6 +85,7 @@
 
 （各階段完成後在此記錄日期、提交與證據入口，一行一項。）
 
+- 2026-10-26 M5：`shared/ipcSchemas.ts`、`types.ts`、`constants.ts` 與 `core/types.ts`、`core/ports.ts` 按所屬拆入各模組契約（library `documentSchemas`／`artifacts`／`pdfLimits`／`taskCompute`，settings `settingsSchemas`／`defaultSettings`，translation `translationSchemas`／`translationBatch`，parsing `blockSchemas`／`parserApi`，reader `readerSchemas`，chat `ragChunk`；共用欄位校驗入 `platform/ipc/contract/validation.ts`，視窗型別與 schema 入 `app/contract/window.ts`），`packagedSmoke` 入 `app/contract`，`utilityOperations` 入 `app/utility/operations.ts`；舊目錄 `shared/`、`core/`、`utility/` 刪除，`@shared`／`@core`／`@runtime`／`@main`／`@renderer` 別名從 tsconfig、electron-vite、utility vite、vitest、ESLint 與 dependency-cruiser 移除；依賴規則全部改 error（378 模組、1533 條依賴、0 違規，入口不可達 0）；平台層三個超限檔拆分（`v2Database` 800→269，migration SQL 原文移至 `v2SchemaSql.ts`，逐字比對一致；`sqliteJobRepository` 699→489；`jobScheduler` 664→582）；根目錄跨模組測試移入 `tests/app/`；修正 M4 library 遺留的必跑集路徑（`libraryMaintenance` 已移入 `tests/features/library/`，舊路徑使 vitest 篩選靜默落空），`affected-tests.mjs` 改為必跑測試缺檔即報錯。門禁：typecheck、lint 0 錯誤、`desktop:test:full` 847 通過／3 跳過、覆蓋率 85.8／82.1／86.9％、build:bundles＋utility smoke 通過、首屏 chunk 仍 2.19 MB；全量 E2E（設定檔變更觸發）30 通過／3 跳過，僅既有 minimap 失敗。
 - 2026-10-26 M4 reader：閱讀器 60 檔移入 `features/reader`（contract／core／runtime／main／utility／renderer）；`documents:cache-figure` 的聲明由 parsing 移至 reader（頻道名不變，57 個頻道與舊 preload 逐一相同）；reader 的 Core RPC 聲明與 Utility handler 歸模組，`shared/coreRpcSchemas.ts` 刪除（全部 operation 已由所屬模組聲明）；文庫對閱讀器的懶載入改經 `loadFigureArtifacts()`，保持分包；拆掉 `readerFigureGroups` ↔ `readerFigureLayout` 循環；no-circular 不再計 `import()` 懶載入邊（含 `typeof import()` 型別）；元件拆分：MarkdownPane 1109→701、PdfPane 927→440、MarkdownMinimap 944→336、ReaderWorkbench 766→247（拆出的檔案均 ≤412 行）；`feature-boundary-reader` 改 error，功能邊界全部為 error。門禁：847 通過；E2E 30 通過／3 跳過，僅既有 minimap 失敗。初版讓 `App.tsx` 經 reader 的 renderer index 取 `loadReaderPage`，index 轉出的 SafeMarkdown（含 KaTeX CSS 副作用）被拉進首屏 chunk（2.19→3.96 MB）；改回由組裝層直接引用 `readerPageLoader` 後首屏 chunk 恢復 2.19 MB，懶載入 chunk 之間僅約 27 KB 移動。
 - 2026-10-25 M4 library：文獻服務、Rpc 轉接、文庫維護、分類、導入、首頁、教程與文庫 3D 檔案頁共 71 檔移入 `features/library`；library、settings 的 Core RPC 聲明歸模組，library 的 Utility handler（任務、文獻、導入、分類）移入 `utility/operations.ts`（設定 handler 會改寫 Utility 的根目錄狀態，留在組裝層）；兩個 Rpc 轉接器改以用到的模組註冊表交集為型別，`app-is-root` 只剩 `utilityOperations`；為消除 index 造成的跨模組循環，`hashFile` 移至 `platform/files/utility`、`TaskRepositoryCompat` 移至 `contract/taskRepository.ts`、分類服務改用結構型別；`v2TaskRepositoryCompat` 1326→1064、`PaperArchiveScene` 1667→1520（記錄、常量拆出，README 註明例外）；`feature-boundary-library` 改 error。門禁：847 通過；E2E 29 通過／3 跳過，失敗僅兩個既有的 reader 用例（minimap、range requests 時序）。
 - 2026-10-25 M4 parsing：解析客戶端、上傳、解析作業、塊映射、Markdown 分塊、文字層修復與 renderer hook 移入 `features/parsing`；`utilityOperations.ts` 中解析產物發布、映射重建與文字層修復（約 290 行）移至 `utility/parserOutput.ts`，handler 與 Core RPC 聲明歸模組（`utilityOperations.ts` 845→約 480 行）；圖片裁圖產物（`figureArtifacts`）只被閱讀文件使用，改歸 reader；`feature-boundary-parsing` 改 error。門禁：847 通過；E2E 29 通過／3 跳過／2 失敗——既有 minimap，以及 `renders a local PDF with range requests before parsing succeeds` 的被動捲動斷言（在上一提交 a0ceaf8 的構建上重跑 4 次同樣 2 次失敗，屬既有時序不穩，記入技術債）。

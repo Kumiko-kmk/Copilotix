@@ -1,5 +1,6 @@
 import { invokeChannel, type IpcBridge } from '@platform/ipc/contract/channels'
-import { documentIdRequestSchema, repairTextLayerResultSchema, type RepairTextLayerResult } from '@shared/ipcSchemas'
+import { documentIdRequestSchema } from '@features/library/contract/documentSchemas'
+import { repairTextLayerResultSchema, type RepairTextLayerResult } from './blockSchemas'
 
 export const parsingChannels = {
   repairTextLayer: invokeChannel('documents:repair-text-layer', documentIdRequestSchema, repairTextLayerResultSchema)

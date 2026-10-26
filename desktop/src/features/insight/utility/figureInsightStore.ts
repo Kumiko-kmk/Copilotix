@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
 import { BLOCK_MAPPING_VERSION } from '@features/parsing/core'
-import { blockMappingSchema } from '@shared/ipcSchemas'
+import { blockMappingSchema } from '@features/parsing/contract/blockSchemas'
 import { buildReaderFigureGeometries } from '@features/reader/core'
 import { buildBriefContext, clip } from '../core/paperBrief/context'
 import { FIGURE_INSIGHT_MAX_IMAGE_BYTES, FIGURE_INSIGHT_PROMPT_VERSION, figureInsightDescriptorSchema,

@@ -2,12 +2,12 @@ import type {
   DocumentChangeEvent,
   DocumentDetails,
   DocumentSummary
-} from '@shared/ipcSchemas'
+} from '../contract/documentSchemas'
 import {
   documentChangeEventSchema,
   documentSummarySchema
-} from '@shared/ipcSchemas'
-import type { DocumentPayload } from '@shared/types'
+} from '../contract/documentSchemas'
+import type { DocumentPayload } from '../contract/documentTypes'
 import { projectDocumentSummary } from '../core/documentSummary'
 
 /**

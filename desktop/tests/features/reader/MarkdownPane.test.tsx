@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReaderBlock } from '@features/reader/core/readerDocument'
 import { buildReaderDocumentBlocks } from '@features/reader/core/readerDocument'
-import type { BlockSelection } from '@shared/types'
+import type { BlockSelection } from '@features/reader/contract/readerTypes'
 import type { ReaderFigureGroup } from '../../../src/features/reader/core/readerFigureGroups'
 import { REORDER_HOLD_MS } from '../../../src/features/reader/renderer/components/ReaderBlockReorder'
 import MarkdownPane, { MARKDOWN_BLOCKS_PER_FRAME, MARKDOWN_INITIAL_BLOCKS } from '../../../src/features/reader/renderer/components/MarkdownPane'

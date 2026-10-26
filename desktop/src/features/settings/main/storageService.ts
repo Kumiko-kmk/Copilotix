@@ -1,6 +1,6 @@
 import { opendir, stat } from 'node:fs/promises'
 import { extname, join, relative } from 'node:path'
-import type { StorageCategory, StorageInfo } from '@shared/ipcSchemas'
+import type { StorageCategory, StorageInfo } from '../contract/settingsSchemas'
 
 const IMAGE_EXTENSIONS = new Set(['.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.tif', '.tiff', '.webp'])
 const CATEGORY_ORDER: StorageCategory['kind'][] = ['source', 'image', 'translation', 'other']

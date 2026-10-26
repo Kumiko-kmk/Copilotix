@@ -12,7 +12,7 @@ import type {
   ReaderAnnotationKind,
   ReaderAnnotationView,
   ReaderChatSelection
-} from '@shared/types'
+} from '../../contract/readerTypes'
 import {
   buildReaderHighlightRanges,
   captureReaderTextSelection,

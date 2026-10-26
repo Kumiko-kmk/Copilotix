@@ -2,8 +2,9 @@ import { createWriteStream } from 'node:fs'
 import { open, rm } from 'node:fs/promises'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { AppSettings, HealthResult, CopilotixTask } from '@shared/types'
-import { PARSER_API_ORIGIN } from '@shared/constants'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
+import type { HealthResult, CopilotixTask } from '@features/library/contract/documentTypes'
+import { PARSER_API_ORIGIN } from '../contract/parserApi'
 
 export type OfficialTaskState = 'waiting-file' | 'pending' | 'running' | 'converting' | 'done' | 'failed'
 

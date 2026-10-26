@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
-import type { TaskComputePort } from '../src/core/ports'
+import type { TaskComputePort } from '@features/library/contract/taskCompute'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '@features/parsing/core/blockMapping'
 
 /** Test-only local compute port; production TaskService always receives RpcTaskCompute. */

@@ -1,5 +1,5 @@
 import type { ReaderBlock } from './readerDocument'
-import type { BlockMapping } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 import { readFigureLayoutHints, type FigureBox, type FigureLayoutHint } from './readerFigureLayout'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'

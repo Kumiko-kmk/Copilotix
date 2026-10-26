@@ -1,10 +1,11 @@
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { MAX_RESULT_ZIP_BYTES, OfficialParserClient, type FileUploader } from '@features/parsing/main/parserClient'
-import type { AppSettings, CopilotixTask } from '@shared/types'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 

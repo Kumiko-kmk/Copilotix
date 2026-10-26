@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { CHAT_CONSENT_VERSION, type PaperChatAskRequest, type PaperContext } from '@features/chat/contract/paperChatSchemas'
 import { canTransitionRagStreamEvent, type RagStreamEvent } from '@features/chat/contract/ragSchemas'
 import { ChatProviderError } from '../../../src/features/chat/main/chatProvider'

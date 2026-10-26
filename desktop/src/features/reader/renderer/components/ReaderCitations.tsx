@@ -1,7 +1,7 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import type { ReaderBlock } from '../../core/readerDocument'
-import type { BlockSelection, ReaderAnnotationView } from '@shared/types'
+import type { BlockSelection, ReaderAnnotationView } from '../../contract/readerTypes'
 import {
   buildCitationIndex,
   counterpartEntry,

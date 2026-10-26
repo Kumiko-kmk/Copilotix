@@ -5,7 +5,7 @@ import { createChatOperations, PaperContextError, RagContentIndexError, RagConte
 import { libraryCoreRequestSchema } from '@features/library/contract/librarySchemas'
 import { mkdir } from 'node:fs/promises'
 import { dirname, isAbsolute } from 'node:path'
-import type { CoreOperation } from '@app/contract/coreRpc'
+import type { CoreOperation } from '../contract/coreRpc'
 import { coreSettingsMigrationPayloadSchema } from '@features/settings/contract/rpc'
 import { coreDatabaseInitPayloadSchema } from '@platform/rpc/contract/protocol'
 import {
@@ -22,10 +22,11 @@ import {
   coreJobRecoverExpiredPayloadSchema,
   coreJobEventsPayloadSchema
 } from '@platform/jobs/contract/rpc'
-import { appSettingsSchema } from '@shared/ipcSchemas'
+import { appSettingsSchema } from '@features/settings/contract/settingsSchemas'
 import { CoreUtilityOperationError, type CoreUtilityOperationHandler } from '@platform/rpc/utility/coreUtilityRuntime'
 import { V2Database } from '@platform/database/utility/v2Database'
-import { SqliteJobRepository, SqliteJobRepositoryError } from '@platform/jobs/utility/sqliteJobRepository'
+import { SqliteJobRepository } from '@platform/jobs/utility/sqliteJobRepository'
+import { SqliteJobRepositoryError } from '@platform/jobs/utility/jobRecords'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { createTranslationOperations, MarkdownTranslationPlanManager } from '@features/translation/utility'
 import { createParsingOperations } from '@features/parsing/utility'

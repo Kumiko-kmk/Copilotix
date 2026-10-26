@@ -1,6 +1,7 @@
 import React from 'react'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
-import type { BlockMapping, BlockSelection } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
+import type { BlockSelection } from '../../contract/readerTypes'
 import { pdfPageRenderScheduler, type ScheduledPdfRender } from '../pdfRenderScheduler'
 import { recordReaderDuration } from '../readerPerformance'
 import { pdfPageMetrics, pdfCanvasOutput, buildMergeConnectors, blockTypeLabel, pdfErrorMessage, isRenderingCancelled, type PdfBaseSize, type ScrollMetrics } from './pdfLayout'

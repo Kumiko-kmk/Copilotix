@@ -1,8 +1,8 @@
 import React from 'react'
 import { ArrowRightOutlined, CheckOutlined, CloudUploadOutlined, FilePdfOutlined, LinkOutlined, ReadOutlined } from '@ant-design/icons'
 import { Button, Input, Modal, Tag, message } from 'antd'
-import type { DocumentSummary } from '@shared/ipcSchemas'
-import type { AppSettings, SettingsUpdate } from '@shared/types'
+import type { DocumentSummary } from '../contract/documentSchemas'
+import type { AppSettings, SettingsUpdate } from '@features/settings/contract/settingsTypes'
 import {
   MINERU_API_TOKEN_URL,
   TUTORIAL_PAPER_PAGES,

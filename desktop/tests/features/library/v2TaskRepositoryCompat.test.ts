@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { CompatDocumentRow, CompatJobRow } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
 import { projectCompatTask, V2TaskRepositoryCompat } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
 import { V2Database } from '../../../src/platform/database/utility/v2Database'
-import type { CopilotixTask, ReaderAnnotation } from '@shared/types'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
+import type { ReaderAnnotation } from '@features/reader/contract/readerTypes'
 
 const roots: string[] = []
 

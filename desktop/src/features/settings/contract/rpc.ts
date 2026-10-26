@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { appSettingsSchema } from '@shared/ipcSchemas'
+import { appSettingsSchema } from './settingsSchemas'
 import { coreIdSchema, corePathSchema } from '@platform/rpc/contract/protocol'
 
 export const coreSettingsGetPayloadSchema = z.object({ outputRoot: corePathSchema }).strict()

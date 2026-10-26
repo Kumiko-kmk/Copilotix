@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { normalizeEnabledProviders, normalizeProviderOrder, executableProviderOrder } from '@features/translation/contract/providerPolicy'
 import { paperChatSessionSchema } from '@features/chat/contract/paperChatStorageSchemas'
-import { ModelGateway } from '../src/features/chat/main/modelGateway'
-import type { ChatProvider } from '../src/features/chat/main/chatProvider'
-import type { CodexRuntime } from '../src/platform/codex/runtime/codexRuntime'
-import { V2Database, V2_MIGRATIONS } from '../src/platform/database/utility/v2Database'
+import { ModelGateway } from '@features/chat/main/modelGateway'
+import type { ChatProvider } from '@features/chat/main/chatProvider'
+import type { CodexRuntime } from '@platform/codex/runtime/codexRuntime'
+import { V2Database, V2_MIGRATIONS } from '@platform/database/utility/v2Database'
 
 describe('Codex integration boundaries', () => {
   it('preserves old ordering without enabling Codex and falls back only to enabled providers', () => {

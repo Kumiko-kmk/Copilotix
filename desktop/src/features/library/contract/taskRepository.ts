@@ -1,10 +1,8 @@
-import type { ArtifactKind } from '@core/types'
-import type { AppSettings, CopilotixTask } from '@shared/types'
-import type {
-  DocumentSummary,
-  MutateReaderAnnotationsRequest,
-  ReaderAnnotationSnapshot
-} from '@shared/ipcSchemas'
+import type { ArtifactKind } from './artifacts'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
+import type { CopilotixTask } from './documentTypes'
+import type { DocumentSummary } from './documentSchemas'
+import type { MutateReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '@features/reader/contract/readerSchemas'
 
 /**
  * Main-process persistence port. Production uses the asynchronous Core RPC

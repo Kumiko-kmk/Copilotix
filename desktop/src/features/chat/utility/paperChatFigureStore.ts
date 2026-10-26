@@ -3,7 +3,7 @@ import { lstat, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { BLOCK_MAPPING_VERSION } from '@features/parsing/core'
-import { blockMappingSchema } from '@shared/ipcSchemas'
+import { blockMappingSchema } from '@features/parsing/contract/blockSchemas'
 import { buildReaderFigureGeometries } from '@features/reader/core'
 import { captionFigureKey } from '../contract/figureMentions'
 import { PAPER_CHAT_MAX_FIGURE_IMAGES, PAPER_CHAT_MAX_IMAGE_BYTES, paperChatFigureRequestSchema, paperChatFigureSourceSchema,

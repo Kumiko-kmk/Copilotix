@@ -1,5 +1,5 @@
 import React from 'react'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '../../contract/documentSchemas'
 import { startCipherField, type CipherField, type CipherTitle } from './homeCipher'
 
 const NO_DOCUMENTS: readonly DocumentSummary[] = []

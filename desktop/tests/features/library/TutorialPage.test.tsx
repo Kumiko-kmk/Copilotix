@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { TUTORIAL_PAPER_SHA256 } from '@features/library/contract/tutorialSample'
-import type { DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentSummary } from '@features/library/contract/documentSchemas'
 import type { CopilotixDesktopApi } from '@app/contract/desktopApi'
 import TutorialPage from '../../../src/features/library/renderer/TutorialPage'
 

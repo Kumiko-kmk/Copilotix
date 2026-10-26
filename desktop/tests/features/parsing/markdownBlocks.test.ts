@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { buildBlockMappings } from '@features/parsing/core/blockMapping'
 import { alignMarkdownBlocks } from '@features/parsing/core/markdownBlocks'
-import type { BlockMapping } from '@shared/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
 
 function mapping(id: string, order: number, sourceText: string, type = 'text'): BlockMapping {
   return {

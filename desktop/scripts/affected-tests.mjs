@@ -14,8 +14,8 @@ const ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: DESKTO
 
 /** Data safety, persistence, IPC origin and cancel/recovery regressions run on every change. */
 export const REQUIRED_UNIT_TESTS = [
-  'tests/ipcContracts.test.ts', 'tests/platform/v2Database.test.ts', 'tests/platform/sqliteJobRepository.test.ts',
-  'tests/platform/jobScheduler.test.ts', 'tests/platform/pathPolicy.test.ts', 'tests/libraryMaintenance.test.ts', 'tests/platform/uninstallCleanup.test.ts'
+  'tests/app/ipcContracts.test.ts', 'tests/platform/v2Database.test.ts', 'tests/platform/sqliteJobRepository.test.ts',
+  'tests/platform/jobScheduler.test.ts', 'tests/platform/pathPolicy.test.ts', 'tests/features/library/libraryMaintenance.test.ts', 'tests/platform/uninstallCleanup.test.ts'
 ]
 /** Changes that can affect any test without appearing in its import graph. */
 const FULL_TRIGGERS = [
@@ -111,6 +111,9 @@ if (mode === 'unit') {
   const affected = JSON.parse(json).map(entry => relative(DESKTOP, entry.file).replaceAll('\\', '/'))
   // A change inside a module also runs that module's whole test directory (the module graph).
   const modules = [...new Set(files.map(owningModule).filter(name => name && testModules().includes(name)))]
+  // A moved or renamed required test must fail here, not drop silently out of the vitest filter.
+  const missingRequired = REQUIRED_UNIT_TESTS.filter(file => !existsSync(join(DESKTOP, file)))
+  if (missingRequired.length > 0) throw new Error(`required unit tests not found: ${missingRequired.join(', ')}`)
   const selected = [...new Set([...REQUIRED_UNIT_TESTS, ...affected, ...modules.map(moduleTestDirectory)])]
   console.log(`[affected-tests] ${affected.length} affected + ${modules.length} modules (${modules.join(', ') || 'none'}) + ${REQUIRED_UNIT_TESTS.length} required → ${selected.length} entries`)
   for (const file of selected) console.log(`  ${file}`)

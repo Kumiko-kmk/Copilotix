@@ -4,13 +4,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { BLOCK_MAPPING_VERSION } from '@features/parsing/core/blockMapping'
-import type { TaskComputePort } from '@core/ports'
+import type { TaskComputePort } from '@features/library/contract/taskCompute'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { ArtifactService, shouldIncludeResultZipEntry } from '../../../src/features/reader/main/artifactService'
 import type { TaskRepositoryCompat } from '../../../src/features/library/contract/taskRepository'
 import { alignMarkdownBlocks, MARKDOWN_MAPPING_ALGORITHM_VERSION } from '../../../src/features/parsing/core/markdownBlocks'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../../../src/features/translation/contract/translationPlanProtocol'
-import type { CopilotixTask } from '../../../src/shared/types'
+import type { CopilotixTask } from '../../../src/features/library/contract/documentTypes'
 
 describe('result archive filtering', () => {
   it('excludes only the root .translation tree, including dotfiles', () => {

@@ -2,7 +2,7 @@ import type {
   RagChunk,
   RagChunkContentType,
   RagMappingConfidence
-} from '@core/types'
+} from '../contract/ragChunk'
 import type { LocalIndexState, SemanticIndexState } from '../contract/ragSchemas'
 
 /** Records, stored rows and validation of the chat index tables (rag_*), shared by SqliteRagRepository. */

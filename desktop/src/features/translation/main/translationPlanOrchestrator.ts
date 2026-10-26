@@ -15,9 +15,11 @@ import {
   translationPlanResponseEnvelopeSchema,
   validateTableTranslationResponse
 } from '../contract/translationPlanProtocol'
-import type { CredentialName, CopilotixTask, TranslationProviderId } from '@shared/types'
+import type { CredentialName } from '@features/settings/contract/settingsTypes'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
+import type { TranslationProviderId } from '../contract/translationTypes'
 import type { PathPolicyPort } from '@platform/files/contract/pathPolicyPort'
-import type { TaskComputePort } from '@core/ports'
+import type { TaskComputePort } from '@features/library/contract/taskCompute'
 import type { TranslationProvider } from './providers'
 import { TranslationCredentialError, TranslationHttpError } from './providers'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'

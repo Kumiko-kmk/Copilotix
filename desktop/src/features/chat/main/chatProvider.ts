@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import type { PaperChatProvider } from '../contract/paperChatSchemas'
 import type { ProviderTokenUsage } from '@features/settings/main'
 import type { MultimodalChatMessage } from '@platform/codex/contract/chatMessages'

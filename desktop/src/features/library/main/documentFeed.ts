@@ -1,5 +1,5 @@
 import { createCoalescedRefresh } from '@platform/jobs/main/coalescedRefresh'
-import type { DocumentChangeEvent, DocumentSummary } from '@shared/ipcSchemas'
+import type { DocumentChangeEvent, DocumentSummary } from '../contract/documentSchemas'
 import { computeDocumentChange } from './documentProjection'
 import type { TaskRepositoryCompat } from '../contract/taskRepository'
 

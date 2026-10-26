@@ -1,7 +1,7 @@
 import React from 'react'
 import { canTransitionRagStreamEvent, type Citation, type RagStreamEventType, type RagStreamEvent } from '../contract/ragSchemas'
 import { paperChatPinnedSchema, supportedChatModelSchema, type PaperChatPinned, type PaperChatProvider } from '../contract/paperChatSchemas'
-import type { ReaderChatSelection } from '@shared/types'
+import type { ReaderChatSelection } from '@features/reader/contract/readerTypes'
 import { emptyPaperChatSession, paperChatTurnSelections, type PaperChatSession, type StoredPaperChatTurn } from '../contract/paperChatStorageSchemas'
 import { PAPER_CHAT_MAX_FIGURES, paperChatFigurePinSchema, type PaperChatFigurePin } from '../contract/paperChatFigures'
 

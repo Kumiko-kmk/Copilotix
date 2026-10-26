@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { CopilotixTask, TranslationProviderId } from '@shared/types'
-import type { UsageAnalytics } from '@shared/ipcSchemas'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
+import type { TranslationProviderId } from '@features/translation/contract/translationTypes'
+import type { UsageAnalytics } from '../contract/settingsSchemas'
 
 interface StoredUsageAnalytics {
   version: 1

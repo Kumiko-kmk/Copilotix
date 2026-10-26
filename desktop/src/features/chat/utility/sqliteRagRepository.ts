@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { StatementSync } from 'node:sqlite'
-import type { RagChunk } from '@core/types'
+import type { RagChunk } from '../contract/ragChunk'
 import { V2Database } from '@platform/database/utility/v2Database'
 import {
   CONTENT_TRANSITIONS,

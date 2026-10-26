@@ -1,9 +1,5 @@
 import { resolveReaderAnnotation } from '../core/readerAnnotations'
-import type {
-  HighlightColor,
-  ReaderAnnotation,
-  ReaderChatSelectionFragment
-} from '@shared/types'
+import type { HighlightColor, ReaderAnnotation, ReaderChatSelectionFragment } from '../contract/readerTypes'
 import type { ReaderNote, ReaderNoteAnchor } from '../contract/readerNotes'
 
 export interface ReaderTextSelection {

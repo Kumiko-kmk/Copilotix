@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import type { BlockMapping } from '@shared/types'
-import type { RagChunk, RagChunkContentType, RagMappingConfidence } from '@core/types'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
+import type { RagChunk, RagChunkContentType, RagMappingConfidence } from '../contract/ragChunk'
 import { alignMarkdownBlocks, parseMarkdownAst, stringifyMarkdownAst } from '@features/parsing/core'
 
 /** Bumping either value intentionally creates a new content-revision identity. */

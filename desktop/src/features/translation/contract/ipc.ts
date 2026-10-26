@@ -1,6 +1,6 @@
 import { invokeChannel, type IpcBridge } from '@platform/ipc/contract/channels'
 import { voidResponseSchema } from '@platform/ipc/contract/schemas'
-import { documentIdRequestSchema } from '@shared/ipcSchemas'
+import { documentIdRequestSchema } from '@features/library/contract/documentSchemas'
 
 export const translationChannels = {
   retranslateEdited: invokeChannel('documents:retranslate-edited', documentIdRequestSchema, voidResponseSchema)

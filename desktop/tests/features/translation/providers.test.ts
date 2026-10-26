@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { createTranslationProviders, probeOpenAiCompatibleCredential } from '@features/translation/main/providers'
 import { buildTableTranslationPlan } from '../../../src/features/translation/utility/tableTranslation'
 import {

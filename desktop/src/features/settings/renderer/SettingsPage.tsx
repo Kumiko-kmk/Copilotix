@@ -8,10 +8,10 @@ import type {
   CredentialName,
   CredentialStatus,
   CredentialValidation,
-  SettingsUpdate,
-  TranslationProviderId
-} from '@shared/types'
-import type { StorageInfo, UsageAnalytics } from '@shared/ipcSchemas'
+  SettingsUpdate
+} from '../contract/settingsTypes'
+import type { TranslationProviderId } from '@features/translation/contract/translationTypes'
+import type { StorageInfo, UsageAnalytics } from '../contract/settingsSchemas'
 import { formatBytes, StorageComposition, StorageGrowth, StorageMetric, UsageDashboard } from './SettingsDashboards'
 import ThemeSettings from './ThemeSettings'
 import { previewAppearance, saveAppearance, storedAppearance, type Appearance } from './theme'

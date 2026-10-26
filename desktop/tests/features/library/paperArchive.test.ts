@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('../../../src/platform/pdf/renderer/pdfDocumentCache', () => ({ acquirePdfDocument: vi.fn() }))
 import { loadDetailPage, type DetailPage } from '../../../src/features/library/renderer/archive/detailPage'
-import { type DocumentSummary } from '../../../src/shared/ipcSchemas'
+import { type DocumentSummary } from '../../../src/features/library/contract/documentSchemas'
 import { ArchiveMomentum, damp, settlingWave, SHOULDER_PEAK } from '../../../src/features/library/renderer/archive/archiveMotion'
 import { ALL_PAPERS, buildArchiveColumns, cellForPaper, groupPapersByCategory, laneStep, nearestOccurrence, paperAt, paperIndexAt, wrap, type ArchivePaper } from '../../../src/features/library/renderer/archive/archiveShelves'
 import { cleanInline, extractPaperProfile } from '../../../src/features/library/core/paperProfile'

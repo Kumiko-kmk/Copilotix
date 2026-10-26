@@ -1,7 +1,7 @@
 import type { IpcRegistrar } from '@platform/ipc/main/ipc'
 import type { MarkdownEditRequest, ResolvedMarkdownEdits } from '../contract/markdownEdits'
 import type { ReaderNotes } from '../contract/readerNotes'
-import type { CacheDocumentFigureRequest, CacheDocumentFigureResult, ListReaderAnnotationsRequest, MutateReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '@shared/ipcSchemas'
+import type { CacheDocumentFigureRequest, CacheDocumentFigureResult, ListReaderAnnotationsRequest, MutateReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '../contract/readerSchemas'
 import type { FigureDisplayStore } from './figureDisplayStore'
 import { readerChannels } from '../contract/ipc'
 
