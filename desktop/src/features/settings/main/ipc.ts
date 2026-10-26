@@ -3,7 +3,8 @@ import type { IpcRegistrar } from '@platform/ipc/main/ipc'
 import type { SettingsService } from './settingsService'
 import type { UsageAnalyticsService } from './usageAnalyticsService'
 import { inspectStorage } from './storageService'
-import type { CopilotixTask, SettingsSaveResult, SettingsUpdate, AppSettings } from '@shared/types'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
+import type { SettingsSaveResult, SettingsUpdate, AppSettings } from '../contract/settingsTypes'
 import { settingsChannels } from '../contract/ipc'
 
 export interface SettingsIpcDeps {

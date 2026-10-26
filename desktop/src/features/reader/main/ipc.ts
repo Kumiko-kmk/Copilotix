@@ -1,8 +1,8 @@
 import type { IpcRegistrar } from '@platform/ipc/main/ipc'
-import type { MarkdownEditRequest, ResolvedMarkdownEdits } from '@shared/markdownEdits'
-import type { ReaderNotes } from '@shared/readerNotes'
-import type { ListReaderAnnotationsRequest, MutateReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '@shared/ipcSchemas'
-import type { FigureDisplayStore } from '@main/figureDisplayStore'
+import type { MarkdownEditRequest, ResolvedMarkdownEdits } from '../contract/markdownEdits'
+import type { ReaderNotes } from '../contract/readerNotes'
+import type { CacheDocumentFigureRequest, CacheDocumentFigureResult, ListReaderAnnotationsRequest, MutateReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '../contract/readerSchemas'
+import type { FigureDisplayStore } from './figureDisplayStore'
 import { readerChannels } from '../contract/ipc'
 
 export interface ReaderIpcDeps {
@@ -20,6 +20,7 @@ export interface ReaderIpcDeps {
   }
   applyEdit(request: MarkdownEditRequest): Promise<{ revision: number }>
   resolvedEdits(documentId: string): Promise<ResolvedMarkdownEdits>
+  cacheFigure(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult>
 }
 
 export function registerReaderIpc(ipc: IpcRegistrar, deps: ReaderIpcDeps): void {
@@ -35,4 +36,5 @@ export function registerReaderIpc(ipc: IpcRegistrar, deps: ReaderIpcDeps): void 
     // The resolved layer replaces the reader's optimistic view; the paper itself is not resent.
     return { revision, edits: await deps.resolvedEdits(request.documentId) }
   })
+  ipc.handle(readerChannels.cacheFigure, (_event, request) => deps.cacheFigure(request))
 }

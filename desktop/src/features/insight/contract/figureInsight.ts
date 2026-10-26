@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { paperChatProviderSchema } from '@shared/paperChatSchemas'
+import { paperChatProviderSchema } from '@features/chat/contract/paperChatSchemas'
 
 export const FIGURE_INSIGHT_PROMPT_VERSION = 'figure-v1.2026-10-11.2'
 export const FIGURE_INSIGHT_MAX_IMAGE_BYTES = 14 * 1024 * 1024

@@ -1,7 +1,15 @@
 import { eventChannel, invokeChannel, type IpcBridge } from '@platform/ipc/contract/channels'
 import { noRequestSchema } from '@platform/ipc/contract/schemas'
-import { windowActionSchema, windowStateSchema } from '@shared/ipcSchemas'
-import type { WindowAction, WindowState } from '@shared/types'
+import { z } from 'zod'
+
+export type WindowAction = 'minimize' | 'toggle-maximize' | 'close'
+
+export interface WindowState {
+  maximized: boolean
+}
+
+export const windowActionSchema = z.enum(['minimize', 'toggle-maximize', 'close'])
+export const windowStateSchema: z.ZodType<WindowState> = z.object({ maximized: z.boolean() }).strict()
 
 export const windowChannels = {
   state: invokeChannel('window:state', noRequestSchema, windowStateSchema),

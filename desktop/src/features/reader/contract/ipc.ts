@@ -1,15 +1,19 @@
 import { invokeChannel, type IpcBridge } from '@platform/ipc/contract/channels'
-import { figureDisplayChoicesSchema, figureDisplayRequestSchema, figureDisplaySetRequestSchema, type FigureDisplayDesktopApi } from '@shared/figureDisplay'
-import { markdownEditRequestSchema, markdownEditResultSchema, type MarkdownEditRequest, type ResolvedMarkdownEdits } from '@shared/markdownEdits'
-import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema, type ReaderNote, type ReaderNotes } from '@shared/readerNotes'
+import { figureDisplayChoicesSchema, figureDisplayRequestSchema, figureDisplaySetRequestSchema, type FigureDisplayDesktopApi } from './figureDisplay'
+import { markdownEditRequestSchema, markdownEditResultSchema, type MarkdownEditRequest, type ResolvedMarkdownEdits } from './markdownEdits'
+import { readerNoteDeleteSchema, readerNoteUpsertSchema, readerNotesRequestSchema, readerNotesSchema, type ReaderNote, type ReaderNotes } from './readerNotes'
 import {
+  cacheDocumentFigureRequestSchema,
+  cacheDocumentFigureResultSchema,
   listReaderAnnotationsRequestSchema,
   mutateReaderAnnotationsRequestSchema,
   readerAnnotationSnapshotSchema,
+  type CacheDocumentFigureRequest,
+  type CacheDocumentFigureResult,
   type ListReaderAnnotationsRequest,
   type MutateReaderAnnotationsRequest,
   type ReaderAnnotationSnapshot
-} from '@shared/ipcSchemas'
+} from './readerSchemas'
 
 export const readerChannels = {
   figureDisplayGet: invokeChannel('reader-figure-display:get', figureDisplayRequestSchema, figureDisplayChoicesSchema),
@@ -20,7 +24,9 @@ export const readerChannels = {
   annotationsList: invokeChannel('reader-annotations:list', listReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema),
   annotationsMutate: invokeChannel('reader-annotations:mutate', mutateReaderAnnotationsRequestSchema, readerAnnotationSnapshotSchema),
   /** The edit layer is written by Utility; Main only forwards the validated request. */
-  editMarkdown: invokeChannel('documents:edit-markdown', markdownEditRequestSchema, markdownEditResultSchema)
+  editMarkdown: invokeChannel('documents:edit-markdown', markdownEditRequestSchema, markdownEditResultSchema),
+  /** Crops one figure from the PDF into the document's figure artifacts. */
+  cacheFigure: invokeChannel('documents:cache-figure', cacheDocumentFigureRequestSchema, cacheDocumentFigureResultSchema)
 }
 
 export interface ReaderDesktopApi {
@@ -35,6 +41,7 @@ export interface ReaderDesktopApi {
   editDocumentMarkdown(request: MarkdownEditRequest): Promise<{ revision: number; edits?: ResolvedMarkdownEdits }>
   listReaderAnnotations(request: ListReaderAnnotationsRequest): Promise<ReaderAnnotationSnapshot>
   mutateReaderAnnotations(request: MutateReaderAnnotationsRequest): Promise<ReaderAnnotationSnapshot>
+  cacheDocumentFigure?(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult>
 }
 
 export function createReaderApi(ipc: IpcBridge): ReaderDesktopApi {
@@ -50,6 +57,7 @@ export function createReaderApi(ipc: IpcBridge): ReaderDesktopApi {
     },
     editDocumentMarkdown: request => ipc.invoke(readerChannels.editMarkdown, request),
     listReaderAnnotations: request => ipc.invoke(readerChannels.annotationsList, request),
-    mutateReaderAnnotations: request => ipc.invoke(readerChannels.annotationsMutate, request)
+    mutateReaderAnnotations: request => ipc.invoke(readerChannels.annotationsMutate, request),
+    cacheDocumentFigure: request => ipc.invoke(readerChannels.cacheFigure, request)
   }
 }

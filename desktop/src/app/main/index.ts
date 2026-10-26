@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { app, dialog, protocol } from 'electron'
 import { runUninstallCleanup, UNINSTALL_CLEANUP_ARG } from '@platform/uninstall/main/uninstallCleanup'
-import { shouldRunPackagedSmoke } from '@shared/packagedSmoke'
+import { shouldRunPackagedSmoke } from '../contract/packagedSmoke'
 import { bootstrap } from './bootstrap'
 import { runPackagedSmoke } from './packagedSmoke'
 import { appShell, libraryGate, services, startup } from './services'

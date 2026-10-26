@@ -1,7 +1,7 @@
-import type { PaperChatStatus } from '@shared/paperChatSchemas'
+import type { PaperChatStatus } from '../contract/paperChatSchemas'
 import { emitEvent, type IpcRegistrar } from '@platform/ipc/main/ipc'
 import { paperChatChannels } from '../contract/ipc'
-import type { PaperChatService } from '@main/chat/paperChatService'
+import type { PaperChatService } from './paperChatService'
 
 export function registerPaperChatHandlers(service: PaperChatService, ensureIndex: (documentId: string) => Promise<PaperChatStatus>, ipc: IpcRegistrar): void {
   ipc.handle(paperChatChannels.load, (_event, request) => service.load(request))

@@ -4,16 +4,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { AppSettings, SettingsUpdate } from '@shared/types'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
+import type { AppSettings, SettingsUpdate } from '@features/settings/contract/settingsTypes'
 import App from '../../src/app/renderer/App'
 
 vi.mock('../../src/app/renderer/WindowControls', () => ({ default: () => null }))
 vi.mock('../../src/app/renderer/EdgeDock', () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
-vi.mock('../../src/renderer/pages/NewParsePage', () => ({ default: () => <section aria-label="新解析页面" /> }))
-vi.mock('../../src/renderer/pages/TutorialPage', () => ({ default: () => <section aria-label="教程页面" /> }))
-vi.mock('../../src/renderer/pages/ReaderPage', () => ({ default: () => <section aria-label="阅读页面" /> }))
-vi.mock('../../src/renderer/pages/LibraryPage', () => ({ default: () => <section aria-label="文库页面" /> }))
+vi.mock('../../src/features/library/renderer/NewParsePage', () => ({ default: () => <section aria-label="新解析页面" /> }))
+vi.mock('../../src/features/library/renderer/TutorialPage', () => ({ default: () => <section aria-label="教程页面" /> }))
+vi.mock('../../src/features/reader/renderer/ReaderPage', () => ({ default: () => <section aria-label="阅读页面" /> }))
+vi.mock('../../src/features/library/renderer/LibraryPage', () => ({ default: () => <section aria-label="文库页面" /> }))
 
 let client: QueryClient
 let settings: AppSettings

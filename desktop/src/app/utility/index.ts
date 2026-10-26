@@ -1,5 +1,5 @@
 import { createCoreUtilityRuntime } from '@platform/rpc/utility/coreUtilityRuntime'
-import { createUtilityOperationHandlers } from '../../utility/core/utilityOperations'
+import { createUtilityOperationHandlers } from './operations'
 import { coreProtocol, type CoreOperationRegistryShape } from '../contract/coreRpc'
 
 // Electron exposes the utility IPC endpoint on the child process object.  The

@@ -2,8 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { AppSettings } from '@shared/types'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
 import type { CopilotixDesktopApi } from '@app/contract/desktopApi'
 import SettingsPage from '../../../src/features/settings/renderer/SettingsPage'
 

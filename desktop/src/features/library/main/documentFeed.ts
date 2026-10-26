@@ -1,7 +1,7 @@
 import { createCoalescedRefresh } from '@platform/jobs/main/coalescedRefresh'
-import type { DocumentChangeEvent, DocumentSummary } from '@shared/ipcSchemas'
-import { computeDocumentChange } from '@main/documentProjection'
-import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
+import type { DocumentChangeEvent, DocumentSummary } from '../contract/documentSchemas'
+import { computeDocumentChange } from './documentProjection'
+import type { TaskRepositoryCompat } from '../contract/taskRepository'
 
 /**
  * The document list the renderer sees: one cached snapshot plus ordered,

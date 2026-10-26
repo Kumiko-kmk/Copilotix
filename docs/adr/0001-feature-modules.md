@@ -74,7 +74,7 @@ src/
 2. `platform/` 不得引用任何 `features/`。
 3. `app/` 可引用一切，但不含業務邏輯。
 4. 既有進程層規則不變：renderer 不碰 main、electron、node；contract／shared 不碰 node、electron；main 不碰 renderer。dependency-cruiser 按路徑補上相對 import：core 同 contract；preload 只碰契約；main 不碰 utility；runtime、utility 不碰 electron 與其他進程層。
-5. 禁止循環依賴。
+5. 禁止循環依賴（含 type-only import）；懶載入的 `import()` 邊（分包頁面，及同時以 `typeof import()` 取型別的寫法）不構成初始化循環，不計入。
 
 ## 後果
 

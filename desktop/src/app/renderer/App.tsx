@@ -1,30 +1,21 @@
 import React from 'react'
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { refreshCodexStatus, loadStorageInfo, SettingsPage } from '@features/settings/renderer'
-import { loadReaderPage, loadedReaderPage } from '@renderer/readerPageLoader'
+// Direct import: the reader barrel re-exports Markdown rendering (KaTeX CSS) that must stay in the lazy reader chunk.
+import { loadReaderPage, loadedReaderPage } from '@features/reader/renderer/readerPageLoader'
 import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
-import type { AppSettings } from '@shared/types'
-import type { DocumentDetails, DocumentSummary } from '@shared/ipcSchemas'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
+import type { DocumentDetails, DocumentSummary } from '@features/library/contract/documentSchemas'
 import EdgeDock from './EdgeDock'
 import WindowControls from './WindowControls'
-import NewParsePage from '@renderer/pages/NewParsePage'
-import TutorialPage from '@renderer/pages/TutorialPage'
-import {
-  applyDocumentChange,
-  getDocumentRefreshPlan,
-  patchDocumentDetails,
-  type DocumentListCache
-} from '@renderer/documentCache'
-import { loadLibraryCategories } from '@renderer/paperArchive/libraryCategoriesClient'
-import { requestLibraryFocus } from '@renderer/paperArchive/libraryFocus'
-import { ACTIVE_STATUSES } from '@renderer/documentStatus'
+import { NewParsePage, TutorialPage, applyDocumentChange, getDocumentRefreshPlan, patchDocumentDetails, type DocumentListCache, loadLibraryCategories, requestLibraryFocus, ACTIVE_STATUSES } from '@features/library/renderer'
 import type { SettingsNavigationGuard } from '@features/settings/renderer'
 
 const ReaderPage = React.lazy(loadReaderPage)
 // Three.js is only loaded once the archive is opened.
-const LibraryPage = React.lazy(() => import('@renderer/pages/LibraryPage'))
+const LibraryPage = React.lazy(() => import('@features/library/renderer/LibraryPage'))
 
 type ReaderOrigin = 'new' | 'library' | 'tutorial'
 type View = { name: ReaderOrigin | 'settings' } | { name: 'reader'; documentId: string; returnTo?: ReaderOrigin }

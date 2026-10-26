@@ -3,11 +3,12 @@ import { mkdtemp, mkdir, readFile, writeFile, stat, rm, symlink } from 'node:fs/
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
-import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
-import type { BlockMapping, CopilotixTask } from '@shared/types'
+import { BLOCK_MAPPING_VERSION } from '@features/parsing/core/blockMapping'
+import { buildReaderFigureGeometries } from '@features/reader/core/readerFigureGroups'
+import type { BlockMapping } from '@features/parsing/contract/blocks'
+import type { CopilotixTask } from '@features/library/contract/documentTypes'
 import { FigureInsightStore } from '../../../src/features/insight/utility/figureInsightStore'
-import { PaperChatFigureStore } from '../../../src/utility/core/persistence/paperChatFigureStore'
+import { PaperChatFigureStore } from '../../../src/features/chat/utility/paperChatFigureStore'
 
 const roots: string[] = []
 const hash = (v: string | Buffer): string => createHash('sha256').update(v).digest('hex')

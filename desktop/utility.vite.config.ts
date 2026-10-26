@@ -10,10 +10,7 @@ export default defineConfig({
     alias: {
       '@app': resolve(__dirname, 'src/app'),
       '@platform': resolve(__dirname, 'src/platform'),
-      '@features': resolve(__dirname, 'src/features'),
-      '@shared': resolve(__dirname, 'src/shared'),
-      '@core': resolve(__dirname, 'src/core'),
-      '@runtime': resolve(__dirname, 'src/runtime')
+      '@features': resolve(__dirname, 'src/features')
     }
   },
   build: {

@@ -3,15 +3,15 @@ import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
-import { BLOCK_MAPPING_VERSION } from '@core/blockMapping'
-import { blockMappingSchema } from '@shared/ipcSchemas'
-import { buildReaderFigureGeometries } from '@shared/readerFigureGroups'
+import { BLOCK_MAPPING_VERSION } from '@features/parsing/core'
+import { blockMappingSchema } from '@features/parsing/contract/blockSchemas'
+import { buildReaderFigureGeometries } from '@features/reader/core'
 import { buildBriefContext, clip } from '../core/paperBrief/context'
 import { FIGURE_INSIGHT_MAX_IMAGE_BYTES, FIGURE_INSIGHT_PROMPT_VERSION, figureInsightDescriptorSchema,
   figureInsightLocationSchema, figureInsightRecordSchema, figureInsightSaveSchema,
   type FigureInsightRequest, type FigureInsightDescriptor, type FigureInsightSave, type FigureInsightState, type FigureInsightRecord } from '../contract/figureInsight'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
-import type { V2TaskRepositoryCompat } from '../../../utility/core/persistence/v2TaskRepositoryCompat'
+import type { V2TaskRepositoryCompat } from '@features/library/utility'
 
 const hash = (value: string | Buffer): string => createHash('sha256').update(value).digest('hex')
 const absent = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT'

@@ -23,7 +23,7 @@
 
 ### 解析乱码行的文字层修复
 
-MinerU 偶尔用只罩住字母上半截的框识别整行，结果只剩 `d h f ld` 这类带上伸笔画的字母（2026-10-21 文献 6d215e7c 共 23 行，含摘要与参考文献 [60]）。`shared/textLayerRepair.ts` 只检查 `type: 'text'` 的 span：至少 6 个词、过半为单个字母且四成以上是小写单字母时才算候选；再按页码和 bbox 从 PDF 文字层（Utility 内 `pdfTextLayer.ts`，pdf.js 假 worker，仅在有候选时懒加载）取同一行文字，只有文字层可读（无 U+FFFD／私用区／控制符、多数为正常单词）且原 span 的字母按顺序 ≥85% 出现在其中、文字层长度 ≥1.5 倍时才替换。公式、表格、图片 span 不参与；无文字层（扫描件）或旋转页保持原样。MinerU 跨页合并段落时，下一页的行留在上一页的块中，此时按下一页 `lines_deleted` 块判定页码。
+MinerU 偶尔用只罩住字母上半截的框识别整行，结果只剩 `d h f ld` 这类带上伸笔画的字母（2026-10-21 文献 6d215e7c 共 23 行，含摘要与参考文献 [60]）。`features/parsing/core/textLayerRepair.ts` 只检查 `type: 'text'` 的 span：至少 6 个词、过半为单个字母且四成以上是小写单字母时才算候选；再按页码和 bbox 从 PDF 文字层（Utility 内 `pdfTextLayer.ts`，pdf.js 假 worker，仅在有候选时懒加载）取同一行文字，只有文字层可读（无 U+FFFD／私用区／控制符、多数为正常单词）且原 span 的字母按顺序 ≥85% 出现在其中、文字层长度 ≥1.5 倍时才替换。公式、表格、图片 span 不参与；无文字层（扫描件）或旋转页保持原样。MinerU 跨页合并段落时，下一页的行留在上一页的块中，此时按下一页 `lines_deleted` 块判定页码。
 
 - 新解析：`compute:normalize-parser` 在 `prepareReaderMarkdown` 之前同时修补 `layout.json` 与原始 Markdown，Markdown 中无法唯一定位的修复整条放弃，两者不会不一致。替换文字转义 Markdown 语法（`\ * _ $ <`、行首列表/标题记号、`](`），连字号行尾按解析器规则并词。读取失败不影响解析，只把候选记为未解决。
 - 旧论文：不重解析、不重翻译，也不加按钮（使用者要求页面简洁）。阅读器打开时 `useTextLayerRepair` 若在布局中发现候选，后台调用 IPC `documents:repair-text-layer` → Core RPC `compute:repair-text-layer`，修复成功只弹一次「已用 PDF 文字层修复 N 行解析乱码」提示；每个布局每次会话只尝试一次，有解析或翻译作业在途、或读取失败时静默放弃，下次打开再试。依次原子发布 `full.md`、`block_list.json`、`layout.json`（中断后重跑可补完，已替换的 Markdown 视为已应用），再由 `recordTextLayerRepair` 在同一事务中以最新 parse 作业写入三个新 revision（metadata `{ textLayerRepair: 1, repairs }`），并把原文视图标注集迁到新的 Markdown revision（标注按 quote／前后文重定位）。映射 ID 只由位置决定，不变。
@@ -37,7 +37,7 @@ MinerU 偶尔用只罩住字母上半截的框识别整行，结果只剩 `d h f
 
 使用者可在「原文」「译文」视图直接改写某一段或删除整段（解析出的页眉页脚、期刊杂讯等）。编辑是独立的一层，解析、文字层修复、翻译产物一律不被改写，因此这些流程永远不会覆盖或丢失使用者的修改。
 
-- 存储：`<文献目录>/edits/markdown-edits.v1.json`（`shared/markdownEdits.ts`），只由 Utility `MarkdownEditStore` 写入（Core RPC `markdown-edits:apply`，按论文串行；临时文件、fsync、原子 rename，Windows EPERM/EACCES/EBUSY 有界重试）。`revision` 做乐观并发：阅读器带上看到的 revision，不一致即拒绝并提示刷新。文件损坏或不属于该论文时报错并保留原文件，不覆盖；阅读照常（`markdownEdits: null`），保存提示检查 `edits` 文件夹。
+- 存储：`<文献目录>/edits/markdown-edits.v1.json`（`features/reader/contract/markdownEdits.ts`），只由 Utility `MarkdownEditStore` 写入（Core RPC `markdown-edits:apply`，按论文串行；临时文件、fsync、原子 rename，Windows EPERM/EACCES/EBUSY 有界重试）。`revision` 做乐观并发：阅读器带上看到的 revision，不一致即拒绝并提示刷新。文件损坏或不属于该论文时报错并保留原文件，不覆盖；阅读照常（`markdownEdits: null`），保存提示检查 `edits` 文件夹。
 - 寻址：按阅读器的内容块位置（`alignMarkdownBlocks` + 排除页眉页脚等映射，即 `annotationKey` 的 `content:N`），同时记录该块的 mapping ID 与解析原文 sha256。重新定位顺序：原位置（mapping 或原文一致）→ 唯一相同 mapping 的块 → 唯一相同原文的块；都不唯一则成为孤儿，保留在文件中但不套用，绝不套到别的段落。文字层修复改写原文后仍按 mapping 找回，使用者文字优先。页眉、页脚、脚注等版面块按 mapping ID 记入 `supplementalDeleted`。
 - 阅读：Main `getDocument` 解析编辑层并随 `documents:get` 返回可选 `markdownEdits`（含已删除段落摘要与边框标记）；阅读器在原有对齐结果上替换文字、在编号之后剔除已删除块，`annotationKey`、mapping、PDF 对应、滚动同步、引用悬停与图片分组不变。高亮与笔记仍按 quote／前后文在改写后的文字中重定位。段落已是当前段（点击或滚动同步选中）时，再单击其正文即原地编辑；等待双击间隔（约 260ms），双击／三击／拖选不进入编辑，链接、按钮、图片、引用标记的点击照旧。段落下方不再有任何按钮，也不提供「还原」（编辑层 API 仍保留 revert 动作）。编辑框复制该段计算后的字体、字号、行高、缩进与段距；保存后同一视图就地更新，阅读位置保留。译文过期时只在该段左缘显示一条淡点线（`data-stale`），原因写在右键菜单首行「译文待更新：原文已修改」；回退翻译的服务名同样只在菜单中显示。
 - 翻译：翻译计划打开时读取编辑层：改写过的原文以使用者文字送译，已删除块成为空的已完成单元；编辑指纹（含重译请求）并入计划 `sourceHash`。PDF 右键「重新翻译此段」写入该段 `retranslateAt` 并新排一个翻译作业（IPC `documents:retranslate-edited`，checkpoint `reason: 'edited'`）：该作业沿用上一份 manifest（同任务、同管线版本）中原文未变的各段结果，失败段保持失败（普通重试仍可处理），只有被请求、被改写的段送模型；被请求段的缓存键加盐，避免命中旧译文，结果以加盐键重新缓存。manifest 新增 `generatedAt`，用于判断请求是否已被满足。编辑译文只写编辑层，记录写作时依据的原文 hash，原文之后再改也会标示。

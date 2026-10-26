@@ -7,13 +7,13 @@ import type {
   CredentialStatus,
   CredentialValidation,
   CredentialValidationResult,
-  HealthResult,
   SettingsSaveResult,
   SettingsUpdate
-} from '@shared/types'
-import { DEFAULT_SETTINGS } from '@shared/constants'
-import { resolvePaperChatModel } from '@shared/paperChatSchemas'
-import type { TaskRepositoryCompat } from '@main/taskRepositoryCompat'
+} from '../contract/settingsTypes'
+import type { HealthResult } from '@features/library/contract/documentTypes'
+import { DEFAULT_SETTINGS } from '../contract/defaultSettings'
+import { resolvePaperChatModel } from '@features/chat/contract/paperChatSchemas'
+import type { TaskRepositoryCompat } from '@features/library/contract/taskRepository'
 
 /** The only persistence SettingsService needs. */
 export type SettingsRepositoryPort = Pick<TaskRepositoryCompat, 'getSettings' | 'saveSettings' | 'getMigrationMarker' | 'markMigration'>

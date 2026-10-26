@@ -1,8 +1,8 @@
 import { eventChannel, invokeChannel, type IpcBridge } from '@platform/ipc/contract/channels'
 import { noRequestSchema, voidResponseSchema } from '@platform/ipc/contract/schemas'
-import { libraryCategoriesPageSchema, libraryCategoriesRequestSchema, type LibraryCategoriesPage, type LibraryCategoriesRequest } from '@shared/libraryCategories'
-import { libraryRequestSchema, libraryResultSchema, type LibraryRequest, type LibraryResult } from '@shared/librarySchemas'
-import type { ImportFileOptions } from '@shared/pdfImport'
+import { libraryCategoriesPageSchema, libraryCategoriesRequestSchema, type LibraryCategoriesPage, type LibraryCategoriesRequest } from './libraryCategories'
+import { libraryRequestSchema, libraryResultSchema, type LibraryRequest, type LibraryResult } from './librarySchemas'
+import type { ImportFileOptions } from './pdfImport'
 import {
   deleteDocumentRequestSchema,
   documentChangeEventSchema,
@@ -22,7 +22,7 @@ import {
   type ImportDocumentsResult,
   type SaveDocumentAsRequest,
   type SaveDocumentAsResult
-} from '@shared/ipcSchemas'
+} from './documentSchemas'
 
 export const libraryChannels = {
   categories: invokeChannel('library:categories', libraryCategoriesRequestSchema, libraryCategoriesPageSchema),

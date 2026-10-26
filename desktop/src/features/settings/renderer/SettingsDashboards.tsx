@@ -1,5 +1,5 @@
 import React from 'react'
-import type { StorageInfo, UsageAnalytics, UsageAnalyticsDay } from '@shared/ipcSchemas'
+import type { StorageInfo, UsageAnalytics, UsageAnalyticsDay } from '../contract/settingsSchemas'
 
 /** Usage and storage panels of the settings page; display only. */
 export function UsageDashboard(props: { analytics: UsageAnalytics | null }): React.JSX.Element {

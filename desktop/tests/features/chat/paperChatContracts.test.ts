@@ -1,0 +1,103 @@
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { describe, expect, it, vi } from 'vitest'
+import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
+import { paperChatAskRequestSchema, paperContextRequestSchema, paperContextResultSchema } from '@features/chat/contract/paperChatSchemas'
+import { appSettingsSchema, settingsUpdateSchema } from '@features/settings/contract/settingsSchemas'
+import { paperChatSessionSchema, paperChatTurnSchema } from '@features/chat/contract/paperChatStorageSchemas'
+import { coreProtocol, coreRequestSchema, validateCoreOperationResult, serializeCoreMessage } from '@app/contract/coreRpc'
+import { makeCoreEvent } from '@platform/rpc/contract/protocol'
+import { CoreClient } from '@platform/rpc/main/coreClient'
+import { registerPaperChatHandlers } from '../../../src/features/chat/main/ipc'
+import { PaperChatService } from '../../../src/features/chat/main/paperChatService'
+import { createIpcRegistrar, type IpcInvokeEventLike } from '../../../src/platform/ipc/main/ipc'
+
+const doc = '10000000-0000-4000-8000-000000000001'
+const request = { documentId: doc, question: 'question', pinned: [], history: [] }
+const pin = { view: 'original', text: 'text', contentRevisionId: 'revision1', fragments: [{ mappingIds: ['m1'], quote: 'text', startOffset: 0, endOffset: 4 }] }
+
+describe('paper chat wire contracts', () => {
+  it('bounds questions, pins, history, provider choices and model names', () => {
+    expect(paperChatAskRequestSchema.parse(request)).toEqual(request)
+    for (const invalid of [{ question: '' }, { question: ' ' }, { question: 'a'.repeat(2001) }, { pinned: Array(9).fill(pin) }, { history: Array(13).fill({ role: 'user', content: 'x' }) }, { history: Array(4).fill({ role: 'user', content: 'x'.repeat(8192) }) }, { pinned: [{ ...pin, fragments: [{ ...pin.fragments[0], endOffset: 0 }] }] }, { baseUrl: 'https://attacker.test' }, { documentId: 'path/to/paper' }, { model: '' }, { model: 'bad\nmodel' }, { model: 'a'.repeat(129) }, { provider: 'bing' }]) {
+      expect(() => paperChatAskRequestSchema.parse({ ...request, ...invalid })).toThrow()
+    }
+    const { credentials: _credentials, ...update } = DEFAULT_SETTINGS
+    expect(() => settingsUpdateSchema.parse({ ...update, chatProvider: 'bing' })).toThrow()
+    expect(() => settingsUpdateSchema.parse({ ...update, qwenChatModel: 'bad\nmodel' })).toThrow()
+    expect(() => settingsUpdateSchema.parse({ ...update, qwenChatModel: 'custom-chat' })).toThrow()
+    expect(() => paperChatAskRequestSchema.parse({ ...request, model: 'custom-chat' })).toThrow()
+    expect(() => settingsUpdateSchema.parse({ ...update, chatConsentVersion: -1 })).toThrow()
+    const { chatProvider: _provider, qwenChatModel: _qwen, deepseekChatModel: _deepseek, chatConsentVersion: _consent, ...old } = DEFAULT_SETTINGS
+    expect(appSettingsSchema.parse({ ...old, outputRoot: 'C:/papers' })).toMatchObject({ chatProvider: null, qwenChatModel: 'qwen-plus', chatConsentVersion: null })
+  })
+  it('accepts figure questions as optional, bounded references and keeps older files readable', () => {
+    const figure = { figureId: 'reader-figure-7-block-a:0', label: 'Fig. 1', pageIndex: 7 }
+    expect(paperChatAskRequestSchema.parse({ ...request, figures: [figure] }).figures).toEqual([figure])
+    for (const figures of [[figure, figure], Array.from({ length: 5 }, (_, i) => ({ ...figure, figureId: `f${i}` })), [{ ...figure, figureId: '../x' }], [{ ...figure, preview: 'images/../x.png' }]]) {
+      expect(() => paperChatAskRequestSchema.parse({ ...request, figures })).toThrow()
+    }
+    const turn = { id: doc, createdAt: '2026-10-21T00:00:00.000Z', provider: 'codex', model: 'gpt', question: 'q', answer: 'a', citations: {}, status: 'completed' }
+    expect(paperChatTurnSchema.parse(turn).figures).toBeUndefined()
+    const image = { path: 'images/figures/figure-p8-' + 'a'.repeat(24) + '.png', sha256: 'b'.repeat(64) }
+    expect(paperChatTurnSchema.parse({ ...turn, figures: [{ ...figure, images: [image] }] }).figures![0]!.images).toEqual([image])
+    expect(() => paperChatTurnSchema.parse({ ...turn, figures: [{ ...figure, images: [{ ...image, path: 'C:/outside.png' }] }] })).toThrow()
+    expect(paperChatSessionSchema.parse({ draft: '', pinned: [], selectedModel: null }).figures).toBeUndefined()
+    expect(paperChatSessionSchema.parse({ draft: '', pinned: [], figures: [figure], selectedModel: null }).figures).toEqual([figure])
+  })
+  it('recovers legacy custom selections while preserving old conversation metadata', () => {
+    const restored = paperChatSessionSchema.parse({ draft: 'keep draft', pinned: [], selectedModel: { provider: 'deepseek', model: 'custom-chat', custom: true } })
+    expect(restored).toEqual({ draft: 'keep draft', pinned: [], selectedModel: { provider: 'deepseek', model: 'deepseek-flash' } })
+    expect(appSettingsSchema.parse({ ...DEFAULT_SETTINGS, outputRoot: 'C:/papers', qwenChatModel: 'custom-chat' }).qwenChatModel).toBe('qwen-plus')
+    expect(paperChatTurnSchema.parse({ id: doc, createdAt: '2026-10-07T00:00:00.000Z', provider: 'qwen', model: 'custom-chat', question: 'old question', answer: 'old answer', citations: {}, status: 'completed' }).model).toBe('custom-chat')
+  })
+  it('enforces explicit, bounded Core RPC input/result contracts on both operations', () => {
+    const payload = { documentId: doc, question: 'question', pinned: [], budgetChars: 48000 }
+    expect(coreRequestSchema.parse({ version: 1, requestId: doc, operation: 'chat:build-context', payload }).payload).toEqual(payload)
+    expect(paperContextRequestSchema.parse({ documentId: doc, question: 'question', pinned: [] }).budgetChars).toBe(48000)
+    expect(() => coreRequestSchema.parse({ version: 1, requestId: doc, operation: 'chat:ensure-index', payload: { documentId: doc, sql: 'SELECT *' } })).toThrow()
+    expect(validateCoreOperationResult('chat:ensure-index', { state: 'ready', progress: 100, contentRevisionId: 'revision1' })).toMatchObject({ state: 'ready' })
+    expect(() => validateCoreOperationResult('chat:build-context', { documentId: doc, contentRevisionId: 'revision1', evidence: [], outline: [], truncated: false, key: 'secret' })).toThrow()
+    expect(() => paperContextResultSchema.parse({ documentId: doc, contentRevisionId: 'revision1', evidence: [], outline: Array(129).fill('heading'), truncated: false })).toThrow()
+  })
+  it('checks trusted IPC senders, payload bounds and unknown request IDs through the actual registrations', async () => {
+    const handlers = new Map<string, (event: IpcInvokeEventLike, request: unknown) => Promise<unknown>>()
+    const service = new PaperChatService({
+      saveTurn: vi.fn(), load: vi.fn(), session: vi.fn(), saveSession: vi.fn(), deleteTurn: vi.fn(), clear: vi.fn(), settings: vi.fn(async () => DEFAULT_SETTINGS), key: vi.fn(), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
+    const owner = { isDestroyed: () => false }
+    const entry = resolve('renderer/index.html')
+    const url = pathToFileURL(entry).href
+    const frame = { url }
+    const event: IpcInvokeEventLike = { sender: { mainFrame: frame, getURL: () => url, isDestroyed: () => false, send: vi.fn() }, senderFrame: frame }
+    const ensureIndex = vi.fn(async () => ({ state: 'queued' as const, progress: 0, contentRevisionId: null }))
+    registerPaperChatHandlers(service, ensureIndex, createIpcRegistrar({ getMainWindow: () => owner, fromWebContents: () => owner, rendererEntryPath: entry, ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } }))
+    expect([...handlers.keys()]).toEqual(['paper-chat:load', 'paper-chat:session', 'paper-chat:save-session', 'paper-chat:delete-turn', 'paper-chat:clear', 'paper-chat:ask', 'paper-chat:cancel', 'paper-chat:ensure-index'])
+    const ask = handlers.get('paper-chat:ask')!
+    await expect(ask({ ...event, senderFrame: { url } }, request)).resolves.toMatchObject({ ok: false, error: { code: 'UNTRUSTED_SENDER' } })
+    for (const invalid of [{ question: 'a'.repeat(2001) }, { pinned: Array(9).fill(pin) }]) await expect(ask(event, { ...request, ...invalid })).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } })
+    // The separate consent dialog was removed; missing credentials must still block sending.
+    await expect(ask(event, request)).resolves.toMatchObject({ ok: false, error: { code: 'CHAT_CREDENTIALS_REQUIRED' } })
+    await expect(handlers.get('paper-chat:cancel')!(event, { requestId: doc })).resolves.toEqual({ ok: true, value: { cancelled: false } })
+    await expect(handlers.get('paper-chat:ensure-index')!(event, { documentId: doc })).resolves.toMatchObject({ ok: true, value: { state: 'queued' } })
+    expect(ensureIndex).toHaveBeenCalledWith(doc)
+  })
+  it('times out and cancels context RPC without waiting for compute work', async () => {
+    vi.useFakeTimers()
+    try {
+      let receive!: (s: string) => void
+      const sent: string[] = []
+      const client = new CoreClient({ send: (s) => { sent.push(s) }, onMessage: (fn) => { receive = fn; return () => undefined } }, coreProtocol)
+      receive(serializeCoreMessage(makeCoreEvent('ready')))
+      const controller = new AbortController()
+      const pending = client.request('chat:build-context', { documentId: doc, question: 'q', pinned: [], budgetChars: 48000 }, { signal: controller.signal })
+      await vi.waitFor(() => expect(sent.some((s) => JSON.parse(s).operation === 'chat:build-context')).toBe(true))
+      controller.abort()
+      await expect(pending).rejects.toMatchObject({ code: 'CORE_CANCELLED' })
+      expect(sent.some((s) => JSON.parse(s).operation === 'cancel')).toBe(true)
+      const timeout = client.request('chat:ensure-index', { documentId: doc }, { timeoutMs: 20 })
+      const rejection = expect(timeout).rejects.toMatchObject({ code: 'CORE_TIMEOUT' })
+      await vi.advanceTimersByTimeAsync(20); await rejection
+      client.close()
+    } finally { vi.useRealTimers() }
+  })
+})

@@ -1,4 +1,4 @@
-import type { ModelGateway } from '@main/chat/modelGateway'
+import type { ModelGateway } from '@features/chat/main'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
 import { lstat, readFile } from 'node:fs/promises'
@@ -6,9 +6,9 @@ import { FIGURE_INSIGHT_MAX_REQUEST_BYTES, figureInsightContentSchema, figureIns
   figureInsightModelSchema, resolveFigureInsightModel, type FigureInsightDescriptor, type FigureInsightRequest,
   type FigureInsightSave, type FigureInsightState } from '../contract/figureInsight'
 import { buildFigureInsightMessages } from '../core/figureInsightPrompt'
-import { resolvePaperChatProvider, type PaperChatProvider } from '@shared/paperChatSchemas'
-import type { AppSettings } from '@shared/types'
-import { abortable } from '@main/chat/chatProvider'
+import { resolvePaperChatProvider, type PaperChatProvider } from '@features/chat/contract/paperChatSchemas'
+import type { AppSettings } from '@features/settings/contract/settingsTypes'
+import { abortable } from '@features/chat/main'
 import type { ProviderTokenUsage } from '@features/settings/main'
 
 export interface FigureInsightDependencies {

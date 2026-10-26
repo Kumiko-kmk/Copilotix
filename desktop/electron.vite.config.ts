@@ -12,17 +12,17 @@ export default defineConfig({
         exclude: ['p-queue', 'remark-gfm', 'remark-math', 'remark-parse', 'remark-stringify', 'unified', 'uuid', 'zod']
       })
     ],
-    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features'), '@shared': resolve('src/shared'), '@core': resolve('src/core'), '@runtime': resolve('src/runtime'), '@main': resolve('src/main') } }
+    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features') } }
   },
   preload: {
     build: { rollupOptions: { input: { index: resolve('src/app/preload/index.ts') } } },
     plugins: [externalizeDepsPlugin({ exclude: ['zod'] })],
-    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features'), '@shared': resolve('src/shared') } }
+    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features') } }
   },
   renderer: {
     root: resolve('src/app/renderer'),
     build: { rollupOptions: { input: { index: resolve('src/app/renderer/index.html') } } },
-    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features'), '@shared': resolve('src/shared'), '@renderer': resolve('src/renderer') } },
+    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features') } },
     // The paper archive embeds its cassette model with `?inline`.
     assetsInclude: ['**/*.glb'],
     plugins: [react()]

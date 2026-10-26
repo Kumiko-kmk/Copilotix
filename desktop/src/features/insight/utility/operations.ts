@@ -1,5 +1,5 @@
 import type { CoreUtilityOperationHandler } from '@platform/rpc/utility/coreUtilityRuntime'
-import type { V2TaskRepositoryCompat } from '../../../utility/core/persistence/v2TaskRepositoryCompat'
+import type { V2TaskRepositoryCompat } from '@features/library/utility'
 import type { InsightOperations } from '../contract/rpc'
 import { figureInsightRequestSchema, figureInsightSaveSchema } from '../contract/figureInsight'
 import { paperInsightRequestSchema } from '../contract/paperInsight'

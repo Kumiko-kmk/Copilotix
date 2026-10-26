@@ -11,7 +11,7 @@ import {
   type ZoteroItemsPage,
   type ZoteroItemsRequest
 } from '../contract/zotero'
-import type { ImportPathsResult } from '@main/documentCommandService'
+import type { ImportPathsResult } from '@features/library/main'
 import type { ZoteroEntry, ZoteroSnapshot } from './zoteroCatalog'
 import { ZoteroUnavailableError } from './zoteroCatalog'
 import { addZoteroLink, readZoteroLinks } from './zoteroLinks'

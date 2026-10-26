@@ -49,20 +49,24 @@ Utility Process（受监督；SQLite 与 compute 的唯一拥有者）
 
 ## 3. 代码地图与模块边界
 
-### 3.1 依赖方向（已用 import 图核对，无反向或跨层依赖）
+### 3.1 依赖方向（`pnpm desktop:deps` 以 error 模式检查，见 ADR-0001）
+
+代码按 `src/app`（组装根）、`src/platform/<关注点>`（基础设施，不认识功能）与 `src/features/<模块>` 分目录，每个单元内再分进程层：
 
 ```text
-renderer ──▶ shared ◀── preload
-main ──▶ core ──▶ shared ◀── utility ──▶ core
+renderer ──▶ contract ◀── preload
+main ──▶ core ──▶ contract ◀── utility ──▶ core
 main ──▶ runtime ──▶ core ◀── runtime ◀── utility
 ```
 
-- `shared`：三端共用的纯 TS，不得导入 Node/Electron/DOM 专有 API；跨层契约（schema、DTO、版本常量）只在这里定义一次。
-- `core`：Main 与 Utility 共用的纯逻辑、Core RPC 客户端、作业模型与端口、block mapping；不得导入 Node/Electron 或 runtime 层，Renderer 不得导入。
-- `runtime`：Main 与 Utility 共用的 Node 运行时实现；`PathPolicy` 在此实现 `core/ports.ts` 的路径端口，Renderer 与 shared/core 不得导入。
-- `renderer` 只依赖 `shared`；`main` 与 `utility` 互不导入，只经 Core RPC 通信。
+- `contract`：各进程共用的纯 TS，不得导入 Node/Electron/DOM 专有 API；跨层契约（schema、DTO、版本常量）只在所属模块定义一次。
+- `core`：纯逻辑，不得导入 Node/Electron 或 runtime 层。
+- `runtime`：Main 与 Utility 共用的 Node 运行时实现，不碰 Electron；`PathPolicy` 在 `platform/files/runtime`。
+- `renderer` 只依赖 contract／core 与 preload API；`main` 与 `utility` 互不导入，只经 Core RPC 通信；其他模块只经 `contract/` 或层 `index.ts` 引用一个模块。
 
 ### 3.2 模块表
+
+> 1.3.0 正按 [ADR-0001](adr/0001-feature-modules.md) 把代码迁入 `src/{app,platform,features}/`（进度见 [milestone](MILESTONE_1_3_ZH.md)），各模块入口以其 `README.md` 为准；`shared/`、`core/` 等旧目录已在 M5 拆除，下表的旧路径在 M6 重写本文时更新。
 
 | 模块 | 主要文件 | 职责与边界 |
 |---|---|---|
@@ -102,15 +106,14 @@ IPC handler 会同时验证来源窗口是当前主窗口、请求来自主 fram
 
 ### 4.2 Preload API
 
-当前公开 API 是 `window.copilotix` 的显式方法集合：设置与连接测试、文档导入/列表/重试/删除/详情、输出打开/另存、阅读标注、窗口状态和事件订阅。每个方法在 `desktop/src/preload/index.ts` 中绑定固定 channel、请求 schema 和响应 schema。
+当前公开 API 是 `window.copilotix` 的显式方法集合：设置与连接测试、文档导入/列表/重试/删除/详情、输出打开/另存、阅读标注、窗口状态和事件订阅。每个方法由所属模块的 `contract/ipc.ts` 绑定固定 channel、请求 schema 和响应 schema，`app/contract/desktopApi.ts` 组合，`app/preload/index.ts` 暴露。
 
 新增方法必须同时更新：
 
-1. `desktop/src/shared/ipcSchemas.ts` 的请求/响应/事件 schema；
-2. `desktop/src/shared/types.ts` 的公开 DTO/API；
-3. preload 的显式方法；
-4. Main 的 `registerValidatedHandler` 或 `sendValidatedEvent`；
-5. 不可信请求、sender、响应和错误 envelope 测试。
+1. 所属模块 `contract/` 的请求/响应/事件 schema 与公开 DTO；
+2. 该模块 `contract/ipc.ts` 的频道声明与 preload API 工厂（preload 无需改动）；
+3. 该模块 `main/ipc.ts` 以 `IpcRegistrar` 注册 handler 或发送事件；
+4. 不可信请求、sender、响应和错误 envelope 测试。
 
 不得暴露 `ipcRenderer`、任意 channel、数据库查询、任意文件读取、Credential Vault 或可注入 URL 的网络代理。
 
@@ -135,7 +138,7 @@ Main 先验证 sender，再解析请求；handler 结果再次验证，schema �
 
 ### 5.2 Main ↔ Utility Core RPC
 
-`desktop/src/shared/coreRpcSchemas.ts` 是 Core RPC 的唯一来源：
+Core RPC 的 operation 由平台、作业与各模块的 `contract/rpc.ts` 声明，`desktop/src/app/contract/coreRpc.ts` 组合为唯一注册表：
 
 | 项目 | 当前值/要求 |
 |---|---|
@@ -267,7 +270,7 @@ Utility-owned `MarkdownTranslationPlanManager` 读取受限的计划 descriptor�
 
 当前网络边界由 Main 持有：
 
-- Parser API 使用 `desktop/src/shared/constants.ts` 中受控的固定来源与 v4 路径；Token 只发送到固定 API 请求；预签名上传/下载不带 Token；
+- Parser API 使用 `desktop/src/features/parsing/contract/parserApi.ts` 中受控的固定来源与 v4 路径；Token 只发送到固定 API 请求；预签名上传/下载不带 Token；
 - Qwen/DeepSeek 使用显式 base URL/model 和 Credential Vault；Bing/TranSmart 是可变的网页 Provider，不能视作稳定官方协议；
 - provider 请求必须有 timeout、重试、状态/响应 schema、取消和安全日志；
 - provider fallback 不得跨 document/job 混写状态，最终结果必须记录 provider/model；
@@ -315,7 +318,7 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 | functions | 80% |
 | branches | 75% |
 
-覆盖统计 `src/main/**`、`src/core/**`、`src/shared/**`，范围与阈值由 `vitest.config.ts` 维护。一般 push／PR 执行 lint、typecheck、受影响单元测试＋必跑安全集、四 bundle 和 smoke＋受影响 E2E（见开发文档）；版本 tag 或手动 `full_validation` 才执行完整覆盖率、全量 Electron、打包和安装验收。发布门禁失败不能称为发布通过；日常核心回归也不代表完整发布验收。
+覆盖统计各单元的 main／core／runtime／contract 层，范围与阈值由 `vitest.config.ts` 维护。一般 push／PR 执行 lint、typecheck、受影响单元测试＋必跑安全集、四 bundle 和 smoke＋受影响 E2E（见开发文档）；版本 tag 或手动 `full_validation` 才执行完整覆盖率、全量 Electron、打包和安装验收。发布门禁失败不能称为发布通过；日常核心回归也不代表完整发布验收。
 
 单元/集成测试至少覆盖：Core RPC schema/1 MiB/超时/取消、sender/frame/URL、Utility ready/restart/drain、STRICT migration/checksum、Repository/lease/checkpoint/retry、PathPolicy/符号链接、流式导入与 atomic artifact、翻译 cache/表格协议、映射/标注以及 release transaction/manifest/fuse/packaged smoke。真实 API、真实翻译和真实 PDF 属于 opt-in fixture，不是所有 PR 的默认证据。
 

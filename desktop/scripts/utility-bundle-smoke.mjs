@@ -17,7 +17,10 @@ export const MAX_CAPTURED_OUTPUT = 128 * 1024
  */
 export function isExpectedUtilityBundleFailure(result) {
   if (!result || result.exitCode === 0 || result.signal) return false
-  const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+  // Node echoes the throwing source line before the error. In the bundle that is one
+  // minified line whose library code may spell "TypeError"; only the diagnostics count.
+  const stderr = (result.stderr ?? '').replace(/^[^\n]*:\d+\r?\n[^\n]*\r?\n[ \t^]*\r?\n/u, '')
+  const output = `${result.stdout ?? ''}\n${stderr}`
   if (!output.includes('Core utility parent port is unavailable')) return false
   return !/(?:ReferenceError|TypeError|SyntaxError|RangeError|DOMException|document(?:\.createElement| is not defined)|MODULE_NOT_FOUND|Cannot find module)/iu.test(output)
 }

@@ -80,10 +80,11 @@ updated: 2026-10-21
 
 | 邊界 | 入口 |
 | --- | --- |
-| 共享契約 | shared/paperChatSchemas.ts、paperChatStorageSchemas.ts、paperChatFigures.ts、figureMentions.ts、ragSchemas.ts、types.ts、coreRpcSchemas.ts |
-| Main／Preload | main/chat/paperChatService.ts、paperChatIpc.ts、chatProvider.ts、main/index.ts、preload/index.ts |
-| Utility | utility/core/paperContextBuilder.ts、persistence/paperChatFigureStore.ts、compute/structureAwareChunker.ts、compute/ragContentIndexService.ts、persistence/{paperChatStore,sqliteRagRepository}.ts、utilityOperations.ts；Main 側 ragContentIndexJobRunner.ts、rpcRagContentIndexer.ts |
-| UI | renderer/usePaperChat.ts、usePaperChatRouting.ts、components/ReaderChatPanel.tsx、paperChat.css、MarkdownPane.tsx、pages/ReaderPage.tsx |
+| 模組 | `desktop/src/features/chat/`（[README](../desktop/src/features/chat/README.md)） |
+| 契約 | `contract/`：paperChatSchemas、paperChatStorageSchemas、paperChatFigures、figureMentions、ragSchemas、`ipc.ts`（paper-chat:*）、`rpc.ts`（chat:*、compute:paper-chat-figure、compute:rag-content-index） |
+| Main | `main/`：paperChatService、chatProvider、modelGateway、ipc、ragContentIndexJobRunner、rpcRagContentIndexer；組裝在 `app/main/bootstrap.ts` |
+| Utility | `utility/`：operations（Core RPC handler）、paperContextBuilder、paperChatStore、paperChatFigureStore、structureAwareChunker、ragContentIndexService、sqliteRagRepository＋ragRecords |
+| UI | `renderer/`：ReaderChatPanel、paperChat.css、usePaperChat、usePaperChatRouting；宿主在閱讀器 MarkdownPane、ReaderPage |
 | 回歸 | paperChatContracts、paperChatService、figureInsightStore（圖片來源）、paperChatUtility、paperChatStore、chatProvider、ReaderChatPanel、paperContextBuilder、ragContracts、ragPersistence、ragContentIndexJobRunner、structureAwareChunker；e2e/paper-chat.spec.ts |
 
 新增持久化回歸覆蓋：真實本地文件重新讀取、文獻隔離、45 輪分頁、完整引用／草稿／模型、取消和清空次序、損壞文件保留、目錄 junction 拒絕、Core RPC 全鏈路和 Renderer reload。E2E 用隔離 vault 與假 Key，只模擬 provider HTTP，不讀寫真人憑據或調用付費 API。

@@ -39,5 +39,9 @@ describe('E2E GPU launch policy', () => {
       stdout: '',
       stderr: `${'x'.repeat(16 * 1024 + 1)}Error: Core utility parent port is unavailable`
     })).toBe(true)
+    // Node's echo of the throwing (minified) source line is not a diagnostic.
+    const echo = 'C:\\app\\out\\utility\\index.js:1101\n;throw new TypeError("pdf-lib text")\n      \n\n'
+    expect(isExpectedUtilityBundleFailure({ exitCode: 1, signal: null, stdout: '', stderr: `${echo}Error: Core utility parent port is unavailable\n    at Object.<anonymous>` })).toBe(true)
+    expect(isExpectedUtilityBundleFailure({ exitCode: 1, signal: null, stdout: '', stderr: `${echo}TypeError: x is not a function\nError: Core utility parent port is unavailable` })).toBe(false)
   })
 })

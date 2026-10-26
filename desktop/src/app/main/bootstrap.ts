@@ -15,33 +15,17 @@ import { refreshNetworkProxy } from '@platform/network/main/networkProxy'
 import { forkUtilityProcess } from '@platform/rpc/main/electronUtilityFork'
 import { resolveUtilityEntryPath } from '@platform/rpc/main/utilityEntryPath'
 import { UtilitySupervisor } from '@platform/rpc/main/utilitySupervisor'
-import { registerPaperChatHandlers } from '@features/chat/main/ipc'
+import { registerPaperChatHandlers, ChatProvider, ModelGateway, PaperChatService, RagContentIndexJobRunner, RpcRagContentIndexer } from '@features/chat/main'
 import { figureInsightChannels, paperInsightChannels } from '@features/insight/contract/ipc'
 import { registerFigureInsightHandlers, registerPaperInsightHandlers, FigureInsightService, loadFullBriefContext, PaperInsightService } from '@features/insight/main'
 import { libraryChannels } from '@features/library/contract/ipc'
-import { DocumentFeed } from '@features/library/main/documentFeed'
-import { registerLibraryIpc } from '@features/library/main/ipc'
-import { registerTaskNotifications } from '@features/library/main/notifications'
-import { registerParsingIpc } from '@features/parsing/main/ipc'
-import { registerReaderIpc, type ReaderIpcDeps } from '@features/reader/main/ipc'
+import { DocumentFeed, registerLibraryIpc, registerTaskNotifications, RpcTaskCompute, RpcTaskRepository, TaskService } from '@features/library/main'
+import { registerParsingIpc, ElectronFileUploader, ParseJobRunner, OfficialParserClient } from '@features/parsing/main'
+import { registerReaderIpc, type ReaderIpcDeps, FigureDisplayStore } from '@features/reader/main'
 import { registerSettingsIpc, SettingsService, UsageAnalyticsService } from '@features/settings/main'
-import { registerTranslationIpc } from '@features/translation/main/ipc'
+import { registerTranslationIpc, probeOpenAiCompatibleCredential, TranslationJobRunner } from '@features/translation/main'
 import { createZoteroExportService, createZoteroImportService, registerZoteroExportHandler, registerZoteroHandlers } from '@features/zotero/main'
-import { paperChatImageInput } from '@shared/paperChatFigures'
-import { ChatProvider } from '@main/chat/chatProvider'
-import { ModelGateway } from '@main/chat/modelGateway'
-import { PaperChatService } from '@main/chat/paperChatService'
-import { FigureDisplayStore } from '@main/figureDisplayStore'
-import { ElectronFileUploader } from '@main/fileUploader'
-import { ParseJobRunner } from '@main/parseJobRunner'
-import { OfficialParserClient } from '@main/parserClient'
-import { RagContentIndexJobRunner } from '@main/ragContentIndexJobRunner'
-import { RpcRagContentIndexer } from '@main/rpcRagContentIndexer'
-import { RpcTaskCompute } from '@main/rpcTaskCompute'
-import { RpcTaskRepository } from '@main/rpcTaskRepository'
-import { TaskService } from '@main/taskService'
-import { probeOpenAiCompatibleCredential } from '@main/translation/providers'
-import { TranslationJobRunner } from '@main/translationJobRunner'
+import { paperChatImageInput } from '@features/chat/contract/paperChatFigures'
 import { coreProtocol } from '../contract/coreRpc'
 import { appShell, libraryGate, services, startup } from './services'
 import { registerWindowIpc } from './window'
@@ -261,7 +245,8 @@ export async function bootstrap(): Promise<void> {
     notes,
     annotations: () => repository,
     applyEdit: (request) => utility.request('markdown-edits:apply', request, { timeoutMs: 30_000 }),
-    resolvedEdits: (documentId) => tasks.resolvedEdits(documentId)
+    resolvedEdits: (documentId) => tasks.resolvedEdits(documentId),
+    cacheFigure: (request) => tasks.cacheFigure(request)
   })
   registerZoteroExportHandler(createZoteroExportService({
     repository,

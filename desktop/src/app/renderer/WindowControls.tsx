@@ -1,5 +1,5 @@
 import React from 'react'
-import type { WindowAction } from '@shared/types'
+import type { WindowAction } from '../contract/window'
 
 export default function WindowControls(): React.JSX.Element {
   const [maximized, setMaximized] = React.useState(false)

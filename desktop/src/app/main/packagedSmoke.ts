@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { forkUtilityProcess } from '@platform/rpc/main/electronUtilityFork'
 import { resolveUtilityEntryPath } from '@platform/rpc/main/utilityEntryPath'
 import { UtilitySupervisor } from '@platform/rpc/main/utilitySupervisor'
-import { formatPackagedSmokeMarker } from '@shared/packagedSmoke'
+import { formatPackagedSmokeMarker } from '../contract/packagedSmoke'
 import { coreProtocol, type CoreOperationRegistryShape } from '../contract/coreRpc'
 
 /** Release check: start Utility against a throwaway database, ping it, print the marker and exit. */
