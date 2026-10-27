@@ -288,7 +288,12 @@ export class MarkdownTranslationPlanManager {
       checkpointRelativePath,
       hashes: { translated: translatedHash, manifest: manifestHash, checkpoint: checkpointHash }
     }
-    return translationPlanFinalizeResultSchema.parse(result)
+    const validated = translationPlanFinalizeResultSchema.parse(result)
+    // Final artifacts and checkpoints are durable. Release the full Markdown
+    // and table AST; a later retry reopens the same on-disk plan as before.
+    const key = planKey(taskId, jobId)
+    if (this.plans.get(key) === state) this.plans.delete(key)
+    return validated
   }
 
   private async ensurePlan(taskId: string, jobId: string): Promise<PlanState> {

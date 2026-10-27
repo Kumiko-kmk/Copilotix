@@ -21,6 +21,13 @@
 
 `tests/features/reader/`（`pnpm desktop:test --module reader`）；E2E `e2e/reader.spec.ts`、`reader-figures.spec.ts`、`qa-fixes.spec.ts`。
 
+## 圖像資源與記憶體
+
+- PDF 保持共用 worker、可見頁前後預渲染和原有並發；圖區仍保留 64 MiB 熱快取，原文／中文共享相同尺寸裁圖。淘汰圖區在最後一個使用者完成複製後釋放畫布像素，已卸載 PDF 頁在渲染取消完成後釋放，失敗／取消解碼一律關閉 ImageBitmap，不改解析度與預熱策略。
+- `figures.json` 的會話元資料最多保留最近使用的 128 篇；淘汰不刪磁碟產物，重新註冊時從原檔讀回。沒有 schema、IPC 或持久化變更；圖片生命週期、可見頁／預熱等既有回歸已執行。記憶體需區分 renderer、GPU、主進程與 Utility 的工作集，不能將單進程數值當作整個應用；隔離三篇成熟論文對照未觀察到反覆開收的線性增長，不承諾固定總占用降幅。
+
+renderer 與測試統一解析直接依賴的 KaTeX：rehype-katex 及所匯入的字體／CSS 不能各用不同 DOM 版本。renderer.resolve.dedupe 與 Vitest 去重一致，測試另內聯 rehype-katex，避免外部化繞過解析；實測單個短公式、分式、根式、矩陣，短公式不拆行。原公式字串與保存資料不變。
+
 ## 例外（超過 600 行）
 
 `renderer/components/MarkdownPane.tsx`（701 行）：一個視圖元件，漸進掛載、圖片就緒、捲動同步、選區與編輯共用約二十個 ref 與同一組 layout effect；塊視圖、圖片狀態、重排單元、狀態面板與 DOM 工具已拆至 `MarkdownBlockView.tsx`、`useMarkdownFigures.ts`、`MarkdownPaneParts.tsx`、`markdownPaneDom.ts`。再拆需改變 effect 次序，留待功能分支並配合真實文庫驗收。

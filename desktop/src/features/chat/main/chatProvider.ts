@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import PQueue from 'p-queue'
 import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import type { PaperChatProvider } from '../contract/paperChatSchemas'
 import type { ProviderTokenUsage } from '@features/settings/main'
@@ -16,16 +17,22 @@ const packetSchema = z.object({
   usage: usageSchema.nullable().optional()
 }).passthrough()
 
-/** Separate FIFO queues: chat never queues behind a translation request. */
+/** Interactive FIFO and bounded background queues never wait for each other. */
 export class ChatProvider {
   private readonly cooldowns = new Map<PaperChatProvider, number>()
   private readonly tails = new Map<PaperChatProvider, Promise<void>>()
+  private readonly background = new Map<PaperChatProvider, PQueue>()
   constructor(private readonly fetcher: ChatFetcher, private readonly options: { firstByteMs?: number; idleMs?: number; invalidate?(provider: Exclude<PaperChatProvider, 'codex'>): Promise<void> } = {}) {}
 
-  stream(input: { provider: Exclude<PaperChatProvider, 'codex'>; baseUrl: string; model: string; key: string; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number }): Promise<ProviderTokenUsage | null> {
+  stream(input: { provider: Exclude<PaperChatProvider, 'codex'>; baseUrl: string; model: string; key: string; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number; lane?: 'interactive' | 'background' }): Promise<ProviderTokenUsage | null> {
     // The endpoint is never a renderer field, and even persisted settings must match the provider whitelist.
     const expected = input.provider === 'qwen' ? DEFAULT_SETTINGS.qwenBaseUrl : DEFAULT_SETTINGS.deepseekBaseUrl
     if (input.baseUrl !== expected) return Promise.reject(new ChatProviderError('PROVIDER_UNAVAILABLE', '问答服务地址不受支持'))
+    if (input.lane === 'background') {
+      let queue = this.background.get(input.provider)
+      if (!queue) { queue = new PQueue({ concurrency: 8 }); this.background.set(input.provider, queue) }
+      return queue.add(() => { input.signal.throwIfAborted(); return this.runStream(input) }, { signal: input.signal }) as Promise<ProviderTokenUsage | null>
+    }
     const previous = this.tails.get(input.provider) ?? Promise.resolve()
     const run = previous.then(() => { input.signal.throwIfAborted(); return this.runStream(input) })
     this.tails.set(input.provider, run.then(() => undefined, () => undefined))

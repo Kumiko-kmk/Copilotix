@@ -149,6 +149,8 @@ export interface JobManualRetryInput {
 
 export interface JobRecoverExpiredInput {
   now: string
+  /** Keep leases owned by a scheduler with unsettled runners out of recovery. */
+  excludeLeaseOwner?: string
 }
 
 export interface JobTransition {

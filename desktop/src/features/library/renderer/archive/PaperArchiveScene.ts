@@ -62,7 +62,7 @@ import {
 } from './archiveDecryption'
 import { COLUMN_SPACING, ROW_SPACING, CARD_HEIGHT, CARD_HALF_WIDTH, CARD_BACK, CARD_FRONT, BASE_Y, RAIL_OFFSET, PREVIEW_LIFT, HOVER_LIFT, CAMERA_DISTANCE, VIEW_SPAN, ARRAY_AIM, LANE_RADIUS, ROW_RADIUS, POOL_SIZE, CARD_RADIUS, IDLE_DELAY, TARGET_FRAME_MS, LATE_FRAME_MS, MAX_STEP_SECONDS, MAX_PIXEL_RATIO, MAX_DRAWING_PIXELS, MIN_RESOLUTION_SCALE, DETAIL_PIXEL_RATIO, MAX_DETAIL_PIXELS, ENTRY_DURATION, SHOULDER_RISE, ARRAY_SCREEN_SHIFT, INSPECTION_LIFT, BASE_DIRECTION, DETAIL_DIRECTION, DETAIL_DISTANCE, DETAIL_SPAN, DETAIL_SCREEN, CLOSE_SECONDS, PAGE_HEIGHT, PAGE_MAX_WIDTH, UP, ARRAY_TRAY, DETAIL_TRAY, SHELL_SURFACES, cellKey, sameCell, indexTone, entryScanTime, decodeInlineAsset, type ShellSurface, type ArchivePalette, type PaperArchiveSceneOptions, type DetailPhase, type Pulse } from './archiveSceneConfig'
 export { entryScanTime } from './archiveSceneConfig'
-export type { ArchivePalette, PaperArchiveSceneOptions, DetailFrame, DetailPhase } from './archiveSceneConfig'
+export type { ArchivePalette, PaperArchiveSceneOptions, DetailFrame, DetailPhase, DetailCoverHandle } from './archiveSceneConfig'
 
 // Scene, model, materials and lighting follow RhineLabUI (MIT, Copyright (c)
 // 2026 LBEILC, https://github.com/LBEILC/RhineLabUI): src/scene.ts and
@@ -136,6 +136,9 @@ export class PaperArchiveScene {
   private detail = 0
   private reveal = 0
   private phase: DetailPhase = 'closed'
+  private coverHandle: import('./archiveSceneConfig').DetailCoverHandle | null = null
+  private openPreparation: { paperId: string; revision: string; controller: AbortController; timer: number } | null = null
+  private coverUploads = 0
   private closing: { elapsed: number; lift: number; detail: number; reveal: number } | null = null
   private pendingSelection: { paperId: string; cell: ArchiveCell; instant: boolean } | null = null
   private pulseGain = 1
@@ -420,6 +423,9 @@ export class PaperArchiveScene {
     if (!mesh) return
     this.pageCanvas = page
     this.renderer.domElement.dataset.archiveCover = page ? page.dataset.archiveCover ?? 'first-page' : 'none'
+    this.renderer.domElement.dataset.archiveCoverKey = page?.dataset.archiveCoverKey ?? ''
+    this.renderer.domElement.dataset.archiveCoverWidth = String(page?.width ?? 0)
+    this.renderer.domElement.dataset.archiveCoverHeight = String(page?.height ?? 0)
     const material = mesh.material as MeshBasicMaterial
     const front = this.pageFront!
     const frontMaterial = front.material as MeshBasicMaterial
@@ -441,6 +447,8 @@ export class PaperArchiveScene {
       material.map = texture
       frontMaterial.map = texture
       this.pageTexture = texture
+      this.renderer.initTexture(texture)
+      this.renderer.domElement.dataset.archiveCoverUploads = String(++this.coverUploads)
       mesh.visible = true
       front.visible = true
     }
@@ -488,6 +496,18 @@ export class PaperArchiveScene {
     return this.phase === 'open'
   }
 
+  get detailPreparing(): boolean {
+    return this.openPreparation !== null
+  }
+
+  private cancelOpenPreparation(): void {
+    const request = this.openPreparation
+    this.openPreparation = null
+    if (!request) return
+    window.clearTimeout(request.timer)
+    request.controller.abort()
+  }
+
   /** A short, additive push of the existing hero, driven by the scene's single frame loop. */
   enterReader(signal: AbortSignal): Promise<void> {
     signal.throwIfAborted()
@@ -525,6 +545,61 @@ export class PaperArchiveScene {
   openDetail(): boolean {
     const paper = paperAt(this.shelves, this.selected)
     if (!this.loaded || this.targetDetail || !paper || this.options.canOpenDetail?.(paper) === false) return false
+    const revision = `${paper.updatedAt ?? paper.createdAt}:${paper.workflow.status}`
+    if (this.openPreparation?.paperId === paper.id && this.openPreparation.revision === revision) return true
+    this.cancelOpenPreparation()
+    const prepared = this.options.getDetailCover?.(paper)
+    if (prepared) {
+      try { this.startDetail(prepared); return true }
+      catch {
+        prepared.release()
+        this.options.onDetailCoverError?.('无法显示完整封面，请重试打开档案。')
+        return false
+      }
+    }
+    if (!this.options.prepareDetailCover) {
+      this.startDetail()
+      return true
+    }
+    this.stopMomentum()
+    const request = { paperId: paper.id, revision, controller: new AbortController(), timer: 0 }
+    this.openPreparation = request
+    request.timer = window.setTimeout(() => {
+      if (this.openPreparation !== request) return
+      this.cancelOpenPreparation()
+      this.options.onDetailCoverError?.('封面准备超时，请重试打开档案。')
+    }, 30_000)
+    try {
+      void this.options.prepareDetailCover(paper, request.controller.signal).then(cover => {
+        const selected = paperAt(this.shelves, this.selected)
+        if (this.disposed || request.controller.signal.aborted || this.openPreparation !== request || selected?.id !== paper.id ||
+          `${selected.updatedAt ?? selected.createdAt}:${selected.workflow.status}` !== revision) { cover.release(); return }
+        this.openPreparation = null
+        window.clearTimeout(request.timer)
+        try { this.startDetail(cover) } catch { cover.release(); this.options.onDetailCoverError?.('无法显示完整封面，请重试打开档案。') }
+      }, () => {
+        if (this.openPreparation !== request) return
+        this.cancelOpenPreparation()
+        this.options.onDetailCoverError?.('无法准备完整封面，请重试打开档案。')
+      })
+    } catch {
+      this.cancelOpenPreparation()
+      this.options.onDetailCoverError?.('无法准备完整封面，请重试打开档案。')
+    }
+    return true
+  }
+
+  /** Texture, geometry and GPU upload are complete before the first extraction frame. */
+  private startDetail(cover?: import('./archiveSceneConfig').DetailCoverHandle): void {
+    if (cover) {
+      if (this.coverHandle?.key === cover.key && this.coverHandle.canvas === cover.canvas) cover.release()
+      else {
+        try { this.setDetailPage(cover.canvas) }
+        catch { this.setDetailPage(null); throw new Error('Cover texture upload failed') }
+        this.coverHandle?.release()
+        this.coverHandle = cover
+      }
+    }
     this.stopMomentum()
     this.hoverCell = null
     this.pendingSelection = null
@@ -533,10 +608,10 @@ export class PaperArchiveScene {
     this.lastInteraction = performance.now()
     this.setPhase(this.reveal >= 1 ? 'open' : 'opening')
     this.wake()
-    return true
   }
 
   closeDetail(): void {
+    this.cancelOpenPreparation()
     if (!this.targetDetail) return
     this.cancelReaderEntry()
     this.targetDetail = false
@@ -556,6 +631,8 @@ export class PaperArchiveScene {
     this.heroUniforms.uReveal.value = 0
     this.lifts.set(cellKey(this.selected), { value: PREVIEW_LIFT, velocity: 0 })
     this.setDetailPage(null)
+    this.coverHandle?.release()
+    this.coverHandle = null
     this.setPhase('closed')
     const pending = this.pendingSelection
     this.pendingSelection = null
@@ -708,6 +785,7 @@ export class PaperArchiveScene {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.cancelOpenPreparation()
     this.cancelReaderEntry()
     cancelAnimationFrame(this.frame)
     window.clearTimeout(this.idleTimer)
@@ -716,6 +794,9 @@ export class PaperArchiveScene {
     for (const mesh of this.surfaces.values()) mesh.dispose()
     for (const item of this.disposables) item.dispose()
     this.pageTexture?.dispose()
+    this.coverHandle?.release()
+    this.coverHandle = null
+    this.pageCanvas = null
     this.inspection.root.remove()
     this.renderer.dispose()
     this.renderer.forceContextLoss()
@@ -752,6 +833,8 @@ export class PaperArchiveScene {
 
   private emitSelection(): void {
     const paper = paperAt(this.shelves, this.selected)
+    if (this.openPreparation && (paper?.id !== this.openPreparation.paperId ||
+      `${paper.updatedAt ?? paper.createdAt}:${paper.workflow.status}` !== this.openPreparation.revision)) this.cancelOpenPreparation()
     const shelf = shelfAt(this.shelves, this.selected.lane)
     if (paper && shelf) this.memory.set(shelf.key, paper.id)
     this.options.onSelect({ ...this.selected }, paper)

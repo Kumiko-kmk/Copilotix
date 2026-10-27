@@ -9,6 +9,21 @@ export const figureInsightRequestSchema = z.object({
 }).strict()
 export type FigureInsightRequest = z.infer<typeof figureInsightRequestSchema>
 
+export const archiveCoverSourceRequestSchema = z.object({ documentId: z.uuid() }).strict()
+export const archiveCoverSourceSchema = z.object({
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
+  hasManifest: z.boolean(),
+  figures: z.array(z.object({
+    figureId: z.string().min(1).max(256),
+    imagePath: z.string().regex(/^images\/figures\/figure-p\d+-[a-f0-9]{24}\.png$/u),
+    width: z.number().int().positive().max(8192), height: z.number().int().positive().max(8192),
+    pageIndex: z.number().int().nonnegative(),
+    cropBox: z.tuple([z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite()]),
+    displayWeight: z.number().int().min(0).max(100).optional()
+  }).strict()).max(2000)
+}).strict()
+export type ArchiveCoverSource = z.infer<typeof archiveCoverSourceSchema>
+
 /** The entire model output contract. Location and provenance are application-owned. */
 export const figureInsightContentSchema = z.object({
   displayWeight: z.number().int().min(0).max(100),

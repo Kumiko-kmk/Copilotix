@@ -1,22 +1,23 @@
 import React from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, ExpandOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '../contract/documentSchemas'
-import type { PaperInsightSource, PaperInsightState } from '@features/insight/contract/paperInsight'
+import type { PaperInsightSource } from '@features/insight/contract/paperInsight'
 import type { LibraryCategories } from '../contract/libraryCategories'
 import { PaperArchiveScene, type ArchivePalette, type DetailPhase } from './archive/PaperArchiveScene'
+import { ArchiveCoverService } from './archive/archiveCoverService'
 import { useArchiveReaderEntry } from './archive/useArchiveReaderEntry'
 import { loadReaderPage } from '@features/reader/renderer'
 import ArchiveText from './archive/ArchiveText'
 import ArchiveDetail, { type ArchiveMorph } from './archive/ArchiveDetail'
 import ArchiveProgressRing from './archive/ArchiveProgressRing'
-import { useArchivePreparation } from './archive/useArchivePreparation'
-import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from '../core/paperProfile'
+import { archivePreparation } from './archive/useArchivePreparation'
+import { archiveTitle } from '../core/paperProfile'
 import { buildArchiveColumns, paperIndexAt, shelfAt, wrap, type ArchiveCell, type ArchivePaper } from './archive/archiveShelves'
 import { workflowSummaryText } from './documentStatus'
 import WorkflowSteps from './WorkflowSteps'
 import { takeLibraryFocus } from './archive/libraryFocus'
 import type { ArchivePreparationStep } from './archive/useArchivePreparation'
+import { useArchiveCatalog } from './archive/useArchiveCatalog'
 import './archive/paperArchive.css'
 
 // Survives page switches so returning from the reader lands on the same paper.
@@ -41,14 +42,17 @@ export default function LibraryPage(props: {
   /** The browse panel's box when extraction starts; the detail panel stretches out of it. */
   const morphFromRef = React.useRef<ArchiveMorph | null>(null)
   const sceneRef = React.useRef<PaperArchiveScene | null>(null)
+  const coversRef = React.useRef<ArchiveCoverService | null>(null)
   const onOpenRef = React.useRef(props.onOpen)
   const [selection, setSelection] = React.useState<Selection>({ cell: { lane: 0, row: 0 }, paper: null })
+  const catalog = useArchiveCatalog(props.documents, props.insights)
+  const browseData = selection.paper ? catalog.get(selection.paper.id) : undefined
   const documentIds = React.useMemo(() => props.documents.map(document => document.id), [props.documents])
   const readerEntry = useArchiveReaderEntry(sceneRef, selection.paper?.id, documentIds, props.onOpen)
   onOpenRef.current = readerEntry.open
-  const preparation = useArchivePreparation(selection.paper, props.insights)
-  const accessRef = React.useRef({ id: selection.paper?.id, ready: preparation.ready })
-  accessRef.current = { id: selection.paper?.id, ready: preparation.ready }
+  const preparation = archivePreparation(selection.paper, browseData, Boolean(props.insights))
+  const accessRef = React.useRef({ catalog, hasSource: Boolean(props.insights) })
+  accessRef.current = { catalog, hasSource: Boolean(props.insights) }
   const [unsupported, setUnsupported] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [searchOpen, setSearchOpen] = React.useState(false)
@@ -64,6 +68,7 @@ export default function LibraryPage(props: {
   }, [query, searchIndex])
   const restoredRef = React.useRef(false)
   const [phase, setPhase] = React.useState<DetailPhase>('closed')
+  const [coverError, setCoverError] = React.useState<string | null>(null)
   /** The glass has begun to clear: the panel's redaction follows it. */
   const [decryptReveal, setDecryptReveal] = React.useState(false)
   /**
@@ -80,7 +85,6 @@ export default function LibraryPage(props: {
     if (readerEntry.phase) pageRef.current?.focus({ preventScroll: true })
   }, [readerEntry.phase])
   const fileNumbers = React.useMemo(() => new Map(shelves.flatMap((shelf) => shelf.papers).map((paper, index) => [paper.id, index + 1])), [shelves])
-  const showPage = React.useCallback((page: HTMLCanvasElement | null) => sceneRef.current?.setDetailPage(page), [])
   const [stats, setStats] = React.useState<ReturnType<PaperArchiveScene['getStats']> | null>(null)
   const [statsOpen, setStatsOpen] = React.useState(false)
 
@@ -96,6 +100,21 @@ export default function LibraryPage(props: {
   }, [statsOpen])
 
   React.useEffect(() => {
+    const service = new ArchiveCoverService()
+    coversRef.current = service
+    const stop = window.copilotix?.figureInsight?.onChanged(({ documentId, state }) => {
+      if (state.status === 'ready') service.invalidate(documentId)
+    })
+    return () => { stop?.(); coversRef.current = null; service.dispose() }
+  }, [])
+
+  React.useEffect(() => {
+    const readyIds = new Set(props.documents.filter(paper => paper.workflow.status === 'completed' && (!props.insights || catalog.get(paper.id)?.ready)).map(paper => paper.id))
+    coversRef.current?.sync(props.documents, readyIds)
+    if (selection.paper) coversRef.current?.prioritize(selection.paper.id)
+  }, [props.documents, props.insights, catalog, selection.paper?.id])
+
+  React.useEffect(() => {
     const host = hostRef.current
     if (!host) return
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -105,13 +124,18 @@ export default function LibraryPage(props: {
         container: host,
         palette: readPalette(host),
         reducedMotion: motionQuery.matches,
+        getDetailCover: paper => coversRef.current?.peek(paper) ?? null,
+        prepareDetailCover: (paper, signal) => coversRef.current?.acquire(paper, signal) ?? Promise.reject(new Error('档案封面服务尚未就绪')),
+        onDetailCoverError: message => setCoverError(message),
         onSelect: (cell, paper) => {
           if (paper) lastPaperId = paper.id
+          if (paper) coversRef.current?.prioritize(paper.id)
+          setCoverError(null)
           setReturningId((current) => (current === paper?.id ? current : null))
           setSelection({ cell, paper })
         },
         onActivate: (paper) => onOpenRef.current(paper.id),
-        canOpenDetail: (paper) => accessRef.current.id === paper.id && accessRef.current.ready,
+        canOpenDetail: (paper) => paper.workflow.status === 'completed' && (!accessRef.current.hasSource || accessRef.current.catalog.get(paper.id)?.ready === true),
         onError: () => setUnsupported(true),
         onDetailFrame: (frame) => {
           const page = pageRef.current
@@ -122,6 +146,7 @@ export default function LibraryPage(props: {
         },
         onDecryptReveal: () => setDecryptReveal(true),
         onDetailPhase: (next) => {
+          if (next === 'opening') setCoverError(null)
           if (next === 'opening' || next === 'closed') setDecryptReveal(false)
           if (next === 'closed') setReturningId(lastPaperId)
           // Still mounted here: React re-renders after this callback.
@@ -199,7 +224,7 @@ export default function LibraryPage(props: {
         return
       }
       if (!scene || target.closest('.paper-archive-tools')) return
-      if (event.key === 'Escape' && scene.detailOpen) {
+      if (event.key === 'Escape' && (scene.detailOpen || scene.detailPreparing)) {
         event.preventDefault()
         scene.closeDetail()
         pageRef.current?.focus({ preventScroll: true })
@@ -218,7 +243,7 @@ export default function LibraryPage(props: {
         event.preventDefault()
         if (event.repeat) return
         if (scene.detailReady) scene.activate()
-        else if (accessRef.current.ready) scene.openDetail()
+        else scene.openDetail()
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -248,7 +273,7 @@ export default function LibraryPage(props: {
       <div ref={hostRef} className="paper-archive-stage" onPointerDown={() => pageRef.current?.focus({ preventScroll: true })} />
       <div className="paper-archive-veil" aria-hidden="true" />
       <div className="paper-archive-floor-veil" aria-hidden="true" />
-      {readerEntry.error ? <p className="paper-archive-reader-error" role="alert">{readerEntry.error}</p> : null}
+      {readerEntry.error || coverError ? <p className="paper-archive-reader-error" role="alert">{readerEntry.error || coverError}</p> : null}
       {stats ? (
         <output className="paper-archive-stats" aria-label="文库渲染诊断">
           {stats.fps} fps · DPR {stats.pixelRatio} × {stats.resolutionScale} · {stats.drawn} 卡 · {(stats.triangles / 1e6).toFixed(2)}M 三角形<br />{stats.gpu}
@@ -320,19 +345,19 @@ export default function LibraryPage(props: {
       ) : paper && phase !== 'closed' ? (
         <div className={`paper-archive-detail-layer${phase === 'closing' ? ' closing' : ''}`} inert={phase === 'closing'} aria-hidden={phase === 'closing' ? true : undefined}>
           <ArchiveDetail key={paper.id} paper={paper} category={shelf?.category ?? ''} fileNumber={fileNumbers.get(paper.id) ?? paperIndex + 1}
-            phase={phase} morphFrom={morphFromRef.current} textReveal={decryptReveal || phase === 'open'} onPage={showPage} onOpen={() => readerEntry.open(paper.id)}
-            onClose={() => { readerEntry.cancel(); sceneRef.current?.closeDetail() }} insights={props.insights} openingReader={readerEntry.phase !== null} />
+            phase={phase} morphFrom={morphFromRef.current} textReveal={decryptReveal || phase === 'open'} onOpen={() => readerEntry.open(paper.id)}
+            onClose={() => { readerEntry.cancel(); sceneRef.current?.closeDetail() }} insights={props.insights} translatedTitle={browseData?.translatedTitle} openingReader={readerEntry.phase !== null} />
         </div>
       ) : paper ? (
         <article ref={panelRef} className={`paper-archive-panel${returningId === paper.id ? ' returning' : ''}`} data-document-id={paper.id} aria-live="polite">
           <span className="paper-archive-path">LIBRARY<i>/</i>{shelf?.category}</span>
           <h2 key={paper.id} className="paper-archive-title"><span><ArchiveText text={displayTitle} /></span></h2>
-          <BrowseTranslatedTitle paper={paper} />
+          <p className="paper-archive-translated-title"><ArchiveText text={browseData?.translatedTitle || '\u00a0'} /></p>
           <div className="paper-archive-rule"><i /><ArchiveStatusLabel paper={paper} waiting={preparation.waiting} />
             {/* A file card that failed will not finish on its own: no ring stuck short of 100%. */}
             {preparation.waiting === 'analysis-failed' ? null : <ArchiveProgressRing key={paper.id} documentId={paper.id} progress={preparation.progress} ready={preparation.ready} />}</div>
           <dl className="paper-archive-meta">
-            <BrowsePaperNotes key={paper.id} paper={paper} source={props.insights} />
+            <BrowsePaperNotes keywords={browseData?.keywords ?? []} summary={browseData?.tldr ?? ''} />
           </dl>
           <div className="paper-archive-actions">
             <button type="button" className="paper-archive-action" disabled={!preparation.ready} onClick={() => { if (preparation.ready) sceneRef.current?.openDetail() }}>
@@ -372,41 +397,9 @@ export default function LibraryPage(props: {
 }
 
 const RULER_TICKS = 9
-/** File-card states of recently selected papers, so the browse panel never re-loads in view. */
-const notesCache = new Map<string, PaperInsightState>()
-
-/** Read keywords and the file card's summary together after selection settles. */
-function BrowsePaperNotes({ paper, source }: { paper: ArchivePaper; source?: PaperInsightSource }): React.JSX.Element {
-  const [settled, setSettled] = React.useState(false)
-  // Coming back from the detail view remounts this panel: start from what was already read.
-  const [state, setCachedState] = React.useState<PaperInsightState | null>(() => notesCache.get(paper.id) ?? null)
-  const setState = React.useCallback((next: PaperInsightState) => {
-    notesCache.delete(paper.id)
-    notesCache.set(paper.id, next)
-    if (notesCache.size > 64) notesCache.delete(notesCache.keys().next().value!)
-    setCachedState(next)
-  }, [paper.id])
-  React.useEffect(() => {
-    let current = true
-    let updated = false
-    const stop = source?.subscribe((id, next) => {
-      if (current && id === paper.id) { updated = true; setState(next) }
-    })
-    const timer = window.setTimeout(() => {
-      setSettled(true)
-      source?.get(paper.id).then((next) => { if (current && !updated) setState(next) }, () => undefined)
-    }, 180)
-    return () => { current = false; window.clearTimeout(timer); stop?.() }
-  }, [paper.id, source, setState])
-  const details = useQuery({
-    queryKey: ['document', paper.id], queryFn: () => window.copilotix.getDocument(paper.id),
-    enabled: settled, staleTime: 30_000
-  })
-  const extracted = React.useMemo(() => details.data
-    ? extractPaperProfile(details.data.markdown, details.data.translatedMarkdown).keywords : [], [details.data])
-  const fromCard = state?.status === 'ready' ? ('brief' in state ? state.brief.keywords : state.insight.keywords) : []
-  const keywords = (fromCard.length ? fromCard : extracted).map((word) => word.trim().replace(/\s+/gu, ' ')).filter(Boolean).join(' ')
-  const summary = state?.status === 'ready' ? ('brief' in state ? state.brief.tldr : state.insight.summary) : ''
+/** The whole library already has these small saved fields, regardless of selection order. */
+function BrowsePaperNotes({ keywords: words, summary }: { keywords: string[]; summary: string }): React.JSX.Element {
+  const keywords = words.map((word) => word.trim().replace(/\s+/gu, ' ')).filter(Boolean).join(' ')
   return <>
     <div className="paper-archive-keywords"><dt>关键词</dt><SingleLineKeywords text={keywords} /></div>
     <div className="paper-archive-summary"><dt>总结</dt><dd key={summary} className="paper-archive-arrive">{summary || '暂无总结'}</dd></div>
@@ -455,23 +448,6 @@ function useLibraryCategories(documents: readonly DocumentSummary[], load: (() =
     return () => { current = false; window.clearTimeout(timer) }
   }, [key, cardsChanged, load])
   return load ? categories : null
-}
-
-/** Read only the selected paper after navigation settles; share the detail query cache. */
-function BrowseTranslatedTitle({ paper }: { paper: ArchivePaper }): React.JSX.Element {
-  const [settledId, setSettledId] = React.useState<string | null>(null)
-  React.useEffect(() => {
-    const timer = window.setTimeout(() => setSettledId(paper.id), 180)
-    return () => window.clearTimeout(timer)
-  }, [paper.id])
-  const details = useQuery({
-    queryKey: ['document', paper.id],
-    queryFn: () => window.copilotix.getDocument(paper.id),
-    enabled: settledId === paper.id,
-    staleTime: 30_000
-  })
-  const translatedTitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown, true), [details.data?.translatedMarkdown])
-  return <p className="paper-archive-translated-title"><ArchiveText text={translatedTitle || '\u00a0'} /></p>
 }
 
 /** A fixed-width ruler; long shelves map onto it proportionally. */

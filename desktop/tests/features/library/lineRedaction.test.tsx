@@ -67,7 +67,11 @@ describe('useLineRedaction', () => {
     const view = render(<FormulaPanel />)
     const bars = view.container.querySelectorAll<HTMLElement>('.paper-archive-redaction')
     expect(bars).toHaveLength(1)
-    expect(bars[0]!.style.height).toBe('102px')
+    // Formula padding is clipped to the field and column, including their top/bottom edges.
+    expect(bars[0]!.style.height).toBe('100px')
+    expect(bars[0]!.style.top).toBe('0px')
+    expect(bars[0]!.style.left).toBe('0px')
+    expect(bars[0]!.style.width).toBe('200px')
   })
   it('keeps the text unpainted while covered and paints it beneath the bars when they start to slide', async () => {
     const view = render(<Panel reveal={false} />)

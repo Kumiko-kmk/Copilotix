@@ -118,6 +118,10 @@ export interface PaperArchiveSceneOptions {
   onActivate(paper: ArchivePaper): void
   /** All routes into detail (including card pointer input) share this guard. */
   canOpenDetail?(paper: ArchivePaper): boolean
+  /** A completed cover is attached before extraction begins; cold requests stay in browse. */
+  getDetailCover?(paper: ArchivePaper): DetailCoverHandle | null
+  prepareDetailCover?(paper: ArchivePaper, signal: AbortSignal): Promise<DetailCoverHandle>
+  onDetailCoverError?(message: string): void
   /** The model could not be prepared; the page shows a fallback. */
   onError?(error: unknown): void
   /** Extraction state of the selected paper, for the detail panel. */
@@ -137,6 +141,13 @@ export interface DetailFrame {
 
 /** closed → opening (lifting, camera turning) → decrypting (cover clearing) → open. */
 export type DetailPhase = 'closed' | 'opening' | 'decrypting' | 'open' | 'closing'
+
+export interface DetailCoverHandle {
+  key: string
+  canvas: HTMLCanvasElement
+  kind: 'spread' | 'single'
+  release(): void
+}
 
 export type Pulse = { row: number; lane: number; time: number }
 export const cellKey = (cell: ArchiveCell): string => `${cell.lane}:${cell.row}`

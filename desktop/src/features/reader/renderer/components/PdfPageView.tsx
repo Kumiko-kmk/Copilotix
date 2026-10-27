@@ -146,6 +146,11 @@ export const PdfPage = React.memo(function PdfPage(props: {
     return () => {
       renderTask.cancel()
       renderTaskRef.current = null
+      // A detached page no longer needs its backing pixels. Wait for cancellation,
+      // so a queued renderer never writes into a canvas while it is being released.
+      void renderTask.promise.catch(() => undefined).finally(() => {
+        if (!canvas.isConnected) { canvas.width = 0; canvas.height = 0 }
+      })
     }
   }, [page, props.onError, scale])
 

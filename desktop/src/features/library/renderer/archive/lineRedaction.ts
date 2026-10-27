@@ -9,6 +9,7 @@ const TARGETS = '.paper-archive-reveal'
 const SAMPLES = 24
 
 interface Line { x: number; y: number; right: number; bottom: number }
+interface Clip { left: number; top: number; right: number; bottom: number }
 
 /**
  * Covers every line inside `.paper-archive-reveal` elements of `root` with an ink bar drawn into
@@ -116,19 +117,53 @@ function watchLayout(article: HTMLElement, host: HTMLElement, changed: () => voi
 function drawCovers(article: HTMLElement, host: HTMLElement): void {
   host.replaceChildren()
   const origin = host.getBoundingClientRect()
+  const articleBounds = article.getBoundingClientRect()
+  const articleStyle = getComputedStyle(article)
+  const pixels = (value: string): number => Number.parseFloat(value) || 0
+  const baseClip: Clip = {
+    left: Math.max(origin.left, articleBounds.left + pixels(articleStyle.borderLeftWidth) + pixels(articleStyle.paddingLeft)),
+    right: Math.min(origin.right, articleBounds.right - pixels(articleStyle.borderRightWidth) - pixels(articleStyle.paddingRight)),
+    top: Math.max(origin.top, articleBounds.top), bottom: Math.min(origin.bottom, articleBounds.bottom)
+  }
+  const clips = new Map<Element, Clip>([[article, baseClip]])
+  const clippedOverflow = /^(?:auto|scroll|hidden|clip)$/u
+  const clipFor = (element: Element): Clip => {
+    const cached = clips.get(element)
+    if (cached) return cached
+    const parent = element.parentElement
+    const clip = { ...(parent && article.contains(parent) ? clipFor(parent) : baseClip) }
+    const style = getComputedStyle(element)
+    if (style.display !== 'inline' && style.display !== 'contents') {
+      const bounds = element.getBoundingClientRect()
+      const left = bounds.left + element.clientLeft, top = bounds.top + element.clientTop
+      if (element.clientWidth > 0 && clippedOverflow.test(style.overflowX)) {
+        clip.left = Math.max(clip.left, left)
+        clip.right = Math.min(clip.right, left + element.clientWidth)
+      }
+      if (element.clientHeight > 0 && clippedOverflow.test(style.overflowY)) {
+        clip.top = Math.max(clip.top, top)
+        clip.bottom = Math.min(clip.bottom, top + element.clientHeight)
+      }
+    }
+    clips.set(element, clip)
+    return clip
+  }
   const lines: Line[] = []
   for (const target of article.querySelectorAll<HTMLElement>(TARGETS)) {
     // Clamped titles and the scrolling tab panel hide some lines; only visible ones are covered.
     const bounds = target.getBoundingClientRect()
     const own: Line[] = []
-    const addRect = (rect: DOMRect): void => {
+    const addRect = (rect: DOMRect, element: Element): void => {
       if (!rect.width || !rect.height) return
-      const top = Math.max(rect.top, bounds.top)
-      const bottom = Math.min(rect.bottom, bounds.bottom)
+      const clip = clipFor(element)
+      // Expand the ink first, then clip it. Hidden text and the one-pixel
+      // cover padding must never escape a field, scroll viewport or column.
+      const top = Math.max(rect.top - 1, bounds.top, clip.top)
+      const bottom = Math.min(rect.bottom + 1, bounds.bottom, clip.bottom)
       if (bottom <= top) return
-      const x = Math.max(rect.left, bounds.left) - origin.left
+      const x = Math.max(rect.left - 1, bounds.left, clip.left) - origin.left
       const y = top - origin.top
-      const right = Math.min(rect.right, bounds.right) - origin.left
+      const right = Math.min(rect.right + 1, bounds.right, clip.right) - origin.left
       if (right <= x) return
       const lineBottom = bottom - origin.top
       const line = own.find((entry) => Math.abs(entry.y - y) < 6)
@@ -142,7 +177,7 @@ function drawCovers(article: HTMLElement, host: HTMLElement): void {
     // KaTeX contains both visual glyphs and accessible MathML. Cover the visual
     // formula as one box so fractions/roots are covered without duplicate bars.
     for (const formula of target.querySelectorAll<HTMLElement>('.katex')) {
-      if (!formula.parentElement?.closest('.katex, [data-archive-unredacted]')) addRect(formula.getBoundingClientRect())
+      if (!formula.parentElement?.closest('.katex, [data-archive-unredacted]')) addRect(formula.getBoundingClientRect(), formula)
     }
     const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT)
     let node: Node | null
@@ -151,7 +186,7 @@ function drawCovers(article: HTMLElement, host: HTMLElement): void {
       const range = document.createRange()
       range.selectNodeContents(node)
       if (typeof range.getClientRects !== 'function') return
-      for (const rect of range.getClientRects()) addRect(rect)
+      for (const rect of range.getClientRects()) addRect(rect, node.parentElement ?? target)
     }
     lines.push(...own)
   }
@@ -159,7 +194,10 @@ function drawCovers(article: HTMLElement, host: HTMLElement): void {
   for (const line of lines) {
     const window = document.createElement('span')
     window.className = 'paper-archive-redaction'
-    window.style.cssText = `left:${(line.x - 1).toFixed(1)}px;top:${(line.y - 1).toFixed(1)}px;width:${(line.right - line.x + 2).toFixed(1)}px;height:${(line.bottom - line.y + 2).toFixed(1)}px`
+    const left = Math.ceil(line.x * 10) / 10, top = Math.ceil(line.y * 10) / 10
+    const right = Math.floor(line.right * 10) / 10, bottom = Math.floor(line.bottom * 10) / 10
+    if (right <= left || bottom <= top) continue
+    window.style.cssText = `left:${left}px;top:${top}px;width:${right - left}px;height:${bottom - top}px`
     const ink = document.createElement('span')
     ink.className = 'paper-archive-redaction-ink'
     window.append(ink)

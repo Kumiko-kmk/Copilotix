@@ -1,7 +1,7 @@
 import type { DocumentSummary } from '../../contract/documentSchemas'
 import { ALL_PAPERS_NAME } from '../../contract/libraryCategories'
 
-export type ArchivePaper = Pick<DocumentSummary, 'id' | 'displayName' | 'originalName' | 'createdAt' | 'workflow'>
+export type ArchivePaper = Pick<DocumentSummary, 'id' | 'displayName' | 'originalName' | 'createdAt' | 'workflow'> & { updatedAt?: string; sourceHash?: string }
 
 export interface ArchiveShelf {
   /** Stable category id; each category occupies one column. */

@@ -24,6 +24,8 @@ export default function App(): React.JSX.Element {
   const queryClient = useQueryClient()
   const insights = React.useMemo<import('@features/insight/contract/paperInsight').PaperInsightSource>(() => ({
     get: (documentId) => window.copilotix.paperInsight.get({ documentId }),
+    readSaved: (documentId) => window.copilotix.paperInsight.get({ documentId, savedOnly: true }),
+    ...(window.copilotix.paperInsight.list ? { list: (documentIds: readonly string[]) => window.copilotix.paperInsight.list!({ documentIds }) } : {}),
     cancel: (documentId) => window.copilotix.paperInsight.cancel({ documentId }),
     generate: (documentId) => window.copilotix.paperInsight.generate({ documentId }),
     subscribe: (listener) => window.copilotix.paperInsight.onChanged(({ documentId, state }) => listener(documentId, state))

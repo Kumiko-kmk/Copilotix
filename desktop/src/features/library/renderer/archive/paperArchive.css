@@ -242,28 +242,29 @@
 /* Keep the header aligned with the brand; use the page's remaining height for the abstract. */
 .paper-archive-detail {
   position: absolute; z-index: 2; top: var(--page-top); left: var(--archive-panel-left);
-  width: var(--archive-detail-width); box-sizing: border-box;
+  width: calc(var(--archive-detail-width) + 32px); box-sizing: border-box;
   bottom: 26px;
 }
-.paper-archive-detail { display: flex; min-height: 0; padding: 18px 0 0; flex-direction: column; }
+.paper-archive-detail { display: flex; min-height: 0; padding: 18px 32px 0 0; flex-direction: column; }
 .paper-archive-detail > * { flex: none; }
 .paper-archive-detail header h2 {
   display: -webkit-box; margin: 4px 0 0; overflow: hidden; color: var(--ink);
   font-size: clamp(20px, 2vw, 30px); font-weight: 760; letter-spacing: .005em; line-height: 1.22; overflow-wrap: anywhere;
   -webkit-box-orient: vertical; -webkit-line-clamp: 2; user-select: text;
 }
-.paper-archive-detail .paper-archive-rule { margin: calc(14px / 3) 0 4px; background: var(--ink); }
+.paper-archive-detail .paper-archive-rule { width: 100%; margin: calc(14px / 3) 0 4px; background: var(--ink); }
 .paper-archive-detail-error { margin: 0 0 12px; color: var(--archive-index-failed); font-size: 13px; }
-.paper-archive-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 22px; margin: 0 0 12px; }
+.paper-archive-fields { display: grid; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 22px; margin: 0 0 12px; }
+.paper-archive-fields > div { min-width: 0; }
 .paper-archive-fields > div.wide { grid-column: 1 / -1; }
 .paper-archive-fields > div.half { grid-column: span 2; }
 .paper-archive-fields dt { margin-bottom: 3px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
 .paper-archive-fields dd {
-  display: -webkit-box; margin: 0; overflow: hidden; color: var(--text); font-size: 13.5px; line-height: 1.55;
+  display: -webkit-box; min-width: 0; max-width: 100%; margin: 0; overflow: hidden; color: var(--text); font-size: 13.5px; line-height: 1.55;
   font-variant-numeric: tabular-nums; -webkit-box-orient: vertical; -webkit-line-clamp: 1; user-select: text;
 }
 .paper-archive-fields > div.half dd { -webkit-line-clamp: 2; }
-.paper-archive-tabs { position: relative; display: flex; gap: 28px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 22%, transparent); }
+.paper-archive-tabs { position: relative; display: flex; width: 100%; gap: 28px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 22%, transparent); }
 .paper-archive-tabs button {
   position: relative; display: inline-flex; align-items: baseline; gap: 6px; height: 36px; padding: 0;
   border: 0; background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 600; cursor: pointer; transition: color .18s ease;
@@ -285,13 +286,14 @@
 }
 .paper-archive-tabs[data-indicator="moving"]::after { transition: transform .28s var(--ease-out), width .28s var(--ease-out); }
 .paper-archive-tabs button:hover { color: var(--ink); }
-.paper-archive-tabpanel { min-height: 64px; margin-top: 14px; overflow: auto; scrollbar-width: none; overscroll-behavior: contain; animation: paper-archive-fade .15s ease both; }
+.paper-archive-tabpanel { width: calc(100% + 32px); min-width: 0; min-height: 64px; margin-top: 14px; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; animation: paper-archive-fade .15s ease both; }
 .paper-archive-tabpanel::-webkit-scrollbar { display: none; }
 .paper-archive-tabpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.paper-archive-abstract { margin: 0; color: var(--text); font-size: 16px; line-height: 1.85; text-align: justify; user-select: text; }
+.paper-archive-abstract { margin: 0; color: var(--text); font-size: 16px; line-height: 1.85; text-align: justify; text-align-last: auto; user-select: text; }
 .paper-archive-tabpanel { position: relative; }
-.paper-archive-reading-body { padding-right: 32px; }
-.paper-archive-reading-error { margin: 8px 0; color: var(--archive-index-failed); font-size: 13px; }
+.paper-archive-reading-body { width: 100%; min-width: 0; box-sizing: border-box; padding-right: 32px; }
+.paper-archive-tabpanel .reader-note-marker { margin-left: 7px; }
+.paper-archive-reading-error { width: calc(100% - 32px); margin: 8px 0; color: var(--archive-index-failed); font-size: 13px; }
 .paper-archive-translated-abstract { text-indent: 2em; overflow-wrap: anywhere; }
 .paper-archive-outline { margin: 0; padding-left: 0; list-style: none; counter-reset: section; }
 .paper-archive-outline li { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px dashed color-mix(in srgb, var(--ink) 14%, transparent); color: var(--text); font-size: 13.5px; counter-increment: section; }
@@ -335,8 +337,8 @@
 }
 
 /* Brief content shares the existing scroll panel and reveal; no additional motion. */
-.paper-archive-brief-content { color: var(--text); font-size: 16px; line-height: 1.85; user-select: text; }
-.paper-archive-brief-content h3 { margin: 20px 0 8px; font-size: 17px; line-height: 1.5; color: var(--ink); }
+.paper-archive-brief-content { color: var(--text); font-size: 16px; line-height: 1.85; text-align: justify; text-align-last: auto; user-select: text; }
+.paper-archive-brief-content h3 { margin: 20px 0 8px; font-size: 17px; line-height: 1.5; color: var(--ink); text-align: left; }
 .paper-archive-brief-content h3:first-child { margin-top: 0; }
 .paper-archive-brief-content p { margin: 6px 0; text-indent: 2em; }
 .paper-archive-brief-content .paper-archive-brief-note { text-indent: 0; }
@@ -357,8 +359,9 @@
   display: flex; flex: 1; flex-direction: column; justify-content: flex-start;
   gap: 18px; margin: 0; padding: 0 0 4px; list-style: none;
 }
-.paper-archive-reading-points > li { display: grid; flex: none; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; }
-.paper-archive-point-index { padding-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.8; font-variant-numeric: tabular-nums; }
+.paper-archive-reading-points > li { display: block; flex: none; min-width: 0; }
+.paper-archive-point-heading { display: flex; align-items: baseline; gap: 12px; }
+.paper-archive-point-index { flex: 0 0 20px; color: var(--muted); font-size: 12px; line-height: 1.8; font-variant-numeric: tabular-nums; }
 .paper-archive-reading-points h3 { margin: 0 0 8px; font-weight: 650; }
 .paper-archive-reading-points p { margin: 0; text-indent: 2em; }
 .paper-archive-reading-points .paper-archive-anchor { margin: 8px 0 0; padding: 0; background: transparent; border-radius: 0; }

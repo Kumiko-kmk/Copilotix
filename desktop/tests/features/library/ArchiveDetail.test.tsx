@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render as renderReact, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactElement } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import ArchiveDetail from '../../../src/features/library/renderer/archive/ArchiveDetail'
 import { briefGeneration } from '../../fixtures/paperBrief'
@@ -7,9 +9,19 @@ import { parseBriefResponse, assembleBrief, buildFullBriefContext } from '../../
 import type { PaperInsightSource } from '../../../src/features/insight/contract/paperInsight'
 
 const query = vi.hoisted(() => ({ data: undefined as undefined | { markdown: string; translatedMarkdown: string; summary: { updatedAt: string } } }))
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ isPending: !query.data, data: query.data }), useQueryClient: () => ({}) }))
+vi.mock('@tanstack/react-query', async importOriginal => {
+  const actual = await importOriginal<typeof import('@tanstack/react-query')>()
+  return { ...actual, useQuery: (options: Parameters<typeof actual.useQuery>[0]) =>
+    options.queryKey[0] === 'archive-insight' ? actual.useQuery(options) : { isPending: !query.data, data: query.data } }
+})
+const clients: QueryClient[] = []
+function render(element: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  clients.push(client)
+  return renderReact(<QueryClientProvider client={client}>{element}</QueryClientProvider>)
+}
 beforeEach(() => { query.data = undefined; vi.stubGlobal('matchMedia', () => ({ matches: true })) })
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.unstubAllGlobals() })
 
 it('renders all legacy v1 fields and preserves navigation and saved data', async () => {
   const insight = {
@@ -23,7 +35,8 @@ it('renders all legacy v1 fields and preserves navigation and saved data', async
   }
   const original = JSON.stringify(insight)
   const onOpen = vi.fn()
-  const view = render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-14T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="测试" fileNumber={1} phase="open" onPage={vi.fn()} onClose={vi.fn()} onOpen={onOpen} insights={source} />)
+  const onPage = vi.fn()
+  const view = render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-14T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="测试" fileNumber={1} phase="open" onPage={onPage} onClose={vi.fn()} onOpen={onOpen} insights={source} />)
   fireEvent.click(await screen.findByRole('tab', { name: /AI 解读/u }))
   await vi.waitFor(() => expect(view.container.querySelectorAll('.paper-archive-insight .katex')).toHaveLength(6))
   expect(view.container.textContent).toContain('论文内容已更新')
@@ -31,6 +44,7 @@ it('renders all legacy v1 fields and preserves navigation and saved data', async
   fireEvent.click(screen.getByRole('button', { name: /打开阅读/u }))
   expect(onOpen).toHaveBeenCalledOnce()
   expect(JSON.stringify(insight)).toBe(original)
+  expect(onPage).not.toHaveBeenCalled()
 })
 
 it('shows generated abstract, paper background, core work and discussion on four tabs', async () => {

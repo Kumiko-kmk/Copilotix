@@ -32,6 +32,11 @@ beforeEach(() => {
     getSettings: async () => settings, listDocuments: async () => [],
     onDocumentsChanged: () => () => undefined,
     onOpenDocument: (listener: typeof openDocument) => { openDocument = listener; return () => undefined },
+    paperInsight: {
+      get: async () => ({ status: 'missing' }), list: async () => [],
+      generate: async () => undefined, cancel: async () => ({ cancelled: false }),
+      onChanged: () => () => undefined
+    },
     getUsageAnalytics: async () => ({ days: [] }), saveSettings
   } })
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })

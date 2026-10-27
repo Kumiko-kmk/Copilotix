@@ -36,7 +36,7 @@ export const DEFAULT_SCHEDULER_CONCURRENCY: Readonly<SchedulerConcurrencyConfig>
   parse: 2,
   upload: 3,
   normalize: 2,
-  translate: 2,
+  translate: 4,
   ragContent: 1,
   ragEmbed: 1,
   ragDelete: 1
@@ -328,7 +328,7 @@ export class JobScheduler extends EventEmitter {
     entry.done = this.executeJob(entry)
       .catch(() => undefined)
       .finally(() => {
-        this.active.delete(job.id)
+        if (this.active.get(job.id) === entry) this.active.delete(job.id)
         if (!work.released) {
           work.released = true
           semaphore.release()
@@ -351,7 +351,7 @@ export class JobScheduler extends EventEmitter {
     work.done = this.executeBatch(entries, runner)
       .catch(() => undefined)
       .finally(() => {
-        for (const entry of entries) this.active.delete(entry.job.id)
+        for (const entry of entries) if (this.active.get(entry.job.id) === entry) this.active.delete(entry.job.id)
         if (!work.released) {
           work.released = true
           semaphore.release()
@@ -499,6 +499,15 @@ export class JobScheduler extends EventEmitter {
         entry.work.controller.abort()
       }
     }))
+    // A quick restart can precede the previous process's lease expiry. Keep
+    // recovery live after startup, after renewing this scheduler's own leases.
+    if (this.state !== 'running') return
+    const recovered = await this.repository.recoverExpired({ now: this.now(), ...(this.active.size ? { excludeLeaseOwner: this.leaseOwner } : {}) })
+    for (const job of recovered) {
+      this.emit('job-changed', job)
+      if (job.status === 'failed') this.emit('job-notification', job)
+    }
+    if (recovered.length) this.wake()
   }
 
   private cancelTimer(kind: 'poll' | 'heartbeat'): void {

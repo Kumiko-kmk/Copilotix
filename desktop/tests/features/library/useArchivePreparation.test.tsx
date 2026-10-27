@@ -1,97 +1,158 @@
 // @vitest-environment jsdom
+import React from 'react'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
-import type { PaperInsightSource, PaperInsightState } from '@features/insight/contract/paperInsight'
-import { useArchivePreparation } from '../../../src/features/library/renderer/archive/useArchivePreparation'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ArchiveInsightSnapshot, PaperInsightSource, PaperInsightState } from '@features/insight/contract/paperInsight'
+import { archivePreparation, useArchivePreparation } from '../../../src/features/library/renderer/archive/useArchivePreparation'
+import { useArchiveCatalog } from '../../../src/features/library/renderer/archive/useArchiveCatalog'
 import type { ArchivePaper } from '../../../src/features/library/renderer/archive/archiveShelves'
-const mocks = vi.hoisted(() => ({ data: undefined as unknown, crop: vi.fn(), cover: vi.fn(async () => ({ canvas: {}, pages: 1 })) }))
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mocks.data }) }))
-vi.mock('@features/reader/core/readerFigureGroups', () => ({ buildReaderFigureGeometries: () => [{ id: 'figure', status: 'complete' }] }))
-vi.mock('../../../src/features/reader/renderer/useFigureArtifacts', () => ({ ensureFigureArtifacts: mocks.crop }))
-vi.mock('../../../src/features/library/renderer/archive/ArchiveDetail', () => ({ renderSpread: mocks.cover }))
-vi.mock('../../../src/features/library/renderer/archive/detailPage', () => ({ loadDetailPage: (_key: string, create: () => Promise<unknown>) => create(), firstPageRenderer: () => vi.fn() }))
-afterEach(() => { cleanup(); vi.clearAllMocks() })
-function fixture(id = crypto.randomUUID()) {
-  mocks.data = { markdown: 'Original paper', mappings: [], layoutJson: '{}', pdfUrl: 'https://local/'+id, summary: { updatedAt: '2026-10-16', workflow: { status: 'completed' } } }
-  let emit!: (id: string, state: PaperInsightState) => void
-  const ready = { status: 'ready', stale: false } as PaperInsightState
-  const source: PaperInsightSource = { get: vi.fn(async () => ready), generate: vi.fn(), subscribe: listener => { emit = listener; return vi.fn() } }
-  const paper: ArchivePaper = { id, displayName: 'Paper', originalName: 'paper.pdf', createdAt: '2026-10-16', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }
-  return { paper, source, emit: (state: PaperInsightState) => emit(id, state) }
+
+const clients: QueryClient[] = []
+afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()) })
+function wrapper() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  clients.push(client)
+  return ({ children }: React.PropsWithChildren) => <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
-it('waits for figures and saved analysis, and never treats a workflow 100% as archive readiness', async () => {
-  const f = fixture()
-  let finish!: (value: { available: number; failed: number }) => void
-  mocks.crop.mockImplementation(() => new Promise(resolve => { finish = resolve }))
-  const view = renderHook(() => useArchivePreparation(f.paper, f.source))
-  await waitFor(() => expect(mocks.crop).toHaveBeenCalledOnce())
-  expect(view.result.current.ready).toBe(false)
-  expect(view.result.current.progress).toBeLessThan(100)
-  act(() => f.emit({ status: 'generating' }))
-  await act(async () => finish({ available: 1, failed: 0 }))
-  expect(view.result.current).toMatchObject({ ready: false, waiting: 'analysis' })
-  act(() => f.emit({ status: 'ready', stale: false } as PaperInsightState))
-  await waitFor(() => expect(view.result.current).toEqual({ ready: true, progress: 100, waiting: null }))
-})
-it('keeps failed figures and partial translations locked', async () => {
-  const f = fixture()
-  mocks.crop.mockResolvedValue({ available: 0, failed: 1 })
-  const view = renderHook(() => useArchivePreparation(f.paper, f.source))
-  await waitFor(() => expect(mocks.crop).toHaveBeenCalledOnce())
-  expect(view.result.current.ready).toBe(false)
-  f.paper.workflow.status = 'partial'
-  view.rerender()
-  expect(view.result.current.progress).toBeLessThan(100)
-})
-it('waits for the laid-out cover even after analysis and crop files are ready', async () => {
-  const f = fixture()
-  mocks.crop.mockResolvedValue({ available: 1, failed: 0 })
-  let finish!: (page: { canvas: object; pages: number }) => void
-  mocks.cover.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
-  const view = renderHook(() => useArchivePreparation(f.paper, f.source))
-  await waitFor(() => expect(mocks.cover).toHaveBeenCalledOnce())
-  expect(view.result.current.ready).toBe(false)
-  await act(async () => finish({ canvas: {}, pages: 1 }))
-  expect(view.result.current.ready).toBe(true)
-})
-it('reports the figures step only while crops are rendered, not while cached ones are checked', async () => {
-  const f = fixture()
-  let finish!: (value: { available: number; failed: number }) => void
-  let render!: () => void
-  mocks.crop.mockImplementation((_id, _url, _geometries, _signal, _progress, onRender: () => void) => {
-    render = onRender
-    return new Promise(resolve => { finish = resolve })
+function paper(): ArchivePaper {
+  return { id: crypto.randomUUID(), displayName: 'Paper', originalName: 'paper.pdf', sourceHash: 'source-hash',
+    createdAt: '2026-10-26T00:00:00Z', updatedAt: '2026-10-26T00:00:00Z',
+    workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }
+}
+function saved(paper: ArchivePaper, patch: Partial<ArchiveInsightSnapshot> = {}): ArchiveInsightSnapshot {
+  return { documentId: paper.id, updatedAt: paper.updatedAt ?? paper.createdAt, workflowStatus: paper.workflow.status,
+    savedStatus: 'ready', ready: true, translatedTitle: '已保存的译名', keywords: ['机制'], tldr: '已保存的论文总结。', ...patch }
+}
+function savedState(): PaperInsightState {
+  return { status: 'ready', stale: false, insight: { summary: '已保存的论文总结。', researchQuestion: '问题', method: '方法',
+    contributions: [], findings: [], limitations: [], keywords: ['机制'], model: { provider: 'deepseek', name: 'deepseek-flash' },
+    generatedAt: '2026-10-26T00:00:00Z', sourceRevision: 'persisted-source' } }
+}
+function sourceFor(papers: ArchivePaper[]) {
+  const listeners = new Set<(id: string, state: PaperInsightState) => void>()
+  const list = vi.fn<NonNullable<PaperInsightSource['list']>>(async ids => ids.flatMap(id => {
+    const value = papers.find(paper => paper.id === id)
+    return value ? [saved(value)] : []
+  }))
+  const source: PaperInsightSource = { list, get: vi.fn(async () => savedState()), generate: vi.fn(async () => undefined),
+    subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener) } } }
+  return { source, list, emit: (id: string, state: PaperInsightState) => listeners.forEach(listener => listener(id, state)) }
+}
+function pending<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>(accept => { resolve = accept })
+  return { promise, resolve }
+}
+
+describe('archive access uses durable saved facts', () => {
+  it('requires the validated saved card even when workflow progress is already 100%', () => {
+    const value = paper()
+    expect(archivePreparation(value, undefined, true)).toMatchObject({ ready: false, waiting: 'analysis' })
+    for (const status of ['missing', 'stale', 'failed'] as const) {
+      const state = archivePreparation(value, saved(value, { savedStatus: status, ready: false }), true)
+      expect(state.ready).toBe(false)
+      expect(state.progress).toBeLessThan(100)
+      expect(state.waiting).toBe(status === 'failed' ? 'analysis-failed' : 'analysis')
+    }
+    expect(archivePreparation(value, saved(value), true)).toEqual({ ready: true, progress: 100, waiting: null })
   })
-  const view = renderHook(() => useArchivePreparation(f.paper, f.source))
-  await waitFor(() => expect(mocks.crop).toHaveBeenCalledOnce())
-  await waitFor(() => expect(view.result.current).toMatchObject({ ready: false, waiting: null }))
-  act(() => render())
-  expect(view.result.current.waiting).toBe('figures')
-  await act(async () => finish({ available: 1, failed: 0 }))
-  await waitFor(() => expect(view.result.current).toEqual({ ready: true, progress: 100, waiting: null }))
+
+  it('keeps partial or active processing locked despite an older saved card and 100% progress', () => {
+    const original = paper()
+    for (const status of ['translating', 'partial', 'failed'] as const) {
+      const value = { ...original, workflow: { ...original.workflow, status, progress: 100 } }
+      const result = archivePreparation(value, saved(original), true)
+      expect(result.ready).toBe(false)
+      expect(result.progress).toBeLessThan(100)
+      expect(result.waiting).toBe('workflow')
+    }
+    expect(archivePreparation(null, undefined, true).ready).toBe(false)
+  })
+
+  it('preserves the legacy embedder fallback when no insight source is supplied', () => {
+    expect(archivePreparation(paper(), undefined, false)).toEqual({ ready: true, progress: 100, waiting: null })
+    const value = paper()
+    value.workflow.status = 'partial'
+    expect(archivePreparation(value, undefined, false).ready).toBe(false)
+  })
 })
-it('aborts old selection preparation and ignores its late completion', async () => {
-  const f = fixture()
-  let finish!: (value: { available: number; failed: number }) => void
-  mocks.crop.mockImplementationOnce(() => new Promise(resolve => { finish = resolve })).mockResolvedValue({ available: 0, failed: 1 })
-  const view = renderHook(({ paper }) => useArchivePreparation(paper, f.source), { initialProps: { paper: f.paper } })
-  await waitFor(() => expect(mocks.crop).toHaveBeenCalledOnce())
-  const signal = mocks.crop.mock.calls[0]![3] as AbortSignal
-  view.rerender({ paper: { ...f.paper, id: crypto.randomUUID() } })
-  expect(signal.aborted).toBe(true)
-  await act(async () => finish({ available: 1, failed: 0 }))
-  expect(view.result.current.ready).toBe(false)
-})
-it('prepares only the paper the selection rests on, not those passed while browsing', async () => {
-  const f = fixture()
-  mocks.crop.mockResolvedValue({ available: 1, failed: 0 })
-  const passed = { ...f.paper, id: crypto.randomUUID() }
-  const resting = { ...f.paper, id: crypto.randomUUID() }
-  const view = renderHook(({ paper }) => useArchivePreparation(paper, f.source), { initialProps: { paper: f.paper } })
-  view.rerender({ paper: passed })
-  view.rerender({ paper: resting })
-  await waitFor(() => expect(mocks.crop).toHaveBeenCalledOnce())
-  await new Promise(resolve => setTimeout(resolve, 600))
-  expect(mocks.crop).toHaveBeenCalledOnce()
-  expect(mocks.crop.mock.calls[0]![0]).toBe(resting.id)
+
+describe('saved catalog updates and selection races', () => {
+  it('loads all saved facts once so arbitrary paper switches stay ready without body or crop work', async () => {
+    const papers = [paper(), paper(), paper()]
+    const f = sourceFor(papers)
+    const view = renderHook(({ selected }) => {
+      const catalog = useArchiveCatalog(papers, f.source)
+      return archivePreparation(selected, catalog.get(selected.id), true)
+    }, { initialProps: { selected: papers[0]! }, wrapper: wrapper() })
+    await waitFor(() => expect(view.result.current.ready).toBe(true))
+    view.rerender({ selected: papers[2]! })
+    expect(view.result.current.ready).toBe(true)
+    view.rerender({ selected: papers[1]! })
+    expect(view.result.current.ready).toBe(true)
+    expect(f.list).toHaveBeenCalledOnce()
+    expect(f.list).toHaveBeenCalledWith(papers.map(paper => paper.id))
+    expect(f.source.get).not.toHaveBeenCalled()
+    expect(f.source.generate).not.toHaveBeenCalled()
+  })
+
+  it('does not transiently disable a saved mature card while its replacement generates or fails', async () => {
+    const value = paper(), f = sourceFor([value])
+    const view = renderHook(() => useArchivePreparation(value, f.source), { wrapper: wrapper() })
+    await waitFor(() => expect(view.result.current.ready).toBe(true))
+    const recheck = pending<ArchiveInsightSnapshot[]>()
+    f.list.mockReturnValueOnce(recheck.promise)
+    act(() => f.emit(value.id, { status: 'generating' }))
+    expect(view.result.current.ready).toBe(true)
+    await waitFor(() => expect(f.list).toHaveBeenCalledTimes(2))
+    await act(async () => { recheck.resolve([saved(value)]) })
+    act(() => f.emit(value.id, { status: 'failed', error: 'replacement failed' }))
+    expect(view.result.current.ready).toBe(true)
+    await waitFor(() => expect(f.list).toHaveBeenCalledTimes(3))
+    expect(view.result.current.ready).toBe(true)
+  })
+
+  it('rejects a late initial missing row after a newer saved-state event has already unlocked the card', async () => {
+    const value = paper(), f = sourceFor([value])
+    const initial = pending<ArchiveInsightSnapshot[]>()
+    f.list.mockReturnValueOnce(initial.promise)
+    const view = renderHook(() => useArchivePreparation(value, f.source), { wrapper: wrapper() })
+    await waitFor(() => expect(f.list).toHaveBeenCalledOnce())
+    act(() => f.emit(value.id, { status: 'generating' }))
+    await waitFor(() => expect(view.result.current.ready).toBe(true))
+    await act(async () => { initial.resolve([saved(value, { savedStatus: 'missing', ready: false })]) })
+    expect(view.result.current.ready).toBe(true)
+    expect(f.source.get).not.toHaveBeenCalled()
+  })
+
+  it('rejects a completed old revision and accepts only the newly selected saved revision', async () => {
+    const original = paper(), f = sourceFor([original])
+    const older = pending<ArchiveInsightSnapshot[]>(), newer = pending<ArchiveInsightSnapshot[]>()
+    f.list.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise)
+    const view = renderHook(({ selected }) => useArchivePreparation(selected, f.source), {
+      initialProps: { selected: original }, wrapper: wrapper()
+    })
+    await waitFor(() => expect(f.list).toHaveBeenCalledOnce())
+    const changed = { ...original, updatedAt: '2026-10-27T00:00:00Z' }
+    view.rerender({ selected: changed })
+    await waitFor(() => expect(f.list).toHaveBeenCalledTimes(2))
+    await act(async () => { older.resolve([saved(original)]) })
+    expect(view.result.current.ready).toBe(false)
+    await act(async () => { newer.resolve([saved(changed)]) })
+    expect(view.result.current).toEqual({ ready: true, progress: 100, waiting: null })
+  })
+
+  it('immediately reflects a valid newly saved card while its follow-up local verification is pending', async () => {
+    const value = paper(), f = sourceFor([value])
+    f.list.mockResolvedValueOnce([saved(value, { savedStatus: 'missing', ready: false })])
+    const view = renderHook(() => useArchivePreparation(value, f.source), { wrapper: wrapper() })
+    await waitFor(() => expect(f.list).toHaveBeenCalledOnce())
+    const recheck = pending<ArchiveInsightSnapshot[]>()
+    f.list.mockReturnValueOnce(recheck.promise)
+    act(() => f.emit(value.id, savedState()))
+    expect(view.result.current.ready).toBe(true)
+    await act(async () => { recheck.resolve([saved(value)]) })
+    expect(view.result.current.ready).toBe(true)
+  })
 })

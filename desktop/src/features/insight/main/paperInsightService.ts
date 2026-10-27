@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { lstat, open } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { buildFullBriefContext, PaperBriefInputError } from '../core/paperBrief/context'
 import { briefSourceSchema, briefContextResultSchema, type BriefSource } from '../core/paperBrief/contracts'
 import { paperBriefModelOutputSchema } from '../core/paperBrief/schema'
@@ -11,9 +12,10 @@ import { paperInsightStateSchema, paperInsightRequestSchema, type PaperInsightSt
 import { resolvePaperChatModel, resolvePaperChatProvider, type PaperChatProvider } from '@features/chat/contract/paperChatSchemas'
 import type { AppSettings } from '@features/settings/contract/settingsTypes'
 import type { Job } from '@platform/jobs/core/jobs'
-import { ChatProviderError } from '@features/chat/main'
+import { ChatProviderError, abortable } from '@features/chat/main'
 import type { ProviderTokenUsage } from '@features/settings/main'
 import { CodexGenerationError, codexFailure } from '@platform/codex/runtime/codexRuntime'
+import { archiveInsightListRequestSchema, type ArchiveInsightSnapshot } from '../contract/archiveInsight'
 
 export async function loadFullBriefContext(documentId: string, signal: AbortSignal,
   source: () => Promise<BriefSource>): Promise<BriefContextResult> {
@@ -46,18 +48,23 @@ export interface PaperInsightDependencies {
   settings(): Promise<AppSettings>
   key(provider: PaperChatProvider): Promise<string | null>
   get(documentId: string): Promise<PaperInsightState>
+  listSaved?(documentIds: readonly string[]): Promise<ArchiveInsightSnapshot[]>
   context(documentId: string, signal: AbortSignal): Promise<BriefContextResult>
   save(documentId: string, brief: PaperBrief, anchors: BriefAnchor[]): Promise<unknown>
   stream: ModelGateway['stream']
   recordUsage(provider: PaperChatProvider, usage: ProviderTokenUsage): Promise<void>
   changed(documentId: string, state: PaperInsightState): void
   canStart(): boolean
+  /** Local descriptor check for startup recovery; never reads/uploads paper text. */
+  hasText?(documentId: string): Promise<boolean>
   /** Receives only classified, log-safe failure details; never prompts, paper text or keys. */
   log?(details: Record<string, unknown>): void
 }
 type Run = { documentId: string; automatic: boolean; controller: AbortController; done: Promise<void>; finish(): void }
 
-/** One queued/running generation per document; at most two active pipelines globally. */
+const PAPER_INSIGHT_CONCURRENCY = 8
+
+/** One queued/running generation per document; bounded network work only. */
 export class PaperInsightService {
   private readonly runs = new Map<string, Run>()
   private readonly queue: Run[] = []
@@ -66,6 +73,7 @@ export class PaperInsightService {
   private active = 0
   private paused = false
   private destroyed = false
+  private recovery?: { controller: AbortController; done: Promise<void> }
   constructor(private readonly deps: PaperInsightDependencies) {}
 
   private emit(documentId: string, state: PaperInsightState): void {
@@ -96,6 +104,17 @@ export class PaperInsightService {
     return undefined
   }
 
+  list(documentIds: readonly string[]): Promise<ArchiveInsightSnapshot[]> {
+    const request = archiveInsightListRequestSchema.parse({ documentIds })
+    return this.deps.listSaved?.(request.documentIds) ?? Promise.resolve([])
+  }
+
+  async getSaved(documentId: string): Promise<PaperInsightState> {
+    paperInsightRequestSchema.parse({ documentId })
+    try { return paperInsightStateSchema.parse(await this.deps.get(documentId)) }
+    catch { return { status: 'failed', error: '无法读取本地解读，请检查论文目录后重试。' } }
+  }
+
   async get(documentId: string): Promise<PaperInsightState> {
     paperInsightRequestSchema.parse({ documentId })
     if (this.runs.has(documentId)) return { status: 'generating' }
@@ -121,8 +140,34 @@ export class PaperInsightService {
     this.pump()
   }
 
+  /** Resume only missing cards after a restart; ready/stale cards remain untouched. */
+  recover(documentIds: readonly string[]): Promise<void> {
+    if (this.recovery) return this.recovery.done
+    const controller = new AbortController(), signal = controller.signal
+    const recovery = { controller, done: Promise.resolve() }
+    recovery.done = (async () => {
+      const hasText = this.deps.hasText
+      if (!hasText) return
+      for (const documentId of new Set(documentIds)) {
+        if (signal.aborted || this.destroyed || this.paused || !this.deps.canStart()) return
+        if (this.runs.has(documentId)) continue
+        const stored = await abortable(this.deps.get(documentId), signal).catch(() => null)
+        if (stored?.status !== 'missing' || !await abortable(hasText(documentId), signal).catch(() => false)) continue
+        // Keep only IDs pending locally; full contexts are loaded by active runs.
+        while (this.runs.size >= 200) {
+          await abortable(Promise.race([...this.runs.values()].map(run => run.done)), signal)
+        }
+        if (signal.aborted || this.destroyed || this.paused || !this.deps.canStart()) return
+        if (this.blocked.has(documentId)) continue
+        await this.generate(documentId, true)
+      }
+    })().finally(() => { if (this.recovery === recovery) this.recovery = undefined })
+    this.recovery = recovery
+    return recovery.done
+  }
+
   private pump(): void {
-    while (this.active < 2 && this.queue.length) {
+    while (!this.paused && !this.destroyed && this.active < PAPER_INSIGHT_CONCURRENCY && this.queue.length) {
       const run = this.queue.shift()!
       this.active++
       void this.execute(run).finally(() => {
@@ -167,18 +212,22 @@ export class PaperInsightService {
         signal.throwIfAborted()
         if (auth.reason !== undefined) { this.emit(documentId, { status: 'unavailable', reason: auth.reason }); return }
         stage = 'generate'; provider = auth.provider; attempts = attempt + 1
+        const streamAuth = auth
         let answer = ''
         let usage: Awaited<ReturnType<PaperInsightDependencies['stream']>>
-        try { usage = await this.deps.stream({
-          provider: auth.provider, model: auth.model, key: auth.key,
-          baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
-          signal, messages, ...(auth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
+        try { usage = await withBriefTransportRetry(() => {
+          answer = ''
+          return this.deps.stream({
+          provider: streamAuth.provider, model: streamAuth.model, key: streamAuth.key,
+          baseUrl: streamAuth.provider === 'qwen' ? streamAuth.settings.qwenBaseUrl : streamAuth.settings.deepseekBaseUrl,
+          signal, messages, lane: 'background', firstByteMs: 120_000, ...(streamAuth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
           onDelta: (delta) => {
             signal.throwIfAborted()
             if (answer.length + delta.length > 32_768) throw new Error('output budget exceeded')
             answer += delta
           }
-        }) } catch (error) {
+          })
+        }, auth.provider, signal) } catch (error) {
           // Codex already backed off and retried; an oversized paper would not fit a smaller model either.
           const next = auth.provider === 'codex' && !signal.aborted && !(error instanceof CodexGenerationError && error.code === 'RAG_LIMIT_EXCEEDED') &&
             (error instanceof CodexGenerationError || codexFailure(error).retryable) ? await this.fallbackProvider() : undefined
@@ -238,23 +287,35 @@ export class PaperInsightService {
 
   cancel(documentId: string): { cancelled: boolean } {
     const run = this.runs.get(documentId)
-    run?.controller.abort()
-    return { cancelled: !!run }
+    if (!run) return { cancelled: false }
+    run.controller.abort()
+    const queued = this.queue.indexOf(run)
+    if (queued >= 0) {
+      this.queue.splice(queued, 1)
+      this.runs.delete(documentId)
+      this.emit(documentId, { status: 'failed', error: '生成已取消，可重新生成。' })
+      run.finish()
+    }
+    return { cancelled: true }
   }
-  cancelAll(): void { for (const run of this.runs.values()) run.controller.abort() }
+  cancelAll(): void {
+    this.recovery?.controller.abort()
+    for (const run of [...this.runs.values()]) this.cancel(run.documentId)
+  }
   async pause(): Promise<void> {
     this.paused = true
+    const recovery = this.recovery
     this.cancelAll()
-    await Promise.all([...this.runs.values()].map((run) => run.done))
+    await Promise.all([...this.runs.values()].map((run) => run.done).concat(recovery ? [recovery.done.catch(() => undefined)] : []))
   }
-  resume(): void { if (!this.destroyed) this.paused = false }
+  resume(): void { if (!this.destroyed) { this.paused = false; this.pump() } }
   async dispose(): Promise<void> { this.destroyed = true; await this.pause() }
   async deleteDocument<T>(documentId: string, remove: () => Promise<T>): Promise<T> {
     if (this.blocked.has(documentId)) throw new Error('论文正在删除')
     this.blocked.add(documentId)
     try {
       const run = this.runs.get(documentId)
-      run?.controller.abort()
+      this.cancel(documentId)
       await run?.done
       return await remove()
     } finally { this.blocked.delete(documentId); this.failures.delete(documentId) }
@@ -265,6 +326,21 @@ export class PaperInsightService {
     // The translation event also recovers older imports and failed generation.
     if (job.kind === 'parse' || job.kind === 'translate') await this.generate(job.documentId, true)
     else this.emit(job.documentId, await this.get(job.documentId))
+  }
+}
+
+/** Network retries are bounded separately from the one structured-output repair. */
+async function withBriefTransportRetry<T>(operation: () => Promise<T>, provider: PaperChatProvider, signal: AbortSignal): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    signal.throwIfAborted()
+    try { return await operation() } catch (error) {
+      // Codex already owns its account-wide adaptive retry policy.
+      if (provider === 'codex' || signal.aborted || attempt >= 2 || !(error instanceof ChatProviderError)
+        || !['EMBEDDING_RATE_LIMITED', 'RAG_TIMEOUT', 'PROVIDER_UNAVAILABLE'].includes(error.code)) throw error
+      const delayMs = error.retryAfterMs ?? 1_000 * 2 ** attempt
+      if (delayMs > 60_000) throw error
+      await sleep(delayMs, undefined, { signal })
+    }
   }
 }
 

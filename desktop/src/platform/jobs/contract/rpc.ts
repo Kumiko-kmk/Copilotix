@@ -145,7 +145,10 @@ export const coreJobManualRetryPayloadSchema = z.object({
   detail: coreJobJsonObjectSchema.optional(),
   refreshTranslation: z.literal(true).optional()
 }).strict()
-export const coreJobRecoverExpiredPayloadSchema = z.object({ now: coreTimestampSchema }).strict()
+export const coreJobRecoverExpiredPayloadSchema = z.object({
+  now: coreTimestampSchema,
+  excludeLeaseOwner: z.string().min(1).max(256).refine(noNul).optional()
+}).strict()
 export const coreJobEventsPayloadSchema = z.object({ jobId: coreIdSchema }).strict()
 
 /** Durable job queue operations, served by the Utility-owned SQLite job repository. */

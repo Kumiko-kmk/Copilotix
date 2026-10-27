@@ -15,20 +15,20 @@ export default function BriefContent(props: { brief: PaperBrief; anchors: BriefA
           { title: '研究进展', text: analysis.discussion.progress },
           { title: '局限与展望', text: analysis.discussion.limitations }
         ]
-    return <div className="paper-archive-brief-content paper-archive-reading">
+    return <div className="paper-archive-brief-content paper-archive-reading" data-section={tab}>
       <ol className="paper-archive-reading-points">
         {points.map((item, index) => <li key={`${tab}-${index}`}>
-          <span className="paper-archive-point-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-          <div>
+          <div className="paper-archive-point-heading">
+            <span className="paper-archive-point-index" aria-hidden="true">{index + 1}</span>
             <h3 data-annotation-block-key={`archive:${tab}:${index}:title`}><ArchiveText text={item.title || ['领域现状', '已有方法与不足', '研究切入点'][index] || '研究背景'} /></h3>
-            <p data-annotation-block-key={`archive:${tab}:${index}:body`}><ArchiveText text={item.text} /></p>
-            {item.anchors ? <Sources ids={item.anchors} anchors={anchors} /> : null}
           </div>
+          <p data-annotation-block-key={`archive:${tab}:${index}:body`}><ArchiveText text={item.text} /></p>
+          {item.anchors ? <Sources ids={item.anchors} anchors={anchors} /> : null}
         </li>)}
       </ol>
     </div>
   }
-  return <div className="paper-archive-brief-content">
+  return <div className="paper-archive-brief-content" data-section={tab}>
     {tab === 'overview' ? <>
       <h3>背景</h3><p><ArchiveText text={brief.context.background} /></p>
       <h3>研究缺口</h3><p><ArchiveText text={brief.context.gap} /></p>

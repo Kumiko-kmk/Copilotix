@@ -1,17 +1,15 @@
-import { loadFigureArtifacts } from '@features/reader/renderer'
 import React from 'react'
 import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { DocumentDetails } from '../../contract/documentSchemas'
 import type { PaperInsight, PaperInsightSource } from '@features/insight/contract/paperInsight'
-import { usePaperInsight } from '@features/insight/renderer'
+import { useArchiveInsight } from './useArchiveInsight'
+import { archivePaperRevision, loadArchiveDocument } from './archiveBrowseData'
 import type { ArchivePaper } from './archiveShelves'
 import type { DetailPhase } from './PaperArchiveScene'
 import { archiveTitle, archiveTranslatedTitle, extractPaperProfile } from '../../core/paperProfile'
 import BriefContent, { type BriefTab } from './BriefContent'
 import { useLineRedaction } from './lineRedaction'
-import { composeSpread, drawFigureSheet, loadSpreadCandidates, loadSpreadImages } from './figureSpread'
-import type { DetailPage } from './detailPage'
 import ArchiveText from './ArchiveText'
 import ArchiveReadingTools from './ArchiveReadingTools'
 
@@ -19,8 +17,8 @@ type Tab = 'abstract' | 'structure' | 'insight' | BriefTab
 
 /**
  * The extracted paper's file, after RhineLabUI's detail view: every line is redacted until the
- * glass clears, then the ink slides away line by line. Mounted only while a paper is extracted, so the archive itself never loads
- * document bodies.
+ * glass clears, then the ink slides away line by line. Mounted only while a paper is extracted;
+ * the pre-rendered cover belongs to the independent service and scene.
  */
 export default function ArchiveDetail(props: {
   paper: ArchivePaper
@@ -32,31 +30,33 @@ export default function ArchiveDetail(props: {
   morphFrom?: ArchiveMorph | null
   /** The glass has started to clear (or the file is already open): lift the redaction. */
   textReveal?: boolean
-  onPage(page: HTMLCanvasElement | null): void
+  onPage?(page: HTMLCanvasElement | null): void
   onOpen(): void
   onClose(): void
   openingReader?: boolean
   insights?: PaperInsightSource
+  /** Keep the browse subtitle visible while the full local document is read. */
+  translatedTitle?: string
 }): React.JSX.Element {
-  const { paper, onPage } = props
+  const { paper } = props
   const details = useQuery<DocumentDetails>({
     queryKey: ['document', paper.id],
-    queryFn: () => window.copilotix.getDocument(paper.id)
+    queryFn: () => loadArchiveDocument(paper.id, archivePaperRevision(paper)), staleTime: 30_000
   })
   const profile = React.useMemo(
     () => details.data ? extractPaperProfile(details.data.markdown, details.data.translatedMarkdown, true) : null,
-    [details.data]
+    [details.data?.markdown, details.data?.translatedMarkdown]
   )
   const [tab, setTab] = React.useState<Tab>('abstract')
   const revealed = props.textReveal ?? props.phase === 'open'
-  const insight = usePaperInsight(paper.id, props.insights)
+  const insight = useArchiveInsight(paper, props.insights)
   const ready = insight.ready
   const briefState = ready && 'brief' in ready ? ready : null
   const brief = briefState?.brief
   const metadata = briefState && !briefState.stale ? brief?.metadata : undefined
   const articleRef = React.useRef<HTMLElement>(null)
   const redactionRef = React.useRef<HTMLDivElement>(null)
-  const redactedContent = React.useMemo(() => ({}), [details.data, ready, tab])
+  const redactedContent = React.useMemo(() => ({}), [profile, ready, tab, paper.displayName])
   // The text is lifted only once it has loaded: lifting earlier left bars over the old layout
   // (covering the tab labels) while late text appeared below them uncovered.
   const contentLoaded = !details.isPending && (!props.insights || insight.state !== null)
@@ -89,39 +89,14 @@ export default function ArchiveDetail(props: {
     return () => animations.forEach((animation) => animation.cancel())
   }, [closing, morphFrom])
 
-  React.useEffect(() => {
-    setTab('abstract')
-    onPage(null)
-  }, [paper.id, onPage])
+  React.useEffect(() => { setTab('abstract') }, [paper.id])
 
-  const data = details.data
-  React.useEffect(() => {
-    if (!data || !profile) return
-    let cancelled = false
-    const controller = new AbortController()
-    const pdf = !/\.(?:md|markdown)$/iu.test(paper.originalName.trim())
-    const key = `${paper.id}:${data.summary.updatedAt}`
-    // pdf.js is loaded only when a paper is extracted.
-    import('./detailPage')
-      .then(({ drawTextPage, loadDetailPage, firstPageRenderer }) => loadDetailPage(`${key}:spread`, () => pdf
-        ? renderSpread(paper.id, data, firstPageRenderer(data.summary.sourceHash), controller.signal, page => {
-          if (!cancelled) onPage(page.canvas)
-        })
-        : Promise.resolve(drawTextPage(profile.title ?? paper.displayName, profile.translatedAbstract ?? profile.abstract)), controller.signal))
-      .then((page) => {
-        if (cancelled) return
-        onPage(page.figures ? composeSpread(page.canvas, page.figures.sheet) : page.canvas)
-      })
-      .catch(() => { /* The card stays frosted without a page; the fields still load. */ })
-    return () => { cancelled = true; controller.abort() }
-  }, [data, profile, paper.id, paper.originalName, paper.displayName, onPage])
-
-  const title = archiveTitle(metadata?.title?.value ?? paper.displayName)
-  const subtitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown, true), [details.data?.translatedMarkdown])
+  const title = archiveTitle(paper.displayName)
+  const subtitle = React.useMemo(() => archiveTranslatedTitle(details.data?.translatedMarkdown, true) || props.translatedTitle || '', [details.data?.translatedMarkdown, props.translatedTitle])
   const abstract = brief?.analysis?.abstract ?? profile?.translatedAbstract
   // The count beside a tab says how much is behind it before switching.
   const tabs: Array<[Tab, string, number?]> = brief
-    ? [['abstract', '摘要'], ['overview', '背景'], ['findings', '结论', brief.analysis?.conclusions.length ?? brief.findings.length], ['limits', '讨论']]
+    ? [['abstract', '摘要'], ['overview', '背景'], ['findings', '结论'], ['limits', '讨论']]
     : [['abstract', '摘要'], ['structure', '结构', profile?.sections.length || undefined], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
   const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
   const tabsRef = React.useRef<HTMLDivElement>(null)
@@ -204,37 +179,6 @@ export default function ArchiveDetail(props: {
       </article>
     </>
   )
-}
-
-/**
- * The card's face: the first page on the left and the key figures on a sheet of the same size on
- * the right. The figure list loads while the page renders; without usable figures the card keeps
- * the plain first page.
- */
-export async function renderSpread(documentId: string, data: DocumentDetails, renderPage: (url: string) => Promise<DetailPage>,
-  signal: AbortSignal, onFirstPage: (page: DetailPage) => void): Promise<DetailPage> {
-  const page = await renderPage(data.pdfUrl)
-  signal.throwIfAborted()
-  onFirstPage(page)
-  const [{ buildReaderFigureGeometries }, { ensureFigureArtifacts }] = await Promise.all([
-    import('@features/reader/core'), loadFigureArtifacts()
-  ])
-  signal.throwIfAborted()
-  const geometries = buildReaderFigureGeometries(data.mappings, data.layoutJson)
-  const crops = await ensureFigureArtifacts(documentId, data.pdfUrl, geometries, signal)
-  signal.throwIfAborted()
-  const ranked = await loadSpreadCandidates(documentId, data.assetBaseUrl)
-  signal.throwIfAborted()
-  if (!ranked.length) {
-    // Do not permanently cache a transient crop failure as a first-page-only cover.
-    if (crops.failed) throw new Error('封面整图尚未生成，可重新打开重试')
-    return page
-  }
-  const { width, height } = page.canvas
-  const figures = await loadSpreadImages(ranked, data.assetBaseUrl, { width, height })
-  if (signal.aborted) { figures.forEach(figure => figure.image.close()); signal.throwIfAborted() }
-  if (!figures.length) throw new Error('封面图片暂时无法读取，可重新打开重试')
-  return { ...page, figures: { sheet: drawFigureSheet(width, height, figures) } }
 }
 
 export interface ArchiveMorph {

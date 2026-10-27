@@ -9,8 +9,10 @@ import { buildBriefContext, buildFullBriefContext, BRIEF_BUDGETS } from '../core
 import { PAPER_BRIEF_PROMPT_VERSION } from '../core/paperBrief/prompt'
 import { paperBriefRecordSchema, paperBriefSaveSchema, briefContextResultSchema, briefSourceSchema, PAPER_BRIEF_MAX_BYTES, type BriefContextResult, type BriefAnchor, type BriefSource } from '../core/paperBrief/contracts'
 import type { PaperBrief } from '../core/paperBrief/schema'
+import { listArchiveInsights } from './archiveInsightCatalog'
 
-type Repository = Pick<V2TaskRepositoryCompat, 'getTask' | 'getLatestArtifactReference'>
+type Repository = Pick<V2TaskRepositoryCompat, 'getTask' | 'getLatestArtifactReference'> &
+  Partial<Pick<V2TaskRepositoryCompat, 'getDocumentSummary'>>
 const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException)?.code === 'ENOENT'
 function sameBriefSource(saved: string, current: string, language: PaperBrief['provenance']['language']): boolean {
   if (saved === current) return true
@@ -24,6 +26,10 @@ function sameBriefSource(saved: string, current: string, language: PaperBrief['p
 export class PaperInsightStore {
   private readonly policy = new PathPolicy()
   constructor(private readonly repository: Repository) {}
+
+  list(documentIds: readonly string[], signal?: AbortSignal) {
+    return listArchiveInsights(this.repository, id => this.get(id), documentIds, signal)
+  }
 
   private async snapshot(documentId: string) {
     const task = this.repository.getTask(documentId)

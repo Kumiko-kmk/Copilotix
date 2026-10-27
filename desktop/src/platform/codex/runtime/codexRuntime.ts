@@ -63,7 +63,7 @@ export class CodexBackoff {
   constructor(private readonly max: number, private readonly retry = CODEX_RETRY, private readonly now = Date.now, private readonly random = Math.random) { this.limit = max }
   failed(rateLimited: boolean, epoch: number): number {
     this.streak = 0
-    if (epoch === this.epoch) {
+    if (epoch === this.epoch || this.until <= this.now()) {
       this.epoch++
       this.strikes++
       if (rateLimited) this.limit = Math.max(1, Math.floor(this.limit / 2))
@@ -73,6 +73,8 @@ export class CodexBackoff {
     return Math.max(0, this.until - this.now())
   }
   succeeded(): void {
+    // In-flight successes during a cooldown must not undo its reduced budget.
+    if (this.until > this.now()) return
     if (++this.streak < this.limit * 2) return
     this.streak = 0
     this.strikes = Math.max(0, this.strikes - 1)

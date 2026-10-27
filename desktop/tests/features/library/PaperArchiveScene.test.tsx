@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PaperArchiveScene, entryScanTime, type ArchivePalette, type PaperArchiveSceneOptions } from '../../../src/features/library/renderer/archive/PaperArchiveScene'
 import { ArchivePlaneMomentum } from '../../../src/features/library/renderer/archive/archiveMotion'
 import { buildArchiveColumns } from '../../../src/features/library/renderer/archive/archiveShelves'
+import type { DetailCoverHandle } from '../../../src/features/library/renderer/archive/archiveSceneConfig'
+
+const gpu = vi.hoisted(() => ({ upload: vi.fn() }))
 
 // Keep the production scene, simulation and scheduler; replace only GPU and model I/O.
 vi.mock('three', async (importOriginal) => {
@@ -22,6 +25,7 @@ vi.mock('three', async (importOriginal) => {
       getSize(target: import('three').Vector2): import('three').Vector2 { return target.copy(this.size) }
       setSize = vi.fn((width: number, height: number) => { this.size.set(width, height) })
       render = vi.fn()
+      initTexture = gpu.upload
       compileAsync = vi.fn(async () => undefined)
       dispose = vi.fn()
       forceContextLoss = vi.fn()
@@ -60,6 +64,7 @@ let frames: Map<number, FrameRequestCallback>
 let nextFrame: number
 
 beforeEach(() => {
+  gpu.upload.mockReset()
   vi.useFakeTimers({ toFake: ['performance', 'setTimeout', 'clearTimeout'] })
   frames = new Map()
   nextFrame = 0
@@ -71,6 +76,8 @@ beforeEach(() => {
     return nextFrame
   })
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(((kind: string) =>
+    kind === '2d' ? { drawImage: vi.fn() } : null) as HTMLCanvasElement['getContext'])
 })
 afterEach(() => {
   archive?.dispose()
@@ -86,7 +93,7 @@ async function createArchive(options: Partial<PaperArchiveSceneOptions> = {}): P
   document.body.appendChild(host)
   archive = new PaperArchiveScene({ container: host, palette, reducedMotion: false, onSelect: vi.fn(), onActivate: vi.fn(), ...options })
   archive.setShelves(buildArchiveColumns(Array.from({ length: 37 }, (_, index) => ({
-    id: String(index), displayName: `Paper ${index}`, originalName: `${index}.pdf`, createdAt: '2026-10-07T12:00:00Z',
+    id: String(index), sourceHash: `source-${index}`, displayName: `Paper ${index}`, originalName: `${index}.pdf`, createdAt: '2026-10-07T12:00:00Z',
     workflow: { status: 'completed' as const, progress: 100, activeJobKind: null, error: null }
   }))))
   await vi.waitFor(() => expect(host.querySelector('canvas')?.getAttribute('data-archive-state')).toBe('ready'))
@@ -107,6 +114,22 @@ function pointer(canvas: HTMLCanvasElement, type: string, x: number, y = 100): v
   const event = new Event(type)
   Object.assign(event, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: x, clientY: y })
   canvas.dispatchEvent(event)
+}
+
+function completedCover(key: string): DetailCoverHandle {
+  const canvas = document.createElement('canvas')
+  canvas.width = 2262
+  canvas.height = 1600
+  canvas.dataset.archiveCover = 'spread'
+  canvas.dataset.archiveCoverKey = key
+  return { key, canvas, kind: 'spread', release: vi.fn() }
+}
+
+function pendingCover() {
+  let resolve!: (cover: DetailCoverHandle) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<DetailCoverHandle>((accept, fail) => { resolve = accept; reject = fail })
+  return { promise, resolve, reject }
 }
 
 describe('paper archive detail transitions', () => {
@@ -242,6 +265,164 @@ describe('paper archive detail transitions', () => {
     expect(archive.detailReady).toBe(false)
     advance(350)
     expect(archive.detailOpen).toBe(false)
+  })
+})
+
+describe('complete covers before extraction', () => {
+  it('keeps cold clicks closed and deduplicated until the complete spread is uploaded', async () => {
+    const pending = pendingCover()
+    const prepareDetailCover = vi.fn(() => pending.promise)
+    const onDetailPhase = vi.fn()
+    await createArchive({ prepareDetailCover, onDetailPhase })
+    expect(archive.openDetail()).toBe(true)
+    expect(archive.openDetail()).toBe(true)
+    expect(prepareDetailCover).toHaveBeenCalledOnce()
+    expect(archive.detailPreparing).toBe(true)
+    expect(archive.detailOpen).toBe(false)
+    advance(1500)
+    expect(onDetailPhase).not.toHaveBeenCalled()
+    expect(gpu.upload).not.toHaveBeenCalled()
+    const cover = completedCover('complete-cold-spread')
+    pending.resolve(cover)
+    await pending.promise
+    expect(archive.detailPreparing).toBe(false)
+    expect(onDetailPhase).toHaveBeenLastCalledWith('opening')
+    expect(gpu.upload).toHaveBeenCalledOnce()
+    expect(gpu.upload.mock.invocationCallOrder[0]).toBeLessThan(onDetailPhase.mock.invocationCallOrder[0]!)
+    expect(document.querySelector('canvas')?.dataset).toMatchObject({ archiveCover: 'spread', archiveCoverKey: cover.key,
+      archiveCoverWidth: '2262', archiveCoverHeight: '1600' })
+    expect(cover.release).not.toHaveBeenCalled()
+  })
+
+  it('opens a hot spread synchronously after GPU upload and releases its pin on close', async () => {
+    const cover = completedCover('hot-spread')
+    const prepareDetailCover = vi.fn()
+    const onDetailPhase = vi.fn()
+    await createArchive({ getDetailCover: () => cover, prepareDetailCover, onDetailPhase })
+    expect(archive.openDetail()).toBe(true)
+    expect(archive.detailOpen).toBe(true)
+    expect(archive.detailPreparing).toBe(false)
+    expect(prepareDetailCover).not.toHaveBeenCalled()
+    expect(gpu.upload.mock.invocationCallOrder[0]).toBeLessThan(onDetailPhase.mock.invocationCallOrder[0]!)
+    archive.closeDetail()
+    advance(350)
+    expect(cover.release).toHaveBeenCalledOnce()
+    expect(archive.detailOpen).toBe(false)
+  })
+
+  it('aborts a prior paper and releases its late cover without opening over a new selection', async () => {
+    const pending = pendingCover()
+    const prepareDetailCover = vi.fn((_paper, _signal: AbortSignal) => pending.promise)
+    const onDetailPhase = vi.fn()
+    await createArchive({ prepareDetailCover, onDetailPhase })
+    archive.openDetail()
+    const signal = prepareDetailCover.mock.calls[0]![1]
+    archive.focusPaper('36', { instant: true })
+    expect(signal.aborted).toBe(true)
+    expect(archive.detailPreparing).toBe(false)
+    const late = completedCover('old-paper')
+    pending.resolve(late)
+    await pending.promise
+    expect(late.release).toHaveBeenCalledOnce()
+    expect(onDetailPhase).not.toHaveBeenCalled()
+    expect(gpu.upload).not.toHaveBeenCalled()
+  })
+
+  it('aborts preparation when the selected paper revision changes', async () => {
+    const pending = pendingCover()
+    const prepareDetailCover = vi.fn((_paper, _signal: AbortSignal) => pending.promise)
+    await createArchive({ prepareDetailCover })
+    archive.openDetail()
+    const signal = prepareDetailCover.mock.calls[0]![1]
+    const state = archive as unknown as { shelves: Parameters<PaperArchiveScene['setShelves']>[0] }
+    archive.setShelves(state.shelves.map(shelf => ({ ...shelf,
+      papers: shelf.papers.map(paper => ({ ...paper, updatedAt: '2026-10-26T01:00:00Z' })) })))
+    expect(signal.aborted).toBe(true)
+    const late = completedCover('old-revision')
+    pending.resolve(late)
+    await pending.promise
+    expect(late.release).toHaveBeenCalledOnce()
+    expect(archive.detailOpen).toBe(false)
+    expect(gpu.upload).not.toHaveBeenCalled()
+  })
+
+  it('cancels a cold opening immediately on close and releases a late result', async () => {
+    const pending = pendingCover()
+    const prepareDetailCover = vi.fn((_paper, _signal: AbortSignal) => pending.promise)
+    const onDetailPhase = vi.fn()
+    await createArchive({ prepareDetailCover, onDetailPhase })
+    archive.openDetail()
+    archive.closeDetail()
+    expect(prepareDetailCover.mock.calls[0]![1].aborted).toBe(true)
+    expect(archive.detailPreparing).toBe(false)
+    const late = completedCover('closed-before-ready')
+    pending.resolve(late)
+    await pending.promise
+    expect(late.release).toHaveBeenCalledOnce()
+    expect(onDetailPhase).not.toHaveBeenCalled()
+  })
+
+  it('aborts a disposed scene and never uploads its late cover', async () => {
+    const pending = pendingCover()
+    const prepareDetailCover = vi.fn((_paper, _signal: AbortSignal) => pending.promise)
+    await createArchive({ prepareDetailCover })
+    archive.openDetail()
+    archive.dispose()
+    expect(prepareDetailCover.mock.calls[0]![1].aborted).toBe(true)
+    const late = completedCover('disposed-before-ready')
+    pending.resolve(late)
+    await pending.promise
+    expect(late.release).toHaveBeenCalledOnce()
+    expect(gpu.upload).not.toHaveBeenCalled()
+    expect(frames.size).toBe(0)
+  })
+
+  it('keeps preparation failures closed and allows a later retry', async () => {
+    const prepareDetailCover = vi.fn().mockRejectedValueOnce(new Error('decode failed'))
+    const onDetailCoverError = vi.fn()
+    const onDetailPhase = vi.fn()
+    await createArchive({ prepareDetailCover, onDetailCoverError, onDetailPhase })
+    archive.openDetail()
+    await Promise.resolve()
+    expect(archive.detailPreparing).toBe(false)
+    expect(archive.detailOpen).toBe(false)
+    expect(onDetailCoverError).toHaveBeenCalledOnce()
+    expect(onDetailPhase).not.toHaveBeenCalled()
+    prepareDetailCover.mockResolvedValueOnce(completedCover('retry-complete'))
+    archive.openDetail()
+    await Promise.resolve()
+    expect(archive.detailOpen).toBe(true)
+  })
+
+  it('keeps a timed-out preparation closed and releases its eventual result', async () => {
+    const pending = pendingCover()
+    const prepareDetailCover = vi.fn((_paper, _signal: AbortSignal) => pending.promise)
+    const onDetailCoverError = vi.fn()
+    await createArchive({ prepareDetailCover, onDetailCoverError })
+    archive.openDetail()
+    vi.advanceTimersByTime(30_000)
+    expect(prepareDetailCover.mock.calls[0]![1].aborted).toBe(true)
+    expect(archive.detailPreparing).toBe(false)
+    expect(archive.detailOpen).toBe(false)
+    expect(onDetailCoverError).toHaveBeenCalledWith(expect.stringContaining('超时'))
+    const late = completedCover('after-timeout')
+    pending.resolve(late)
+    await pending.promise
+    expect(late.release).toHaveBeenCalledOnce()
+    expect(gpu.upload).not.toHaveBeenCalled()
+  })
+
+  it('keeps hot GPU upload failures closed and releases the failed cover pin', async () => {
+    const cover = completedCover('GPU-failed')
+    const onDetailCoverError = vi.fn()
+    const onDetailPhase = vi.fn()
+    await createArchive({ getDetailCover: () => cover, onDetailCoverError, onDetailPhase })
+    gpu.upload.mockImplementationOnce(() => { throw new Error('GPU upload failed') })
+    expect(() => archive.openDetail()).not.toThrow()
+    expect(cover.release).toHaveBeenCalledOnce()
+    expect(archive.detailOpen).toBe(false)
+    expect(onDetailPhase).not.toHaveBeenCalled()
+    expect(onDetailCoverError).toHaveBeenCalledOnce()
   })
 })
 

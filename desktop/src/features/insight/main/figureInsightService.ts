@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createHash } from 'node:crypto'
 import { lstat, readFile } from 'node:fs/promises'
 import { FIGURE_INSIGHT_MAX_REQUEST_BYTES, figureInsightContentSchema, figureInsightRequestSchema, figureInsightUploadSchema,
-  figureInsightModelSchema, resolveFigureInsightModel, type FigureInsightDescriptor, type FigureInsightRequest,
+  archiveCoverSourceRequestSchema, figureInsightModelSchema, resolveFigureInsightModel, type ArchiveCoverSource, type FigureInsightDescriptor, type FigureInsightRequest,
   type FigureInsightSave, type FigureInsightState } from '../contract/figureInsight'
 import { buildFigureInsightMessages } from '../core/figureInsightPrompt'
 import { resolvePaperChatProvider, type PaperChatProvider } from '@features/chat/contract/paperChatSchemas'
@@ -16,6 +16,7 @@ export interface FigureInsightDependencies {
   key(provider: PaperChatProvider): Promise<string | null>
   descriptor(request: FigureInsightRequest, signal: AbortSignal): Promise<FigureInsightDescriptor>
   get(request: FigureInsightRequest): Promise<FigureInsightState>
+  coverSource?(documentId: string): Promise<ArchiveCoverSource>
   save(request: FigureInsightSave): Promise<unknown>
   stream: ModelGateway['stream']
   recordUsage(provider: PaperChatProvider, usage: ProviderTokenUsage): Promise<void>
@@ -38,6 +39,13 @@ export class FigureInsightService {
   private paused = false
   private destroyed = false
   constructor(private readonly deps: FigureInsightDependencies) {}
+
+  async coverSource(documentId: string): Promise<ArchiveCoverSource> {
+    archiveCoverSourceRequestSchema.parse({ documentId })
+    if (!this.deps.coverSource) return Promise.reject(new Error('本地封面来源暂不可用。'))
+    try { return await this.deps.coverSource(documentId) }
+    catch { throw new Error('无法读取本地封面来源，请检查论文图像清单后重试。') }
+  }
 
   private emit(request: FigureInsightRequest, state: FigureInsightState): void {
     const key = identity(request)
@@ -117,7 +125,7 @@ export class FigureInsightService {
         let answer = ''
         const usage = await this.deps.stream({ provider: auth.provider, model: auth.model.name, key: auth.key,
           baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
-          messages, signal, ...(auth.provider === 'codex' ? { outputSchema: z.toJSONSchema(figureInsightContentSchema) } : {}), temperature: 0.2, maxOutputTokens: 1400, responseFormat: { type: 'json_object' },
+          messages, signal, lane: 'background', ...(auth.provider === 'codex' ? { outputSchema: z.toJSONSchema(figureInsightContentSchema) } : {}), temperature: 0.2, maxOutputTokens: 1400, responseFormat: { type: 'json_object' },
           maxRequestBytes: FIGURE_INSIGHT_MAX_REQUEST_BYTES,
           firstByteMs: 120_000,
           onDelta: delta => { signal.throwIfAborted(); if (answer.length + delta.length > 8192) throw new Error('output too large'); answer += delta }

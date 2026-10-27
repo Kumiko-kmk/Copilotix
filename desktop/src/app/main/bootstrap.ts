@@ -93,6 +93,7 @@ export async function bootstrap(): Promise<void> {
     key: providerKey,
     descriptor: (request, signal) => utility.request('compute:figure-insight-descriptor', request, { signal, timeoutMs: 30_000 }),
     get: request => utility.request('figureInsight:get', request),
+    coverSource: documentId => utility.request('figureInsight:cover-source', { documentId }, { timeoutMs: 30_000 }),
     save: request => utility.request('figureInsight:save', request, { timeoutMs: 30_000 }),
     stream: input => modelGateway.stream(input),
     encodeImage: async png => {
@@ -139,11 +140,13 @@ export async function bootstrap(): Promise<void> {
     settings: () => settings.get(),
     key: providerKey,
     get: (documentId) => utility.request('insight:get', { documentId }),
+    listSaved: documentIds => utility.request('insight:list', { documentIds: [...documentIds] }, { timeoutMs: 30_000 }),
     context: (documentId, signal) => loadFullBriefContext(documentId, signal, () => utility.request('insight:brief-source', { documentId }, { signal, timeoutMs: 10_000 })),
     save: (documentId, brief, anchors) => utility.request('insight:save-brief', { documentId, brief, anchors }),
     stream: (input) => modelGateway.stream(input),
     recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
     canStart: canStartBackground,
+    hasText: async documentId => (await utility.request('insight:brief-source', { documentId }, { timeoutMs: 10_000 })).sources.length > 0,
     log: (details) => logger.info('paper-insight', details),
     changed: (documentId, state) => {
       const contents = toRenderer()
@@ -151,6 +154,10 @@ export async function bootstrap(): Promise<void> {
     }
   })
   services.paperInsight = paperInsight
+  const recoverPaperInsight = (): void => {
+    void repository.listDocumentSummaries().then(documents => paperInsight.recover(documents.map(document => document.id)))
+      .catch(() => logger.info('paper-insight', { status: 'recovery-stopped' }))
+  }
   jobScheduler.on('job-changed', (job) => { void paperInsight.onJobChanged(job).catch(() => logger.info('paper-insight', { status: 'refresh-failed' })) })
   const compute = new RpcTaskCompute(utility)
   const pathPolicy = new PathPolicy()
@@ -200,7 +207,7 @@ export async function bootstrap(): Promise<void> {
     maintenance: {
       pause: async () => { await paperInsight.pause(); await figureInsight.pause() },
       settle: () => paperChat.settle(),
-      resume: () => { paperInsight.resume(); figureInsight.resume() }
+      resume: () => { paperInsight.resume(); figureInsight.resume(); recoverPaperInsight() }
     },
     deleteDocument: (documentId, deleteFiles) => figureInsight.deleteDocument(documentId, () => paperInsight.deleteDocument(documentId, async () => {
       await paperChat.settleDocument(documentId)
@@ -296,6 +303,7 @@ export async function bootstrap(): Promise<void> {
   }))
   startup.phase = 'scheduler-start'
   await jobScheduler.start()
+  recoverPaperInsight()
 
   app.on('activate', () => appShell.show())
   startup.phase = 'ready'

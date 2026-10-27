@@ -16,6 +16,7 @@ interface RegionEntry {
   controller: AbortController
   references: number
   bytes: number
+  canvas?: HTMLCanvasElement
 }
 const regionCache = new Map<string, RegionEntry>()
 let cachedBytes = 0
@@ -84,7 +85,11 @@ export default function ReaderFigureSnapshot(props: {
     }, { root: host.closest('.markdown-scroll'), rootMargin: '320px' })
     if (observer) observer.observe(host)
     else start()
-    return () => { cancelled = true; window.clearTimeout(timeoutId); observer?.disconnect(); release?.() }
+    const canvas = canvasRef.current
+    return () => {
+      cancelled = true; window.clearTimeout(timeoutId); observer?.disconnect(); release?.()
+      if (canvas && !canvas.isConnected) { canvas.width = 0; canvas.height = 0 }
+    }
   }, [key, attempt, props.preRender])
 
   return (
@@ -101,6 +106,13 @@ function removeEntry(key: string, entry: RegionEntry): void {
   if (regionCache.get(key) !== entry) return
   regionCache.delete(key)
   cachedBytes -= entry.bytes
+  if (entry.references === 0) releaseRegionPixels(entry)
+}
+function releaseRegionPixels(entry: RegionEntry): void {
+  if (!entry.canvas) return
+  entry.canvas.width = 0
+  entry.canvas.height = 0
+  entry.canvas = undefined
 }
 function acquireRegion(pdfUrl: string, group: ReaderFigureGroup, pixelWidth: number): { promise: Promise<HTMLCanvasElement>; release(): void } {
   // Quantization permits the two language panes to share a crop at similar widths.
@@ -114,6 +126,7 @@ function acquireRegion(pdfUrl: string, group: ReaderFigureGroup, pixelWidth: num
     const controller = new AbortController()
     const created: RegionEntry = { controller, references: 0, bytes: 0, promise: Promise.resolve(null as unknown as HTMLCanvasElement) }
     created.promise = renderRegion(pdfUrl, group, target, controller.signal).then(canvas => {
+      created.canvas = canvas
       if (regionCache.get(key) === created) {
         created.bytes = canvas.width * canvas.height * 4
         cachedBytes += created.bytes
@@ -122,6 +135,7 @@ function acquireRegion(pdfUrl: string, group: ReaderFigureGroup, pixelWidth: num
           if (oldEntry.bytes) removeEntry(oldKey, oldEntry)
         }
       }
+      if (created.references === 0 && regionCache.get(key) !== created) releaseRegionPixels(created)
       return canvas
     }).catch(error => { removeEntry(key, created); throw error })
     entry = created
@@ -139,25 +153,35 @@ function acquireRegion(pdfUrl: string, group: ReaderFigureGroup, pixelWidth: num
         removeEntry(key, entry)
         entry.controller.abort()
       }
+      if (entry.references === 0 && regionCache.get(key) !== entry) releaseRegionPixels(entry)
     }
   }
 }
 
 type SavedCrop = { figureId: string; imagePath: string; pageIndex: number; cropBox: number[] }
 const savedCrops = new Map<string, { assetBaseUrl: string; crops: Promise<Map<string, SavedCrop>> }>()
+const SAVED_CROP_DOCUMENT_LIMIT = 128
 /**
  * The paper's saved whole-figure crops (figures.json). Drawing a saved PNG replaces re-rendering the
  * PDF region on every open; a crop whose page or box no longer matches is ignored.
  */
 export function registerSavedFigureCrops(pdfUrl: string, assetBaseUrl: string): void {
-  if (savedCrops.get(pdfUrl)?.assetBaseUrl === assetBaseUrl) return
+  const cached = savedCrops.get(pdfUrl)
+  if (cached?.assetBaseUrl === assetBaseUrl) {
+    savedCrops.delete(pdfUrl)
+    savedCrops.set(pdfUrl, cached)
+    return
+  }
   const crops = fetch(`${assetBaseUrl}figures.json`).then(response => response.ok ? response.json() : null)
     .then((value: { figures?: SavedCrop[] } | null) => new Map((value?.figures ?? []).map(crop => [crop.figureId, crop])))
     .catch(() => new Map<string, SavedCrop>())
+  savedCrops.delete(pdfUrl)
   savedCrops.set(pdfUrl, { assetBaseUrl, crops })
+  if (savedCrops.size > SAVED_CROP_DOCUMENT_LIMIT) savedCrops.delete(savedCrops.keys().next().value!)
 }
 async function savedCrop(pdfUrl: string, figure: Pick<ReaderFigureGroup, 'id' | 'pageIndex' | 'cropBox'>): Promise<string | null> {
   const entry = savedCrops.get(pdfUrl)
+  if (entry) { savedCrops.delete(pdfUrl); savedCrops.set(pdfUrl, entry) }
   const crop = entry ? (await entry.crops).get(figure.id) : undefined
   if (!entry || !crop || crop.pageIndex !== figure.pageIndex || crop.cropBox.length !== 4 || crop.cropBox.some((value, i) => value !== figure.cropBox[i]) ||
     !/^images\/figures\/[\w.-]+\.png$/u.test(crop.imagePath)) return null
@@ -172,18 +196,24 @@ async function savedCropCanvas(pdfUrl: string, group: ReaderFigureGroup, signal:
   if (!url) return null
   // Decoded off the main thread; drawing the bitmap is then a cheap copy.
   const bitmap = await createImageBitmap(await (await fetch(url, { signal })).blob())
-  signal.throwIfAborted()
-  const canvas = window.document.createElement('canvas')
-  canvas.width = bitmap.width
-  canvas.height = bitmap.height
-  canvas.getContext('2d')?.drawImage(bitmap, 0, 0)
-  bitmap.close()
-  return canvas
+  try {
+    signal.throwIfAborted()
+    const canvas = window.document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    try {
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('无法创建复合图画布')
+      context.drawImage(bitmap, 0, 0)
+      return canvas
+    } catch (error) { canvas.width = 0; canvas.height = 0; throw error }
+  } finally { bitmap.close() }
 }
 
 async function renderRegion(pdfUrl: string, group: ReaderFigureGroup, pixelWidth: number, signal: AbortSignal): Promise<HTMLCanvasElement> {
   const saved = await savedCropCanvas(pdfUrl, group, signal).catch(() => null)
   if (saved) return saved
+  signal.throwIfAborted()
   const handle = acquirePdfDocument(pdfUrl)
   const release = (): void => handle.release()
   signal.addEventListener('abort', release, { once: true })
@@ -250,11 +280,17 @@ export async function renderDocumentRegion(
   canvas.width = width
   canvas.height = height
   const context = canvas.getContext('2d')
-  if (!context) throw new Error('无法创建复合图画布')
-  const task = page.render({ canvas, canvasContext: context, viewport,
-    transform: [1, 0, 0, 1, -left * scale, -top * scale] })
-  const cancel = (): void => task.cancel()
-  signal?.addEventListener('abort', cancel, { once: true })
-  try { await task.promise; signal?.throwIfAborted(); return canvas }
-  finally { signal?.removeEventListener('abort', cancel) }
+  let cancel: (() => void) | undefined
+  try {
+    if (!context) throw new Error('无法创建复合图画布')
+    const task = page.render({ canvas, canvasContext: context, viewport,
+      transform: [1, 0, 0, 1, -left * scale, -top * scale] })
+    cancel = () => task.cancel()
+    signal?.addEventListener('abort', cancel, { once: true })
+    await task.promise
+    signal?.throwIfAborted()
+    return canvas
+  }
+  catch (error) { canvas.width = 0; canvas.height = 0; throw error }
+  finally { if (cancel) signal?.removeEventListener('abort', cancel) }
 }

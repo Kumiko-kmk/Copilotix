@@ -411,6 +411,7 @@ export class SqliteJobRepository implements JobRepositoryPort {
 
   recoverExpired(input: JobRecoverExpiredInput): Job[] {
     const now = validateTimestamp(input.now, 'recovery time')
+    const excludedOwner = input.excludeLeaseOwner === undefined ? undefined : validateLeaseOwner(input.excludeLeaseOwner)
     return this.database.transaction(() => {
       // Older manual retries kept terminal 100% progress while queued. Preserve
       // their checkpoint, but let the next attempt show its own progress.
@@ -423,6 +424,7 @@ export class SqliteJobRepository implements JobRepositoryPort {
       for (const row of expired) {
         const current = this.getUnsafe(row.id)
         if (!current || current.status !== 'running' || !current.leaseExpiresAt || current.leaseExpiresAt > now) continue
+        if (excludedOwner !== undefined && current.leaseOwner === excludedOwner) continue
         const toState: JobStatus = current.attempt < current.maxAttempts ? 'queued' : 'failed'
         const errorCode = 'LEASE_EXPIRED'
         const errorMessage = toState === 'failed'

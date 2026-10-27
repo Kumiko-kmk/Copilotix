@@ -13,6 +13,12 @@ Markdown 翻譯：可恢復的翻譯計劃（Utility）、服務商與回退策�
 
 `full.zh-CN.md`、`translation.manifest.json`（計劃 v6，兼容 v4／v5）、`.translation/<jobId>/` 計劃與單元回應；翻譯快取與塊記錄在 SQLite。
 
+## 並發與恢復
+
+文檔翻譯調度上限為 4；單篇仍保留 64 個在途計劃單元，Qwen／DeepSeek 各共用最多 16 個 HTTP 請求，免費源各 1 個。Qwen MT 表格最多 4 個單元格並行，與普通文字共用同一 HTTP 預算，保持原單元格順序與表格校驗；任一請求失敗後停止發送該表新請求，等待已發送請求結束再回退。429 共用冷卻及既有有限重試不變。Codex 繼續由 runtime 的 8 槽自適應預算控制。
+
+finalize 成功寫入並校驗產物後釋放該計劃的全文／表格 AST 記憶體，重試仍從原有磁碟計劃與 SQLite 塊記錄恢復，保留已完成塊；無 IPC、schema、快取鍵或產物格式變更。已執行翻譯計劃恢復及跨文檔共享併發上限回歸；恢復入口為 `markdownTranslationPlan`、`translationPlanOrchestrator`、`translationProviders` 用例。
+
 ## 測試
 
 `tests/features/translation/`（`pnpm desktop:test --module translation`）；跨模組的作業憑據門禁在 `tests/app/credentialGate.test.ts`。

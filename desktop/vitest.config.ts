@@ -2,10 +2,12 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  resolve: { alias: { '@app': resolve(__dirname, 'src/app'), '@platform': resolve(__dirname, 'src/platform'), '@features': resolve(__dirname, 'src/features') } },
+  resolve: { dedupe: ['katex'], alias: { '@app': resolve(__dirname, 'src/app'), '@platform': resolve(__dirname, 'src/platform'), '@features': resolve(__dirname, 'src/features') } },
   // Mirrors the renderer config: the paper archive embeds its cassette model with `?inline`.
   assetsInclude: ['**/*.glb'],
   test: {
+    // Keep rehype's KaTeX import inside Vite resolution so tests use the renderer's engine.
+    server: { deps: { inline: ['rehype-katex'] } },
     environment: 'node',
     // Windows + coverage instrumentation can exceed the default 5 s for React views.
     testTimeout: 15_000,

@@ -18,6 +18,10 @@
 - 文獻目錄 `chat/`：分頁歷史、`session.json`（草稿、選區、模型），原子寫入，無 migration。
 - SQLite `rag_documents`、`rag_content_revisions`、`rag_chunks`。
 
+## 模型請求隊列
+
+`ChatProvider.stream` 可選 `lane` 只屬 Main 內部參數，未提供時沿用交互 FIFO；`background` 為每服務商最多 8 個在途串流，檔案卡與圖片解讀共用此預算。交互請求擁有獨立槽位，不排在后台長文生成之後；服務商冷卻及憑據失效仍共用，排隊取消可中斷，首字節期限從真正開始請求時計算。現有 IPC／Core RPC／歷史檔格式與問答順序不變。本次按使用者要求未執行測試；既有隊列／取消／期限入口為 `tests/features/chat/chatProvider.test.ts`。
+
 ## 測試
 
 `tests/features/chat/`（`pnpm desktop:test --module chat`）；E2E `e2e/paper-chat.spec.ts`、`codex.spec.ts`。

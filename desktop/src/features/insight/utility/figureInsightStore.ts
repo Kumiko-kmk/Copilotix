@@ -12,6 +12,7 @@ import { FIGURE_INSIGHT_MAX_IMAGE_BYTES, FIGURE_INSIGHT_PROMPT_VERSION, figureIn
   type FigureInsightRequest, type FigureInsightDescriptor, type FigureInsightSave, type FigureInsightState, type FigureInsightRecord } from '../contract/figureInsight'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import type { V2TaskRepositoryCompat } from '@features/library/utility'
+import { loadArchiveCoverSource } from './archiveCoverSource'
 
 const hash = (value: string | Buffer): string => createHash('sha256').update(value).digest('hex')
 const absent = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT'
@@ -21,7 +22,11 @@ const mappingsSchema = z.object({ version: z.literal(BLOCK_MAPPING_VERSION), map
 /** Utility owns source resolution and atomic persistence. The descriptor never carries PNG bytes. */
 export class FigureInsightStore {
   private readonly policy = new PathPolicy()
-  constructor(private readonly repository: Pick<V2TaskRepositoryCompat, 'getTask'>) {}
+  constructor(private readonly repository: Pick<V2TaskRepositoryCompat, 'getTask'> & Partial<Pick<V2TaskRepositoryCompat, 'getLatestArtifactReference'>>) {}
+
+  coverSource(documentId: string, signal?: AbortSignal) {
+    return loadArchiveCoverSource(this.repository, documentId, signal)
+  }
 
   private async root(documentId: string): Promise<string> {
     const task = this.repository.getTask(documentId)

@@ -147,6 +147,9 @@ describe('Codex generation lifecycle', () => {
     now = 500; expect(backoff.failed(true, inFlight)).toBe(500); expect(backoff.limit).toBe(4)
     now = 1000; expect(backoff.failed(true, backoff.epoch)).toBe(2000); expect(backoff.limit).toBe(2)
     for (let i = 0; i < 4; i++) backoff.succeeded()
+    expect(backoff.limit).toBe(2)
+    now = 3000
+    for (let i = 0; i < 4; i++) backoff.succeeded()
     expect(backoff.limit).toBe(3)
     backoff.failed(false, backoff.epoch); expect(backoff.limit).toBe(3)
   })

@@ -18,8 +18,8 @@ type UsageObserver = (provider: 'qwen' | 'deepseek', usage: ProviderTokenUsage) 
 
 const PROVIDER_CONCURRENCY: Readonly<Record<TranslationProviderId, number>> = Object.freeze({
   codex: 8,
-  qwen: 8,
-  deepseek: 8,
+  qwen: 16,
+  deepseek: 16,
   bing: 1,
   transmart: 1
 })
@@ -95,6 +95,30 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     return this.credentialState === 'valid' && Boolean(await this.vault.get(this.credentialAccount))
   }
 
+  override async translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
+    if (!isQwenMtModel(this.id, this.model)) return super.translateTable(request, signal)
+    const segments = flattenSegments(request)
+    const translations = new Array<{ id: string; text: string }>(segments.length)
+    let cursor = 0
+    let failure: { error: unknown } | undefined
+    // Each cell enters the same provider-wide HTTP budget as normal text;
+    // never hold an outer table slot while waiting for these inner requests.
+    await Promise.all(Array.from({ length: Math.min(4, segments.length) }, async () => {
+      try {
+      for (;;) {
+        if (failure) return
+        signal?.throwIfAborted()
+        const index = cursor++
+        const segment = segments[index]
+        if (!segment) return
+        translations[index] = { id: segment.id, text: await this.translate(segment.text, signal) }
+      }
+      } catch (error) { failure ??= { error } }
+    }))
+    if (failure) throw failure.error
+    return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
+  }
+
   protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
     const apiKey = await this.vault.get(this.credentialAccount)
     if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
@@ -120,13 +144,6 @@ class OpenAiCompatibleProvider extends QueuedProvider {
   protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
     const apiKey = await this.vault.get(this.credentialAccount)
     if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
-    if (isQwenMtModel(this.id, this.model)) {
-      const translations: Array<{ id: string; text: string }> = []
-      for (const segment of flattenSegments(request)) {
-        translations.push({ id: segment.id, text: await this.translateText(apiKey, segment.text, signal) })
-      }
-      return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
-    }
     const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -505,7 +522,7 @@ class SharedProviderLimiter {
   run<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     const options = signal ? { signal } : undefined
     return this.queue.add(async () => {
-      await waitUntil(this.blockedUntil, signal)
+      while (this.blockedUntil > Date.now()) await waitUntil(this.blockedUntil, signal)
       try {
         const result = await operation()
         this.nextBackoffMs = MIN_RATE_LIMIT_BACKOFF_MS

@@ -22,7 +22,8 @@ export default defineConfig({
   renderer: {
     root: resolve('src/app/renderer'),
     build: { rollupOptions: { input: { index: resolve('src/app/renderer/index.html') } } },
-    resolve: { alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features') } },
+    // rehype-katex and the imported stylesheet must use the same KaTeX DOM contract.
+    resolve: { dedupe: ['katex'], alias: { '@app': resolve('src/app'), '@platform': resolve('src/platform'), '@features': resolve('src/features') } },
     // The paper archive embeds its cassette model with `?inline`.
     assetsInclude: ['**/*.glb'],
     plugins: [react()]

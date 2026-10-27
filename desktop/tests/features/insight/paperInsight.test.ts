@@ -122,21 +122,53 @@ describe('structured paper insight', () => {
     await f.service.generate(f.id); await vi.waitFor(() => expect(f.states.at(-1)).toEqual({ status: 'failed', error: '服务商限流，请稍后重试。' }))
     await f.service.dispose()
   })
-  it('single-flights each paper, limits two pipelines and drains queued work on cancellation', async () => {
+  it('single-flights running and queued papers, limits eight pipelines and starts the ninth after cancellation', async () => {
     const f = fixture()
     let active = 0, peak = 0
+    const ids = [f.id, ...Array.from({ length: 8 }, () => randomUUID())]
+    const documentForSignal = new Map<AbortSignal, string>()
+    const started: string[] = []
+    const loadContext = f.deps.context
+    f.deps.context = vi.fn(async (documentId, signal) => {
+      documentForSignal.set(signal, documentId)
+      return loadContext(documentId, signal)
+    })
     vi.mocked(f.deps.stream).mockImplementation(async ({ signal }) => {
+      started.push(documentForSignal.get(signal)!)
       active++; peak = Math.max(peak, active)
       await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))
       active--; signal.throwIfAborted(); return null
     })
-    await f.service.generate(f.id); await f.service.generate(f.id)
-    await f.service.generate(randomUUID()); await f.service.generate(randomUUID())
-    await vi.waitFor(() => expect(active).toBe(2))
-    await f.service.pause()
-    expect(peak).toBe(2); expect(active).toBe(0); expect(f.deps.save).not.toHaveBeenCalled()
-    await expect(f.service.generate(f.id)).rejects.toThrow('维护')
-    f.service.resume(); await f.service.dispose()
+    try {
+      for (const id of ids) await f.service.generate(id)
+      await f.service.generate(f.id)
+      await f.service.generate(ids[8]!)
+      await vi.waitFor(() => expect(active).toBe(8))
+      expect(started).toEqual(ids.slice(0, 8))
+      expect(f.deps.stream).toHaveBeenCalledTimes(8)
+      expect(f.deps.context).toHaveBeenCalledTimes(8)
+      expect(vi.mocked(f.deps.changed).mock.calls.filter(([id, state]) => id === f.id && state.status === 'generating')).toHaveLength(1)
+      expect(vi.mocked(f.deps.changed).mock.calls.filter(([id, state]) => id === ids[8] && state.status === 'generating')).toHaveLength(1)
+
+      expect(f.service.cancel(f.id)).toEqual({ cancelled: true })
+      await vi.waitFor(() => {
+        expect(active).toBe(8)
+        expect(started).toEqual(ids)
+      })
+      expect(f.deps.stream).toHaveBeenCalledTimes(9)
+      expect(peak).toBe(8)
+
+      await f.service.pause()
+      expect(active).toBe(0)
+      expect(f.deps.save).not.toHaveBeenCalled()
+      await expect(f.service.generate(f.id)).rejects.toThrow('维护')
+      f.service.resume()
+      await f.service.generate(f.id)
+      await vi.waitFor(() => expect(active).toBe(1))
+      expect(started.filter(id => id === f.id)).toHaveLength(2)
+      expect(peak).toBe(8)
+    } finally { await f.service.dispose() }
+    expect(active).toBe(0)
   })
   it('waits for an in-flight atomic save before deleting and rejects new work during deletion', async () => {
     const f = fixture()

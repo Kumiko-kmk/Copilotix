@@ -13,6 +13,8 @@ describe('archive mathematics', () => {
   it.each(['$x_i^2$', '\\(x_i^2\\)', '$$\n\\frac{x_i}{y_j}\n$$', '\\[\\frac{x_i}{y_j}\\]'])('renders explicit delimiters %s without invalid paragraph nesting', text => {
     const { container } = render(<p><ArchiveText text={text} /></p>)
     expect(container.querySelectorAll('.katex')).toHaveLength(1)
+    // CSS comes from the direct KaTeX dependency; rehype must generate that version's DOM.
+    expect(container.querySelector('.katex-html > .katex-base')).not.toBeNull()
     expect(container.querySelector('.katex-error')).toBeNull()
     expect(container.querySelector('p p, p div, p pre, p table')).toBeNull()
     expect(container.querySelector('annotation')?.textContent).toMatch(/x_i/)
