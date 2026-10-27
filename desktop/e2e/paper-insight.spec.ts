@@ -30,9 +30,12 @@ test('archive insight uses validated settings, provider HTTP and durable local s
       const archive = window.getByRole('region', { name: '文库', exact: true })
       await expect(archive.locator('canvas[data-archive-state="ready"]')).toBeVisible({ timeout: 20_000 })
       await archive.getByRole('button', { name: '查看档案' }).click()
+      // aria-busy includes the extraction/decryption phase. Hosted software GL
+      // may take several seconds per frame; assert content after that phase,
+      // within the existing 30 s cold-cover and 120 s case budgets.
+      await expect(archive).toHaveAttribute('data-detail-phase', 'open', { timeout: 30_000 })
       await expect(archive.locator('.paper-archive-detail')).toHaveAttribute('aria-busy', 'false')
       await expect(archive.locator('.paper-archive-detail h2')).toHaveText('Insight test paper')
-      await expect(archive).toHaveAttribute('data-detail-phase', 'open')
       await expect(archive.getByRole('tab', { name: /摘要/u })).toHaveAttribute('aria-selected', 'true')
       const legacyTab = archive.getByRole('tab', { name: /AI 解读/u })
       if (await legacyTab.count()) await legacyTab.click()
