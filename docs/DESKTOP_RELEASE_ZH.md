@@ -26,7 +26,7 @@ release-artifacts/<build-id>/
 
 下载 ZIP 内仅有一个版本根目录，包含 Setup、卸载入口、说明和校验文件。完整程序已嵌入 Setup；开发运行副本只存于 `release-artifacts/<build-id>/program/`，不进入 ZIP，避免重复交付约 150 MiB 的运行时压缩数据。无需下载开发副本即可离线安装。
 
-当前版本为 **1.2.0**（以 `desktop/package.json` 为准），安装入口固定为 `setup.exe`；版本仍写入 ZIP 名、程序和安装登记。安装目录页后提供默认勾选的“创建桌面图标”，可自行取消。下文体积数值为历史构建记录，当前产物以最终 manifest 为准。
+当前版本为 **1.3.0**（以 `desktop/package.json` 为准），安装入口固定为 `setup.exe`；版本仍写入 ZIP 名、程序和安装登记。安装目录页后提供默认勾选的“创建桌面图标”，可自行取消。下文体积数值为历史构建记录，当前产物以最终 manifest 为准。
 
 manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`。外层 `artifactDirectory` 定位 ZIP 所在目录，`runtimeArtifactDirectory` 定位开发运行副本。runtime EXE/ASAR 哈希描述 Setup 内已验证的程序，不表示 ZIP 中存在独立 program。内层 bundle-manifest 保存程序、Setup 和卸载入口的哈希／签名，不含外部产物路径或 ZIP 自引用哈希；内层 SHA256SUMS 仅校验实际存在的 Setup、卸载入口。GitHub 平面清单校验独立 Setup、ZIP 及解压后的两个入口。
 
@@ -78,6 +78,8 @@ build 报告保存于 `Copilotix-Windows-verification-reports`，含 Playwright 
 首次 `desktop-v1.0.0` 的未签章例外要求仓库 Actions variable `COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE` 精确等于 `desktop-v1.0.0`。2026-10-07，维护者另行明确授权 **仅本次 `desktop-v1.1.0` 未签章发布**；此例外要求 `COPILOTIX_UNSIGNED_RELEASE_TAG` 精确等于 `desktop-v1.1.0`，工作流也严格限制相同 tag，其他 tag 或变量值不能启用例外。Release 说明醒目标注未签章。完整构建、安装／卸载、下载删除、资产数量和远端哈希校验照常执行。对应发布完成后移除变量，后续版本继续要求受信任签章，不以自签证书代替。
 
 2026-10-18，维护者明确授权 **仅本次 `desktop-v1.2.0` 未签章发布**。沿用上述逐 tag 约束，只有 tag 与 `COPILOTIX_UNSIGNED_RELEASE_TAG` 同为 `desktop-v1.2.0` 才能启用；版本说明标注未签章，全部 CI 与完整性检查保留，发布后移除变量。此授权不延续到后续版本。
+
+2026-10-27，维护者明确授权 **仅本次 `desktop-v1.3.0` 未签名发布**。只有 tag 与 `COPILOTIX_UNSIGNED_RELEASE_TAG` 同为 `desktop-v1.3.0` 才启用；发布说明明确标注，完整回归、打包、隔离安装与远端资产哈希检查保留。任一门禁失败保留未发布状态，修复后重新验证，不改变文库或安装器格式；成功公开后移除变量。后续版本不继承本次授权。
 
 托管 Windows runner 无 GPU，文库 3D 场景（约 260 万三角形）以软件光栅化运行在 1–3 fps，展开档案单帧可超过 10 秒。2026-10-19 维护者同意：文库导航 E2E（`paper-archive.spec.ts`）检测到软件渲染器时改用减少动态效果运行，断言共用；只有抽出中再按 Enter、收回期间 inert 与收回中重开这几步依赖动画，仅在有 GPU 时验证；软件渲染下逐秒帧率采样改为要求导航与拖拽期间确有场景渲染（硬件仍要求 30 fps，三角形与帧率上限不变）。单用例预算保持 180 秒。1.2.0 的点击卡死已由动画步长修正（见 [文库渲染契约](UI_PREFERENCES_ZH.md#文庫頁與-ai-解讀)）；完整动画在 CI 上不再覆盖，有 GPU 的真实帧率与动画以本机与真人验收为准。
 

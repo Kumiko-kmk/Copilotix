@@ -39,6 +39,15 @@ repository variable after publication to close this one-time exception.
 
 ## Network use and privacy
 
+On 2026-10-27 the maintainer explicitly authorized one unsigned release,
+`desktop-v1.3.0`. The workflow permits this exception only when the exact tag
+matches `COPILOTIX_UNSIGNED_RELEASE_TAG=desktop-v1.3.0`. Release notes disclose
+the unsigned installer; all regression, package, installation and remote asset
+integrity checks remain required. Remove the variable after successful publication.
+This authorization does not extend to subsequent versions. Recovery is to leave
+the release unpublished on any failed gate and retry from the verified revision;
+no library or installer format change is introduced by this exception.
+
 When a user starts parsing, PDF content is uploaded to the configured parsing
 service (MinerU). Translation requests transmit the relevant document text to
 the translation provider enabled by the user. Service validation sends requests
