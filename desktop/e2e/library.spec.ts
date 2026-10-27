@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test'
 import { mkdir, readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
-import { V2Database } from '../src/utility/core/persistence/v2Database'
-import { verifyBackup } from '../src/utility/core/libraryMaintenance'
+import { V2Database } from '../src/platform/database/utility/v2Database'
+import { verifyBackup } from '../src/features/library/utility/libraryMaintenance'
 
 test('backs up a complete library through the storage settings RPC in an isolated workspace', async ({}, testInfo) => {
   const workspace = await createE2EWorkspace()

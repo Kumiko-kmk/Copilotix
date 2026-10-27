@@ -1,0 +1,27 @@
+.zotero-import-alert { margin-bottom: 12px; }
+.zotero-import-source { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--muted); font-size: 13px; }
+.zotero-import-loading { display: grid; min-height: 240px; place-items: center; }
+.zotero-import-body { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; height: min(520px, 62vh); min-height: 0; }
+.zotero-import-collections { display: flex; flex-direction: column; gap: 2px; min-height: 0; padding-right: 8px; overflow: auto; border-right: 1px solid var(--rule); }
+.zotero-scope { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 2px; color: var(--text); background: transparent; cursor: pointer; font-size: 13px; text-align: left; }
+.zotero-scope span { min-width: 0; overflow-wrap: anywhere; }
+.zotero-scope small { flex: none; color: var(--muted); }
+.zotero-scope:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+.zotero-scope.active { color: var(--primary); background: color-mix(in srgb, var(--primary) 11%, transparent); font-weight: 600; }
+.zotero-scope:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.zotero-import-items { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.zotero-import-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; margin-bottom: 8px; }
+.zotero-import-toolbar small { color: var(--muted); white-space: nowrap; }
+.zotero-import-list { flex: 1; min-height: 0; overflow: auto; }
+.zotero-import-item { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 4px; border-bottom: 1px solid var(--rule); cursor: pointer; }
+.zotero-import-item.imported { cursor: default; }
+.zotero-import-item-text { display: grid; gap: 3px; min-width: 0; }
+.zotero-import-item-text strong { display: -webkit-box; overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 550; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.zotero-import-item-text small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.zotero-import-item.imported .zotero-import-item-text strong { color: var(--muted); }
+.zotero-import-badge { padding: 1px 8px; border: 1px solid var(--rule-strong); border-radius: 2px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.zotero-import-footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.zotero-import-footer > span { margin-right: auto; color: var(--muted); font-size: 13px; }
+.zotero-entry { justify-self: center; margin-top: 12px; padding: 4px 10px; border: 0; border-radius: 2px; color: var(--muted); background: transparent; cursor: pointer; font-size: 13px; }
+.zotero-entry:hover { color: var(--primary); }
+.zotero-entry:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

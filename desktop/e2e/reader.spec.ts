@@ -2,8 +2,8 @@ import { chromium, expect, test, type Locator, type Page } from '@playwright/tes
 import { execFileSync, spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
-import type { ReaderAnnotationSnapshot } from '../src/shared/ipcSchemas'
-import type { CopilotixDesktopApi } from '../src/shared/types'
+import type { ReaderAnnotationSnapshot } from '../src/features/reader/contract/readerSchemas'
+import type { CopilotixDesktopApi } from '../src/app/contract/desktopApi'
 
 const FIXTURE_TRANSLATED_MARKDOWN = [
   '# 测试文档',

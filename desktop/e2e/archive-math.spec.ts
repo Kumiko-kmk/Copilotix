@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { join } from 'node:path'
-import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, seedReaderTask, mockSavedArchiveCatalog } from './helpers'
 import { briefContent } from '../tests/fixtures/paperBrief'
 
 test('archive renders maths across fields and tabs without clipping or changing reader behaviour', async ({ browserName }, testInfo) => {
@@ -43,6 +43,7 @@ test('archive renders maths across fields and tabs without clipping or changing 
           provenance: { promptVersion: 'fixture', model: { provider: 'deepseek', name: 'deepseek-flash' }, generatedAt: '2026-10-14T00:00:00Z', sourceRevision: 'fixture', language: 'original', sentBytes: 100, sourceBytes: 200 } }
       } }))
     }, { content, text })
+    await mockSavedArchiveCatalog(app, page, { translatedTitle: '模型 $x_i$', keywords: content.keywords, tldr: content.tldr })
     await page.locator('[data-edge-dock="top"]').hover()
     await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
     const archive = page.getByRole('region', { name: '文库', exact: true })

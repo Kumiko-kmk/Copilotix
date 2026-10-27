@@ -11,7 +11,7 @@
 - `takeaway`：目標 50–90 字元，存儲硬上限 160 字元，指出核心理解與邊界。目標字數不強制補足；只有超過硬上限或 schema 錯誤才修復。
 - 純公式／推導圖片：`displayWeight: 0` 且兩個文字字段為空。混合流程／架構圖仍解釋機制，不轉錄或推導其中公式。不可讀圖片零分，文字可簡述無法可靠解讀。
 
-模型格式/schema 失敗最多修復一次；第二次仍不合法則失敗，不保存無效結果。字段與提示詞入口：`desktop/src/shared/figureInsight.ts`、`figureInsightPrompt.ts`。改提示詞時更新 `FIGURE_INSIGHT_PROMPT_VERSION`。
+模型格式/schema 失敗最多修復一次；第二次仍不合法則失敗，不保存無效結果。字段與提示詞入口：`desktop/src/features/insight/contract/figureInsight.ts`、`core/figureInsightPrompt.ts`。改提示詞時更新 `FIGURE_INSIGHT_PROMPT_VERSION`。
 
 ## 圖片及上下文
 
@@ -57,7 +57,7 @@ unsubscribe()
 
 狀態為 `missing / generating / ready / unavailable / failed`；ready 附 `record`、`stale`。事件訂閱應在 generate 前建立，並按雙 ID 過濾。重開窗口用 get 恢復磁盤結果。封面候選可依 `record.content.displayWeight` 排序；圖片使用相對 `record.figure.imagePath`，PDF 定位用 `pageIndex`、`cropBox`，不得讓模型生成路径或坐标。
 
-Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RPC：`figureInsight:get / save` 及 `compute:figure-insight-descriptor`。流程入口：`main/chat/figureInsightService.ts`、`utility/core/persistence/figureInsightStore.ts`；IPC 註冊與生命週期在 `main/index.ts`。
+Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RPC：`figureInsight:get / save` 及 `compute:figure-insight-descriptor`。流程入口：`features/insight/main/figureInsightService.ts`、`utility/figureInsightStore.ts`；IPC 在 `features/insight/{contract,main}/ipc.ts`，組裝與生命週期在 `app/main/bootstrap.ts`。
 
 ## 閱讀器整圖邊界
 
@@ -69,7 +69,7 @@ Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RP
 
 ## 文庫封面
 
-`paperArchive/figureSpread.ts`：抽出檔案時，卡片顯示跨頁——左為論文首頁，右為同尺寸圖頁。Renderer 經 `copilotix-asset://<id>/figures.json` 讀清單（只接受 `images/figures/*.png`），逐圖 `figureInsight.get` 取 `displayWeight`；有分者按分數排前、0 分不展示，無分者按頁序（附錄靠後）、裁圖面積和長寬比兜底；首頁上的圖與極端長條不選。排版為等寬行（每行 1–3 張、行內等高撐滿），在前 1–6 張的所有分行中選版面利用率最高、最小短邊 ≥ 版心寬 24%、大小不過分懸殊者；圖多不扣分，同等利用率下展示更多高分圖。只解碼選中圖片，任一失敗或無可用圖則保留單頁封面。封面只補齊本地整圖，不觸發 AI 解讀。選中新導入論文後，在進入詳情前即與閱讀器共用 `ensureFigureArtifacts`：由解析映射與 layout 識別可靠整圖、從 PDF 裁取並經既有 revision 校驗與原子保存生成 `figures.json`／PNG，再選圖排版；不再依賴使用者先進入閱讀器。所需可靠整圖、排版封面與檔案內容就緒前不開放詳情；抽出後使用已準備的跨頁。切篇／關閉取消未完成裁圖，暫時失敗不快取為永久單頁封面，重新打開可重試。
+`features/library/renderer/archive/figureSpread.ts`：抽出檔案時，卡片顯示跨頁——左為論文首頁，右為同尺寸圖頁。Renderer 經 `copilotix-asset://<id>/figures.json` 讀清單（只接受 `images/figures/*.png`），逐圖 `figureInsight.get` 取 `displayWeight`；有分者按分數排前、0 分不展示，無分者按頁序（附錄靠後）、裁圖面積和長寬比兜底；首頁上的圖與極端長條不選。排版為等寬行（每行 1–3 張、行內等高撐滿），在前 1–6 張的所有分行中選版面利用率最高、最小短邊 ≥ 版心寬 24%、大小不過分懸殊者；圖多不扣分，同等利用率下展示更多高分圖。只解碼選中圖片，任一失敗或無可用圖則保留單頁封面。封面只補齊本地整圖，不觸發 AI 解讀。選中新導入論文後，在進入詳情前即與閱讀器共用 `ensureFigureArtifacts`：由解析映射與 layout 識別可靠整圖、從 PDF 裁取並經既有 revision 校驗與原子保存生成 `figures.json`／PNG，再選圖排版；不再依賴使用者先進入閱讀器。所需可靠整圖、排版封面與檔案內容就緒前不開放詳情；抽出後使用已準備的跨頁。切篇／關閉取消未完成裁圖，暫時失敗不快取為永久單頁封面，重新打開可重試。
 
 ## 驗證邊界
 
@@ -81,6 +81,6 @@ Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RP
 
 含排錯的已返回用量為輸入 **174,428**、輸出 **5,644** tokens。按 [DeepSeek 當日官方價格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)（週末閒時，輸入全按未命中 1 元／百萬、輸出 4 元／百萬）估 **0.197004 元人民幣**；續跑快照已去重，未返回 usage 的中斷請求不計入，未讀取帳單，不能當作實際扣款。
 
-使用者要求停止額外驗證前，圖片解析／保存、ChatProvider、Core RPC 四組 **47 項**針對性測試通過。後續維護了 RPC 名稱一致性、圖片首包預算及 JPEG 傳輸身份的回歸用例，依使用者要求未再執行；未跑 smoke、E2E、應用重建或打包。最近一次 typecheck 尚有既有 `renderer/paperArchive/ArchiveDetail.tsx:120` 的 TS7030，不宣稱全倉型別檢查通過。
+使用者要求停止額外驗證前，圖片解析／保存、ChatProvider、Core RPC 四組 **47 項**針對性測試通過。後續維護了 RPC 名稱一致性、圖片首包預算及 JPEG 傳輸身份的回歸用例，依使用者要求未再執行；未跑 smoke、E2E、應用重建或打包。最近一次 typecheck 尚有既有 `features/library/renderer/archive/ArchiveDetail.tsx:120` 的 TS7030，不宣稱全倉型別檢查通過。
 
 Codex 可作為已啟用的首選服務：使用服務連接中選定的 Codex 問答模型；不讀取 API Key。圖片還需模型支持 image，否則明確失敗。結果仍經既有 schema／grounding 校驗與原子保存。運行時與資料庫 provider 擴展見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)，設定步驟見 [服務配置](wiki/Service-Setup.md)。

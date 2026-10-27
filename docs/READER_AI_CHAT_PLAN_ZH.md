@@ -3,7 +3,7 @@ document_id: copilotix-reader-ai-chat-plan
 status: implemented-local-build-awaiting-live-acceptance
 owner: shared-agents
 branch: master
-updated: 2026-10-12
+updated: 2026-10-21
 ---
 
 # 單篇文獻 AI 問答：Agent 協作與維護契約
@@ -62,15 +62,30 @@ updated: 2026-10-12
 - Enter 發送，Shift+Enter 換行，IME 不誤發；輸入框／模型選擇留在面板底部。停止後保留部分回答；失敗／取消可重試。引用按首次出現順序編號，點擊核對版本後定位來源，不添加懸停提示。
 - SafeMarkdown 禁止回答中的外部圖片／可執行鏈接／script 網路副作用；只顯示經驗證引用和 KaTeX 公式。長回答僅在用戶接近底部時自動跟隨，尊重 reduced-motion。
 
+## 5a. 圖片加入問答
+
+2026-10-21 起取代「擴展自動圖片解讀」的方向：圖片由用戶主動加入問答，模型結合上下文逐子圖解讀。figureInsight（文庫封面選圖）保留原樣，不共用存儲。
+
+- 入口：Markdown 原文／譯文每個圖組（`readerFigureGroups` 的 complete／ambiguous／unsupported 均可）右鍵選單有「图片加入问答」（不可用時以停用項寫明原因），不切換頁籤，最多 4 張／問。PDF 視圖暫無入口（PdfPane 沒有圖區疊層）。
+- 能力：`paperChatFigures.ts` 的 `paperChatImageInput`。Qwen 僅 `qwen3.8-flash`／`qwen3.8-max`，DeepSeek 僅 `deepseek-flash`，Codex 依模型目錄 `image`；目錄未知視為不可確認。當前模型不支持時，入口以 `aria-disabled` 變灰、點擊顯示原因（無懸停提示）；已加入的圖片保留在輸入欄，輸入欄顯示原因並禁止發送；Main 在保存 turn 前再次拒絕（`FIGURE_UNSUPPORTED`），從不靜默丟圖。
+- 圖片來源：Utility `compute:paper-chat-figure` 按 figureId 重算幾何。complete 且 `figures.json` 裁圖經 figureInsight descriptor 校驗通過時送整圖；否則送該圖組解析出的子圖（`images/<name>.jpg|png`，最多 6 張，PathPolicy、格式頭與大小校驗）。只回傳路徑、大小、SHA-256；Main 重讀並比對雜湊後編碼（>2 MiB PNG 傳輸用 JPEG98），全部圖片 ≤14 MiB、請求 ≤20 MiB，首包等待 120 秒。
+- 上下文：`PaperContextBuilder` 收到 `figures`（captionMappingIds、mappingIds、圖號 key）後，圖說 chunk 必選；全文中所有提及該圖號的段落（`figureMentions.ts`：Fig./Figs./Figure/图/圖、`(a)`／`1a`、`1–3` 範圍、Supplementary/Extended Data，不含 Fig. 10 或 configure 1）最多 24 段優先入選；其前後段落次之；章節路徑隨 evidence 傳遞。結果 `figures` 列出 caption／mention／nearby 的 E 編號與因預算略去的提及數。模型收到 `userFigures` 與按順序排列的圖片，提示要求逐子圖、結合正文並以 [E#] 引用提及段落；引用沿用既有可點擊定位。
+- 歷史：turn JSON 可選 `figures`（figureId、label、pageIndex、images[path, sha256]），不存圖片位元組；session.json 可選 `figures` 保存輸入欄中的圖。之後的提問只在歷史問題前加「[附图：Fig. 1]」，不重送舊圖。重試按 figureId 重新解析。
+
+兼容策略（shared schema／IPC／Core RPC）：`paper-chat:ask` 請求、`chat:build-context` 請求與結果、turn 與 session 文件均只新增可選欄位，舊客戶端／舊文件不受影響；新增 Core RPC `compute:paper-chat-figure` 與錯誤碼 `FIGURE_UNAVAILABLE`（只增不刪）。無 SQLite migration、無 IPC 通道增減。含 `figures` 的 turn／session 被更早版本讀取時會因 strict schema 拒絕，與 `selections` 相同，降級不受支持。恢復語義不變：圖片不可讀或雜湊不符時該輪以 FIGURE_UNAVAILABLE 失敗並保存，可重新加入圖片後重試。
+
+驗收（2026-10-21，隔離資料目錄複製真實文庫的斷裂力學綜述，Codex gpt-6-luna）：加入 Fig. 1 直接發送，回答分 (a)(b) 解讀，引用圖說 [E73] 與 4.1 節中「Fig. 1 presents a comparison…」段落 [E76]，點擊引用定位到 PDF 第 8 頁圖說；舊 turn（無 figures）照常顯示。
+
 ## 6. 代碼與測試入口
 
 | 邊界 | 入口 |
 | --- | --- |
-| 共享契約 | shared/paperChatSchemas.ts、paperChatStorageSchemas.ts、ragSchemas.ts、types.ts、coreRpcSchemas.ts |
-| Main／Preload | main/chat/paperChatService.ts、paperChatIpc.ts、chatProvider.ts、main/index.ts、preload/index.ts |
-| Utility | utility/core/paperContextBuilder.ts、compute/structureAwareChunker.ts、compute/ragContentIndexService.ts、persistence/{paperChatStore,sqliteRagRepository}.ts、utilityOperations.ts；Main 側 ragContentIndexJobRunner.ts、rpcRagContentIndexer.ts |
-| UI | renderer/usePaperChat.ts、components/ReaderChatPanel.tsx、paperChat.css、MarkdownPane.tsx、pages/ReaderPage.tsx |
-| 回歸 | paperChatContracts、paperChatService、paperChatUtility、paperChatStore、chatProvider、ReaderChatPanel、paperContextBuilder、ragContracts、ragPersistence、ragContentIndexJobRunner、structureAwareChunker；e2e/paper-chat.spec.ts |
+| 模組 | `desktop/src/features/chat/`（[README](../desktop/src/features/chat/README.md)） |
+| 契約 | `contract/`：paperChatSchemas、paperChatStorageSchemas、paperChatFigures、figureMentions、ragSchemas、`ipc.ts`（paper-chat:*）、`rpc.ts`（chat:*、compute:paper-chat-figure、compute:rag-content-index） |
+| Main | `main/`：paperChatService、chatProvider、modelGateway、ipc、ragContentIndexJobRunner、rpcRagContentIndexer；組裝在 `app/main/bootstrap.ts` |
+| Utility | `utility/`：operations（Core RPC handler）、paperContextBuilder、paperChatStore、paperChatFigureStore、structureAwareChunker、ragContentIndexService、sqliteRagRepository＋ragRecords |
+| UI | `renderer/`：ReaderChatPanel、paperChat.css、usePaperChat、usePaperChatRouting；宿主在閱讀器 MarkdownPane、ReaderPage |
+| 回歸 | paperChatContracts、paperChatService、figureInsightStore（圖片來源）、paperChatUtility、paperChatStore、chatProvider、ReaderChatPanel、paperContextBuilder、ragContracts、ragPersistence、ragContentIndexJobRunner、structureAwareChunker；e2e/paper-chat.spec.ts |
 
 新增持久化回歸覆蓋：真實本地文件重新讀取、文獻隔離、45 輪分頁、完整引用／草稿／模型、取消和清空次序、損壞文件保留、目錄 junction 拒絕、Core RPC 全鏈路和 Renderer reload。E2E 用隔離 vault 與假 Key，只模擬 provider HTTP，不讀寫真人憑據或調用付費 API。
 

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { PACKAGED_SMOKE_ARG, validatePackagedSmokeOutput } from '../src/shared/packagedSmoke.mjs'
+import { PACKAGED_SMOKE_ARG, validatePackagedSmokeOutput } from '../src/app/contract/packagedSmoke.mjs'
 
 const [executable, appVersion, electronVersion] = process.argv.slice(2)
 const result = spawnSync(executable, [PACKAGED_SMOKE_ARG], {

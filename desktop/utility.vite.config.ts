@@ -8,9 +8,9 @@ export default defineConfig({
     conditions: ['node', 'default'],
     mainFields: ['main'],
     alias: {
-      '@shared': resolve(__dirname, 'src/shared'),
-      '@core': resolve(__dirname, 'src/core'),
-      '@runtime': resolve(__dirname, 'src/runtime')
+      '@app': resolve(__dirname, 'src/app'),
+      '@platform': resolve(__dirname, 'src/platform'),
+      '@features': resolve(__dirname, 'src/features')
     }
   },
   build: {
@@ -19,8 +19,8 @@ export default defineConfig({
     emptyOutDir: false,
     lib: {
       entry: {
-        index: resolve(__dirname, 'src/utility/index.ts'),
-        'uninstall-cleanup': resolve(__dirname, 'src/utility/uninstallCleanupEntry.ts')
+        index: resolve(__dirname, 'src/app/utility/index.ts'),
+        'uninstall-cleanup': resolve(__dirname, 'src/app/utility/uninstallCleanupEntry.ts')
       },
       formats: ['cjs'],
       fileName: (_format, entryName) => `${entryName}.js`

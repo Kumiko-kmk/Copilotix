@@ -56,7 +56,7 @@
 
 这是本机 CLI 接口接入，**不是离线模型**：内容仍经 Codex 发往其配置的模型服务，受登录、网络、账户额度和模型权限限制。Copilotix 不读取登录令牌、不替你登录，也不更改个人 Codex 配置。PDF 解析仍使用 MinerU。
 
-目录可见不等于实际可调用。模型繁忙时可稍后重试或手动换模型；不会自动换 Codex 模型。翻译队列到达 Codex 后，失败不会继续转发给其他服务。若要确保仅发往 Codex，将它排第一或关闭其他来源。连接异常先检查 `codex login status`、CLI 版本及所选模型。该接入使用 [Codex App Server](https://learn.chatgpt.com/docs/app-server)，当前只启用已验证的 0.159.x 协议。
+目录可见不等于实际可调用。模型繁忙时可稍后重试或手动换模型；不会自动换 Codex 模型。Codex 限流时会自动降速并重试；仍失败的翻译段落会交给顺序中下一个已启用的服务，译文中以「X 回退翻译」标出，档案卡也会改用已启用的 Qwen／DeepSeek。若要确保内容仅发往 Codex，请在模型设置中关闭其他翻译来源。连接异常先检查 `codex login status`、CLI 版本及所选模型。该接入使用 [Codex App Server](https://learn.chatgpt.com/docs/app-server)，当前只启用已验证的 0.159.x 协议。
 
 ## 启用、顺序与共用凭据
 

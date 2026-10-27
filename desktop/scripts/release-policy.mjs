@@ -10,6 +10,10 @@ export const RELEASE_LIMITS = Object.freeze({
   setupBytes: 180 * MEBIBYTE
 })
 
+// User request 2026-10-22: the runtime is close to its limit, so for now it only warns.
+// Remove a key from this list to make that size a hard gate again.
+export const ADVISORY_RELEASE_LIMITS = Object.freeze(['runtimeBytes'])
+
 const RELEASE_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
 
 /** Require the pushed desktop tag to describe the version being packaged. */
@@ -106,16 +110,21 @@ export function assertSafeBuildOutputPath(desktopDirectory, targetDirectory) {
   }
 }
 
-export function assertReleaseMeasurements(measurements, limits = RELEASE_LIMITS) {
+/** Throws for a hard size gate; returns warnings for advisory ones. */
+export function assertReleaseMeasurements(measurements, limits = RELEASE_LIMITS, advisory = ADVISORY_RELEASE_LIMITS) {
+  const warnings = []
   for (const key of ['appAsarBytes', 'runtimeBytes', 'zipBytes', 'setupBytes']) {
     const actual = measurements[key]
     const limit = limits[key]
     if (!Number.isFinite(actual) || actual < 0) throw new Error(`Invalid release measurement ${key}: ${String(actual)}`)
     if (!Number.isFinite(limit) || limit <= 0) throw new Error(`Invalid release limit ${key}: ${String(limit)}`)
     if (actual > limit) {
-      throw new Error(`Release size limit exceeded for ${key}: ${formatMiB(actual)} MiB > ${formatMiB(limit)} MiB`)
+      const message = `Release size limit exceeded for ${key}: ${formatMiB(actual)} MiB > ${formatMiB(limit)} MiB`
+      if (!advisory.includes(key)) throw new Error(message)
+      warnings.push(`${message} (advisory)`)
     }
   }
+  return warnings
 }
 
 export function assertLocales(entryNames) {
@@ -173,7 +182,7 @@ export async function auditRelease({ runtimeDirectory, zipPath, setupPath, asarE
     zipBytes: zipDetails.size,
     setupBytes: setupDetails.size
   }
-  assertReleaseMeasurements(measurements)
+  for (const warning of assertReleaseMeasurements(measurements)) process.stderr.write(`Warning: ${warning}\n`)
   assertLocales(localeEntries.map((entry) => entry.name))
   assertNoCanvasPaths([...runtimeFiles.map((file) => file.path), ...asarEntries])
   return measurements

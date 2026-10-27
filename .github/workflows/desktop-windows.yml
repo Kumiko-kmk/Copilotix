@@ -29,7 +29,7 @@ permissions:
 env:
   # Maintainer-authorized exceptions require an exact tag and repository variable.
   # Every other public tag still requires trusted signing.
-  COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE: ${{ (github.ref == 'refs/tags/desktop-v1.0.0' && vars.COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE == 'desktop-v1.0.0') || (github.ref == 'refs/tags/desktop-v1.1.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.1.0') || (github.ref == 'refs/tags/desktop-v1.2.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.2.0') }}
+  COPILOTIX_AUTHORIZED_UNSIGNED_RELEASE: ${{ (github.ref == 'refs/tags/desktop-v1.0.0' && vars.COPILOTIX_UNSIGNED_BOOTSTRAP_RELEASE == 'desktop-v1.0.0') || (github.ref == 'refs/tags/desktop-v1.1.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.1.0') || (github.ref == 'refs/tags/desktop-v1.2.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.2.0') || (github.ref == 'refs/tags/desktop-v1.3.0' && vars.COPILOTIX_UNSIGNED_RELEASE_TAG == 'desktop-v1.3.0') }}
 
 jobs:
   build:
@@ -39,8 +39,13 @@ jobs:
       contents: read
     env:
       FULL_VALIDATION: ${{ startsWith(github.ref, 'refs/tags/desktop-v') || (github.event_name == 'workflow_dispatch' && inputs.full_validation) }}
+      # Affected-test base: the PR target or the previous master head; empty falls back to merge-base(origin/master).
+      COPILOTIX_TEST_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Affected-test selection diffs against the base commit.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
@@ -64,19 +69,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm desktop:lint
       - run: pnpm desktop:typecheck
-      - name: Fast core regression
+      # Module boundaries (ADR-0001): warnings are the migration backlog, errors fail the build.
+      - run: pnpm desktop:deps
+      # Unit tests affected by the change (import graph) plus the always-run safety set; toolchain changes run all.
+      - name: Affected unit regression
         if: env.FULL_VALIDATION != 'true'
         run: pnpm desktop:test
       # Full coverage runs in e2e shard 1, beside packaging instead of before it.
-      # Fast core tests normally install Electron as a side effect; full builds need it explicitly.
+      # Affected-only unit runs may not require Electron, so install its binary explicitly every time.
       - name: Install the Electron binary
-        if: env.FULL_VALIDATION == 'true'
         working-directory: desktop
         run: node -e "require('electron')"
       - run: pnpm desktop:build:bundles
-      - name: Source application smoke
+      # Smoke plus the E2E specs mapped from changed paths (scripts/affected-tests.mjs).
+      - name: Source application smoke and affected E2E
         if: env.FULL_VALIDATION != 'true'
-        run: pnpm desktop:test:e2e
+        run: pnpm desktop:test:e2e:affected
       - name: Diagnose archive interactions
         if: github.event_name == 'workflow_dispatch' && inputs.archive_diagnostic && env.FULL_VALIDATION != 'true'
         run: pnpm --dir desktop exec playwright test e2e/archive-layout.spec.ts e2e/archive-math.spec.ts e2e/paper-archive.spec.ts e2e/paper-insight.spec.ts

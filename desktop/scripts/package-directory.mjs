@@ -31,7 +31,7 @@ import {
   formatPackagedSmokeMarker,
   shouldRunPackagedSmoke,
   validatePackagedSmokeOutput
-} from '../src/shared/packagedSmoke.mjs'
+} from '../src/app/contract/packagedSmoke.mjs'
 import {
   assertReleaseLayout,
   createReleaseLayout,

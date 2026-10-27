@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { join } from 'node:path'
 import { writeFile } from 'node:fs/promises'
-import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, seedReaderTask, mockSavedArchiveCatalog } from './helpers'
 
 for (const disableWebGL of [false, true]) {
   test(`paper archive search, navigation and reader return${disableWebGL ? ' without WebGL' : ''}`, async ({}, testInfo) => {
@@ -63,6 +63,7 @@ for (const disableWebGL of [false, true]) {
           })
         })
       }
+      await mockSavedArchiveCatalog(app, window, { tldr: 'Archive fixture' })
       await window.locator('[data-edge-dock="top"]').hover()
       const navigation = window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u })
       await expect(navigation).toBeVisible()

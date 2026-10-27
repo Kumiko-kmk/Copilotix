@@ -3,18 +3,34 @@ import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { _electron as electron, expect, type Page } from '@playwright/test'
-import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/core/blockMapping'
-import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/shared/translationPlanProtocol'
-import { V2Database } from '../src/utility/core/persistence/v2Database'
-import { V2TaskRepositoryCompat } from '../src/utility/core/persistence/v2TaskRepositoryCompat'
-import type { ArtifactKind } from '../src/core/types'
+import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/features/parsing/core/blockMapping'
+import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/features/translation/contract/translationPlanProtocol'
+import { V2Database } from '../src/platform/database/utility/v2Database'
+import { V2TaskRepositoryCompat } from '../src/features/library/utility/v2TaskRepositoryCompat'
+import type { ArtifactKind } from '../src/features/library/contract/artifacts'
 import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from './launchPolicy'
-import { credentialServiceForRuntime, WindowsCredentialVault, type CredentialAccount } from '../src/main/credentialVault'
+import { credentialServiceForRuntime, WindowsCredentialVault, type CredentialAccount } from '../src/platform/credentials/main/credentialVault'
 import {
   alignMarkdownBlocks,
   MARKDOWN_MAPPING_ALGORITHM_VERSION,
   splitMarkdownBlocks
-} from '../src/shared/markdownBlocks'
+} from '../src/features/parsing/core/markdownBlocks'
+
+/** Keep deterministic layout fixtures aligned with the compact browse IPC. */
+export async function mockSavedArchiveCatalog(app: Awaited<ReturnType<typeof launchElectron>>, page: Page,
+  values: { translatedTitle?: string; keywords?: string[]; tldr?: string } = {}): Promise<void> {
+  const documents = await page.evaluate(() => window.copilotix.listDocuments())
+  await app.evaluate(({ ipcMain }, { documents, values }) => {
+    ipcMain.removeHandler('paperInsight:list')
+    ipcMain.handle('paperInsight:list', (_event, request: { documentIds: string[] }) => ({ ok: true, value:
+      documents.filter(paper => request.documentIds.includes(paper.id)).map(paper => ({
+        documentId: paper.id, updatedAt: paper.updatedAt, workflowStatus: paper.workflow.status,
+        savedStatus: 'ready', ready: paper.workflow.status === 'completed',
+        translatedTitle: values.translatedTitle ?? '', keywords: values.keywords ?? [], tldr: values.tldr ?? ''
+      }))
+    }))
+  }, { documents, values })
+}
 
 const FIXTURE_MARKDOWN = [
   '# Fixture document',

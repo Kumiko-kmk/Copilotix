@@ -6,7 +6,7 @@
 
 | 项目 | 当前基线 |
 |---|---|
-| 适用分支 | 当前工作分支见根 `AGENTS.md` |
+| 适用分支 | `master` |
 | Desktop 版本 | 以 `desktop/package.json` 为准 |
 | Electron | `44.1.1` |
 | Node.js | `24.19.0`（`.node-version` 与 CI 一致） |
@@ -49,28 +49,32 @@ Utility Process（受监督；SQLite 与 compute 的唯一拥有者）
 
 ## 3. 代码地图与模块边界
 
-### 3.1 依赖方向（已用 import 图核对，无反向或跨层依赖）
+### 3.1 依赖方向（`pnpm desktop:deps` 以 error 模式检查，见 ADR-0001）
+
+代码按 `src/app`（组装根）、`src/platform/<关注点>`（基础设施，不认识功能）与 `src/features/<模块>` 分目录，每个单元内再分进程层：
 
 ```text
-renderer ──▶ shared ◀── preload
-main ──▶ core ──▶ shared ◀── utility ──▶ core
+renderer ──▶ contract ◀── preload
+main ──▶ core ──▶ contract ◀── utility ──▶ core
 main ──▶ runtime ──▶ core ◀── runtime ◀── utility
 ```
 
-- `shared`：三端共用的纯 TS，不得导入 Node/Electron/DOM 专有 API；跨层契约（schema、DTO、版本常量）只在这里定义一次。
-- `core`：Main 与 Utility 共用的纯逻辑、Core RPC 客户端、作业模型与端口、block mapping；不得导入 Node/Electron 或 runtime 层，Renderer 不得导入。
-- `runtime`：Main 与 Utility 共用的 Node 运行时实现；`PathPolicy` 在此实现 `core/ports.ts` 的路径端口，Renderer 与 shared/core 不得导入。
-- `renderer` 只依赖 `shared`；`main` 与 `utility` 互不导入，只经 Core RPC 通信。
+- `contract`：各进程共用的纯 TS，不得导入 Node/Electron/DOM 专有 API；跨层契约（schema、DTO、版本常量）只在所属模块定义一次。
+- `core`：纯逻辑，不得导入 Node/Electron 或 runtime 层。
+- `runtime`：Main 与 Utility 共用的 Node 运行时实现，不碰 Electron；`PathPolicy` 在 `platform/files/runtime`。
+- `renderer` 只依赖 contract／core 与 preload API；`main` 与 `utility` 互不导入，只经 Core RPC 通信；其他模块只经 `contract/` 或层 `index.ts` 引用一个模块。
 
 ### 3.2 模块表
+
+> 1.3.0 正按 [ADR-0001](adr/0001-feature-modules.md) 把代码迁入 `src/{app,platform,features}/`（进度见 [milestone](MILESTONE_1_3_ZH.md)），各模块入口以其 `README.md` 为准；`shared/`、`core/` 等旧目录已在 M5 拆除，下表的旧路径在 M6 重写本文时更新。
 
 | 模块 | 主要文件 | 职责与边界 |
 |---|---|---|
 | 跨层契约 | `shared/ipcSchemas.ts`、`types.ts`、`coreRpcSchemas.ts`、`ragSchemas.ts`、`paperChat*Schemas.ts`、`paperInsight.ts`、`figureInsight.ts`、`librarySchemas.ts`、`libraryCategories.ts`、`translationPlanProtocol.ts` | 所有 IPC／RPC／磁盘 JSON 的 Zod 契约；`documentSummary.ts` 是文档摘要唯一投影 |
 | 文档纯逻辑 | `shared/markdownBlocks.ts`、`standardMarkdown.ts`、`mathDelimiters.ts`、`readerDocument.ts`、`readerAnnotations.ts`、`readerFigureGroups.ts`、`readerFigureLayout.ts`、`figureArtifacts.ts`、`titleNaming.ts`、`paperBrief/` | 无 I/O 的解析、映射、导出投影与提示词构造，可在任意进程运行 |
-| Core 契约与基础件 | `core/coreClient.ts`、`jobs.ts`、`types.ts`、`ports.ts`、`blockMapping.ts` | 文件系统路径实现位于 `runtime/pathPolicy.ts`，由 Main 与 Utility 共用 |
-| Preload 桥 | `preload/index.ts`、`ipcClient.ts` | 只暴露 `window.copilotix` 显式领域方法 |
-| Main：外壳与 IPC | `main/index.ts`、`ipc.ts`、`libraryAccessGate.ts`、`assetProtocol.ts`、`singleInstance.ts`、`networkProxy.ts`、`logger.ts` | 生命周期、窗口、托盘、IPC 注册；所有 handler 经 `registerValidatedHandler` |
+| Core 契约与基础件 | `platform/rpc`（协定与 `CoreClient`）、`platform/jobs`、`core/types.ts`、`core/ports.ts`、`core/blockMapping.ts`；完整 RPC 注册表在 `app/contract/coreRpc.ts` | 文件系统路径实现位于 `platform/files/runtime/pathPolicy.ts`，由 Main 与 Utility 共用 |
+| Preload 桥 | `app/preload/index.ts`、`app/contract/desktopApi.ts`、`platform/ipc/preload/{bridge,ipcClient}.ts` | 只暴露 `window.copilotix` 显式领域方法；方法与频道由各模块 `contract/ipc.ts` 组合 |
+| Main：外壳与 IPC | `app/main/{index,bootstrap,window,services,packagedSmoke,singleInstance}.ts`、`platform/ipc/main/ipc.ts`、`libraryAccessGate.ts`、`platform/{assets,network,log}` | 生命周期、窗口、托盘与组装；各模块 `main/ipc.ts` 以 `IpcRegistrar.handle(契约频道, handler)` 注册，底层仍经 `registerValidatedHandler` |
 | Main：Utility 桥 | `utilitySupervisor.ts`、`electronUtilityFork.ts`、`utilityEntryPath.ts`、`rpc*.ts`、`taskRepositoryCompat.ts` | Utility 生命周期与 RPC 代理；`rpc*` 只把端口方法映射为固定 operation |
 | Main：文档与作业 | `taskService.ts`、`documentCommandService.ts`、`documentProjection.ts`、`artifactService.ts`、`figureArtifactStore.ts`、`jobScheduler.ts`、`*JobRunner.ts`、`progressReporter.ts` | 导入／重试／删除／导出与 durable job 执行；只经 JobRepository／TaskCompute 端口改状态 |
 | Main：外部服务 | `parserClient.ts`、`fileUploader.ts`、`translation/`、`chat/chatProvider.ts`、`credentialVault.ts`、`settingsService.ts`、`usageAnalyticsService.ts` | 网络、凭据与设置；Token／Key 不离开 Main |
@@ -102,15 +106,14 @@ IPC handler 会同时验证来源窗口是当前主窗口、请求来自主 fram
 
 ### 4.2 Preload API
 
-当前公开 API 是 `window.copilotix` 的显式方法集合：设置与连接测试、文档导入/列表/重试/删除/详情、输出打开/另存、阅读标注、窗口状态和事件订阅。每个方法在 `desktop/src/preload/index.ts` 中绑定固定 channel、请求 schema 和响应 schema。
+当前公开 API 是 `window.copilotix` 的显式方法集合：设置与连接测试、文档导入/列表/重试/删除/详情、输出打开/另存、阅读标注、窗口状态和事件订阅。每个方法由所属模块的 `contract/ipc.ts` 绑定固定 channel、请求 schema 和响应 schema，`app/contract/desktopApi.ts` 组合，`app/preload/index.ts` 暴露。
 
 新增方法必须同时更新：
 
-1. `desktop/src/shared/ipcSchemas.ts` 的请求/响应/事件 schema；
-2. `desktop/src/shared/types.ts` 的公开 DTO/API；
-3. preload 的显式方法；
-4. Main 的 `registerValidatedHandler` 或 `sendValidatedEvent`；
-5. 不可信请求、sender、响应和错误 envelope 测试。
+1. 所属模块 `contract/` 的请求/响应/事件 schema 与公开 DTO；
+2. 该模块 `contract/ipc.ts` 的频道声明与 preload API 工厂（preload 无需改动）；
+3. 该模块 `main/ipc.ts` 以 `IpcRegistrar` 注册 handler 或发送事件；
+4. 不可信请求、sender、响应和错误 envelope 测试。
 
 不得暴露 `ipcRenderer`、任意 channel、数据库查询、任意文件读取、Credential Vault 或可注入 URL 的网络代理。
 
@@ -135,7 +138,7 @@ Main 先验证 sender，再解析请求；handler 结果再次验证，schema �
 
 ### 5.2 Main ↔ Utility Core RPC
 
-`desktop/src/shared/coreRpcSchemas.ts` 是 Core RPC 的唯一来源：
+Core RPC 的 operation 由平台、作业与各模块的 `contract/rpc.ts` 声明，`desktop/src/app/contract/coreRpc.ts` 组合为唯一注册表：
 
 | 项目 | 当前值/要求 |
 |---|---|
@@ -193,7 +196,7 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 ### 6.2 STRICT schema 与迁移纪律
 
-`desktop/src/utility/core/persistence/v2Database.ts` 用 `node:sqlite` 的 `DatabaseSync`，开启 WAL 与 foreign keys。连接属于 Utility，不属于 Main。当前 schema 使用 STRICT 表并包含：
+`desktop/src/platform/database/utility/v2Database.ts` 用 `node:sqlite` 的 `DatabaseSync`，开启 WAL 与 foreign keys。连接属于 Utility，不属于 Main。当前 schema 使用 STRICT 表并包含：
 
 - `settings`：JSON 公开设置；
 - `documents`：来源名、标题、storage path、checksum、解析/翻译配置；
@@ -206,7 +209,7 @@ Utility 端拒绝新工作后等待活动作业，再 flush/close；任何 close
 
 ### 6.3 PathPolicy
 
-`runtime/pathPolicy.ts` 是 Main 与 Utility 共用的唯一 `PathPolicy` 实现（端口见 `core/ports.ts`）。实现从 Core 移入 runtime 层，导出的类与词法校验函数、磁盘路径规则及恢复语义保持不变；无需数据库或 IPC migration。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
+`platform/files/runtime/pathPolicy.ts` 是 Main 与 Utility 共用的唯一 `PathPolicy` 实现（端口见 `platform/files/contract/pathPolicyPort.ts`）。实现从 Core 移入 runtime 层，导出的类与词法校验函数、磁盘路径规则及恢复语义保持不变；无需数据库或 IPC migration。任何相对 artifact、导入目录、asset URL 或删除目标都必须：
 
 1. 拒绝 NUL、绝对跨平台路径和 `..` 段；
 2. 先做 lexical containment，再做 realpath containment；
@@ -234,6 +237,13 @@ Scheduler 从 Utility-owned JobRepository claim 作业，以 lease owner/expiry 
 4. Utility normalize 只发布受 PathPolicy 保护的 `full.md`、`layout.json`、可选 content list、图片和 `block_list.json`；产物发布完成且 hash 可验证后才写 `artifacts` revision。
 5. 同作业恢复必须能识别已发布、hash 相同的文件，不重复破坏已有产物；解析成功后按依赖关系创建 translate job。
 
+**导入确认与首页封面（1.2.0）**：确认框由 Renderer 以共用 pdf.js worker 在本地读取页数、PDF 元数据标题与第 1 页文字（≤120MB），`shared/pdfImport.ts` 的 `trustedPdfMetadataTitle`／`detectRepositoryCoverPage` 判定标题可信度与机构库封面（City Research Online、White Rose、HAL、ResearchGate、JSTOR、Taylor & Francis 等，或两条以上通用版权／引用信号）；只提示，跳过与否由用户勾选。
+
+- IPC `documents:import` 内部请求新增可选 `files: { skipFirstPage?, metadataTitle? }[]`，必须与 `paths` 等长；preload 按路径配对过滤非 PDF。缺省即旧行为，旧 renderer 无需改动。Main 用同一函数重新校验标题，不信任 renderer 的判断。
+- Core RPC `compute:import-pdf` 新增可选 `skipFirstPage`。Utility 用 pdf-lib（打包进 bundle 的 devDependency）在内存中删除第 1 页，以 `wx` 写 partial、fsync 后 rename 为 `original.pdf`；`sourceHash` 与 artifact 记录的是裁剪后的字节，用户原文件不变。上限 `MAX_PDF_CROP_BYTES`（64MB）；加密、单页或无法改写时返回 `CORE_PDF_REWRITE_FAILED` 且不留文件。缺省即原流式复制。
+- 元数据标题写入 `display_title` 作为暂定标题；`CopilotixTask.titleSource='pdf-metadata'` 只在插入时把 `titleSource`／`provisionalTitle` 写进 parse job checkpoint，读取时不返回。解析完成时若标题仍等于暂定值即改用解析标题；用户选「原文件名」的标题不覆盖。无 schema／migration；旧 checkpoint 没有这两个键，行为不变。
+- 状态投影：parse job 的 `uploading`／`parsing` 改按 runner 写入的 `checkpoint.stage`（无 stage 时回退插入时的 `phase`），修正整个解析期间都显示「上传中」；失败的翻译保留 `translationProgress`，界面据此把失败落在翻译步骤。首页导入进度卡、文库浏览面板与阅读器都用 `renderer/documentStatus.ts` 显示「上传 → 解析 → 翻译 n/总数」。回归：`utilityOperations`、`v2TaskRepositoryCompat`、`parsePipelineConcurrency`、`ipcContracts`、`titleNaming` 测试。
+
 ### 7.3 Translate
 
 Utility-owned `MarkdownTranslationPlanManager` 读取受限的计划 descriptor，按 AST/表格逻辑单元列出工作，Main 只负责 provider 顺序、凭证、网络调用和小型 response JSON。翻译计划通过 jobId 绑定 block，cache 命中、apply/fail、checkpoint 和 finalize 都验证 document/job/unit 关系。
@@ -260,7 +270,7 @@ Utility-owned `MarkdownTranslationPlanManager` 读取受限的计划 descriptor�
 
 当前网络边界由 Main 持有：
 
-- Parser API 使用 `desktop/src/shared/constants.ts` 中受控的固定来源与 v4 路径；Token 只发送到固定 API 请求；预签名上传/下载不带 Token；
+- Parser API 使用 `desktop/src/features/parsing/contract/parserApi.ts` 中受控的固定来源与 v4 路径；Token 只发送到固定 API 请求；预签名上传/下载不带 Token；
 - Qwen/DeepSeek 使用显式 base URL/model 和 Credential Vault；Bing/TranSmart 是可变的网页 Provider，不能视作稳定官方协议；
 - provider 请求必须有 timeout、重试、状态/响应 schema、取消和安全日志；
 - provider fallback 不得跨 document/job 混写状态，最终结果必须记录 provider/model；
@@ -308,7 +318,7 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 | functions | 80% |
 | branches | 75% |
 
-覆盖统计 `src/main/**`、`src/core/**`、`src/shared/**`，范围与阈值由 `vitest.config.ts` 维护。一般 push／PR 执行 lint、typecheck、快速核心回归、四 bundle 和源码启动 smoke；版本 tag 或手动 `full_validation` 才执行完整覆盖率、全量 Electron、打包和安装验收。发布门禁失败不能称为发布通过；日常核心回归也不代表完整发布验收。
+覆盖统计各单元的 main／core／runtime／contract 层，范围与阈值由 `vitest.config.ts` 维护。一般 push／PR 执行 lint、typecheck、受影响单元测试＋必跑安全集、四 bundle 和 smoke＋受影响 E2E（见开发文档）；版本 tag 或手动 `full_validation` 才执行完整覆盖率、全量 Electron、打包和安装验收。发布门禁失败不能称为发布通过；日常核心回归也不代表完整发布验收。
 
 单元/集成测试至少覆盖：Core RPC schema/1 MiB/超时/取消、sender/frame/URL、Utility ready/restart/drain、STRICT migration/checksum、Repository/lease/checkpoint/retry、PathPolicy/符号链接、流式导入与 atomic artifact、翻译 cache/表格协议、映射/标注以及 release transaction/manifest/fuse/packaged smoke。真实 API、真实翻译和真实 PDF 属于 opt-in fixture，不是所有 PR 的默认证据。
 
@@ -329,7 +339,6 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 ## 14. 已知結構債（未處理）
 
 - `v2TaskRepositoryCompat.ts`（約 1300 行）仍以舊 `CopilotixTask` 投影同時承擔文檔、artifact、翻譯塊、標註、設置；宜按聚合拆成獨立 Repository，Main 側 `TaskRepositoryCompat` 隨之收窄。
-- `main/index.ts` 內聯約 20 個 IPC handler；宜按 `chat/*Ipc.ts` 的模式拆出文檔、文庫、設置、窗口註冊模組。
 - 過大單文件：`paperArchive/PaperArchiveScene.ts`、`compute/markdownTranslationPlan.ts`、`MarkdownPane.tsx`、`MarkdownMinimap.tsx`、`PdfPane.tsx`。
 - Renderer 根目錄平鋪十餘個 reader／pdf 模組，待按「閱讀工作台／文庫」分子目錄；搬移前先與其他 worktree 協調以免衝突。
 - `ragSchemas`／`sqliteRagRepository`／`rag-content-index` 的 rag 前綴已名不副實；作業類型字串已持久化，只能改代碼名。`database:flush` operation 目前 Main 未調用。
@@ -341,12 +350,13 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 
 ## Codex provider（本机 App Server）
 
-- Main 的 `runtime/codexRuntime.ts` 通过 `codex.exe app-server --listen stdio://` 建立 JSON-RPC；`modelGateway.ts` 统一远端与 Codex 流式调用，翻译适配器保留现有表格 ID 校验。翻译、问答、Paper Brief 和图片解读共享此运行时；不提供 embeddings 或 PDF 解析替代。
-- `shared/codex.ts` 定义可兼容旧设置的可选配置与状态。Preload 只开放经 Main 校验的检查／模型测试与原生选执行文件 IPC；无令牌接口。模型、视觉输入和推理强度来自当前模型目录，模型缺失显式失败。旧四服务顺序可读取，默认追加但不启用 Codex；翻译回退顺序在 Codex 处截止。
-- 交互保留独立 FIFO，后台共用等待队列，由空闲槽位领取下一请求，最多 8 个独立进程槽位，每槽同时一个请求。槽内复用经过隔离配置校验的进程，每次请求创建新 ephemeral thread；闲置 30 秒、出错或退出关闭进程。避免每段重复 account/read／model/list；不复用论文会话。最终回答、token usage、结构化 schema 经业务校验后落盘。CLI 限定 0.159.x，子进程不经 shell，工作目录在 userData 的 codex-runtime。
+- Main 的 `platform/codex/runtime/codexRuntime.ts` 通过 `codex.exe app-server --listen stdio://` 建立 JSON-RPC；`modelGateway.ts` 统一远端与 Codex 流式调用，翻译适配器保留现有表格 ID 校验。翻译、问答、Paper Brief 和图片解读共享此运行时；不提供 embeddings 或 PDF 解析替代。
+- `platform/codex/contract/codex.ts` 定义可兼容旧设置的可选配置与状态。Preload 只开放经 Main 校验的检查／模型测试与原生选执行文件 IPC；无令牌接口。模型、视觉输入和推理强度来自当前模型目录，模型缺失显式失败。旧四服务顺序可读取，默认追加但不启用 Codex。2026-10-21 起（产品决策：多数用户以 Codex 为主，接受自动切换）翻译不再在 Codex 处截止：Codex 退避重试后仍失败的单元按顺序落到下一个已启用且凭据有效的服务；不新增开关，「模型设置」中关闭其他翻译来源即为仅用 Codex。manifest 逐块 provider/model 不变；Main 读取时对 provider≠preferredProvider 的完成块附加可选 `fallbackProvider`（IPC `translatedMarkdownBlockSchema` 新增可选字段，旧 manifest 无 provider 时不标记，无迁移），译文视图不常驻标注（2026-10-24 起），该段右键菜单首行显示「此段由 X 回退翻译」，不进入选区、标注偏移或复制文本。档案卡在 Codex 失败（非上下文超限）或一次修复后仍不符合字数／结构契约时，改用翻译顺序中下一个已启用且 Key 有效的 Qwen／DeepSeek，从干净提示重新生成并各有一次修复，档案卡状态显示实际模型名；`paper-insight` 日志的 `problems` 只记字段路径与字数（如 `analysis.abstract:178`）；问答、图片解读不回退。
+- 交互保留独立 FIFO，后台共用等待队列，由空闲槽位领取下一请求，最多 8 个独立进程槽位，每槽同时一个请求。槽内复用经过隔离配置校验的进程，每次请求创建新 ephemeral thread；闲置 30 秒、协议／连接出错或退出关闭进程，turn 正常结束为 failed 时保留进程供重试。避免每段重复 account/read／model/list；不复用论文会话。最终回答、token usage、结构化 schema 经业务校验后落盘。CLI 限定 0.159.x，子进程不经 shell，工作目录在 userData 的 codex-runtime。
 - 翻译按 32 条元数据分页预取，同时准备最多 64 个单元，Codex／Qwen／DeepSeek 请求上限 8。Codex 仅合并同一作业 signal 的短片段：每批最多 16 组／64 片段／约 8K 字符，单个超长组独立发送而不截断；短传输 ID 在本地还原后逐单元校验、保存。表格保留行列结构，使用同样的短 ID 映射与完整性检查。翻译 low、档案 medium；thread/start 与 turn/start 均使用任务实际档位，问答沿用全局设置。读取相同输出根目录的设置不重建翻译计划。
 - 会话级覆盖关闭 shell、MCP、应用、插件、浏览器、联网搜索、记忆和子代理，设置只读沙箱、无持久历史、忽略项目文档；启动时读回隔离配置。工具请求一律拒绝并终止任务。覆盖不写入用户配置。用户文档、图片与历史均作为不可信内容；图片只接收应用已验证的 PNG/JPEG 数据。
 - 初始化 RPC 15 秒，生成空闲 120 秒、总计 10 分钟；排队取消立即返回，运行取消请求 turn/interrupt，5 秒后关闭进程。进程异常、非成功完成、空结果和工具尝试均不能当作成功；退出关闭所有进程。不会静默切换模型或其他供应商。诊断不记录提示正文、图片或令牌。
+- 限流与重试（2026-10-21）：ChatGPT 后端对 Codex 账户按速率返回 429，app-server 内部重试数秒后以 `codexErrorInfo: { responseTooManyFailedAttempts: { httpStatusCode: 429 } }` 结束 turn；8 槽并发约 10 个请求后即触发，旧 `turnError` 只认字符串变体，统一成不可重试的「Codex 生成失败」，每批 16 单元秒失败（真实论文 435 块首轮失败 154）。现 `turnError` 解析对象变体与 HTTP 状态：429／rateLimitExceeded／serverOverloaded 为限流，连接／流中断及 5xx 为暂时错误，额度、登录、上下文与 4xx 不重试。后台通道由 `CodexBackoff` 共享冷却：限流时并发减半（下限 1）并按 5 秒起指数退避（≤60 秒、抖动），同一冷却窗内其他在途失败不再减半，持续成功逐槽恢复到 8；未输出任何增量的请求最多尝试 6 次，已有部分输出或交互通道不重试。Main 日志 `codex.generation.failed`（lane、attempt、category=变体:状态、retryable、willRetry、cooldownMs、concurrency、耗时）、`codex.concurrency`、`paper-insight`（stage、provider、category）只记分类，不记 prompt、论文、上游错误文本或凭据。只改 Main 运行时，不涉 IPC／Core RPC／schema。实测：同篇 431 个翻译单元经真实 Codex 与 64 单元并发全部成功（305 秒，35 次 429 均重试成功，最多第 3 次）；回归见 codexRuntime、paperInsight 测试。
 - SQLite migration **5 / add-codex-provider** 仅扩展 documents、translation_blocks、translation_cache 的 provider 约束；迁移 1–4 不改，复制原数据并恢复索引。仅在事务外临时关闭外键，提交前检查外键，异常回滚并恢复外键开关；沿用迁移前快照。旧程序不可直接打开 schema 5，回退需用迁移前快照恢复，不删除用户原库。聊天／解读 JSON 增加 codex 枚举，既有内容不改写；token 统计兼容缺失的 Codex 计数。
 - 回归入口：codexConnection、codexRuntime、codexIntegration、credentialGate、v2Database 测试；真实调用仅显式 `COPILOTIX_CODEX_LIVE=1` 运行 e2e/codex.spec.ts，使用合成论文。2026-10-13 本机 111 个测试文件通过（759 通过、3 跳过），类型检查与 lint 通过；合成文本翻译、表格、证据问答、Brief schema／引用、图片解读和取消实测成功，Electron 设置→授权→真实问答→引用落盘流程通过；不替代真实论文人工质量审阅或远端 CI。使用步骤见 [服务配置](wiki/Service-Setup.md)。
 
@@ -362,3 +372,11 @@ Renderer 的公开 API 是 preload 暴露的 `window.copilotix`；它与四个 b
 普通 ChatGPT 聊天接入分析（2026-10-14，尚未实现）：可用 OpenAI Responses API 请求聊天模型（chat-latest 为 ChatGPT 当前 Instant 别名），也可按 Sign in with ChatGPT 的本地／开源应用授权流程请求账户目录中的可用模型；两者均不要求经过 Codex agent。订阅接入仍取决于实际资格与模型目录，不能直接使用 ChatGPT backend-api 或假设已有 Codex 登录代表获得所有聊天模型权限。
 来源：[chat-latest](https://developers.openai.com/api/docs/models/chat-latest)、[订阅推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)、[预览限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)。订阅路线当前不支持图片生成、Code Interpreter、文件搜索等托管工具；标准平台 API 可另接对应工具。API 不返回 ChatGPT 客户端的完整呈现树；模型接口切换与富内容 UI 是两项工作。
 当前 Chat 已支持 Markdown 文本、标题、列表、表格及 KaTeX 公式；图示四宫格可由结构化 JSON 与本地组件复现，来源胶囊需要返回的引用元信息与独立组件。当前回答中的图片和外链仅显示文本，未加载图片；图片需增加验证、资源下载／持久化与受控展示，生成图片还需独立工具。交互图表／地图／视频／音频／Canvas 等需对应资源和组件，不能靠文本回答自动保持 ChatGPT 原格式。本次仅修改页签、公式渲染和隐藏用时，保留既有 Codex 路由。
+
+## 契約（2026-10-26 自 AGENTS.md 遷入）
+
+### 平台層執行契約（原 AGENTS §7）
+
+- Core RPC 只保留 Main 實際調用的 operation；完整註冊表在 `desktop/src/app/contract/coreRpc.ts`（由平台、作業與功能各自聲明的 operation 組合），Main／Utility 經構造參數取得綁定的 protocol，`platform/` 不認識具體功能；新增能力採「Utility 生成 descriptor，Main 只傳 ID 與小結果」。可能隨文庫增長的列表一律分頁；`tasks:list`／`documents:list` 採 keyset `{ after? } → { items, next }`，每頁 ≤200 行、≤512 KiB。
+- Utility SQLite operation 分 data、compute（`compute:*`）及獨佔生命週期（init／flush／close／library）通道；事務回調內不得 await。Main compute 用 `COMPUTE_RPC_TIMEOUT_MS` 與作業 signal 取消。
+- JobScheduler 的 `job-changed(job)`／`job-notification(job)` 用 `job.documentId` 定位文檔；Main 高頻事件經 `createCoalescedRefresh` 合併刷新。Reader 給 MarkdownPane 的 blocks／annotations 用 `useMemo` 保持引用穩定。

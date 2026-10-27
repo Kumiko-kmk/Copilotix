@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTask } from './helpers'
-import { MAX_PDF_PAGES } from '../src/shared/constants'
+import { MAX_PDF_PAGES } from '../src/features/library/contract/pdfLimits'
 
 const MINIMAP_TRANSLATED_MARKDOWN = [
   '# 测试文档',
@@ -140,7 +140,7 @@ test('keeps the new parse page layout across supported sizes and themes', async 
       mimeType: 'application/pdf',
       buffer: Buffer.from('%PDF-1.4 fixture')
     })
-    await expect(window.getByRole('dialog', { name: '确认解析任务' })).toBeVisible()
+    await expect(window.getByRole('dialog', { name: '确认导入' })).toBeVisible()
   } finally {
     await app.close()
     await workspace.cleanup()

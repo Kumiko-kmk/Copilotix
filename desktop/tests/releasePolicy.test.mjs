@@ -81,9 +81,16 @@ describe("releasePolicy", () => {
       })).not.toThrow()
     })
 
-    it.each(['appAsarBytes', 'runtimeBytes', 'zipBytes', 'setupBytes'])('rejects an oversized %s measurement', (key) => {
+    it.each(['appAsarBytes', 'zipBytes', 'setupBytes'])('rejects an oversized %s measurement', (key) => {
       const measurements = { ...RELEASE_LIMITS, [key]: RELEASE_LIMITS[key] + 1 }
       expect(() => assertReleaseMeasurements(measurements)).toThrow(key)
+    })
+
+    it('only warns for an oversized runtime while it is advisory, but still rejects invalid values', () => {
+      const oversized = { ...RELEASE_LIMITS, runtimeBytes: RELEASE_LIMITS.runtimeBytes + 1 }
+      expect(assertReleaseMeasurements(oversized)).toEqual([expect.stringMatching(/runtimeBytes.*advisory/)])
+      expect(() => assertReleaseMeasurements(oversized, RELEASE_LIMITS, [])).toThrow('runtimeBytes')
+      expect(() => assertReleaseMeasurements({ ...RELEASE_LIMITS, runtimeBytes: -1 })).toThrow(/Invalid release measurement/)
     })
 
     it('rejects duplicate-runtime archives rather than expanding the ZIP budget', () => {

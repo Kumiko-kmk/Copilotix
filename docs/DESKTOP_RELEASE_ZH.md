@@ -26,7 +26,7 @@ release-artifacts/<build-id>/
 
 下载 ZIP 内仅有一个版本根目录，包含 Setup、卸载入口、说明和校验文件。完整程序已嵌入 Setup；开发运行副本只存于 `release-artifacts/<build-id>/program/`，不进入 ZIP，避免重复交付约 150 MiB 的运行时压缩数据。无需下载开发副本即可离线安装。
 
-当前版本为 **1.2.0**（以 `desktop/package.json` 为准），安装入口固定为 `setup.exe`；版本仍写入 ZIP 名、程序和安装登记。安装目录页后提供默认勾选的“创建桌面图标”，可自行取消。下文体积数值为历史构建记录，当前产物以最终 manifest 为准。
+当前版本为 **1.3.0**（以 `desktop/package.json` 为准），安装入口固定为 `setup.exe`；版本仍写入 ZIP 名、程序和安装登记。安装目录页后提供默认勾选的“创建桌面图标”，可自行取消。下文体积数值为历史构建记录，当前产物以最终 manifest 为准。
 
 manifest schema 5 标记 `distribution: compact-setup` 和 `runtime.embeddedIn`。外层 `artifactDirectory` 定位 ZIP 所在目录，`runtimeArtifactDirectory` 定位开发运行副本。runtime EXE/ASAR 哈希描述 Setup 内已验证的程序，不表示 ZIP 中存在独立 program。内层 bundle-manifest 保存程序、Setup 和卸载入口的哈希／签名，不含外部产物路径或 ZIP 自引用哈希；内层 SHA256SUMS 仅校验实际存在的 Setup、卸载入口。GitHub 平面清单校验独立 Setup、ZIP 及解压后的两个入口。
 
@@ -79,6 +79,8 @@ build 报告保存于 `Copilotix-Windows-verification-reports`，含 Playwright 
 
 2026-10-18，维护者明确授权 **仅本次 `desktop-v1.2.0` 未签章发布**。沿用上述逐 tag 约束，只有 tag 与 `COPILOTIX_UNSIGNED_RELEASE_TAG` 同为 `desktop-v1.2.0` 才能启用；版本说明标注未签章，全部 CI 与完整性检查保留，发布后移除变量。此授权不延续到后续版本。
 
+2026-10-27，维护者明确授权 **仅本次 `desktop-v1.3.0` 未签名发布**。只有 tag 与 `COPILOTIX_UNSIGNED_RELEASE_TAG` 同为 `desktop-v1.3.0` 才启用；发布说明明确标注，完整回归、打包、隔离安装与远端资产哈希检查保留。任一门禁失败保留未发布状态，修复后重新验证，不改变文库或安装器格式；成功公开后移除变量。后续版本不继承本次授权。
+
 托管 Windows runner 无 GPU，文库 3D 场景（约 260 万三角形）以软件光栅化运行在 1–3 fps，展开档案单帧可超过 10 秒。2026-10-19 维护者同意：文库导航 E2E（`paper-archive.spec.ts`）检测到软件渲染器时改用减少动态效果运行，断言共用；只有抽出中再按 Enter、收回期间 inert 与收回中重开这几步依赖动画，仅在有 GPU 时验证；软件渲染下逐秒帧率采样改为要求导航与拖拽期间确有场景渲染（硬件仍要求 30 fps，三角形与帧率上限不变）。单用例预算保持 180 秒。1.2.0 的点击卡死已由动画步长修正（见 [文库渲染契约](UI_PREFERENCES_ZH.md#文庫頁與-ai-解讀)）；完整动画在 CI 上不再覆盖，有 GPU 的真实帧率与动画以本机与真人验收为准。
 
 正式发布 tag 必须严格等于 `desktop-v<desktop/package.json version>`，例如 package version 为 `1.0.0` 时只能推送 `desktop-v1.0.0`。CI 会先核对 tag 与包版本，再构建并验证 Electron fuses、签名、运行包和哈希。
@@ -114,3 +116,42 @@ Electron fuses 在 electron-builder `afterPack` 阶段写入并读回校验，�
 - 发现应用运行时提示正常退出，不强杀后台任务；覆盖升级和静默卸载不清理个人资料。只有向导明确选择清理并经 Main 第二次原生确认，Utility 才按已登记的文献和固定 userData 边界清理；目录 junction、路径漂移或确认 token 不符时拒绝操作，保护原始 PDF、外部备份和共享文件。
 - 新增凭据、native 依赖、资源或存储格式时同步更新打包／卸载清单和验证。退出、备份与文库维护前等待聊天取消和落盘；完整迁移文献目录中的 chat 文件。数据库迁移的快照、校验和与回滚约束不变。
 - 人工安装验收使用独立 GUID 和隔离目录，检查中文／空格路径、快捷方式、运行中保护与取消；不覆盖日常安装，不用单元测试代替原生 wizard 验收。自动更新、MSIX／Store 与跨平台安装器仍未接入。
+
+## 契約（2026-10-26 自 AGENTS.md 遷入）
+
+### 1. 本地 Windows 構建與交付
+
+使用 Node **24.19.0**、根 `packageManager` 指定的 pnpm **11.19.0**。系統 Node 24.11.1 曾靜默崩潰並留下舊 out；不要使用。Codex fallback pnpm 版本可能不符，可用正確 Node 執行 Corepack 快取的 `11.19.0/bin/pnpm.mjs`，不得偽造 user-agent。
+
+在倉庫根目錄執行：
+
+```powershell
+pnpm install                       # 新 worktree 或依賴／lockfile 改變時
+pnpm desktop:build:bundles          # 源碼改動後重建 Main、Preload、Renderer、Utility
+pnpm desktop:release:from-built     # 僅明確要求打包時執行；使用新 out，不與 desktop:release 並行
+```
+
+僅源碼與 `desktop/out/` 均未變更時，才可省略 build。打包內建的 ASAR、資源、fuses、體積、雜湊與 packaged smoke 校驗不可移除；成功後原子更新發布目錄，失敗保留 `.release-next-*` 供排查。
+
+Electron 下載不可用時，可在本次 PowerShell 設 `$env:COPILOTIX_USE_INSTALLED_ELECTRON='1'` 再打包；只複製本 worktree 已安裝、版本與發行要求一致的 Electron `dist`，不修改依賴來源。預設下載路徑及所有打包門禁不變，版本不符仍失敗並保留 staging。使用後清除此環境變數。回歸入口：`releasePolicy.test.mjs`、`releaseTransaction.test.mjs`。
+
+- 人工測試入口：`release-artifacts/<build-id>/program/Copilotix.exe`，不可單獨搬走 EXE；同目錄 DLL、PAK、resources 均必需。
+- 交付包：`release-artifacts/<build-id>/Copilotix-<version>-win-x64.zip`，Setup 規則見第 6 節。
+- Runtime 上限 **360 MiB**，Electron 約占 330 MiB；2026-10-22 起依使用者要求暫列 `ADVISORY_RELEASE_LIMITS`（`release-policy.mjs`），超出只警告不失敗，app.asar／ZIP／Setup 上限仍為硬門禁，恢復時從清單移除即可。Renderer-only 套件放 `devDependencies`；Main 純 JS 優先由 electron-vite externalize `exclude` 打入 bundle；原生或刻意外部化套件才留 `dependencies`。
+
+### 5. 許可與簽名
+
+- 自有代碼沿用根 `LICENSE.md` 的 MIT，不覆蓋第三方或歷史上游許可。
+- 打包生成第三方許可匯總（包括開發依賴），並複製 MIT 與聲明到 `resources/licenses`；缺少許可文本須如實列出。
+- 本機自簽僅供測試，不自動加入系統信任。正式政策與 SignPath 見 `docs/CODE_SIGNING_POLICY.md`、`docs/LICENSE_AND_SIGNING_ZH.md`。
+
+### 6. Setup 交付契約
+
+- 從 1.2.0 起，公開 Release 僅上傳 `setup.exe`，源碼由 GitHub 按 tag 提供 ZIP／tar.gz；不發布運行包 ZIP、SHA 或 manifest。下列緊湊 ZIP 與雜湊清單只作本地／CI 內部校驗，不刪除打包安全檢查。
+
+- ZIP 為 compact-setup：根目錄含 Setup、`uninstall.exe`、安裝說明及小型 advanced 校驗文件；runtime 嵌入 Setup，不在 ZIP 重複放置，開發副本留在 `release-artifacts/<build-id>/program/`。
+- schema 5：distribution 為 compact-setup，`runtime.embeddedIn` 標記內嵌；外層 `runtimeArtifactDirectory` 指向開發副本，`artifactDirectory` 指向 ZIP 目錄。ZIP 內 bundle-manifest 不含外部產物路徑或自身哈希；外層 release-manifest 在 ZIP 完成後加入 `transport.sha256`，不進 ZIP。成功只清理上一成功版本已驗證的產物路徑，失敗暫存保留。
+- 強制目前使用者安裝，允許選位置。安裝／卸載發現應用運行時提示退出，不強制結束背景隊列。
+- 卸載預設保留資料、憑據與獨立文庫；只有明確勾選清除、Main 第二次原生確認後，獨立 Utility 才按唯讀清單驗證並安全清理。覆蓋升級／靜默卸載不得清資料；新增憑據或儲存結構須同步卸載清單與路徑驗證。
+- 安裝精靈視覺：`scripts/generate-installer-assets.ps1` 生成字陣風格的 sidebar（164×314）與內頁 header（150×57）BMP；完成頁有專案主頁連結。頁面順序、控件 ID 與歡迎／選項／完成頁文案不變（wizard 測試依賴）。
+- Setup、主程式、內嵌卸載器均受正式簽章門禁。必要驗收入口：`pnpm desktop:test:installer:wizard`、`pnpm desktop:test:installer`；腳本拒絕覆蓋既有安裝。
