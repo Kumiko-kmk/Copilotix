@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { join } from 'node:path'
 import { writeFile } from 'node:fs/promises'
-import { createE2EWorkspace, launchElectron, seedReaderTask } from './helpers'
+import { createE2EWorkspace, launchElectron, seedReaderTask, mockSavedArchiveCatalog } from './helpers'
 import { briefContent } from '../tests/fixtures/paperBrief'
 
 const originalTitle = 'Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators for scientific machine learning'
@@ -47,6 +47,7 @@ test('archive keeps titles separate, category controls fixed, and translated abs
           provenance: { promptVersion: 'brief-v2.2026-10-10', model: { provider: 'deepseek', name: 'deepseek-flash' }, generatedAt: '2026-10-10T00:00:00Z', sourceRevision: 'fixture', language: 'original', sentBytes: 100, sourceBytes: 200 } }
       } }))
     }, briefContent)
+    await mockSavedArchiveCatalog(app, page, { keywords: briefContent.keywords, tldr: briefContent.tldr, translatedTitle })
     await page.locator('[data-edge-dock="top"]').hover()
     await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
     const archive = page.getByRole('region', { name: '文库', exact: true })

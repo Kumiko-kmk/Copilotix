@@ -16,6 +16,22 @@ import {
   splitMarkdownBlocks
 } from '../src/features/parsing/core/markdownBlocks'
 
+/** Keep deterministic layout fixtures aligned with the compact browse IPC. */
+export async function mockSavedArchiveCatalog(app: Awaited<ReturnType<typeof launchElectron>>, page: Page,
+  values: { translatedTitle?: string; keywords?: string[]; tldr?: string } = {}): Promise<void> {
+  const documents = await page.evaluate(() => window.copilotix.listDocuments())
+  await app.evaluate(({ ipcMain }, { documents, values }) => {
+    ipcMain.removeHandler('paperInsight:list')
+    ipcMain.handle('paperInsight:list', (_event, request: { documentIds: string[] }) => ({ ok: true, value:
+      documents.filter(paper => request.documentIds.includes(paper.id)).map(paper => ({
+        documentId: paper.id, updatedAt: paper.updatedAt, workflowStatus: paper.workflow.status,
+        savedStatus: 'ready', ready: paper.workflow.status === 'completed',
+        translatedTitle: values.translatedTitle ?? '', keywords: values.keywords ?? [], tldr: values.tldr ?? ''
+      }))
+    }))
+  }, { documents, values })
+}
+
 const FIXTURE_MARKDOWN = [
   '# Fixture document',
   '<sub>Ada Lovelace</sub> and Alan Turing',

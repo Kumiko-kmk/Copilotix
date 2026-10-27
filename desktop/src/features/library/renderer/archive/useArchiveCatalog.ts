@@ -124,7 +124,9 @@ export function useArchiveCatalog(documents: readonly CatalogPaper[], source?: P
     const controller = new AbortController()
     const papers = [...currentDocuments.current.values()].filter(paper => {
       const entry = cache.get(paper.id)
-      return entry?.version !== version(paper) || Date.now() - entry.readAt > (entry.value.savedStatus === 'failed' ? 3_000 : 30_000)
+      // Generation can finish while this page is unmounted and has no event
+      // subscription. Recheck negative facts on return, even within the TTL.
+      return entry?.version !== version(paper) || entry.value.savedStatus !== 'ready' || Date.now() - entry.readAt > 30_000
     })
     void (async () => {
       for (let offset = 0; !controller.signal.aborted && offset < papers.length; offset += LOCAL_PAGE_SIZE) {

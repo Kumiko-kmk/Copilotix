@@ -79,6 +79,20 @@ describe('archive access uses durable saved facts', () => {
 })
 
 describe('saved catalog updates and selection races', () => {
+  it('rechecks a missing card generated while the library page was unmounted', async () => {
+    const value = paper(), f = sourceFor([value]), provider = wrapper()
+    f.list.mockResolvedValueOnce([saved(value, { savedStatus: 'missing', ready: false })])
+    const first = renderHook(() => useArchiveCatalog([value], f.source), { wrapper: provider })
+    await waitFor(() => expect(first.result.current.get(value.id)?.savedStatus).toBe('missing'))
+    first.unmount()
+    // The default source now returns a saved card, with no document timestamp
+    // change and no subscriber around to receive the generation event.
+    const returned = renderHook(() => useArchiveCatalog([value], f.source), { wrapper: provider })
+    await waitFor(() => expect(returned.result.current.get(value.id)?.ready).toBe(true))
+    expect(f.list).toHaveBeenCalledTimes(2)
+    expect(f.source.generate).not.toHaveBeenCalled()
+  })
+
   it('loads all saved facts once so arbitrary paper switches stay ready without body or crop work', async () => {
     const papers = [paper(), paper(), paper()]
     const f = sourceFor(papers)

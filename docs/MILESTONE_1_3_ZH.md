@@ -1,6 +1,6 @@
 # 1.3.0 Milestone：功能模組化與開發秩序
 
-狀態：進行中（2026-10-25 使用者確認方向；重構在分支 `modularize-1.3`）。本文件是本 milestone 的唯一進度入口，各階段完成後在此勾選並刪除過時說明；架構決策見 [ADR-0001](adr/0001-feature-modules.md)。
+狀態：M1–M5 已在本地集成，1.3.0 發布驗收中（[PR #14](https://github.com/Kumiko-kmk/Copilotix/pull/14)，分支 `release/1.3.0`）。使用者於 2026-10-27 授權上傳、合併、發布及僅本版本未簽名例外。尚未完成的性能門禁與真實服務旅程保留為後續工作，不把版本發布等同整份 milestone 全部完成。架構決策見 [ADR-0001](adr/0001-feature-modules.md)，使用者變更與升級說明見 [1.3.0 發布說明](releases/1.3.0.zh-CN.md)。
 
 ## 目標
 
@@ -18,7 +18,7 @@
 - **功能之間沒有邊界**：一個功能（例如閱讀器編輯層）同時散落在 `shared/markdownEdits.ts`、`main/artifactService.ts`、`utility/...`、`renderer/components/MarkdownPane.tsx`；`shared/` 是 40 個檔案的雜物間。
 - 中樞檔案過大：`main/index.ts` 723 行承擔 31 個 IPC handler 與全部組裝；`preload/index.ts` 手寫全部 API。
 - 超過 600 行的檔案 15 個，最大 `PaperArchiveScene.ts` 1667 行、`markdownTranslationPlan.ts` 1361、`v2TaskRepositoryCompat.ts` 1326、`MarkdownPane.tsx` 1109。
-- 本地 `master` 領先 `origin/master` 44 個提交，從未經遠端 CI；版本號仍為 1.2.0。
+- 此為重構前基線；目前版本號已更新至 1.3.0，遠端發布驗收由 PR #14 與正式 tag 的 CI 記錄。
 
 ## 退出標準（全部達成才算完成）
 
@@ -60,17 +60,14 @@
 
 `pnpm desktop:deps`（warn 模式，CI 在 typecheck 後執行）：274 個模組、1165 條依賴，**9 個違規，全為 `no-circular`**，皆在 `shared/`：`types.ts` 與 `ipcSchemas`、`paperChatSchemas`、`paperChatStorageSchemas`、`paperInsight`、`figureInsight`、`pdfImport`（經 `titleNaming`）互相引用型別（7 個）；`readerFigureGroups` ↔ `readerFigureLayout`；`paperBrief/lengths` ↔ `paperBrief/schema`。功能邊界 0（尚無 `features/`），進程層 0，入口不可達的檔案 0。跨模組耦合集中在 `shared/types.ts`、`ipcSchemas.ts`、`coreRpcSchemas.ts`、`utilityOperations.ts`、`main/index.ts`、`preload/index.ts` 六個中樞，M2–M5 依次拆開。
 
-## 技術債清單（待逐項結論）
+## 技術債清單（發布範圍與後續結論）
 
-- Runtime 355.6／360 MiB，暫列 advisory（`release-policy.mjs`）。
-- 中文全形標點緊貼 `**` 時粗體不渲染（問答回答中可見）。
-- 部分圖說中 φ 顯示為「�」。
-- Zotero 導入不顯示首頁進度卡（導入結果只回數量）。
-- PDF 視圖無引用懸停（無鏈接注釋層）。
-- 「重新翻譯此段」「長按拖曳排序」尚未在真實憑據下走過完整流程。
-- CI「只測受影響部分」的選擇邏輯尚未在遠端驗證。
-- 本機 E2E `reader.spec.ts`「keeps the complete minimap static across long-document jumps」穩定失敗（標題距捲動容器頂 15.45 px，期望 16±0.5），master 原樣即如此，疑與顯示縮放有關；待在 CI／其他機器確認。
-- 本機 E2E `reader.spec.ts`「renders a local PDF with range requests before parsing succeeds」間歇失敗（約半數）：Markdown 程式捲動後 PDF `scrollTop` 仍變化（811→545），疑為前一步 PDF 置中的平滑捲動未結束；重構前提交上同樣出現。
+- Runtime 體積仍按使用者原授權列 advisory；ASAR、Setup、ZIP 硬門禁保留，實際值以本版 CI manifest 為準，性能預算自動門禁延後建立，不由單次幀率數字代替。
+- 中文全形標點緊貼 `**` 時粗體不渲染、部分圖說 φ 為「�」：延後至 Markdown／解析專項，需保留原文對照樣本，避免發布整理擴大文字修復範圍。
+- Zotero 導入首頁進度卡、PDF 引用懸停：延後的產品功能，當前導入回傳數量，PDF 尚無鏈接注釋層；不描述為本版已實作。
+- 「重新翻譯此段」「長按拖曳排序」及完整真實服務旅程：保留人工驗收邊界，發布自動化不使用個人付費憑據，不冒充真實服務驗收。
+- CI 受影響測試選擇：本 PR 遠端執行；正式發布另強制完整覆蓋率及全部 E2E，故不依賴選擇器證明完整驗收。
+- 本機歷史 minimap 15.45 px 對齊與 PDF range／平滑捲動時序問題：2026-10-27 首輪 [完整 CI](https://github.com/Kumiko-kmk/Copilotix/actions/runs/40435335753) 的 reader 用例均通過，沒有放寬斷言；本機顯示縮放差異保留追蹤，不據此保證所有硬體均已驗收。
 - RAG 時期遺留（結論：保留）：`sqliteRagRepository.ts`、`rag-content-index` 作業與 rag_* 表仍是問答上下文的檢索索引，已整體歸入 chat，作業名與表名不改（改名須改持久化契約）；`createContentRevision` 只被測試用來建立修訂，作為測試入口保留。
 
 ## 參考規範
@@ -84,6 +81,8 @@
 ## 驗收紀錄
 
 （各階段完成後在此記錄日期、提交與證據入口，一行一項。）
+
+- 2026-10-27 發布驗收：初輪 Windows build（含打包、隔離安裝生命週期及下載／哈希）通過；E2E 揭示批量狀態夾具需同步，以及離開文庫期間生成的缺失狀態快取、無可靠完整圖組的單頁封面判定兩項回歸，已修正並重跑。最終驗收以 PR #14／`desktop-v1.3.0` 全綠結果為準，不沿用初輪失敗狀態宣稱發布完成。
 
 - 2026-10-26 M5：`shared/ipcSchemas.ts`、`types.ts`、`constants.ts` 與 `core/types.ts`、`core/ports.ts` 按所屬拆入各模組契約（library `documentSchemas`／`artifacts`／`pdfLimits`／`taskCompute`，settings `settingsSchemas`／`defaultSettings`，translation `translationSchemas`／`translationBatch`，parsing `blockSchemas`／`parserApi`，reader `readerSchemas`，chat `ragChunk`；共用欄位校驗入 `platform/ipc/contract/validation.ts`，視窗型別與 schema 入 `app/contract/window.ts`），`packagedSmoke` 入 `app/contract`，`utilityOperations` 入 `app/utility/operations.ts`；舊目錄 `shared/`、`core/`、`utility/` 刪除，`@shared`／`@core`／`@runtime`／`@main`／`@renderer` 別名從 tsconfig、electron-vite、utility vite、vitest、ESLint 與 dependency-cruiser 移除；依賴規則全部改 error（378 模組、1533 條依賴、0 違規，入口不可達 0）；平台層三個超限檔拆分（`v2Database` 800→269，migration SQL 原文移至 `v2SchemaSql.ts`，逐字比對一致；`sqliteJobRepository` 699→489；`jobScheduler` 664→582）；根目錄跨模組測試移入 `tests/app/`；修正 M4 library 遺留的必跑集路徑（`libraryMaintenance` 已移入 `tests/features/library/`，舊路徑使 vitest 篩選靜默落空），`affected-tests.mjs` 改為必跑測試缺檔即報錯。門禁：typecheck、lint 0 錯誤、`desktop:test:full` 847 通過／3 跳過、覆蓋率 85.8／82.1／86.9％、build:bundles＋utility smoke 通過、首屏 chunk 仍 2.19 MB；全量 E2E（設定檔變更觸發）30 通過／3 跳過，僅既有 minimap 失敗。
 - 2026-10-26 M4 reader：閱讀器 60 檔移入 `features/reader`（contract／core／runtime／main／utility／renderer）；`documents:cache-figure` 的聲明由 parsing 移至 reader（頻道名不變，57 個頻道與舊 preload 逐一相同）；reader 的 Core RPC 聲明與 Utility handler 歸模組，`shared/coreRpcSchemas.ts` 刪除（全部 operation 已由所屬模組聲明）；文庫對閱讀器的懶載入改經 `loadFigureArtifacts()`，保持分包；拆掉 `readerFigureGroups` ↔ `readerFigureLayout` 循環；no-circular 不再計 `import()` 懶載入邊（含 `typeof import()` 型別）；元件拆分：MarkdownPane 1109→701、PdfPane 927→440、MarkdownMinimap 944→336、ReaderWorkbench 766→247（拆出的檔案均 ≤412 行）；`feature-boundary-reader` 改 error，功能邊界全部為 error。門禁：847 通過；E2E 30 通過／3 跳過，僅既有 minimap 失敗。初版讓 `App.tsx` 經 reader 的 renderer index 取 `loadReaderPage`，index 轉出的 SafeMarkdown（含 KaTeX CSS 副作用）被拉進首屏 chunk（2.19→3.96 MB）；改回由組裝層直接引用 `readerPageLoader` 後首屏 chunk 恢復 2.19 MB，懶載入 chunk 之間僅約 27 KB 移動。
