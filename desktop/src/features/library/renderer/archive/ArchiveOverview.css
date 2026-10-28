@@ -1,6 +1,6 @@
 /* Whole-library network over the overview camera. Layers reveal left to right after the climb. */
 .archive-overview {
-  position: absolute; z-index: 4; inset: calc(var(--page-top) + 176px) var(--archive-gutter) 28px;
+  position: absolute; z-index: 4; inset: calc(var(--page-top) + 18px) var(--archive-gutter) 84px;
   display: flex; flex-direction: column; color: var(--ink);
 }
 .archive-overview-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; animation: archive-overview-fade .3s var(--ease-out) .32s both; }
@@ -54,8 +54,8 @@
 .archive-overview-label:focus-visible { outline: 1px solid var(--archive-accent); outline-offset: 3px; }
 
 /* While the overview shows, the browse UI steps aside and the drifting array recedes. */
-.paper-archive-page.overview-open :is(.paper-archive-panel, .paper-archive-tools, .paper-archive-search, .paper-archive-footer, .paper-archive-hints, .paper-archive-index, .paper-archive-shelves, .paper-archive-rows, .paper-archive-ruler) { opacity: 0; pointer-events: none; transition: opacity .2s ease; }
-.paper-archive-page.overview-open .paper-archive-stage { opacity: .42; filter: saturate(.7); transition: opacity .5s var(--ease-out), filter .5s var(--ease-out); }
+.paper-archive-page.overview-open :is(.paper-archive-brand, .paper-archive-veil, .paper-archive-floor-veil, .paper-archive-panel, .paper-archive-tools, .paper-archive-search, .paper-archive-footer, .paper-archive-hints, .paper-archive-index, .paper-archive-shelves, .paper-archive-rows, .paper-archive-ruler) { opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+.paper-archive-page.overview-open .paper-archive-stage { opacity: .36; filter: saturate(.7); transition: opacity .5s var(--ease-out), filter .5s var(--ease-out); }
 .paper-archive-stage { transition: opacity .4s var(--ease-out), filter .4s var(--ease-out); }
 .paper-archive-overview-toggle {
   pointer-events: auto; margin-top: 10px; padding: 0; border: 0; border-bottom: 1px solid currentColor;
@@ -68,6 +68,13 @@
 @keyframes archive-overview-draw { to { stroke-dashoffset: 0; } }
 @keyframes archive-overview-pop { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
-  .archive-overview *, .archive-overview-head { animation: none !important; stroke-dashoffset: 0 !important; }
+  .archive-overview *, .archive-overview-head, .archive-overview-wash { animation: none !important; stroke-dashoffset: 0 !important; }
   .paper-archive-stage { transition: none; }
+}
+
+/* A wash behind the title column keeps the text readable over the drifting array in every theme. */
+.archive-overview-wash {
+  position: absolute; z-index: 3; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent 46%, color-mix(in srgb, var(--surface) 74%, transparent) 60%);
+  animation: archive-overview-fade .4s ease .3s backwards;
 }

@@ -27,7 +27,10 @@ export const VIEW_SPAN = 7.33
 export const ARRAY_AIM = new Vector3(-1.091, -0.045, 0.481)
 export const LANE_RADIUS = 4
 export const ROW_RADIUS = 30
-export const POOL_SIZE = (LANE_RADIUS * 2 + 1) * (ROW_RADIUS * 2 + 1)
+/** The overview looks straight down on a wider area; only its loop uses these radii. */
+export const OVERVIEW_LANE_RADIUS = 6
+export const OVERVIEW_ROW_RADIUS = 66
+export const POOL_SIZE = (Math.max(LANE_RADIUS, OVERVIEW_LANE_RADIUS) * 2 + 1) * (Math.max(ROW_RADIUS, OVERVIEW_ROW_RADIUS) * 2 + 1)
 export const CARD_RADIUS = 3.4
 
 export const IDLE_DELAY = 2.5

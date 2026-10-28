@@ -95,15 +95,16 @@ export default function ArchiveOverview(props: Props): React.JSX.Element {
     : []
 
   return (
-    <div ref={hostRef} className="archive-overview" role="dialog" aria-label="全部论文"
+    <div className="archive-overview" role="dialog" aria-label="全部论文"
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); props.onClose() } }}>
       <div className="archive-overview-head">
         <span className="paper-archive-eyebrow">LIBRARY NETWORK</span>
         <strong>全部论文</strong>
         <span>{paperCount} 篇 · {categories.length} 个分类</span>
       </div>
+      {/* Measured on its own: the heading above takes part of the overlay. */}
+      <div ref={hostRef} className="archive-overview-scroll">
       {layout ? (
-        <div className="archive-overview-scroll">
           <div className="archive-overview-canvas" style={{ height: layout.contentHeight }}>
             <svg className="archive-overview-links" width={layout.width} height={layout.contentHeight} aria-hidden="true">
               <g className="archive-overview-mesh">
@@ -155,8 +156,8 @@ export default function ArchiveOverview(props: Props): React.JSX.Element {
               )
             })}
           </div>
-        </div>
       ) : null}
+      </div>
     </div>
   )
 }

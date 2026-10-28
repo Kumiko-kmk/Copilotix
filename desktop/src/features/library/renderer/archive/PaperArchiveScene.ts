@@ -51,7 +51,7 @@ import {
   type Spring
 } from './archiveMotion'
 import { cellForPaper, laneStep, paperAt, shelfAt, wrap, type ArchiveCell, type ArchiveShelf } from './archiveShelves'
-import { NO_DRIFT, OVERVIEW_AIM, OVERVIEW_DIRECTION, OVERVIEW_DISTANCE, OVERVIEW_RATE, OVERVIEW_SPAN, laneDrift } from './overviewMotion'
+import { NO_DRIFT, OVERVIEW_AIM, OVERVIEW_DIRECTION, OVERVIEW_DISTANCE, OVERVIEW_RATE, OVERVIEW_SPAN, OVERVIEW_UP, laneDrift } from './overviewMotion'
 import {
   GLASS_FEATHER,
   SCAN_CORNERS,
@@ -61,7 +61,7 @@ import {
   decryptionFrame,
   type DecryptionFrame
 } from './archiveDecryption'
-import { COLUMN_SPACING, ROW_SPACING, CARD_HEIGHT, CARD_HALF_WIDTH, CARD_BACK, CARD_FRONT, BASE_Y, RAIL_OFFSET, PREVIEW_LIFT, HOVER_LIFT, CAMERA_DISTANCE, VIEW_SPAN, ARRAY_AIM, LANE_RADIUS, ROW_RADIUS, POOL_SIZE, CARD_RADIUS, IDLE_DELAY, TARGET_FRAME_MS, LATE_FRAME_MS, MAX_STEP_SECONDS, MAX_PIXEL_RATIO, MAX_DRAWING_PIXELS, MIN_RESOLUTION_SCALE, DETAIL_PIXEL_RATIO, MAX_DETAIL_PIXELS, ENTRY_DURATION, SHOULDER_RISE, ARRAY_SCREEN_SHIFT, INSPECTION_LIFT, BASE_DIRECTION, DETAIL_DIRECTION, DETAIL_DISTANCE, DETAIL_SPAN, DETAIL_SCREEN, CLOSE_SECONDS, PAGE_HEIGHT, PAGE_MAX_WIDTH, UP, ARRAY_TRAY, DETAIL_TRAY, SHELL_SURFACES, cellKey, sameCell, indexTone, entryScanTime, decodeInlineAsset, type ShellSurface, type ArchivePalette, type PaperArchiveSceneOptions, type DetailPhase, type Pulse } from './archiveSceneConfig'
+import { COLUMN_SPACING, ROW_SPACING, CARD_HEIGHT, CARD_HALF_WIDTH, CARD_BACK, CARD_FRONT, BASE_Y, RAIL_OFFSET, PREVIEW_LIFT, HOVER_LIFT, CAMERA_DISTANCE, VIEW_SPAN, ARRAY_AIM, LANE_RADIUS, ROW_RADIUS, OVERVIEW_LANE_RADIUS, OVERVIEW_ROW_RADIUS, POOL_SIZE, CARD_RADIUS, IDLE_DELAY, TARGET_FRAME_MS, LATE_FRAME_MS, MAX_STEP_SECONDS, MAX_PIXEL_RATIO, MAX_DRAWING_PIXELS, MIN_RESOLUTION_SCALE, DETAIL_PIXEL_RATIO, MAX_DETAIL_PIXELS, ENTRY_DURATION, SHOULDER_RISE, ARRAY_SCREEN_SHIFT, INSPECTION_LIFT, BASE_DIRECTION, DETAIL_DIRECTION, DETAIL_DISTANCE, DETAIL_SPAN, DETAIL_SCREEN, CLOSE_SECONDS, PAGE_HEIGHT, PAGE_MAX_WIDTH, UP, ARRAY_TRAY, DETAIL_TRAY, SHELL_SURFACES, cellKey, sameCell, indexTone, entryScanTime, decodeInlineAsset, type ShellSurface, type ArchivePalette, type PaperArchiveSceneOptions, type DetailPhase, type Pulse } from './archiveSceneConfig'
 export { entryScanTime } from './archiveSceneConfig'
 export type { ArchivePalette, PaperArchiveSceneOptions, DetailFrame, DetailPhase, DetailCoverHandle } from './archiveSceneConfig'
 
@@ -926,6 +926,8 @@ export class PaperArchiveScene {
     camera.near = Math.max(1, distance - 45)
     camera.far = distance + 60
     camera.position.copy(aim).addScaledVector(direction, distance)
+    // The overview rolls the camera so the columns run across the screen as tilted bands.
+    camera.up.copy(UP).lerp(OVERVIEW_UP, climb).normalize()
     camera.lookAt(aim)
     camera.updateProjectionMatrix()
     camera.updateMatrixWorld()
@@ -1392,11 +1394,14 @@ export class PaperArchiveScene {
 
     const fogFar = (this.scene.fog as Fog).far
     let count = 0
-    for (let lane = centerLane - LANE_RADIUS; lane <= centerLane + LANE_RADIUS; lane++) {
+    // The overview sees a wider area straight down; the array keeps its own radii.
+    const laneRadius = this.overview.value > 0 ? OVERVIEW_LANE_RADIUS : LANE_RADIUS
+    const rowRadius = this.overview.value > 0 ? OVERVIEW_ROW_RADIUS : ROW_RADIUS
+    for (let lane = centerLane - laneRadius; lane <= centerLane + laneRadius; lane++) {
       const shelf = shelfAt(this.shelves, lane)
       const x = lane * COLUMN_SPACING - trackX
       const drift = this.driftTime > 0 ? laneDrift(lane, this.driftTime) : NO_DRIFT
-      for (let slot = centerRow - ROW_RADIUS; slot <= centerRow + ROW_RADIUS; slot++) {
+      for (let slot = centerRow - rowRadius; slot <= centerRow + rowRadius; slot++) {
         // While drifting, each slot shows the paper that has slid into it.
         const row = slot - drift.rows
         if (heroActive && lane === selected.lane && row === selected.row) continue

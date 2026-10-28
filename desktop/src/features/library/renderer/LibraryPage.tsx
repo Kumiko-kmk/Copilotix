@@ -317,13 +317,20 @@ export default function LibraryPage(props: {
         {!empty && !unsupported ? (
           <button type="button" className="paper-archive-overview-toggle" aria-pressed={overview}
             disabled={phase !== 'closed'} onClick={() => toggleOverview(!overview)}>
-            {overview ? '返回文库 G' : '全部论文 G'}
+            全部论文 G
           </button>
         ) : null}
       </header>
       {overview ? (
-        <ArchiveOverview shelves={shelves} translatedTitle={(id) => catalog.get(id)?.translatedTitle}
-          onPick={pickFromOverview} onClose={() => toggleOverview(false)} />
+        <>
+          <div className="archive-overview-wash" aria-hidden="true" />
+          <ArchiveOverview shelves={shelves} translatedTitle={(id) => catalog.get(id)?.translatedTitle}
+            onPick={pickFromOverview} onClose={() => toggleOverview(false)} />
+          {/* Same return control as an opened file, in the same place. */}
+          <button type="button" className="paper-archive-detail-back" onClick={() => toggleOverview(false)}>
+            <ArrowLeftOutlined aria-hidden="true" /><span>返回文库</span><kbd>Esc</kbd>
+          </button>
+        </>
       ) : null}
 
       {/* While a paper is extracted the index folds down into its rule and the rule retracts. */}
