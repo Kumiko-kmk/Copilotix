@@ -1,0 +1,73 @@
+/* Whole-library network over the overview camera. Layers reveal left to right after the climb. */
+.archive-overview {
+  position: absolute; z-index: 4; inset: calc(var(--page-top) + 176px) var(--archive-gutter) 28px;
+  display: flex; flex-direction: column; color: var(--ink);
+}
+.archive-overview-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; animation: archive-overview-fade .3s var(--ease-out) .32s both; }
+.archive-overview-head strong { font-size: 20px; font-weight: 700; letter-spacing: .06em; }
+.archive-overview-head > span:last-child { color: var(--muted); font-size: 13px; letter-spacing: .04em; }
+.archive-overview-scroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.archive-overview-scroll::-webkit-scrollbar { display: none; }
+.archive-overview-canvas { position: relative; width: 100%; }
+.archive-overview-links { position: absolute; inset: 0 auto auto 0; overflow: visible; }
+
+.archive-overview-mesh { animation: archive-overview-fade .5s ease .62s backwards; }
+.archive-overview-mesh path { fill: none; stroke: var(--ink); stroke-width: .5; stroke-opacity: .05; }
+.archive-overview-edges path {
+  fill: none; stroke: var(--archive-accent); stroke-width: 1.5; opacity: .85;
+  stroke-dasharray: 1200; stroke-dashoffset: 1200; animation: archive-overview-draw .7s var(--ease-out) forwards;
+  transition: opacity .2s ease;
+}
+.archive-overview-edges.layer-1 path { animation-delay: .34s; }
+.archive-overview-edges.layer-2 path { animation-delay: .52s; stroke-width: 1.1; opacity: .6; }
+.archive-overview-edges path.dim { opacity: .08; }
+
+.archive-overview-node { fill: var(--surface); stroke: var(--ink); stroke-width: 1.4; transform-box: fill-box; transform-origin: center; animation: archive-overview-pop .32s var(--ease-out) backwards; transition: opacity .2s ease; }
+.archive-overview-node.root { fill: var(--ink); animation-delay: .3s; }
+.archive-overview-node.category { animation-delay: .44s; }
+.archive-overview-node.category.focused { fill: var(--archive-accent); stroke: var(--archive-accent); }
+.archive-overview-node.paper { stroke: var(--surface); stroke-width: 1.5; animation-delay: .62s; }
+.archive-overview-node.paper.tone-done { fill: var(--archive-index-done); }
+.archive-overview-node.paper.tone-active { fill: var(--archive-index-active); }
+.archive-overview-node.paper.tone-partial { fill: var(--archive-index-partial); }
+.archive-overview-node.paper.tone-failed { fill: var(--archive-index-failed); }
+.archive-overview-node.dim { opacity: .2; }
+
+.archive-overview-label {
+  position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left;
+  transform: translateY(-50%); transition: opacity .2s ease; animation: archive-overview-fade .3s ease backwards;
+}
+.archive-overview-label small { color: var(--muted); font-size: 10.5px; letter-spacing: .03em; opacity: .8; }
+.archive-overview-label.root { align-items: flex-end; margin-left: -18px; transform: translate(-100%, -50%); animation-delay: .32s; }
+.archive-overview-label.root strong { font-size: 18px; letter-spacing: .1em; }
+.archive-overview-label.category { align-items: flex-end; margin-left: -16px; transform: translate(-100%, -50%); cursor: pointer; animation-delay: .46s; }
+.archive-overview-label.category strong { font-size: 14px; font-weight: 650; }
+.archive-overview-label.category.focused strong { color: var(--archive-accent); }
+.archive-overview-label.paper { flex-direction: row; align-items: baseline; gap: 10px; margin-left: 14px; cursor: pointer; animation-delay: .66s; }
+.archive-overview-label.paper span { flex: 0 1 auto; }
+.archive-overview-label.paper small { flex: 1 1 0; min-width: 0; }
+.archive-overview-label.paper span, .archive-overview-label.paper small { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.archive-overview-label.paper span { font-size: 13px; }
+.archive-overview-label.paper:hover span, .archive-overview-label.paper:focus-visible span { color: var(--archive-accent); }
+.archive-overview-label.dim { opacity: .25; }
+.archive-overview-label:focus-visible { outline: 1px solid var(--archive-accent); outline-offset: 3px; }
+
+/* While the overview shows, the browse UI steps aside and the drifting array recedes. */
+.paper-archive-page.overview-open :is(.paper-archive-panel, .paper-archive-tools, .paper-archive-search, .paper-archive-footer, .paper-archive-hints, .paper-archive-index, .paper-archive-shelves, .paper-archive-rows, .paper-archive-ruler) { opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+.paper-archive-page.overview-open .paper-archive-stage { opacity: .42; filter: saturate(.7); transition: opacity .5s var(--ease-out), filter .5s var(--ease-out); }
+.paper-archive-stage { transition: opacity .4s var(--ease-out), filter .4s var(--ease-out); }
+.paper-archive-overview-toggle {
+  pointer-events: auto; margin-top: 10px; padding: 0; border: 0; border-bottom: 1px solid currentColor;
+  background: none; color: var(--muted); font: inherit; font-size: 12px; letter-spacing: .08em; cursor: pointer;
+}
+.paper-archive-overview-toggle:hover, .paper-archive-overview-toggle[aria-pressed="true"] { color: var(--archive-accent); }
+.paper-archive-overview-toggle:disabled { opacity: .4; cursor: default; }
+
+@keyframes archive-overview-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes archive-overview-draw { to { stroke-dashoffset: 0; } }
+@keyframes archive-overview-pop { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .archive-overview *, .archive-overview-head { animation: none !important; stroke-dashoffset: 0 !important; }
+  .paper-archive-stage { transition: none; }
+}

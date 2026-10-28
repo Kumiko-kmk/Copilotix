@@ -51,6 +51,7 @@ import {
   type Spring
 } from './archiveMotion'
 import { cellForPaper, laneStep, paperAt, shelfAt, wrap, type ArchiveCell, type ArchiveShelf } from './archiveShelves'
+import { NO_DRIFT, OVERVIEW_AIM, OVERVIEW_DIRECTION, OVERVIEW_DISTANCE, OVERVIEW_RATE, OVERVIEW_SPAN, laneDrift } from './overviewMotion'
 import {
   GLASS_FEATHER,
   SCAN_CORNERS,
@@ -761,6 +762,24 @@ export class PaperArchiveScene {
   }
 
   /** Select a paper by id; returns false when it is not in the archive. */
+  /** Climb to (or descend from) the whole-library overview; refused while a paper is extracted. */
+  setOverview(on: boolean): boolean {
+    if (on && (this.targetDetail || this.detail > 1e-4)) return false
+    if (this.targetOverview === on) return true
+    this.targetOverview = on
+    this.wake()
+    return true
+  }
+
+  get overviewActive(): boolean {
+    return this.targetOverview || this.overview.value > 1e-3
+  }
+
+  private targetOverview = false
+  private readonly overview = { value: 0, velocity: 0 }
+  /** Drift clock: advances only while the overview shows, so the columns start and stop smoothly. */
+  private driftTime = 0
+
   focusPaper(paperId: string, options: { instant?: boolean } = {}): boolean {
     const cell = cellForPaper(this.shelves, paperId, this.selected)
     if (!cell) return false
@@ -867,7 +886,7 @@ export class PaperArchiveScene {
     const { clientWidth: width, clientHeight: height } = this.options.container
     if (!width || !height) return
     const detail = this.detail
-    const key = detail < 1e-4 ? `array:${width}x${height}` : ''
+    const key = detail < 1e-4 && this.overview.value < 1e-4 ? `array:${width}x${height}` : ''
     if (key && key === this.cameraKey) return
     this.cameraKey = key
     const distance = this.pointCamera(this.camera, detail, width, height, this.heroPosition)
@@ -880,11 +899,13 @@ export class PaperArchiveScene {
   /** Point `camera` for a blend between the array (0) and detail (1) framing; returns its distance. */
   private pointCamera(camera: PerspectiveCamera, detail: number, width: number, height: number, hero: Vector3): number {
     const aspect = width / height
-    const baseSpan = VIEW_SPAN + (DETAIL_SPAN - VIEW_SPAN) * detail
+    // The overview climbs from the array framing; it is never combined with the detail framing.
+    const climb = smooth(Math.min(1, Math.max(0, this.overview.value)))
+    const baseSpan = VIEW_SPAN + (DETAIL_SPAN - VIEW_SPAN) * detail + (OVERVIEW_SPAN - VIEW_SPAN) * climb
     // RhineLabUI's archiveFraming: wide windows extend sideways, narrow ones keep the 16:9 width.
     const span = Math.max(baseSpan, baseSpan * (16 / 9) / aspect)
-    const direction = this.cameraDirection.copy(BASE_DIRECTION).lerp(DETAIL_DIRECTION, detail).normalize()
-    const distance = CAMERA_DISTANCE + (DETAIL_DISTANCE - CAMERA_DISTANCE) * detail
+    const direction = this.cameraDirection.copy(BASE_DIRECTION).lerp(DETAIL_DIRECTION, detail).lerp(OVERVIEW_DIRECTION, climb).normalize()
+    const distance = CAMERA_DISTANCE + (DETAIL_DISTANCE - CAMERA_DISTANCE) * detail + (OVERVIEW_DISTANCE - CAMERA_DISTANCE) * climb
     const right = this.cameraRight.crossVectors(UP, direction).normalize()
     const up = this.cameraUp.crossVectors(direction, right).normalize()
     const unitsPerPixel = span / height
@@ -899,6 +920,7 @@ export class PaperArchiveScene {
       detailAim.addScaledVector(up, (DETAIL_SCREEN.y - 0.5) * height * unitsPerPixel)
       aim.lerp(detailAim, detail)
     }
+    if (climb > 0) aim.lerp(OVERVIEW_AIM, climb)
     camera.aspect = aspect
     camera.fov = (2 * Math.atan(span / (2 * distance)) * 180) / Math.PI
     camera.near = Math.max(1, distance - 45)
@@ -1147,6 +1169,17 @@ export class PaperArchiveScene {
       moving ||= !springSettled(this.laneTrack, this.selected.lane) || !springSettled(this.rowTrack, this.selected.row)
     } else moving = true
 
+    const overviewTarget = this.targetOverview ? 1 : 0
+    damp(this.overview, overviewTarget, reduced ? 35 : OVERVIEW_RATE, dt)
+    if (springSettled(this.overview, overviewTarget)) {
+      this.overview.value = overviewTarget
+      this.overview.velocity = 0
+    } else moving = true
+    if (this.overview.value > 0 && !reduced) {
+      this.driftTime += dt * this.overview.value
+      moving = true
+    }
+
     damp(this.shoulder, this.selected.row, reduced ? 35 : 5, dt)
     damp(this.laneFocus, this.selected.lane, reduced ? 35 : 4, dt)
     moving ||= !springSettled(this.shoulder, this.selected.row) || !springSettled(this.laneFocus, this.selected.lane)
@@ -1155,7 +1188,7 @@ export class PaperArchiveScene {
     if (this.shelves.length && !this.lifts.has(selectedKey)) this.lifts.set(selectedKey, { value: 0, velocity: 0 })
     for (const [key, spring] of this.lifts) {
       if (key === selectedKey && this.closing) continue
-      const target = key === selectedKey && this.shelves.length ? (this.targetDetail ? INSPECTION_LIFT : PREVIEW_LIFT) : 0
+      const target = key === selectedKey && this.shelves.length && !this.targetOverview ? (this.targetDetail ? INSPECTION_LIFT : PREVIEW_LIFT) : 0
       const extracting = key === selectedKey && (this.targetDetail || spring.value > PREVIEW_LIFT + 0.01)
       const rate = reduced ? 35 : extracting ? 5 : target ? 4.2 : 4.5
       damp(spring, target, rate, dt)
@@ -1362,9 +1395,12 @@ export class PaperArchiveScene {
     for (let lane = centerLane - LANE_RADIUS; lane <= centerLane + LANE_RADIUS; lane++) {
       const shelf = shelfAt(this.shelves, lane)
       const x = lane * COLUMN_SPACING - trackX
-      for (let row = centerRow - ROW_RADIUS; row <= centerRow + ROW_RADIUS; row++) {
+      const drift = this.driftTime > 0 ? laneDrift(lane, this.driftTime) : NO_DRIFT
+      for (let slot = centerRow - ROW_RADIUS; slot <= centerRow + ROW_RADIUS; slot++) {
+        // While drifting, each slot shows the paper that has slid into it.
+        const row = slot - drift.rows
         if (heroActive && lane === selected.lane && row === selected.row) continue
-        const z = row * ROW_SPACING + rail + slide
+        const z = slot * ROW_SPACING + rail + slide + drift.offset
         // Skip cards outside the view or wholly inside the fog before evaluating their motion.
         this.bounds.center.set(x, BASE_Y + CARD_HEIGHT / 2 + 1, z)
         this.bounds.radius = CARD_RADIUS + 2

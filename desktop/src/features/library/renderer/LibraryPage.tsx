@@ -18,6 +18,7 @@ import WorkflowSteps from './WorkflowSteps'
 import { takeLibraryFocus } from './archive/libraryFocus'
 import type { ArchivePreparationStep } from './archive/useArchivePreparation'
 import { useArchiveCatalog } from './archive/useArchiveCatalog'
+import ArchiveOverview from './archive/ArchiveOverview'
 import './archive/paperArchive.css'
 
 // Survives page switches so returning from the reader lands on the same paper.
@@ -85,6 +86,22 @@ export default function LibraryPage(props: {
     if (readerEntry.phase) pageRef.current?.focus({ preventScroll: true })
   }, [readerEntry.phase])
   const fileNumbers = React.useMemo(() => new Map(shelves.flatMap((shelf) => shelf.papers).map((paper, index) => [paper.id, index + 1])), [shelves])
+  const [overview, setOverview] = React.useState(false)
+  const overviewRef = React.useRef(overview)
+  overviewRef.current = overview
+  /** Climb to the whole-library network; refused while a paper is extracted. */
+  const toggleOverview = React.useCallback((on: boolean) => {
+    const scene = sceneRef.current
+    if (!scene || !scene.setOverview(on)) return
+    setOverview(on)
+    if (on) setSearchOpen(false)
+    pageRef.current?.focus({ preventScroll: true })
+  }, [])
+  const pickFromOverview = React.useCallback((paperId: string) => {
+    lastPaperId = paperId
+    toggleOverview(false)
+    sceneRef.current?.focusPaper(paperId)
+  }, [toggleOverview])
   const [stats, setStats] = React.useState<ReturnType<PaperArchiveScene['getStats']> | null>(null)
   const [statsOpen, setStatsOpen] = React.useState(false)
 
@@ -212,6 +229,19 @@ export default function LibraryPage(props: {
       if (!target || !pageRef.current?.contains(target)) return
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
       if (document.querySelector('.ant-modal-wrap')) return
+      // The overview owns the keyboard while it shows: G or Esc returns to the array.
+      if (overviewRef.current) {
+        if (event.key === 'Escape' || event.key === 'g' || event.key === 'G') {
+          event.preventDefault()
+          toggleOverview(false)
+        }
+        return
+      }
+      if ((event.key === 'g' || event.key === 'G') && !event.repeat && scene && !scene.detailOpen && !scene.detailPreparing) {
+        event.preventDefault()
+        toggleOverview(true)
+        return
+      }
       if (event.key === '/') {
         event.preventDefault()
         searchRef.current?.focus()
@@ -248,7 +278,7 @@ export default function LibraryPage(props: {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [searchOpen, readerEntry.phase, readerEntry.cancel])
+  }, [searchOpen, readerEntry.phase, readerEntry.cancel, toggleOverview])
 
   const navigate = React.useCallback((axis: 'lane' | 'row', direction: number) => sceneRef.current?.navigate(axis, direction), [])
   const shelf = shelfAt(shelves, selection.cell.lane)
@@ -269,7 +299,7 @@ export default function LibraryPage(props: {
   }
 
   return (
-    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}`} aria-label="文库" aria-busy={readerEntry.phase !== null} data-detail-phase={phase} data-reader-entry={readerEntry.phase ?? undefined}>
+    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}${overview ? ' overview-open' : ''}`} aria-label="文库" aria-busy={readerEntry.phase !== null} data-detail-phase={phase} data-reader-entry={readerEntry.phase ?? undefined}>
       <div ref={hostRef} className="paper-archive-stage" onPointerDown={() => pageRef.current?.focus({ preventScroll: true })} />
       <div className="paper-archive-veil" aria-hidden="true" />
       <div className="paper-archive-floor-veil" aria-hidden="true" />
@@ -284,7 +314,17 @@ export default function LibraryPage(props: {
         <span className="paper-archive-eyebrow">PAPER ARCHIVE</span>
         <h1>文库</h1>
         <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${categoryCount} 个分类 · ${shelves.length} 列`}</p>
+        {!empty && !unsupported ? (
+          <button type="button" className="paper-archive-overview-toggle" aria-pressed={overview}
+            disabled={phase !== 'closed'} onClick={() => toggleOverview(!overview)}>
+            {overview ? '返回文库 G' : '全部论文 G'}
+          </button>
+        ) : null}
       </header>
+      {overview ? (
+        <ArchiveOverview shelves={shelves} translatedTitle={(id) => catalog.get(id)?.translatedTitle}
+          onPick={pickFromOverview} onClose={() => toggleOverview(false)} />
+      ) : null}
 
       {/* While a paper is extracted the index folds down into its rule and the rule retracts. */}
       <div className={`paper-archive-tools${phase !== 'closed' ? ' collapsed' : ''}`} inert={phase !== 'closed'} aria-hidden={phase !== 'closed' ? true : undefined}>
