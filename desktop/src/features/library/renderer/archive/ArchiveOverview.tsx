@@ -14,6 +14,8 @@ interface Props {
   translatedTitle(paperId: string): string | undefined
   onPick(paperId: string): void
   onClose(): void
+  /** The network retracts before the camera descends. */
+  closing?: boolean
 }
 
 interface Layer<T> { x: number; nodes: Array<T & { y: number }> }
@@ -23,6 +25,8 @@ type PaperNode = { paper: ArchivePaper; category: string }
 const NODE_GAP = 26
 /** Above this many decorative lines the mesh is skipped; it would only add noise and cost. */
 const MESH_LIMIT = 900
+/** The travelling signal animates every real link; skipped for very large libraries. */
+const FLOW_LIMIT = 200
 
 function uniqueCategories(shelves: readonly ArchiveShelf[]): CategoryNode[] {
   const byName = new Map<string, CategoryNode>()
@@ -93,9 +97,23 @@ export default function ArchiveOverview(props: Props): React.JSX.Element {
   const mesh = layout && layout.cats.nodes.length * layout.papers.nodes.length <= MESH_LIMIT
     ? layout.cats.nodes.flatMap((cat) => layout.papers.nodes.map((node) => curve(layout.cats.x, cat.y, layout.papers.x, node.y)))
     : []
+  type Link = { key: string; d: string; dim: boolean }
+  const links: { layer1: Link[]; layer2: Link[] } = { layer1: [], layer2: [] }
+  if (layout) {
+    const catY = new Map(layout.cats.nodes.map((cat) => [cat.name, cat.y]))
+    for (const cat of layout.cats.nodes) {
+      links.layer1.push({ key: cat.key, d: curve(layout.root.x, layout.root.y, layout.cats.x, cat.y), dim: Boolean(focusCategory && focusCategory !== cat.name) })
+    }
+    for (const node of layout.papers.nodes) {
+      links.layer2.push({
+        key: node.paper.id, d: curve(layout.cats.x, catY.get(node.category) ?? node.y, layout.papers.x, node.y),
+        dim: Boolean(focusCategory && focusCategory !== node.category)
+      })
+    }
+  }
 
   return (
-    <div className="archive-overview" role="dialog" aria-label="全部论文"
+    <div className={`archive-overview${props.closing ? ' closing' : ''}`} role="dialog" aria-label="全部论文"
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); props.onClose() } }}>
       <div className="archive-overview-head">
         <span className="paper-archive-eyebrow">LIBRARY NETWORK</span>
@@ -111,25 +129,24 @@ export default function ArchiveOverview(props: Props): React.JSX.Element {
                 {mesh.map((d, i) => <path key={i} d={d} />)}
               </g>
               <g className="archive-overview-edges layer-1">
-                {layout.cats.nodes.map((cat) => (
-                  <path key={cat.key} d={curve(layout.root.x, layout.root.y, layout.cats.x, cat.y)}
-                    className={focusCategory && focusCategory !== cat.name ? 'dim' : undefined} />
-                ))}
+                {links.layer1.map((link) => <path key={link.key} d={link.d} className={link.dim ? 'dim' : undefined} />)}
               </g>
               <g className="archive-overview-edges layer-2">
-                {layout.papers.nodes.map((node) => {
-                  const cat = layout.cats.nodes.find((item) => item.name === node.category)!
-                  return <path key={node.paper.id} d={curve(layout.cats.x, cat.y, layout.papers.x, node.y)}
-                    className={focusCategory && focusCategory !== node.category ? 'dim' : undefined} />
-                })}
+                {links.layer2.map((link) => <path key={link.key} d={link.d} className={link.dim ? 'dim' : undefined} />)}
               </g>
+              {paperCount <= FLOW_LIMIT ? (
+                <g className="archive-overview-flow">
+                  {[...links.layer1, ...links.layer2].map((link) => <path key={link.key} d={link.d} className={link.dim ? 'dim' : undefined} />)}
+                </g>
+              ) : null}
+              <circle className="archive-overview-pulse" cx={layout.root.x} cy={layout.root.y} r={9} />
               <circle className="archive-overview-node root" cx={layout.root.x} cy={layout.root.y} r={9} />
               {layout.cats.nodes.map((cat) => (
                 <circle key={cat.key} className={`archive-overview-node category${focusCategory === cat.name ? ' focused' : ''}`} cx={layout.cats.x} cy={cat.y} r={6} />
               ))}
-              {layout.papers.nodes.map((node) => (
+              {layout.papers.nodes.map((node, index) => (
                 <circle key={node.paper.id} className={`archive-overview-node paper tone-${statusTone(node.paper)}${focusCategory && focusCategory !== node.category ? ' dim' : ''}`}
-                  cx={layout.papers.x} cy={node.y} r={5} />
+                  cx={layout.papers.x} cy={node.y} r={5} style={{ '--i': index } as React.CSSProperties} />
               ))}
             </svg>
 
@@ -144,10 +161,10 @@ export default function ArchiveOverview(props: Props): React.JSX.Element {
                 <strong>{cat.name}</strong><small>{cat.papers.length} 篇</small>
               </button>
             ))}
-            {layout.papers.nodes.map((node) => {
+            {layout.papers.nodes.map((node, index) => {
               const translated = props.translatedTitle(node.paper.id)
               return (
-                <button key={node.paper.id} type="button" style={{ left: layout.papers.x, top: node.y, width: layout.width * 0.95 - layout.papers.x }}
+                <button key={node.paper.id} type="button" style={{ left: layout.papers.x, top: node.y, width: layout.width * 0.95 - layout.papers.x, '--i': index } as React.CSSProperties}
                   className={`archive-overview-label paper${focusCategory && focusCategory !== node.category ? ' dim' : ''}`}
                   onClick={() => props.onPick(node.paper.id)}>
                   <span>{translated || archiveTitle(node.paper.displayName)}</span>

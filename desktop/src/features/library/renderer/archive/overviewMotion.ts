@@ -17,8 +17,8 @@ export const OVERVIEW_UP = new Vector3(Math.cos(OVERVIEW_TILT), 0, -Math.sin(OVE
 export const OVERVIEW_DISTANCE = 230
 export const OVERVIEW_SPAN = 34
 export const OVERVIEW_AIM = new Vector3(0, BASE_Y + CARD_HEIGHT, RAIL_OFFSET)
-/** Spring rate for the climb and the descent: fast, settling in about 0.6 s. */
-export const OVERVIEW_RATE = 7
+/** Spring rate for the climb and the descent: settles in about 1.1 s. */
+export const OVERVIEW_RATE = 4
 /** Band drift in world units per second at full overview. */
 export const OVERVIEW_DRIFT_SPEED = 0.55
 
@@ -31,10 +31,24 @@ export interface LaneDrift {
 
 export const NO_DRIFT: LaneDrift = { rows: 0, offset: 0 }
 
-/** Neighbouring bands drift in opposite directions at the same constant speed. */
-export function laneDrift(lane: number, time: number): LaneDrift {
+/**
+ * Neighbouring bands drift in opposite directions at the same constant speed.
+ *
+ * A band repeats its papers every `period` rows, so the drift is first wrapped into the
+ * equivalent shift nearest zero (at most half a cycle), then scaled by `weight`, the overview
+ * amount. On the way back down the shift therefore unwinds to exactly zero and the array is
+ * left aligned with its selection; without it the band kept the drift and the selected card no
+ * longer matched the rows around it.
+ */
+export function laneDrift(lane: number, time: number, period: number, weight: number): LaneDrift {
+  if (weight <= 0 || time <= 0) return NO_DRIFT
   const direction = lane % 2 === 0 ? 1 : -1
-  const distance = direction * OVERVIEW_DRIFT_SPEED * time
+  let distance = direction * OVERVIEW_DRIFT_SPEED * time
+  if (period > 0) {
+    const cycle = period * ROW_SPACING
+    distance -= Math.round(distance / cycle) * cycle
+  }
+  distance *= weight
   const rows = Math.floor(distance / ROW_SPACING)
   return { rows, offset: distance - rows * ROW_SPACING }
 }

@@ -6,6 +6,8 @@ import { ArchiveMomentum, damp, settlingWave, SHOULDER_PEAK } from '../../../src
 import { ALL_PAPERS, buildArchiveColumns, cellForPaper, groupPapersByCategory, laneStep, nearestOccurrence, paperAt, paperIndexAt, wrap, type ArchivePaper } from '../../../src/features/library/renderer/archive/archiveShelves'
 import { cleanInline, extractPaperProfile } from '../../../src/features/library/core/paperProfile'
 import { layoutSpreadFigures, parseFigureManifest, rankSpreadFigures, type SpreadCandidate } from '../../../src/features/library/renderer/archive/figureSpread'
+import { NO_DRIFT, laneDrift } from '../../../src/features/library/renderer/archive/overviewMotion'
+import { ROW_SPACING } from '../../../src/features/library/renderer/archive/archiveSceneConfig'
 
 describe("paperArchive", () => {
   let sequence = 0
@@ -348,4 +350,18 @@ it('retains a completed cover after its view closes', async () => {
   controller.abort()
   await expect(loadDetailPage('completed-cover', render)).resolves.toBe(page)
   expect(render).toHaveBeenCalledTimes(1)
+})
+
+it('overview drift unwinds to zero on return, so the array stays aligned with its selection', () => {
+  const shift = (lane: number, time: number, period: number, weight: number): number => {
+    const drift = laneDrift(lane, time, period, weight)
+    return drift.rows * ROW_SPACING + drift.offset
+  }
+  // Fully shown: neighbouring bands move in opposite directions, never more than half a content cycle.
+  expect(Math.sign(shift(0, 3, 5, 1))).toBe(-Math.sign(shift(1, 3, 5, 1)))
+  for (const time of [1, 7.3, 60, 3600]) expect(Math.abs(shift(0, time, 5, 1))).toBeLessThanOrEqual(5 * ROW_SPACING / 2 + 1e-9)
+  // Descending: the shift shrinks with the overview amount and is exactly gone at zero, however long it ran.
+  expect(Math.abs(shift(0, 3600, 5, 0.5))).toBeLessThanOrEqual(Math.abs(shift(0, 3600, 5, 1)) / 2 + 1e-9)
+  expect(laneDrift(0, 3600, 5, 0)).toBe(NO_DRIFT)
+  expect(laneDrift(3, 0, 5, 1)).toBe(NO_DRIFT)
 })

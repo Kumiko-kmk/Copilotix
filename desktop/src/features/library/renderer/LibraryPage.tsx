@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, ExpandOutlined } from '@ant-design/icons'
+import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, DeploymentUnitOutlined, ExpandOutlined } from '@ant-design/icons'
 import type { DocumentSummary } from '../contract/documentSchemas'
 import type { PaperInsightSource } from '@features/insight/contract/paperInsight'
 import type { LibraryCategories } from '../contract/libraryCategories'
@@ -24,6 +24,8 @@ import './archive/paperArchive.css'
 // Survives page switches so returning from the reader lands on the same paper.
 let lastPaperId: string | null = null
 const SEARCH_LIMIT = 40
+/** The overview network retracts (ArchiveOverview.css) before the camera descends. */
+const OVERVIEW_RETRACT_MS = 360
 
 type Selection = { cell: ArchiveCell; paper: ArchivePaper | null }
 
@@ -87,20 +89,37 @@ export default function LibraryPage(props: {
   }, [readerEntry.phase])
   const fileNumbers = React.useMemo(() => new Map(shelves.flatMap((shelf) => shelf.papers).map((paper, index) => [paper.id, index + 1])), [shelves])
   const [overview, setOverview] = React.useState(false)
+  /** The network is retracting; the camera descends once it has gone. */
+  const [overviewClosing, setOverviewClosing] = React.useState(false)
   const overviewRef = React.useRef(overview)
   overviewRef.current = overview
-  /** Climb to the whole-library network; refused while a paper is extracted. */
-  const toggleOverview = React.useCallback((on: boolean) => {
+  const closeTimerRef = React.useRef<number | null>(null)
+  React.useEffect(() => () => { if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current) }, [])
+  /** Climb to the whole-library network (refused while a paper is extracted), or retract and descend. */
+  const toggleOverview = React.useCallback((on: boolean, afterDescent?: () => void) => {
     const scene = sceneRef.current
-    if (!scene || !scene.setOverview(on)) return
-    setOverview(on)
-    if (on) setSearchOpen(false)
+    if (!scene) return
+    if (on) {
+      if (overviewRef.current || !scene.setOverview(true)) return
+      setOverview(true)
+      setSearchOpen(false)
+    } else {
+      if (!overviewRef.current || closeTimerRef.current !== null) return
+      setOverviewClosing(true)
+      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      closeTimerRef.current = window.setTimeout(() => {
+        closeTimerRef.current = null
+        sceneRef.current?.setOverview(false)
+        setOverview(false)
+        setOverviewClosing(false)
+        afterDescent?.()
+      }, reduced ? 0 : OVERVIEW_RETRACT_MS)
+    }
     pageRef.current?.focus({ preventScroll: true })
   }, [])
   const pickFromOverview = React.useCallback((paperId: string) => {
     lastPaperId = paperId
-    toggleOverview(false)
-    sceneRef.current?.focusPaper(paperId)
+    toggleOverview(false, () => sceneRef.current?.focusPaper(paperId))
   }, [toggleOverview])
   const [stats, setStats] = React.useState<ReturnType<PaperArchiveScene['getStats']> | null>(null)
   const [statsOpen, setStatsOpen] = React.useState(false)
@@ -314,20 +333,14 @@ export default function LibraryPage(props: {
         <span className="paper-archive-eyebrow">PAPER ARCHIVE</span>
         <h1>文库</h1>
         <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${categoryCount} 个分类 · ${shelves.length} 列`}</p>
-        {!empty && !unsupported ? (
-          <button type="button" className="paper-archive-overview-toggle" aria-pressed={overview}
-            disabled={phase !== 'closed'} onClick={() => toggleOverview(!overview)}>
-            全部论文 G
-          </button>
-        ) : null}
       </header>
       {overview ? (
         <>
-          <div className="archive-overview-wash" aria-hidden="true" />
-          <ArchiveOverview shelves={shelves} translatedTitle={(id) => catalog.get(id)?.translatedTitle}
+          <div className={`archive-overview-wash${overviewClosing ? ' closing' : ''}`} aria-hidden="true" />
+          <ArchiveOverview shelves={shelves} translatedTitle={(id) => catalog.get(id)?.translatedTitle} closing={overviewClosing}
             onPick={pickFromOverview} onClose={() => toggleOverview(false)} />
           {/* Same return control as an opened file, in the same place. */}
-          <button type="button" className="paper-archive-detail-back" onClick={() => toggleOverview(false)}>
+          <button type="button" className={`paper-archive-detail-back archive-overview-back${overviewClosing ? ' closing' : ''}`} onClick={() => toggleOverview(false)}>
             <ArrowLeftOutlined aria-hidden="true" /><span>返回文库</span><kbd>Esc</kbd>
           </button>
         </>
@@ -412,6 +425,9 @@ export default function LibraryPage(props: {
             </button>
             <button type="button" className="paper-archive-action" disabled={readerEntry.phase !== null} onClick={() => readerEntry.open(paper.id)}>
               <span>打开阅读</span><ArrowRightOutlined aria-hidden="true" />
+            </button>
+            <button type="button" className="paper-archive-action" disabled={phase !== 'closed'} onClick={() => toggleOverview(true)}>
+              <span>管理文库</span><DeploymentUnitOutlined aria-hidden="true" />
             </button>
           </div>
         </article>

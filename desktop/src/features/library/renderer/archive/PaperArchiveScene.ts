@@ -1180,7 +1180,7 @@ export class PaperArchiveScene {
     if (this.overview.value > 0 && !reduced) {
       this.driftTime += dt * this.overview.value
       moving = true
-    }
+    } else if (this.overview.value === 0) this.driftTime = 0
 
     damp(this.shoulder, this.selected.row, reduced ? 35 : 5, dt)
     damp(this.laneFocus, this.selected.lane, reduced ? 35 : 4, dt)
@@ -1400,7 +1400,7 @@ export class PaperArchiveScene {
     for (let lane = centerLane - laneRadius; lane <= centerLane + laneRadius; lane++) {
       const shelf = shelfAt(this.shelves, lane)
       const x = lane * COLUMN_SPACING - trackX
-      const drift = this.driftTime > 0 ? laneDrift(lane, this.driftTime) : NO_DRIFT
+      const drift = this.driftTime > 0 ? laneDrift(lane, this.driftTime, shelf?.papers.length ?? 0, smooth(Math.min(1, this.overview.value))) : NO_DRIFT
       for (let slot = centerRow - rowRadius; slot <= centerRow + rowRadius; slot++) {
         // While drifting, each slot shows the paper that has slid into it.
         const row = slot - drift.rows
