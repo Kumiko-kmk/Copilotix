@@ -98,6 +98,8 @@ export async function seedReaderTask(
     alignmentRegression?: boolean
     legacyTranslationManifest?: boolean
     englishTitle?: string
+    /** Save one figure crop and figures.json, as a matured paper has, so the archive can open it. */
+    savedCoverFigure?: boolean
   }
 ): Promise<string> {
   const taskId = options?.taskId ?? (options?.missingPdf
@@ -177,6 +179,19 @@ export async function seedReaderTask(
       }, null, 2), 'utf8')
     }
     await writeFile(join(outputDir, 'layout.json'), JSON.stringify(layout), 'utf8')
+    if (options?.savedCoverFigure) {
+      // The fixture layout only yields ambiguous/unsupported hints; without a saved crop the
+      // archive cover rightly refuses to open, so seed what the crop pipeline would have written.
+      const png = await readFile(join(__dirname, '../resources/icon.png'))
+      const imagePath = `images/figures/figure-p2-${'0'.repeat(24)}.png`
+      await mkdir(join(outputDir, 'images', 'figures'), { recursive: true })
+      await writeFile(join(outputDir, imagePath), png)
+      await writeFile(join(outputDir, 'figures.json'), JSON.stringify({ version: 1, figures: [{
+        figureId: 'fixture-figure', imagePath, sourceRevision: 'fixture', pageIndex: 1, cropBox: [72, 120, 520, 480],
+        mappingIds: [], sourceAssets: [], width: png.readUInt32BE(16), height: png.readUInt32BE(20),
+        pngSha256: createHash('sha256').update(png).digest('hex')
+      }] }, null, 2), 'utf8')
+    }
   }
 
   const database = new V2Database(join(workspace.userData, 'copilotix-desktop-v2.sqlite3'))

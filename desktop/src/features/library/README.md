@@ -18,7 +18,7 @@
 
 完整跨頁封面在開檔動畫前完成 CPU 合成及 GPU 上傳；原有升起、鏡頭、玻璃曲線不等待外部工作。ArchiveDetail 只管理文字，不再清除／重建封面。尚未準備的冷檔先維持原瀏覽姿態，完整後才開始動畫；30 秒截止、失敗保留瀏覽，可重試，Esc／換篇／卸載取消並拒收晚到畫面，不能開到一半再補單頁或雙頁。封面按文檔版本、來源雜湊、整圖清單與已存評分指紋隔離；整圖已有可讀 PNG 時不重掃 PDF，缺圖不能誤存成合法單頁。
 
-**未決回歸**：目前 complete 過濾可能把 ambiguous／unsupported 降成可開啟單頁，違反完整封面門檻；修復及快取失效要求見 [交接](../../../../docs/MILESTONE_1_3_ZH.md)。
+封面門檻計入全部圖組提示，不論 complete、ambiguous 或 unsupported：只要論文有任何圖組提示而沒有已保存整圖清單，就不生成單頁，保持瀏覽姿態；裁圖只輸出 complete 圖組，因此全是 ambiguous／unsupported 的論文不會開檔。只有完全沒有圖組提示（或 Markdown 來源）才使用合法單頁。1.3.0 曾以 complete 過濾把這類論文存成可開啟單頁；持久封面記錄帶 `rule`（`ARCHIVE_COVER_RULE`，現為 2），讀到舊規則下的 single 時視為未命中並刪除，重新判定，spread 不受影響、不需重建，資料庫版本不變。回歸：`archiveCover.test.ts`（拒絕開檔、無提示仍單頁）、`archiveCoverStore.test.ts`（舊單頁失效、spread 保留）、E2E `paper-archive.spec.ts`「never cropped」（未裁圖論文提示失敗並留在瀏覽）；需要開檔的文庫 E2E 以 `seedReaderTask({ savedCoverFigure: true })` 種入已保存整圖，走真實跨頁路徑。
 
 首頁快取 copilotix-archive-pages 按 PDF 內容 hash 保存最多160頁 WebP，失敗回退重繪。解碼後完整畫面以 48MiB LRU 限額保存，正在場景使用的畫面 pin 至紋理釋放；持久封面在獨立 `copilotix-archive-spreads` v1 庫，最多 128MiB／160 項，無需升級既有首頁庫。合成後清除首頁／圖頁 scratch canvas，位圖 decode 後釋放；IndexedDB／壓縮錯誤不阻止已準備畫面使用。只讀 `figureInsight.coverSource` 返回輕量指紋／幾何／權重，不讀全文、不觸發模型。文字進度事件不重傳紋理。
 

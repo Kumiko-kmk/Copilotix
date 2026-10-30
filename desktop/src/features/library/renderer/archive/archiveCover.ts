@@ -49,9 +49,10 @@ export async function renderArchiveCover(paper: ArchivePaper, data: DocumentDeta
     import('@features/reader/core'), import('@features/reader/renderer')
   ])
   signal.throwIfAborted()
-  // The crop pipeline exports only complete groups. Ambiguous/unsupported
-  // hints cannot produce a manifest and must not lock a valid single-page cover.
-  const geometries = (data.base?.figures ?? buildReaderFigureGeometries(data.mappings, data.layoutJson)).filter(figure => figure.status === 'complete')
+  // Every hint counts, whatever its status: the crop pipeline exports only complete groups, so a
+  // paper whose hints are all ambiguous/unsupported never gets a manifest and stays unopenable
+  // rather than passing as a single page with its figures missing.
+  const geometries = data.base?.figures ?? buildReaderFigureGeometries(data.mappings, data.layoutJson)
   // Only the PDF renderer owns its temporary page canvas. It is cleared even when crop work fails.
   const page = await firstPageRenderer(data.summary.sourceHash)(data.pdfUrl)
   let sheet: HTMLCanvasElement | undefined

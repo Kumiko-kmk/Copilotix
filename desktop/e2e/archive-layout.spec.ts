@@ -19,7 +19,7 @@ test('archive keeps titles separate, category controls fixed, and translated abs
     for (let index = 0; index < 13; index++) {
       ids.push(await seedReaderTask(workspace, {
         taskId: `00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`,
-        createdAt: '2026-10-07T12:00:00Z', englishTitle: `${originalTitle} ${index}`,
+        createdAt: '2026-10-07T12:00:00Z', englishTitle: `${originalTitle} ${index}`, savedCoverFigure: true,
         sourceMarkdown: `# ${originalTitle}\n\n## Abstract\n\nOriginal abstract.\n\n## Method\n\nOperators.`,
         translatedMarkdown: `# ${translatedTitle}\n\n## 摘要\n\n${translatedAbstract}\n\n## 方法\n\n算子学习。`
       }))
