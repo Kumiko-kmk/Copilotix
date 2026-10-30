@@ -1,3 +1,6 @@
+import type { DocumentSnapshot } from '@features/document/contract/documentModel'
+import { createHash } from 'node:crypto'
+import { documentContextChunks } from './documentContextChunks'
 import type { RagChunk } from '../contract/ragChunk'
 import { PAPER_CHAT_MAX_BYTES, paperContextRequestSchema, paperContextResultSchema, type PaperContext, type PaperContextRequest, type PaperEvidence } from '../contract/paperChatSchemas'
 import { ragWireByteLength } from '../contract/ragSchemas'
@@ -84,7 +87,7 @@ const FIGURE_MENTION_LIMIT = 24
 export class PaperContextBuilder {
   constructor(private readonly rag: Pick<SqliteRagRepository, 'getDocumentKnowledge' | 'getContentRevision' | 'listChunks'>) {}
 
-  build(raw: PaperContextRequest, signal?: AbortSignal, edits?: MarkdownEditsFile | null, order?: ReadonlyMap<string, number> | null): PaperContext {
+  build(raw: PaperContextRequest, signal?: AbortSignal, edits?: MarkdownEditsFile | null, order?: ReadonlyMap<string, number> | null, snapshot?: DocumentSnapshot): PaperContext {
     signal?.throwIfAborted()
     const input = paperContextRequestSchema.parse(raw)
     const knowledge = this.rag.getDocumentKnowledge(input.documentId)
@@ -94,7 +97,9 @@ export class PaperContextBuilder {
       throw new PaperContextError('CONTENT_NOT_READY', indexing ? '论文正在索引，请稍后重试' : '论文尚未建立可用索引，请先完成解析', true)
     }
     if (revision.documentId !== input.documentId) throw new PaperContextError('QUERY_SCOPE_INVALID', '论文索引范围不一致')
-    const chunks = applyChunkEdits(this.rag.listChunks(revision.contentRevisionId), edits, order)
+    if (snapshot && createHash('sha256').update(snapshot.base.markdown).digest('hex') !== revision.contentHash) throw new PaperContextError('CONTENT_NOT_READY', '文档已更新，正在等待索引', true)
+    const indexed = this.rag.listChunks(revision.contentRevisionId)
+    const chunks = snapshot ? documentContextChunks(snapshot, revision.contentRevisionId, indexed) : applyChunkEdits(indexed, edits, order)
     if (!chunks.length) throw new PaperContextError('INSUFFICIENT_EVIDENCE', '论文中没有找到依据')
     const mappingIndex = new Map<string, number[]>()
     chunks.forEach((chunk, index) => {

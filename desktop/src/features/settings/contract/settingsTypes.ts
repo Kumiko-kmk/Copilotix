@@ -31,11 +31,12 @@ export interface CredentialFieldError {
 }
 
 export interface AppSettings {
+  modelConnections?: import('@platform/models/contract/models').ModelConnection[]
   codex?: import('@platform/codex/contract/codex').CodexSettings
   outputRoot: string
   formulaEnabled: boolean
   tableEnabled: boolean
-  translationProvider: TranslationProviderId
+  translationProvider: TranslationProviderId | null
   translationProviderOrder: TranslationProviderId[]
   enabledTranslationProviders: TranslationProviderId[]
   qwenBaseUrl: string

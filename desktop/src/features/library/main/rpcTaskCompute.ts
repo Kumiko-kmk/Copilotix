@@ -1,3 +1,4 @@
+import type { DocumentOperations } from '@features/document/contract/rpc'
 import type { CopilotixTask } from '../contract/documentTypes'
 import type { CoreRequester } from '@platform/rpc/contract/protocol'
 import type { ParsingOperations } from '@features/parsing/contract/rpc'
@@ -5,7 +6,7 @@ import type { TranslationOperations } from '@features/translation/contract/rpc'
 import type { LibraryOperations } from '../contract/rpc'
 
 /** Compute operations behind TaskComputePort: import (library), parser output (parsing) and translation plans. */
-type ComputeOperations = LibraryOperations & ParsingOperations & TranslationOperations
+type ComputeOperations = LibraryOperations & ParsingOperations & TranslationOperations & DocumentOperations
 import type { NormalizeParserOutputResult, TaskComputePort } from '../contract/taskCompute'
 import type {
   TranslationPlanFinalizeResult,
@@ -25,6 +26,10 @@ export const COMPUTE_RPC_TIMEOUT_MS = 10 * 60_000
 /** Main-side compute proxy; all heavy file/hash/mapping work remains utility-owned. */
 export class RpcTaskCompute implements TaskComputePort {
   constructor(private readonly supervisor: CoreRequester<ComputeOperations>) {}
+
+  async ensureDocumentModel(documentId: string) {
+    return this.supervisor.request('compute:document-model', { documentId }, { timeoutMs: COMPUTE_RPC_TIMEOUT_MS })
+  }
 
   async hashFile(path: string): Promise<string> {
     const result = await this.supervisor.request('compute:hash-file', { path }, { timeoutMs: COMPUTE_RPC_TIMEOUT_MS })

@@ -33,12 +33,7 @@
 
 Codex 可作為已啟用的首選服務：使用服務連接中選定的 Codex 問答模型；不讀取 API Key。圖片還需模型支持 image，否則明確失敗。結果仍經既有 schema／grounding 校驗與原子保存。運行時與資料庫 provider 擴展見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)，設定步驟見 [服務配置](wiki/Service-Setup.md)。
 
-## 本地完整流程驗證
 
-2026-10-16 使用 17 頁 F-FNO 論文、獨立空翻譯快取文庫及本機 Codex `gpt-6-luna`，實際請求為翻譯 low／檔案 medium，觀測峰值 8 路。由導入至譯文、已保存四部分分析及排版封面全部可用共 **102.142 秒**；解析約 37.4 秒，140／140 翻譯塊成功。完成前門禁、重新載入不重播圓環、標題及圖片顯示通過；**尚未達到一分鐘目標**，單次樣本不代表所有論文時延或人工品質驗收。
+## 驗證邊界
 
-證據在工作區 `../investigation/efficiency-20261016/`：`report-run-7.json`、`model-trace-run-7.jsonl`、`timing-details.json`、`real-library.json` 與介面截圖；原文庫刪除／重導入記錄為 `../investigation/import-flow-20261015/flow.json`。測試原先勾選保留原檔名，已修正該篇名稱；後續導入關閉此選項，正確識別 FACTORIZED FOURIER NEURAL OPERATORS。受影響的 15 個測試檔共 129 項通過，TypeScript 檢查及隔離構建通過；未進行打包或安裝驗收。
-
-同日經使用者授權比較既有 API 額度，均使用另一獨立空快取文庫及同一 PDF。Qwen（翻譯 `qwen-mt-plus`、檔案 `qwen-plus`）在 161.503 秒時因檔案生成失敗停止，觀測到 32 次 HTTP 429；DeepSeek（翻譯及檔案均 `deepseek-flash`、關閉 thinking）首輪 81.073 秒、復測 45.461 秒時因檔案校驗失敗停止，均不屬成功完成時間。復測解析約 25.4 秒，但回答先有 JSON 反斜杠錯誤，修復後仍超字數；未放寬契約或解除門禁，也未切換正式文庫的 Codex 首選設定。並發為翻譯最多 8 路，另有檔案流，API 觀測峰值 9 路；解析服務等待亦有變動，不能由此保證一分鐘。
-
-本次補正一項修復回饋：額外字段與字數問題一併列出，額外字段仍被拒絕，不將診斷副本用於保存。相關 33 項測試、TypeScript 及程式檢查通過。API 各輪請求元資料、實際返回 token 用量、失敗回答校驗與介面截圖在 `../investigation/efficiency-20261016/api-comparison/comparison.json` 及各輪目錄；token 用量僅為捕獲到的響應統計，不是帳單。
+歷史實測在工作區 investigation/efficiency-20261016；不能保證一分鐘完成、模型品質或當前構建驗收。測試須覆蓋生成／取消／落盤／恢復與所有入口門檻。封面單頁回歸見 [未決事項](MILESTONE_1_3_ZH.md)。

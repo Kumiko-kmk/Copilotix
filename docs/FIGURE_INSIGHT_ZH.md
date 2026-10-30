@@ -63,24 +63,15 @@ Main／Preload IPC：`figureInsight:get / generate / cancel / changed`。Core RP
 
 `readerFigureGroups.ts` 先按圖說與解析器結構建立候選，再以多源最短路分配子圖歸屬；邊權使用頁面歸一化中心距離，跨行／欄的連接容差同時參考頁面及子圖尺寸。相鄰獨立圖可按各自對齊的圖說分開，接近同分的歸屬保留歧義；跨欄圖說的續文共用歸屬。解析器父節點只是證據：不得越過正文、表格或其他圖說，也不得因部分子圖受阻就只接受最近一列；父節點錯連到圖說另一側、且被阻隔時，以清楚的幾何歸屬為準。沒有論文名稱、圖號或固定行列數特例。
 
-圖體外包範圍完整保留，四周最多 4 pt 留白按相鄰內容的空隙中線收縮；真正侵入圖體、未知／損壞坐標、多重歸屬或跨頁映射仍保留來源圖，不用局部成功隱藏缺失。映射 ID、標註和來源文件不變；裁圖範圍／成員改變透過既有 geometry key 淘汰舊快取、按需生成。17 篇實際文庫幾何比對的完整圖組由 101 組增至 111 組，原有已支持圖片無丟失、無重複歸屬或越界裁切；此為幾何與資料驗證，不代表所有組圖均已人工辨識。證據在工作區 `../investigation/robust-figures-20261016/corpus.json`；回歸入口 `readerFigureGroups.test.ts` 包含多列、疏間距、三種縮放、輸入逆序、側／頂圖說、獨立鄰圖、錯誤父節點與正文穿插。
+圖體外包範圍完整保留，四周最多 4 pt 留白按相鄰內容的空隙中線收縮；真正侵入圖體、未知／損壞坐標、多重歸屬或跨頁映射仍保留來源圖，不用局部成功隱藏缺失。映射 ID、標註和來源文件不變；裁圖範圍／成員改變透過既有 geometry key 淘汰舊快取、按需生成。回歸入口 `readerFigureGroups.test.ts` 包含多列、疏間距、三種縮放、輸入逆序、側／頂圖說、獨立鄰圖、錯誤父節點與正文穿插。
 
 閱讀投影以實際圖片來源優先於解析器錯掛的錨點。上一圖說與下一圖首張圖片被解析成同一 Markdown 段落時，可共享來源段落而分別展示兩個完整圖；下一圖優先置於沒有外來圖說的成員段落，保留原有圖說順序。僅相應裁圖成功才隱藏它自己的來源圖片／已核對的圖內文字，另一圖待處理或失敗時保留其來源；不重寫 Markdown、mapping ID、annotation key 或文字偏移。共享無法確證時仍回退。`captionLabel` 是同版本 Main／Renderer 內部幾何提示，不改持久化 figure manifest；投影與顯示回歸在 `readerFigureGroups.test.ts`／`MarkdownPane.test.tsx`，包含單圖失敗與標註文字不變。
 
 ## 文庫封面
 
-`features/library/renderer/archive/figureSpread.ts`：抽出檔案時，卡片顯示跨頁——左為論文首頁，右為同尺寸圖頁。Renderer 經 `copilotix-asset://<id>/figures.json` 讀清單（只接受 `images/figures/*.png`），逐圖 `figureInsight.get` 取 `displayWeight`；有分者按分數排前、0 分不展示，無分者按頁序（附錄靠後）、裁圖面積和長寬比兜底；首頁上的圖與極端長條不選。排版為等寬行（每行 1–3 張、行內等高撐滿），在前 1–6 張的所有分行中選版面利用率最高、最小短邊 ≥ 版心寬 24%、大小不過分懸殊者；圖多不扣分，同等利用率下展示更多高分圖。只解碼選中圖片，任一失敗或無可用圖則保留單頁封面。封面只補齊本地整圖，不觸發 AI 解讀。選中新導入論文後，在進入詳情前即與閱讀器共用 `ensureFigureArtifacts`：由解析映射與 layout 識別可靠整圖、從 PDF 裁取並經既有 revision 校驗與原子保存生成 `figures.json`／PNG，再選圖排版；不再依賴使用者先進入閱讀器。所需可靠整圖、排版封面與檔案內容就緒前不開放詳情；抽出後使用已準備的跨頁。切篇／關閉取消未完成裁圖，暫時失敗不快取為永久單頁封面，重新打開可重試。
+`features/library/renderer/archive/figureSpread.ts`：抽出檔案時，卡片顯示跨頁——左為論文首頁，右為同尺寸圖頁。Renderer 經 `copilotix-asset://<id>/figures.json` 讀清單（只接受 `images/figures/*.png`），逐圖 `figureInsight.get` 取 `displayWeight`；有分者按分數排前、0 分不展示，無分者按頁序（附錄靠後）、裁圖面積和長寬比兜底；首頁上的圖與極端長條不選。排版為等寬行（每行 1–3 張、行內等高撐滿），在前 1–6 張的所有分行中選版面利用率最高、最小短邊 ≥ 版心寬 24%、大小不過分懸殊者；圖多不扣分，同等利用率下展示更多高分圖。只解碼選中圖片；失敗或缺少必要圖組必須停留瀏覽姿態，不可開檔後補圖。現有單頁回歸見 [未決事項](MILESTONE_1_3_ZH.md)。封面只補齊本地整圖，不觸發 AI 解讀。選中新導入論文後，在進入詳情前即與閱讀器共用 `ensureFigureArtifacts`：由解析映射與 layout 識別可靠整圖、從 PDF 裁取並經既有 revision 校驗與原子保存生成 `figures.json`／PNG，再選圖排版；不再依賴使用者先進入閱讀器。所需可靠整圖、排版封面與檔案內容就緒前不開放詳情；抽出後使用已準備的跨頁。切篇／關閉取消未完成裁圖，暫時失敗不快取為永久單頁封面，重新打開可重試。
+
 
 ## 驗證邊界
 
-2026-10-11 經使用者明確授權，使用既存 DeepSeek Key 實測六篇論文全部已提取整圖，共 **39/39** 成功：Transformer 5、AlphaFold 5、DDPM 15、Neural Operators 3、Graph Networks 9、GAN 2；權重 62–96。全部三欄結果經 schema 校驗、原子保存並讀回確認非 stale。這是模型／持久化實測，未做完整人工科學內容驗收或已打包應用 UI 驗收。
-
-證據在 workspace `../investigation/figure-insight-live-20261011/`：`preview.html` 可看完整原圖與三欄結果；`report.json` 有位置、caption、實際回覆、請求／用量及記錄路徑；`summary.json` 有逐篇排序和費用估算；`report-before-*.json` 保留排錯及續跑快照。大樣本矩陣原 PNG 約 6–8 MiB，完整 JPEG98 約 1.4–1.8 MiB（像素尺寸保持）；本次批次工具用 Windows 圖像編碼產生 JPEG，正式 Main 使用 Electron nativeImage，後者未在已打包應用單独驗收。三張因 SSE 中斷／逾時而失敗的圖最後改用完整 JSON 回覆補齊；正式 Main 仍採串流，不宣稱網路失敗已完全消除。
-
-批次入口 `desktop/scripts/figure-insight-live.ts`：預設只讀預檢，`--execute` 才發送，續跑跳過已保存且未過期的結果；`--non-stream` 僅為批次實測的 JSON 回覆適配。腳本只讀 SQLite／原始憑據，授權設定為本次程序內設定，不更改使用者持久設定；測試用量在上述證據中，不寫入桌面用量頁。大圖 JPEG 測試副本在證據目錄 `uploads/`，不進文獻原圖目錄。
-
-含排錯的已返回用量為輸入 **174,428**、輸出 **5,644** tokens。按 [DeepSeek 當日官方價格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)（週末閒時，輸入全按未命中 1 元／百萬、輸出 4 元／百萬）估 **0.197004 元人民幣**；續跑快照已去重，未返回 usage 的中斷請求不計入，未讀取帳單，不能當作實際扣款。
-
-使用者要求停止額外驗證前，圖片解析／保存、ChatProvider、Core RPC 四組 **47 項**針對性測試通過。後續維護了 RPC 名稱一致性、圖片首包預算及 JPEG 傳輸身份的回歸用例，依使用者要求未再執行；未跑 smoke、E2E、應用重建或打包。最近一次 typecheck 尚有既有 `features/library/renderer/archive/ArchiveDetail.tsx:120` 的 TS7030，不宣稱全倉型別檢查通過。
-
-Codex 可作為已啟用的首選服務：使用服務連接中選定的 Codex 問答模型；不讀取 API Key。圖片還需模型支持 image，否則明確失敗。結果仍經既有 schema／grounding 校驗與原子保存。運行時與資料庫 provider 擴展見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)，設定步驟見 [服務配置](wiki/Service-Setup.md)。
+回歸入口：figureInsight、figureInsightStore、chatProvider、readerFigureGroups、MarkdownPane。歷史實測證據在工作區 investigation/figure-insight-live-20261011、robust-figures-20261016，不代表當前構建或全部圖組經人工品質驗收。scripts/figure-insight-live.ts 預設只讀預檢，--execute 才發送；--non-stream 只供批次實測，不能當正式串流成功證據。真實憑據與付費服務需另行授權。Codex 模型須支持 image，無 Key、不自動回退，隔離及資料兼容見 [架構](ARCHITECTURE_ZH.md#codex-provider本机-app-server)。

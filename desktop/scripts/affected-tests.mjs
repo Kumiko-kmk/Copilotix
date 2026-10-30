@@ -129,5 +129,8 @@ if (mode === 'unit') {
   }
   const selected = all ? [] : [...specs].map(name => `e2e/${name}.spec.ts`)
   console.log(`[affected-tests] e2e: ${all ? 'all specs' : selected.join(' ')}`)
-  if (!listOnly) run(PLAYWRIGHT, ['test', ...selected, '--grep-invert', 'hardened packaged'])
+  // A narrow change can legitimately select no files in one configured shard.
+  // Unsharded and full-release runs retain Playwright's no-tests failure.
+  const emptyShard = process.env.COPILOTIX_E2E_SHARD ? ['--pass-with-no-tests'] : []
+  if (!listOnly) run(PLAYWRIGHT, ['test', ...selected, '--grep-invert', 'hardened packaged', ...emptyShard])
 }

@@ -1,3 +1,4 @@
+import { resolveLegacyTextAnchor } from '@features/document/core'
 import { resolveReaderAnnotation } from '../core/readerAnnotations'
 import type { HighlightColor, ReaderAnnotation, ReaderChatSelectionFragment } from '../contract/readerTypes'
 import type { ReaderNote, ReaderNoteAnchor } from '../contract/readerNotes'
@@ -71,8 +72,10 @@ export function buildReaderHighlightRanges(article: HTMLElement, annotations: Re
     Array.from(article.querySelectorAll<HTMLElement>('[data-annotation-block-key]'))
       .map((block) => [block.dataset.annotationBlockKey!, block])
   )
+  const texts = new Map([...blocks].map(([key, block]) => [key, textContent(block)]))
   for (const annotation of annotations) {
-    const block = blocks.get(annotation.blockKey)
+    const key = resolveLegacyTextAnchor(texts, annotation)
+    const block = key ? blocks.get(key) : undefined
     if (!block) continue
     const resolved = resolveReaderAnnotation(textContent(block), annotation)
     if (!resolved) continue
@@ -111,10 +114,12 @@ export function buildReaderNoteRanges(article: HTMLElement, notes: readonly Read
       .map((block) => [block.dataset.annotationBlockKey!, block])
   )
   const result = new Map<string, Range[]>()
+  const texts = new Map([...blocks].map(([key, block]) => [key, textContent(block)]))
   for (const note of notes) {
     const ranges: Range[] = []
     for (const anchor of note.anchors) {
-      const block = blocks.get(anchor.blockKey)
+      const key = resolveLegacyTextAnchor(texts, anchor)
+      const block = key ? blocks.get(key) : undefined
       if (!block) continue
       // Same context matching as highlights; the note fields stand in for an annotation's.
       const resolved = resolveReaderAnnotation(textContent(block), { ...anchor, id: note.id, taskId: '', view: note.view, kind: 'underline', color: null, createdAt: note.createdAt, updatedAt: note.updatedAt })

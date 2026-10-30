@@ -1,3 +1,4 @@
+import { documentModels } from '@features/document/utility'
 import { createHash } from 'node:crypto'
 import { lstat, readFile } from 'node:fs/promises'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
@@ -67,13 +68,16 @@ export class RagContentIndexService {
       if (artifact.content_hash !== revision.contentHash) throw contentError('RAG_CONTENT_HASH_MISMATCH', 'Registered artifact hash differs from revision', false)
       const markdown = await readRegisteredText(document.storage_path, artifact, this.pathPolicy)
       if (signal?.aborted) throw abortError()
-      const mappings = await this.readMappings(document.storage_path, request.documentId, revision.mappingFingerprint, this.pathPolicy)
+      const mappingSource = await this.readMappings(document.storage_path, request.documentId, revision.mappingFingerprint, this.pathPolicy)
+      const mappings = mappingSource.mappings
+      const base = await documentModels.ensureBase(request.documentId, document.storage_path, [artifact.relative_path, mappingSource.path, 'layout.json'])
+      if (base.markdown !== markdown || JSON.stringify(base.mappings) !== JSON.stringify(mappings)) throw contentError('RAG_CONTENT_HASH_MISMATCH', 'Document model differs from the registered revision', false)
       const input: StructureAwareChunkInput = {
         documentId: request.documentId,
         contentRevisionId: revision.contentRevisionId,
         contentHash: revision.contentHash,
         sourceText: markdown,
-        mappings
+        mappings, alignedBlocks: base.content
       }
       let chunks: ReturnType<typeof structureAwareChunk>
       try {
@@ -97,13 +101,13 @@ export class RagContentIndexService {
     }
   }
 
-  private async readMappings(root: string, documentId: string, mappingFingerprint: string, policy: PathPolicyPort): Promise<readonly BlockMapping[]> {
+  private async readMappings(root: string, documentId: string, mappingFingerprint: string, policy: PathPolicyPort): Promise<{ mappings: readonly BlockMapping[]; path: string }> {
     const artifacts = this.database.connection.prepare(`
       SELECT id,document_id,kind,relative_path,content_hash,metadata_json FROM artifacts
       WHERE document_id=? AND kind='block_mappings' ORDER BY revision DESC,id ASC
     `).all(documentId) as Array<ArtifactRow & { metadata_json: string }>
     const artifact = artifacts.find((candidate) => candidate.content_hash === mappingFingerprint || metadataFingerprint(candidate.metadata_json) === mappingFingerprint)
-    if (!artifact) return []
+    if (!artifact) return { mappings: [], path: '' }
     const raw = await readRegisteredText(root, artifact, policy)
     let value: unknown
     try { value = JSON.parse(raw) } catch { throw contentError('RAG_BLOCK_MAPPING_INVALID_JSON', 'Block mapping JSON is invalid', false) }
@@ -111,7 +115,7 @@ export class RagContentIndexService {
     if (!list) throw contentError('RAG_BLOCK_MAPPING_INVALID', 'Block mapping root must be an array', false)
     let parsed: BlockMapping[]
     try { parsed = list.map((item) => blockMappingSchema.parse(item)) } catch { throw contentError('RAG_BLOCK_MAPPING_SCHEMA_INVALID', 'Block mapping schema is invalid', false) }
-    return parsed
+    return { mappings: parsed, path: artifact.relative_path }
   }
 
   private markFailure(revision: RagContentRevisionRecord, oldKnowledge: ReturnType<SqliteRagRepository['getDocumentKnowledge']>, error: unknown): void {

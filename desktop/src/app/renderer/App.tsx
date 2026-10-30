@@ -1,3 +1,4 @@
+import { documentEventDisposition } from '@features/library/renderer'
 import React from 'react'
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { refreshCodexStatus, loadStorageInfo, SettingsPage } from '@features/settings/renderer'
@@ -7,7 +8,7 @@ import { Button, Modal } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
 import type { AppSettings } from '@features/settings/contract/settingsTypes'
-import type { DocumentDetails, DocumentSummary } from '@features/library/contract/documentSchemas'
+import type { DocumentChangeEvent, DocumentDetails, DocumentSummary } from '@features/library/contract/documentSchemas'
 import EdgeDock from './EdgeDock'
 import WindowControls from './WindowControls'
 import { NewParsePage, TutorialPage, applyDocumentChange, getDocumentRefreshPlan, patchDocumentDetails, type DocumentListCache, loadLibraryCategories, requestLibraryFocus, ACTIVE_STATUSES } from '@features/library/renderer'
@@ -72,9 +73,25 @@ export default function App(): React.JSX.Element {
     queryKey: ['settings'],
     queryFn: () => window.copilotix.getSettings()
   })
+  const pendingDocumentEvents = React.useRef<DocumentChangeEvent[]>([])
   const documentsQuery = useQuery<DocumentListCache>({
     queryKey: ['documents'],
-    queryFn: async () => ({ revision: 0, documents: await window.copilotix.listDocuments() })
+    queryFn: async () => {
+      let snapshot: DocumentListCache
+      for (;;) {
+        snapshot = window.copilotix.listDocumentSnapshot ? await window.copilotix.listDocumentSnapshot() : { revision: 0, documents: await window.copilotix.listDocuments() }
+        const buffered = pendingDocumentEvents.current.splice(0)
+        let gap = false
+        for (const change of buffered) {
+          const disposition = documentEventDisposition(snapshot, change)
+          if (disposition === 'resync') gap = true
+          else if (disposition === 'apply') snapshot = applyDocumentChange(snapshot, change)
+        }
+        if (!gap) break
+      }
+      const current = queryClient.getQueryData<DocumentListCache>(['documents'])
+      return current?.sessionId && current.sessionId === ('sessionId' in snapshot ? snapshot.sessionId : undefined) && current.revision > snapshot.revision ? current : snapshot
+    }
   })
   const settings = settingsQuery.data
   const documents = documentsQuery.data?.documents ?? []
@@ -87,6 +104,7 @@ export default function App(): React.JSX.Element {
   const onImported = React.useCallback((created: DocumentSummary[]) => {
     const ids = new Set(created.map((document) => document.id))
     queryClient.setQueryData<DocumentListCache>(['documents'], (current) => ({
+      sessionId: current?.sessionId,
       revision: current?.revision ?? 0,
       documents: [...created, ...(current?.documents ?? []).filter((item) => !ids.has(item.id))]
     }))
@@ -107,7 +125,7 @@ export default function App(): React.JSX.Element {
     preload()
     const timer = setInterval(preload, 60_000)
     return () => clearInterval(timer)
-  }, [settings?.outputRoot, documentsQuery.dataUpdatedAt])
+  }, [settings?.outputRoot, documents.length])
 
 
   React.useEffect(() => {
@@ -121,6 +139,15 @@ export default function App(): React.JSX.Element {
   React.useEffect(() => {
     const stop = window.copilotix.onDocumentsChanged((change) => {
       const current = queryClient.getQueryData<DocumentListCache>(['documents'])
+      const disposition = documentEventDisposition(current, change)
+      if (disposition === 'ignore') return
+      if (disposition === 'resync') {
+        pendingDocumentEvents.current.push(change)
+        if (pendingDocumentEvents.current.length > 1000) pendingDocumentEvents.current.splice(0, 999)
+        void queryClient.invalidateQueries({ queryKey: ['documents'] }, { cancelRefetch: false })
+        void queryClient.invalidateQueries({ queryKey: ['document'] })
+        return
+      }
       const previousSummaries = new Map(current?.documents.map((document) => [document.id, document] as const))
       if (!current) {
         void queryClient.invalidateQueries({ queryKey: ['documents'] })
@@ -129,7 +156,7 @@ export default function App(): React.JSX.Element {
       }
 
       for (const summary of change.upserted) {
-        const refreshPlan = getDocumentRefreshPlan(previousSummaries.get(summary.id), summary)
+        const refreshPlan = getDocumentRefreshPlan(previousSummaries.get(summary.id), summary, change.changes?.find(item => item.documentId === summary.id)?.kinds)
         queryClient.setQueryData<DocumentDetails>(['document', summary.id], (detail) =>
           patchDocumentDetails(detail, change)
         )
@@ -203,7 +230,8 @@ export default function App(): React.JSX.Element {
           onOpenReader={openFromTutorial}
           onImported={(document) => {
             queryClient.setQueryData<DocumentListCache>(['documents'], (current) => ({
-              revision: current?.revision ?? 0,
+              sessionId: current?.sessionId,
+      revision: current?.revision ?? 0,
               documents: [document, ...(current?.documents ?? []).filter((item) => item.id !== document.id)]
             }))
           }}

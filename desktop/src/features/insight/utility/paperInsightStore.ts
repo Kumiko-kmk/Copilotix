@@ -1,3 +1,5 @@
+import { getDocumentSnapshot, snapshotTextFile } from '@features/document/utility'
+import { readMarkdownEditsFile } from '@features/document/runtime'
 import { setTimeout as delay } from 'node:timers/promises'
 import { randomUUID } from 'node:crypto'
 import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises'
@@ -16,6 +18,7 @@ type Repository = Pick<V2TaskRepositoryCompat, 'getTask' | 'getLatestArtifactRef
 const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException)?.code === 'ENOENT'
 function sameBriefSource(saved: string, current: string, language: PaperBrief['provenance']['language']): boolean {
   if (saved === current) return true
+  if (saved.split('|').find(part => part.startsWith('e:')) !== current.split('|').find(part => part.startsWith('e:'))) return false
   // An analysis of original text does not become stale when its translation is published.
   if (language !== 'original') return false
   const original = saved.split('|').find(part => part.startsWith('p:'))
@@ -39,7 +42,9 @@ export class PaperInsightStore {
     const original = this.repository.getLatestArtifactReference(documentId, 'parsed_markdown')
     const translated = this.repository.getLatestArtifactReference(documentId, 'translated_markdown')
     const revision = (ref: typeof original) => ref ? `${ref.id}:${ref.revision}:${ref.contentHash}` : 'none'
-    return { root: task.outputDir, original, translated, sourceRevision: `p:${revision(original)}|t:${revision(translated)}` }
+    const edits = await readMarkdownEditsFile(task.outputDir, documentId)
+    const editVersion = edits.revision ? `|e:${edits.revision}` : ''
+    return { root: task.outputDir, original, translated, sourceRevision: `p:${revision(original)}|t:${revision(translated)}${editVersion}` }
   }
 
   private async read(path: string, maxBytes: number): Promise<string> {
@@ -87,16 +92,9 @@ export class PaperInsightStore {
   async briefContext(documentId: string, signal: AbortSignal): Promise<BriefContextResult> {
     signal.throwIfAborted()
     const snapshot = await this.snapshot(documentId)
-    const readArtifact = async (artifact: typeof snapshot.original): Promise<string> => {
-      if (!artifact) return ''
-      this.policy.resolveChild(snapshot.root, artifact.relativePath)
-      return this.read(join(snapshot.root, artifact.relativePath), 32 * 1024 * 1024)
-    }
-    const original = await readArtifact(snapshot.original)
+    const content = await this.content(documentId, snapshot)
     signal.throwIfAborted()
-    const translated = original.trim() ? '' : await readArtifact(snapshot.translated)
-    signal.throwIfAborted()
-    const context = buildFullBriefContext(original, translated)
+    const context = buildFullBriefContext(content.originalText, content.translatedText)
     const after = await this.snapshot(documentId)
     if (after.sourceRevision !== snapshot.sourceRevision) throw new Error('论文内容正在更新，请重试')
     return briefContextResultSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, context })
@@ -104,15 +102,17 @@ export class PaperInsightStore {
 
   async briefSource(documentId: string): Promise<BriefSource> {
     const snapshot = await this.snapshot(documentId)
+    const content = await this.content(documentId, snapshot)
     const sources: BriefSource['sources'] = []
-    for (const [artifact, language] of [[snapshot.original, 'original'], [snapshot.translated, 'translated']] as const) {
-      if (!artifact) continue
-      const path = this.policy.resolveChild(snapshot.root, artifact.relativePath)
-      const info = await lstat(path)
-      if (!info.isFile() || info.isSymbolicLink()) throw new Error('论文全文来源无效或超过 16 MiB；未截断内容')
-      sources.push({ path, hash: artifact.contentHash, language })
+    for (const [text, language] of [[content.originalText, 'original'], [content.translatedText, 'translated']] as const) {
+      if (text.trim()) sources.push({ ...await snapshotTextFile(snapshot.root, text), language })
     }
+    if ((await this.snapshot(documentId)).sourceRevision !== snapshot.sourceRevision) throw new Error('论文内容正在更新，请重试')
     return briefSourceSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, sources })
+  }
+
+  private content(documentId: string, snapshot: Awaited<ReturnType<PaperInsightStore['snapshot']>>) {
+    return getDocumentSnapshot(documentId, snapshot.root, [snapshot.original?.relativePath ?? '', 'block_list.json', 'layout.json'], snapshot.translated?.relativePath ?? 'full.zh-CN.md')
   }
 
   /**
@@ -139,8 +139,8 @@ export class PaperInsightStore {
     const snapshot = await this.snapshot(documentId)
     const artifact = snapshot.translated ?? snapshot.original
     if (!artifact) return null
-    this.policy.resolveChild(snapshot.root, artifact.relativePath)
-    const markdown = await this.read(join(snapshot.root, artifact.relativePath), 32 * 1024 * 1024)
+    const content = await this.content(documentId, snapshot)
+    const markdown = snapshot.translated ? content.translatedText : content.originalText
     signal.throwIfAborted()
     const context = snapshot.translated
       ? buildBriefContext('', markdown, BRIEF_BUDGETS.standard)

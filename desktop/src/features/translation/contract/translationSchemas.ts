@@ -7,6 +7,8 @@ import type { TranslatedMarkdownBlock } from './translationTypes'
 export const translationProviderIdSchema = z.enum(['qwen', 'deepseek', 'bing', 'transmart', 'codex'])
 
 export const translatedMarkdownBlockSchema: z.ZodType<TranslatedMarkdownBlock> = z.object({
+  sourceVersion: z.string().optional(),
+  unmatched: z.literal(true).optional(),
   sourceIndex: z.number().int().min(0).optional(),
   markdown: z.string().max(16_777_216),
   mappingIds: z.array(boundedId).max(100_000),

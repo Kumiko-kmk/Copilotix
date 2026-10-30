@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { _electron as electron, expect, type Page } from '@playwright/test'
+import { buildReaderBase, DOCUMENT_MODEL_VERSION } from '../src/features/document/core'
 import { BLOCK_MAPPING_VERSION, buildBlockMappings } from '../src/features/parsing/core/blockMapping'
 import { TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION } from '../src/features/translation/contract/translationPlanProtocol'
 import { V2Database } from '../src/platform/database/utility/v2Database'
@@ -11,7 +12,6 @@ import type { ArtifactKind } from '../src/features/library/contract/artifacts'
 import { shouldDisableGpuSandbox, shouldUseHostCompatibilityMode } from './launchPolicy'
 import { credentialServiceForRuntime, WindowsCredentialVault, type CredentialAccount } from '../src/platform/credentials/main/credentialVault'
 import {
-  alignMarkdownBlocks,
   MARKDOWN_MAPPING_ALGORITHM_VERSION,
   splitMarkdownBlocks
 } from '../src/features/parsing/core/markdownBlocks'
@@ -140,9 +140,12 @@ export async function seedReaderTask(
     await mkdir(imagesDir, { recursive: true })
     await copyFile(join(__dirname, '../resources/icon.png'), join(imagesDir, 'fixture.png'))
     await writeFile(join(outputDir, 'full.md'), fixtureMarkdown, 'utf8')
+    const fixtureMappings = buildBlockMappings(taskId, layout)
+    const mappingFile = JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: fixtureMappings }, null, 2)
+    await writeFile(join(outputDir, 'block_list.json'), mappingFile, 'utf8')
     if (options?.translatedMarkdown !== undefined) {
       await writeFile(join(outputDir, 'full.zh-CN.md'), options.translatedMarkdown, 'utf8')
-      const sourceBlocks = alignMarkdownBlocks(fixtureMarkdown, buildBlockMappings(taskId, layout))
+      const sourceBlocks = buildReaderBase(fixtureMarkdown, fixtureMappings).content
       const translatedBlocks = splitMarkdownBlocks(options.translatedMarkdown)
       if (translatedBlocks.length !== sourceBlocks.length) {
         throw new Error(`Fixture translation block count ${translatedBlocks.length} does not match source ${sourceBlocks.length}`)
@@ -150,6 +153,7 @@ export async function seedReaderTask(
       await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify({
         version: 2,
         ...(options?.legacyTranslationManifest ? {} : {
+          sourceVersion: createHash('sha256').update(JSON.stringify([DOCUMENT_MODEL_VERSION, MARKDOWN_MAPPING_ALGORITHM_VERSION, fixtureMarkdown, mappingFile, JSON.stringify(layout)])).digest('hex'),
           mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
           blockMappingVersion: BLOCK_MAPPING_VERSION,
           translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
@@ -163,7 +167,7 @@ export async function seedReaderTask(
           blockId: `fixture-translation-${sourceIndex}`,
           sourceIndex,
           mappingIds: sourceBlocks[sourceIndex]?.mappingIds ?? [],
-          sourceHash: `fixture-source-${sourceIndex}`,
+          sourceHash: createHash('sha256').update(sourceBlocks[sourceIndex]!.markdown).digest('hex'),
           markdown,
           provider: 'qwen',
           model: 'fixture',

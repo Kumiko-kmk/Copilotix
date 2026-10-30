@@ -1,4 +1,5 @@
 import React from 'react'
+import { isActiveProvider } from '@features/translation/contract/providerPolicy'
 import { cachedStorageInfo, loadStorageInfo } from './storageInfoClient'
 import { DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Button, Checkbox, Input, Typography, message } from 'antd'
@@ -10,7 +11,7 @@ import type {
   CredentialValidation,
   SettingsUpdate
 } from '../contract/settingsTypes'
-import type { TranslationProviderId } from '@features/translation/contract/translationTypes'
+import type { ActiveTranslationProviderId } from '@features/translation/contract/translationTypes'
 import type { StorageInfo, UsageAnalytics } from '../contract/settingsSchemas'
 import { formatBytes, StorageComposition, StorageGrowth, StorageMetric, UsageDashboard } from './SettingsDashboards'
 import ThemeSettings from './ThemeSettings'
@@ -44,12 +45,10 @@ const STATUS_LABELS: Record<CredentialValidation, string> = {
   invalid: '验证失败'
 }
 
-const MODEL_DETAILS: Record<TranslationProviderId, { label: string; description: string }> = {
+const MODEL_DETAILS: Record<ActiveTranslationProviderId, { label: string; description: string }> = {
   codex: { label: 'Codex', description: '通过本机 Codex 提供大语言模型翻译与论文分析' },
   deepseek: { label: 'DeepSeek', description: '通过 DeepSeek API 提供大语言模型翻译' },
   qwen: { label: '千问 / Qwen', description: '通过阿里云百炼 API 提供专业翻译模型' },
-  transmart: { label: 'Transmart', description: '通过腾讯交互翻译网页接口提供机器翻译' },
-  bing: { label: 'Bing', description: '通过微软必应翻译网页接口提供机器翻译' }
 }
 
 export default function SettingsPage(props: {
@@ -68,7 +67,7 @@ export default function SettingsPage(props: {
   const [storageLoading, setStorageLoading] = React.useState(false)
   const [libraryAction, setLibraryAction] = React.useState<'backup' | 'restore' | 'migrate' | null>(null)
   const libraryActionRef = React.useRef(false)
-  const [draggingProvider, setDraggingProvider] = React.useState<TranslationProviderId | null>(null)
+  const [draggingProvider, setDraggingProvider] = React.useState<ActiveTranslationProviderId | null>(null)
   const previousSettingsRef = React.useRef(props.settings)
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -271,12 +270,12 @@ export default function SettingsPage(props: {
     }
   }, [appearance, appearanceChanged, credentials, draft, messageApi, props.onSaved, refreshStorageInfo, section, settingsChanged])
 
-  const moveProvider = React.useCallback((source: TranslationProviderId, target: TranslationProviderId) => {
+  const moveProvider = React.useCallback((source: ActiveTranslationProviderId, target: ActiveTranslationProviderId) => {
     setDraft((current) => {
-      const order = moveProviderBefore(current.translationProviderOrder, source, target)
+      const order = moveProviderBefore(current.translationProviderOrder.filter(isActiveProvider), source, target)
       return {
         ...current,
-        translationProvider: order.find((provider) => current.enabledTranslationProviders.includes(provider))!,
+        translationProvider: order.find((provider) => current.enabledTranslationProviders.includes(provider)) ?? null,
         translationProviderOrder: order
       }
     })
@@ -287,25 +286,21 @@ export default function SettingsPage(props: {
     setDraggingProvider(null)
   }, [draggingProvider])
 
-  const toggleTranslationProvider = React.useCallback((provider: TranslationProviderId) => {
+  const toggleTranslationProvider = React.useCallback((provider: ActiveTranslationProviderId) => {
     const enabled = draft.enabledTranslationProviders.includes(provider)
-    if (enabled && draft.enabledTranslationProviders.length === 1) {
-      messageApi.warning('至少需要启用一个翻译模型')
-      return
-    }
     setDraft((current) => {
       const next = enabled
         ? current.enabledTranslationProviders.filter((candidate) => candidate !== provider)
         : [...current.enabledTranslationProviders, provider]
       return {
         ...current,
-        translationProvider: current.translationProviderOrder.find((candidate) => next.includes(candidate))!,
+        translationProvider: current.translationProviderOrder.find((candidate) => next.includes(candidate)) ?? null,
         enabledTranslationProviders: next
       }
     })
-  }, [draft.enabledTranslationProviders, messageApi])
+  }, [draft.enabledTranslationProviders])
 
-  const moveProviderByKeyboard = React.useCallback((provider: TranslationProviderId, direction: -1 | 1) => {
+  const moveProviderByKeyboard = React.useCallback((provider: ActiveTranslationProviderId, direction: -1 | 1) => {
     const index = draft.translationProviderOrder.indexOf(provider)
     const targetIndex = index + direction
     if (index < 0 || targetIndex < 0 || targetIndex >= draft.translationProviderOrder.length) return
@@ -313,7 +308,7 @@ export default function SettingsPage(props: {
     ;[next[index], next[targetIndex]] = [next[targetIndex]!, next[index]!]
     setDraft((current) => ({
       ...current,
-      translationProvider: next.find((candidate) => current.enabledTranslationProviders.includes(candidate))!,
+      translationProvider: next.find((candidate) => current.enabledTranslationProviders.includes(candidate)) ?? null,
       translationProviderOrder: next
     }))
   }, [draft.translationProviderOrder])
@@ -407,9 +402,9 @@ export default function SettingsPage(props: {
           {section === 'models' ? (
             <section className="settings-section model-priority" aria-label="模型设置">
               <div className="model-priority-card">
-                <div className="model-priority-heading"><strong>大语言模型优先级</strong><span className="model-request-order"><span>请求顺序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).map((provider) => MODEL_DETAILS[provider].label.replace(' / Qwen', '')).join(' → ')}</strong></span></div>
+                <div className="model-priority-heading"><strong>大语言模型优先级</strong><span className="model-request-order"><span>请求顺序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).filter(isActiveProvider).map((provider) => MODEL_DETAILS[provider].label.replace(' / Qwen', '')).join(' → ') || '未配置'}</strong></span></div>
                 <div className="model-priority-list" role="list" aria-label="翻译模型优先级">
-                  {draft.translationProviderOrder.map((provider, index) => {
+                  {draft.translationProviderOrder.filter(isActiveProvider).map((provider, index) => {
                     const details = MODEL_DETAILS[provider]
                     const credentialStatus = provider === 'qwen' || provider === 'deepseek' ? draft.credentials[provider] : null
                     return (
@@ -573,10 +568,10 @@ function CredentialEditor(props: {
 }
 
 export function moveProviderBefore(
-  order: readonly TranslationProviderId[],
-  source: TranslationProviderId,
-  target: TranslationProviderId
-): TranslationProviderId[] {
+  order: readonly ActiveTranslationProviderId[],
+  source: ActiveTranslationProviderId,
+  target: ActiveTranslationProviderId
+): ActiveTranslationProviderId[] {
   const sourceIndex = order.indexOf(source)
   const targetIndex = order.indexOf(target)
   if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return [...order]

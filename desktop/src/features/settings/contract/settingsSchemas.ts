@@ -1,9 +1,10 @@
 import { codexSettingsSchema, DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { paperChatProviderSchema, qwenChatModelSchema, deepseekChatModelSchema } from '@features/chat/contract/paperChatSchemas'
 import { z } from 'zod'
+import { modelConnectionSchema, defaultConnections } from '@platform/models/contract/models'
 import { boundedPath, hasControlCharacters, noNul } from '@platform/ipc/contract/validation'
 import type { AppSettings, CredentialFieldError, CredentialMutation, CredentialName, CredentialStatus, CredentialStatuses, CredentialValidationResult, SettingsUpdate, SettingsSaveResult } from './settingsTypes'
-import { translationProviderIdSchema } from '@features/translation/contract/translationSchemas'
+const activeProviderSchema = z.enum(['qwen', 'deepseek', 'codex'])
 
 /** IPC schemas for settings, credentials, storage and usage analytics. */
 
@@ -27,12 +28,12 @@ export const credentialStatusesSchema: z.ZodType<CredentialStatuses> = z.object(
   deepseek: credentialStatusSchemaPlaceholder()
 }).strict()
 
-export const translationProviderOrderSchema = z.array(translationProviderIdSchema).min(4).max(5).refine(
-  (providers) => new Set(providers).size === providers.length && (providers.length === 5 || !providers.includes('codex')),
+export const translationProviderOrderSchema = z.array(activeProviderSchema).length(3).refine(
+  (providers) => new Set(providers).size === providers.length,
   '翻译模型顺序必须完整且不能重复'
 )
 
-export const enabledTranslationProvidersSchema = z.array(translationProviderIdSchema).min(1).max(5).refine(
+export const enabledTranslationProvidersSchema = z.array(activeProviderSchema).max(3).refine(
   (providers) => new Set(providers).size === providers.length,
   '启用的翻译模型不能重复'
 )
@@ -63,10 +64,11 @@ export const credentialValidationRequestSchema = z.object({
 }).strict()
 
 export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
+  modelConnections: z.array(modelConnectionSchema).max(64).default(defaultConnections),
   outputRoot: boundedPath,
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
-  translationProvider: translationProviderIdSchema,
+  translationProvider: activeProviderSchema.nullable(),
   translationProviderOrder: translationProviderOrderSchema,
   enabledTranslationProviders: enabledTranslationProvidersSchema,
   codex: codexSettingsSchema.default(DEFAULT_CODEX_SETTINGS),
@@ -82,15 +84,16 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   chatConsentVersion: z.number().int().min(1).max(1000).nullable().default(null),
   credentials: credentialStatusesSchema
 }).strict().refine(
-  (settings) => settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) === settings.translationProvider,
+  (settings) => (settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) ?? null) === settings.translationProvider,
   '首选翻译模型必须是顺序中第一个已启用模型'
 )
 
 export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
+  modelConnections: z.array(modelConnectionSchema).max(64).optional(),
   outputRoot: boundedPath,
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
-  translationProvider: translationProviderIdSchema,
+  translationProvider: activeProviderSchema.nullable(),
   translationProviderOrder: translationProviderOrderSchema,
   enabledTranslationProviders: enabledTranslationProvidersSchema,
   codex: codexSettingsSchema.default(DEFAULT_CODEX_SETTINGS),
@@ -110,7 +113,7 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
     deepseek: credentialMutationSchema.optional()
   }).strict().optional()
 }).strict().refine(
-  (settings) => settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) === settings.translationProvider,
+  (settings) => (settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) ?? null) === settings.translationProvider,
   '首选翻译模型必须是顺序中第一个已启用模型'
 )
 

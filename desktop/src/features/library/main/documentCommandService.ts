@@ -62,6 +62,7 @@ export class DocumentCommandService {
     if (!this.compute.importPdf) throw new Error('核心导入服务尚未初始化')
     const settings = await this.settingsService.get()
     assertParserCredentialUsable(settings)
+    if (!settings.enabledTranslationProviders.length) throw new Error('未配置翻译来源，请先在服务连接中启用来源')
     await mkdir(settings.outputRoot, { recursive: true })
     const documentsRoot = join(settings.outputRoot, 'documents-v2')
     await mkdir(documentsRoot, { recursive: true })

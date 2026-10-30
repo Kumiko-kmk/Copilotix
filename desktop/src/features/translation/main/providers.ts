@@ -1,4 +1,7 @@
-import PQueue from 'p-queue'
+import { postCompletion, completionUsage, CompletionHttpError as TranslationHttpError } from '@platform/models/main/completionTransport'
+export { TranslationHttpError }
+import { connectionFor, sharedModelRuntime } from '@platform/models/main/modelRuntime'
+import type { ModelConnection, ModelUsage } from '@platform/models/contract/models'
 import type { AppSettings, CredentialName } from '@features/settings/contract/settingsTypes'
 import type { HealthResult } from '@features/library/contract/documentTypes'
 import type { TranslationProviderId } from '../contract/translationTypes'
@@ -16,15 +19,6 @@ import type { ProviderTokenUsage } from '@features/settings/main'
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 type UsageObserver = (provider: 'qwen' | 'deepseek', usage: ProviderTokenUsage) => void | Promise<void>
 
-const PROVIDER_CONCURRENCY: Readonly<Record<TranslationProviderId, number>> = Object.freeze({
-  codex: 8,
-  qwen: 16,
-  deepseek: 16,
-  bing: 1,
-  transmart: 1
-})
-const MIN_RATE_LIMIT_BACKOFF_MS = 1_000
-const MAX_RATE_LIMIT_BACKOFF_MS = 60_000
 
 export interface TranslationProvider {
   readonly id: TranslationProviderId
@@ -36,15 +30,6 @@ export interface TranslationProvider {
   translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse>
 }
 
-export class TranslationHttpError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly retryAfterMs?: number
-  ) {
-    super(message)
-  }
-}
 
 export class TranslationCredentialError extends Error {
   constructor(
@@ -61,15 +46,16 @@ abstract class QueuedProvider implements TranslationProvider {
   abstract readonly id: TranslationProviderId
   abstract readonly model: string
   abstract isAvailable(): Promise<boolean>
-  protected abstract translateDirect(text: string, signal?: AbortSignal): Promise<string>
-  protected abstract translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse>
+  protected abstract connection(): Promise<ModelConnection>
+  protected abstract translateDirect(text: string, signal?: AbortSignal): Promise<{ value: string; usage: ModelUsage | null }>
+  protected abstract translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<{ value: TableTranslationResponse; usage: ModelUsage | null }>
 
   translate(text: string, signal?: AbortSignal): Promise<string> {
-    return sharedProviderLimiter(this.id).run(() => this.translateDirect(text, signal), signal)
+    return this.connection().then(connection => sharedModelRuntime.execute({ purpose: 'translation', model: this.model, lane: 'background', candidates: [connection], signal: signal ?? new AbortController().signal }, () => this.translateDirect(text, signal))).then(result => result.value)
   }
 
   translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
-    return sharedProviderLimiter(this.id).run(() => this.translateTableDirect(request, signal), signal)
+    return this.connection().then(connection => sharedModelRuntime.execute({ purpose: 'translation', model: this.model, lane: 'background', candidates: [connection], signal: signal ?? new AbortController().signal }, () => this.translateTableDirect(request, signal))).then(result => result.value)
   }
 }
 
@@ -85,6 +71,10 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     private readonly onUsage?: UsageObserver
   ) {
     super()
+  }
+
+  protected async connection(): Promise<ModelConnection> {
+    return connectionFor(this.id, this.baseUrl, await this.vault.get(this.credentialAccount) ?? '')
   }
 
   get credentialName(): 'qwen' | 'deepseek' {
@@ -119,38 +109,22 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
   }
 
-  protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
+  protected async translateDirect(text: string, signal?: AbortSignal): Promise<{ value: string; usage: ModelUsage | null }> {
     const apiKey = await this.vault.get(this.credentialAccount)
     if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
     return this.translateText(apiKey, text, signal)
   }
 
-  private async translateText(apiKey: string, text: string, signal?: AbortSignal): Promise<string> {
-    const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(translationRequestBody(this.id, this.model, text)),
-      signal: requestSignal(signal, 90_000)
-    })
-    if (!response.ok) throw await toHttpError(response, `${this.id} 翻译失败`)
-    const payload: unknown = await response.json()
+  private async translateText(apiKey: string, text: string, signal?: AbortSignal): Promise<{ value: string; usage: ModelUsage | null }> {
+    const payload = await postCompletion(this.fetcher, this.id, this.baseUrl, apiKey, translationRequestBody(this.id, this.model, text), signal)
     await this.reportUsage(payload)
-    return openAiResponseContent(payload, this.id)
+    return { value: openAiResponseContent(payload, this.id), usage: completionUsage(payload) }
   }
 
-  protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
+  protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<{ value: TableTranslationResponse; usage: ModelUsage | null }> {
     const apiKey = await this.vault.get(this.credentialAccount)
     if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
-    const response = await this.fetcher(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+    const payload = await postCompletion(this.fetcher, this.id, this.baseUrl, apiKey, {
         model: this.model,
         ...(this.id === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
         temperature: 0.1,
@@ -162,152 +136,15 @@ class OpenAiCompatibleProvider extends QueuedProvider {
           },
           { role: 'user', content: JSON.stringify(request) }
         ]
-      }),
-      signal: requestSignal(signal, 90_000)
-    })
-    if (!response.ok) throw await toHttpError(response, `${this.id} 表格翻译失败`)
-    const payload: unknown = await response.json()
+      }, signal)
     await this.reportUsage(payload)
     const content = openAiResponseContent(payload, this.id)
-    return parseTableTranslationResponse(content, request)
+    return { value: parseTableTranslationResponse(content, request), usage: completionUsage(payload) }
   }
 
   private async reportUsage(payload: unknown): Promise<void> {
-    const usage = openAiTokenUsage(payload)
+    const usage = completionUsage(payload)
     if (usage && this.onUsage) await this.onUsage(this.id, usage)
-  }
-}
-
-class BingProvider extends QueuedProvider {
-  readonly id = 'bing' as const
-  readonly model = 'bing-translator-web'
-  private session: { ig: string; iid: string; key: string; token: string; expiresAt: number } | null = null
-
-  constructor(private readonly fetcher: Fetcher) {
-    super()
-  }
-
-  async isAvailable(): Promise<boolean> {
-    return true
-  }
-
-  protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
-    return this.translateRemoteText(text, signal)
-  }
-
-  protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
-    const segments = flattenSegments(request)
-    const translations: Array<{ id: string; text: string }> = []
-    for (const segment of segments) {
-      translations.push({ id: segment.id, text: await this.translateRemoteText(segment.text, signal) })
-    }
-    return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
-  }
-
-  private async translateRemoteText(text: string, signal?: AbortSignal): Promise<string> {
-    const session = await this.getSession()
-    const body = new URLSearchParams({
-      fromLang: 'auto-detect',
-      text,
-      to: 'zh-Hans',
-      token: session.token,
-      key: session.key
-    })
-    const url = `https://www.bing.com/ttranslatev3?isVertical=1&IG=${encodeURIComponent(session.ig)}&IID=${encodeURIComponent(session.iid)}`
-    const response = await this.fetcher(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-      body,
-      signal: requestSignal(signal, 45_000)
-    })
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) this.session = null
-      throw await toHttpError(response, 'Bing 翻译接口暂不可用')
-    }
-    const payload: unknown = await response.json()
-    return bingResponseText(payload)
-  }
-
-  private async getSession(): Promise<NonNullable<BingProvider['session']>> {
-    if (this.session && this.session.expiresAt > Date.now()) return this.session
-    const response = await this.fetcher('https://www.bing.com/translator', {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(30_000)
-    })
-    if (!response.ok) throw await toHttpError(response, '无法初始化 Bing 翻译会话')
-    const html = await response.text()
-    const ig = html.match(/IG:"([^"]+)"/)?.[1]
-    const helper = html.match(/params_AbusePreventionHelper\s*=\s*\[(\d+),\s*"([^"]+)"/)
-    if (!ig || !helper?.[1] || !helper[2]) throw new Error('Bing 页面格式已变化，请改用其他翻译源')
-    this.session = {
-      ig,
-      iid: 'translator.5028.1',
-      key: helper[1],
-      token: helper[2],
-      expiresAt: Date.now() + 20 * 60 * 1000
-    }
-    return this.session
-  }
-}
-
-class TransmartProvider extends QueuedProvider {
-  readonly id = 'transmart' as const
-  readonly model = 'transmart-web'
-
-  constructor(private readonly fetcher: Fetcher) {
-    super()
-  }
-
-  async isAvailable(): Promise<boolean> {
-    return true
-  }
-
-  protected async translateDirect(text: string, signal?: AbortSignal): Promise<string> {
-    const translated = await this.translateRemoteTexts([text], signal)
-    return translated[0]!
-  }
-
-  protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
-    const segments = flattenSegments(request)
-    if (segments.length === 0) {
-      return { protocol: TABLE_TRANSLATION_PROTOCOL, translations: [] }
-    }
-    const translated = await this.translateRemoteTexts(segments.map((segment) => segment.text), signal)
-    const translations = segments.map((segment, index) => ({ id: segment.id, text: translated[index]! }))
-    return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
-  }
-
-  private async translateRemoteTexts(texts: string[], signal?: AbortSignal): Promise<string[]> {
-    const response = await this.fetcher('https://transmart.qq.com/api/imt', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Origin: 'https://transmart.qq.com',
-        Referer: 'https://transmart.qq.com/zh-CN/index'
-      },
-      body: JSON.stringify({
-        header: { fn: 'auto_translation', client_key: 'browser-chrome-1.0.0' },
-        type: 'plain',
-        model_category: 'normal',
-        source: { lang: 'auto', text_list: texts },
-        target: { lang: 'zh' }
-      }),
-      signal: requestSignal(signal, 45_000)
-    })
-    if (!response.ok) throw await toHttpError(response, 'TranSmart 翻译接口暂不可用')
-    const payload: unknown = await response.json()
-    const root = asRecord(payload)
-    const translated = root?.auto_translation ?? asRecord(root?.target)?.text_list
-    if (!Array.isArray(translated)) throw new Error('TranSmart 返回了无法识别的结果')
-    if (translated.length !== texts.length) {
-      throw new Error(`TranSmart 批量响应数量不匹配：预期 ${texts.length}，实际 ${translated.length}`)
-    }
-    return translated.map((value: unknown, index: number) => {
-      if (typeof value !== 'string' || !value.trim()) {
-        throw new Error(`TranSmart 批量响应第 ${index + 1} 项为空或无效`)
-      }
-      return value
-    })
   }
 }
 
@@ -338,15 +175,6 @@ function openAiResponseContent(payload: unknown, providerId: string): string {
   }
 }
 
-function bingResponseText(payload: unknown): string {
-  const first = Array.isArray(payload) ? asRecord(payload[0]) : null
-  const translations = first?.translations
-  const firstTranslation = Array.isArray(translations) ? asRecord(translations[0]) : null
-  const text = firstTranslation?.text
-  if (typeof text !== 'string' || !text.trim()) throw new Error('Bing 返回了无法识别的结果')
-  return text.trim()
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -373,27 +201,8 @@ export function createTranslationProviders(
         settings.credentials.deepseek.state,
         onUsage
       )
-    ],
-    ['bing', new BingProvider(fetcher)],
-    ['transmart', new TransmartProvider(fetcher)]
+    ]
   ])
-}
-
-function openAiTokenUsage(payload: unknown): ProviderTokenUsage | null {
-  const usage = asRecord(asRecord(payload)?.usage)
-  const promptTokens = nonNegativeUsageInteger(usage?.prompt_tokens)
-  const completionTokens = nonNegativeUsageInteger(usage?.completion_tokens)
-  const totalTokens = nonNegativeUsageInteger(usage?.total_tokens)
-  if (totalTokens === null && promptTokens === null && completionTokens === null) return null
-  return {
-    promptTokens: promptTokens ?? 0,
-    completionTokens: completionTokens ?? 0,
-    totalTokens: totalTokens ?? (promptTokens ?? 0) + (completionTokens ?? 0)
-  }
-}
-
-function nonNegativeUsageInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
 /** Validate a candidate OpenAI-compatible credential without touching the vault. */
@@ -495,97 +304,4 @@ function translationRequestBody(providerId: 'qwen' | 'deepseek', model: string, 
 
 function isQwenMtModel(providerId: 'qwen' | 'deepseek', model: string): boolean {
   return providerId === 'qwen' && /^qwen-mt(?:-|$)/iu.test(model.trim())
-}
-
-async function toHttpError(response: Response, prefix: string): Promise<TranslationHttpError> {
-  const retryAfter = response.headers.get('retry-after')
-  const retryAfterMs = parseRetryAfter(retryAfter)
-  // Do not copy a provider response body into an Error.  Some gateways echo
-  // request data (including an API key) in error payloads; keeping the body out
-  // of the error prevents it from reaching task state or logs.
-  return new TranslationHttpError(
-    `${prefix}（HTTP ${response.status}）`,
-    response.status,
-    Number.isFinite(retryAfterMs) ? retryAfterMs : undefined
-  )
-}
-
-class SharedProviderLimiter {
-  private readonly queue: PQueue
-  private blockedUntil = 0
-  private nextBackoffMs = MIN_RATE_LIMIT_BACKOFF_MS
-
-  constructor(concurrency: number) {
-    this.queue = new PQueue({ concurrency })
-  }
-
-  run<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-    const options = signal ? { signal } : undefined
-    return this.queue.add(async () => {
-      while (this.blockedUntil > Date.now()) await waitUntil(this.blockedUntil, signal)
-      try {
-        const result = await operation()
-        this.nextBackoffMs = MIN_RATE_LIMIT_BACKOFF_MS
-        return result
-      } catch (error) {
-        if (error instanceof TranslationHttpError && error.status === 429) {
-          const delayMs = Math.min(
-            MAX_RATE_LIMIT_BACKOFF_MS,
-            Math.max(MIN_RATE_LIMIT_BACKOFF_MS, error.retryAfterMs ?? this.nextBackoffMs)
-          )
-          this.blockedUntil = Math.max(this.blockedUntil, Date.now() + delayMs)
-          this.nextBackoffMs = Math.min(MAX_RATE_LIMIT_BACKOFF_MS, delayMs * 2)
-        }
-        throw error
-      }
-    }, options) as Promise<T>
-  }
-}
-
-const sharedProviderLimiters = new Map<TranslationProviderId, SharedProviderLimiter>()
-
-function sharedProviderLimiter(provider: TranslationProviderId): SharedProviderLimiter {
-  let limiter = sharedProviderLimiters.get(provider)
-  if (!limiter) {
-    limiter = new SharedProviderLimiter(PROVIDER_CONCURRENCY[provider])
-    sharedProviderLimiters.set(provider, limiter)
-  }
-  return limiter
-}
-
-function parseRetryAfter(value: string | null): number | undefined {
-  if (!value) return undefined
-  const seconds = Number(value)
-  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000
-  const timestamp = Date.parse(value)
-  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined
-}
-
-async function waitUntil(timestamp: number, signal?: AbortSignal): Promise<void> {
-  const delayMs = timestamp - Date.now()
-  if (delayMs <= 0) return
-  if (signal?.aborted) throw abortError()
-  await new Promise<void>((resolve, reject) => {
-    const finish = (operation: () => void): void => {
-      clearTimeout(timer)
-      signal?.removeEventListener('abort', onAbort)
-      operation()
-    }
-    const timer = setTimeout(() => finish(resolve), delayMs)
-    const onAbort = (): void => {
-      finish(() => reject(abortError()))
-    }
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
-}
-
-function abortError(): Error {
-  const error = new Error('Translation request aborted')
-  error.name = 'AbortError'
-  return error
-}
-
-function requestSignal(jobSignal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeoutSignal = AbortSignal.timeout(timeoutMs)
-  return jobSignal ? AbortSignal.any([jobSignal, timeoutSignal]) : timeoutSignal
 }

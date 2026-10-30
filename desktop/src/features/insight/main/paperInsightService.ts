@@ -1,7 +1,8 @@
+import { ModelConnectionUnavailable } from '@platform/models/runtime/modelRuntime'
 import { z } from 'zod'
 import { lstat, open } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
-import { setTimeout as sleep } from 'node:timers/promises'
+
 import { buildFullBriefContext, PaperBriefInputError } from '../core/paperBrief/context'
 import { briefSourceSchema, briefContextResultSchema, type BriefSource } from '../core/paperBrief/contracts'
 import { paperBriefModelOutputSchema } from '../core/paperBrief/schema'
@@ -220,7 +221,7 @@ export class PaperInsightService {
           return this.deps.stream({
           provider: streamAuth.provider, model: streamAuth.model, key: streamAuth.key,
           baseUrl: streamAuth.provider === 'qwen' ? streamAuth.settings.qwenBaseUrl : streamAuth.settings.deepseekBaseUrl,
-          signal, messages, lane: 'background', firstByteMs: 120_000, ...(streamAuth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
+          signal, messages, purpose: 'brief', lane: 'background', firstByteMs: 120_000, ...(streamAuth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
           onDelta: (delta) => {
             signal.throwIfAborted()
             if (answer.length + delta.length > 32_768) throw new Error('output budget exceeded')
@@ -229,8 +230,8 @@ export class PaperInsightService {
           })
         }, auth.provider, signal) } catch (error) {
           // Codex already backed off and retried; an oversized paper would not fit a smaller model either.
-          const next = auth.provider === 'codex' && !signal.aborted && !(error instanceof CodexGenerationError && error.code === 'RAG_LIMIT_EXCEEDED') &&
-            (error instanceof CodexGenerationError || codexFailure(error).retryable) ? await this.fallbackProvider() : undefined
+          const next = auth.provider === 'codex' && !answer && !signal.aborted && !(error instanceof CodexGenerationError && error.code === 'RAG_LIMIT_EXCEEDED') &&
+            (error instanceof ModelConnectionUnavailable || error instanceof CodexGenerationError || codexFailure(error).retryable) ? await this.fallbackProvider() : undefined
           if (!next) throw error
           switchTo(next, failureCategory(error)); attempt = -1
           continue
@@ -330,18 +331,9 @@ export class PaperInsightService {
 }
 
 /** Network retries are bounded separately from the one structured-output repair. */
-async function withBriefTransportRetry<T>(operation: () => Promise<T>, provider: PaperChatProvider, signal: AbortSignal): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    signal.throwIfAborted()
-    try { return await operation() } catch (error) {
-      // Codex already owns its account-wide adaptive retry policy.
-      if (provider === 'codex' || signal.aborted || attempt >= 2 || !(error instanceof ChatProviderError)
-        || !['EMBEDDING_RATE_LIMITED', 'RAG_TIMEOUT', 'PROVIDER_UNAVAILABLE'].includes(error.code)) throw error
-      const delayMs = error.retryAfterMs ?? 1_000 * 2 ** attempt
-      if (delayMs > 60_000) throw error
-      await sleep(delayMs, undefined, { signal })
-    }
-  }
+async function withBriefTransportRetry<T>(operation: () => Promise<T>, _provider: PaperChatProvider, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted()
+  return operation()
 }
 
 /** Field paths and display lengths from parser hints (e.g. "analysis.abstract:178"); never generated text. */

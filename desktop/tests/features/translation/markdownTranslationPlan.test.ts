@@ -11,6 +11,7 @@ import { MarkdownTranslationPlanManager } from '../../../src/features/translatio
 import { V2Database } from '../../../src/platform/database/utility/v2Database'
 import { V2TaskRepositoryCompat } from '../../../src/features/library/utility/v2TaskRepositoryCompat'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
+import { documentModels } from '@features/document/utility'
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111'
 const roots: string[] = []
@@ -79,6 +80,26 @@ function closeFixture(fixture: Fixture): void {
 }
 
 describe('utility markdown translation plan manager', () => {
+  it('uses the registered document source for both plan identity and translation content', async () => {
+    const fixture = await createFixture('# Stale conventional file\n')
+    const previousSourceFiles = documentModels.sourceFiles
+    const registeredMarkdown = '# Registered source\n\nTranslate this current paragraph.\n'
+    try {
+      await writeFile(join(fixture.outputDir, 'registered.md'), registeredMarkdown, 'utf8')
+      documentModels.sourceFiles = () => ['registered.md', 'block_list.json', 'layout.json']
+      const manager = new MarkdownTranslationPlanManager(fixture.repository)
+      const opened = await manager.open(fixture.task.id, fixture.jobId)
+      expect(opened.sourceHash).toBe(createHash('sha256').update(registeredMarkdown).digest('hex'))
+      const work = await manager.listWork(fixture.task.id, fixture.jobId)
+      const requests = await Promise.all(work.items.map(item => readFile(absolutePath(fixture.outputDir, item.requestPath), 'utf8')))
+      expect(requests.join('\n')).toContain('Registered source')
+      expect(requests.join('\n')).not.toContain('Stale conventional file')
+    } finally {
+      documentModels.sourceFiles = previousSourceFiles
+      closeFixture(fixture)
+    }
+  })
+
   it('keeps references and protected blocks complete and repairs old false failures on reopen', async () => {
     const fixture = await createFixture('```js\nconst x = 1\n```\n\n# References\n\n[1] Smith. A paper, 2020.\n')
     try {

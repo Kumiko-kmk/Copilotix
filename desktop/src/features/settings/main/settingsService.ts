@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { sharedModelRuntime, configureModelConnections } from '@platform/models/main/modelRuntime'
 import type {
   AppSettings,
   CredentialFieldError,
@@ -78,6 +79,7 @@ export class SettingsService {
 
   async get(): Promise<AppSettings> {
     const settings = internalProviderSettings(await this.repository.getSettings(this.defaultOutputRoot))
+    configureModelConnections(settings.modelConnections)
     const [parserValue, qwenValue, deepseekValue] = await Promise.all([
       this.vault.get('parser-token'),
       this.vault.get('qwen-api-key'),
@@ -115,6 +117,7 @@ export class SettingsService {
         : await this.probe.provider(name, normalized, settings)
       const validation = validationFromHealth(result)
       if (validatingStored && validation.state === 'valid') {
+        if (name !== 'parser') sharedModelRuntime.reset(`${name}:default`)
         const cached = {
           fingerprint: fingerprint(normalized),
           configFingerprint: configFingerprint(name, settings),
@@ -184,7 +187,7 @@ export class SettingsService {
       formulaEnabled: true,
       tableEnabled: true,
       enabledTranslationProviders,
-      translationProvider: enabledTranslationProviders[0]!
+      translationProvider: enabledTranslationProviders[0] ?? null
     }
     // A provider's validation is tied to its endpoint. Changing the endpoint
     // or model must return that credential to the pending state until it has
@@ -242,6 +245,7 @@ export class SettingsService {
           this.validations.set(entry.name, validation)
           await this.persistValidation(entry.name, validation)
         }
+        if (entry.name !== 'parser') sharedModelRuntime.reset(entry.name + ':default')
       } catch {
         fieldErrors[entry.name] = {
           code: 'CREDENTIAL_STORAGE_FAILED',

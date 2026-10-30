@@ -53,3 +53,8 @@ debug/
 *.p12
 *.key
 *.pem
+
+# Workspace-local isolated test libraries
+desktop/.test-tmp/
+
+desktop/baseline-e2e-results/

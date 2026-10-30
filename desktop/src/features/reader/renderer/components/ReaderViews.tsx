@@ -1,3 +1,4 @@
+import type { ReaderFigureGeometry } from '@features/document/core'
 import { registerSavedFigureCrops } from './ReaderFigureSnapshot'
 import React from 'react'
 import type { ReaderNote } from '../../contract/readerNotes'
@@ -63,6 +64,7 @@ export interface ReaderViewSpec {
 export type ReaderViewSpecs = Partial<Record<ReaderViewId, ReaderViewSpec>>
 
 export interface ReaderViewsInput {
+  figureGeometries?: ReaderFigureGeometry[]
   pdfUrl?: string
   mappings?: BlockMapping[]
   layoutJson?: string
@@ -128,7 +130,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   const translatedNotes = React.useMemo(() => (props.notes ?? []).filter((note) => note.view === 'translated'), [props.notes])
   // Registered during render: figure snapshots start in effects that run before this component's.
   if (props.pdfUrl) registerSavedFigureCrops(props.pdfUrl, props.assetBaseUrl)
-  const figureGeometries = React.useMemo(() => buildReaderFigureGeometries(mappings, props.layoutJson), [mappings, props.layoutJson])
+  const figureGeometries = React.useMemo(() => props.figureGeometries ?? buildReaderFigureGeometries(mappings, props.layoutJson), [props.figureGeometries, mappings, props.layoutJson])
   useFigureArtifacts(props.taskId, props.pdfUrl, figureGeometries)
   const figureDisplay = useFigureDisplayChoices(props.taskId)
   // Figures are grouped on the unedited blocks, then re-indexed to the shown ones; a group keeps its

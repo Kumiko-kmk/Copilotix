@@ -85,7 +85,7 @@ export class CodexTranslationProvider implements TranslationProvider {
   }
   private async run(system: string, text: string, signal: AbortSignal, outputSchema?: unknown): Promise<string> {
     let answer = ''
-    const usage = await this.runtime.generate({ model: this.model, signal, lane: 'background', effort: 'low', outputSchema,
+    const usage = await this.runtime.generate({ purpose: 'translation', model: this.model, signal, lane: 'background', effort: 'low', outputSchema,
       messages: [{ role: 'system', content: system }, { role: 'user', content: text }], onDelta: delta => { answer += delta } })
     if (usage) await this.onUsage?.(usage)
     return answer

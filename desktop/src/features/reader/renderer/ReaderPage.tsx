@@ -1,3 +1,4 @@
+import { loadDocumentBase } from '@features/document/renderer'
 import { paperSelectionText } from '../core/paperSelectionText'
 import { readerContentMappings, buildReaderBase, buildTranslatedBase, withReaderEdits } from '../core/readerDocument'
 import type { PdfBlockMenu } from './components/PdfPane'
@@ -63,7 +64,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
 
   const documentQuery = useQuery<DocumentDetails>({
     queryKey: ['document', props.documentId],
-    queryFn: () => window.copilotix.getDocument(props.documentId)
+    queryFn: () => window.copilotix.getDocument(props.documentId).then(loadDocumentBase)
   })
   const originalAnnotations = useAnnotationQuery(props.documentId, 'original')
   const translatedAnnotations = useAnnotationQuery(props.documentId, 'translated')
@@ -96,7 +97,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   const mappings = document?.mappings ?? EMPTY_MAPPINGS
   const markdownEdits = document?.markdownEdits ?? null
   // Parsed and translated blocks are built once; an edit only re-applies the edit layer on top.
-  const readerBase = React.useMemo(() => buildReaderBase(markdown, mappings), [markdown, mappings])
+  const readerBase = React.useMemo(() => document?.base ?? buildReaderBase(markdown, mappings), [document?.base, markdown, mappings])
   const translatedBase = React.useMemo(
     () => buildTranslatedBase(readerBase, translatedMarkdown, translatedSourceBlocks, mappings),
     [readerBase, mappings, translatedMarkdown, translatedSourceBlocks]
@@ -373,6 +374,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           pdfUrl: document.pdfUrl,
           mappings: document.mappings,
           layoutJson: document.layoutJson,
+          figureGeometries: document.base?.figures,
           originalBlocks,
           translatedBlocks,
           originalBaseBlocks: readerBase.original,

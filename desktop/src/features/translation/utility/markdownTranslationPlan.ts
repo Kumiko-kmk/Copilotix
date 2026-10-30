@@ -1,15 +1,13 @@
+import { documentModels } from '@features/document/utility'
 import { randomUUID } from 'node:crypto'
 import { prepareReaderMarkdown, READER_MARKDOWN_FORMAT_VERSION } from '@platform/markdown/core/standardMarkdown'
 import { lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { z } from 'zod'
 import type { TranslationBatchBlock, TranslationBatchCommit, TranslationCacheEntry } from '../contract/translationBatch'
-import { BLOCK_MAPPING_VERSION, alignMarkdownBlocks, type AlignedMarkdownBlock } from '@features/parsing/core'
+import { BLOCK_MAPPING_VERSION, type AlignedMarkdownBlock } from '@features/parsing/core'
 import type { BlockMapping } from '@features/parsing/contract/blocks'
 import type { TranslationBlockRecord, TranslationProviderId } from '../contract/translationTypes'
-import { blockMappingSchema } from '@features/parsing/contract/blockSchemas'
 import { resolveMarkdownEdits, type MarkdownEditsFile } from '@features/reader/contract/markdownEdits'
-import { readerContentMappings } from '@features/reader/core'
 import { readMarkdownEditsFile } from '@features/reader/runtime'
 import { MARKDOWN_MAPPING_ALGORITHM_VERSION, TABLE_TRANSLATION_CACHE_VERSION, TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, plainTranslationResponseSchema, tableTranslationRequestSchema, tableTranslationResponseSchema, translationCacheKey, translationPlanFinalizeResultSchema, translationPlanListResultSchema, translationPlanOpenResultSchema, translationPlanResponseEnvelopeSchema, type PlainTranslationRequest, type PlainTranslationResponse, type TableTextSegment, type TableTranslationResponse, type TranslationPlanFinalizeResult, type TranslationPlanListResult, type TranslationPlanMutationResult, type TranslationPlanOpenResult, type TranslationPlanResponse, type TranslationPlanWorkDescriptor } from '../contract/translationPlanProtocol'
 import { applyTableTranslation, buildTableTranslationUnits, type TableTranslationUnit } from './tableTranslation'
@@ -43,8 +41,9 @@ export class MarkdownTranslationPlanManager {
     const binding = this.repository.requireTranslationJobBinding(taskId, jobId)
     await this.assertBindingOutputDir(binding)
     await mkdir(binding.outputDir, { recursive: true })
-    const sourceMarkdown = await this.readOutputFile(binding.outputDir, 'full.md')
-    const mappings = await this.readMappings(binding.outputDir)
+    const model = await documentModels.ensureBase(taskId, binding.outputDir)
+    const sourceMarkdown = model.markdown
+    const mappings = model.mappings
     // The reader's edit layer: edited originals are translated as edited, deleted blocks not at all.
     // Its fingerprint joins the source hash so an edit rebuilds the plan; unchanged units still hit the cache.
     const edits = await readMarkdownEditsFile(binding.outputDir, taskId)
@@ -57,7 +56,7 @@ export class MarkdownTranslationPlanManager {
     const key = planKey(taskId, jobId)
     const planPath = this.resolveOutputPath(binding.outputDir, `.translation/${jobId}/plan.json`)
     const existingMetadata = await this.readMetadata(planPath)
-    const candidate = this.buildState(binding, sourceMarkdown, mappings, sourceHash, mappingHash, existingMetadata, editFingerprint.length ? edits : null, previous)
+    const candidate = this.buildState(binding, sourceMarkdown, model.content, model.sourceVersion, edits.revision, mappings, sourceHash, mappingHash, existingMetadata, editFingerprint.length ? edits : null, previous)
     const planMatches = existingMetadata !== null && this.metadataMatches(existingMetadata, candidate)
 
     if (!planMatches) {
@@ -224,6 +223,7 @@ export class MarkdownTranslationPlanManager {
     const manifestRelativePath = 'translation.manifest.json'
     const checkpointRelativePath = 'translation.checkpoint.json'
     const manifest = {
+      sourceVersion: state.sourceVersion,
       version: 2,
       mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
       markdownFormat: READER_MARKDOWN_FORMAT_VERSION,
@@ -300,7 +300,11 @@ export class MarkdownTranslationPlanManager {
     const existing = this.plans.get(planKey(taskId, jobId))
     if (existing) {
       const binding = this.repository.requireTranslationJobBinding(taskId, jobId)
-      if (binding.outputDir === existing.binding.outputDir && binding.attempt === existing.binding.attempt) return existing
+      if (binding.outputDir === existing.binding.outputDir && binding.attempt === existing.binding.attempt) {
+        const [base, edits] = await Promise.all([documentModels.ensureBase(taskId, binding.outputDir), readMarkdownEditsFile(binding.outputDir, taskId)])
+        if (base.sourceVersion !== existing.sourceVersion || edits.revision !== existing.editRevision) throw new Error('文档或编辑版本已变化，请重新执行翻译；已完成结果保留')
+        return existing
+      }
     }
     await this.open(taskId, jobId)
     const state = this.plans.get(planKey(taskId, jobId))
@@ -311,6 +315,9 @@ export class MarkdownTranslationPlanManager {
   private buildState(
     binding: TranslationJobBinding,
     sourceMarkdown: string,
+    canonical: AlignedMarkdownBlock[],
+    sourceVersion: string,
+    editRevision: number,
     mappings: BlockMapping[],
     sourceHash: string,
     mappingHash: string,
@@ -318,13 +325,13 @@ export class MarkdownTranslationPlanManager {
     edits: MarkdownEditsFile | null = null,
     previous: PreviousManifest | null = null
   ): PlanState {
-    const sourceBlocks = alignMarkdownBlocks(sourceMarkdown, mappings)
+    const sourceBlocks = canonical.map(block => ({ ...block }))
     const deleted = new Set<number>()
     /** Blocks the user asked to translate again, with the time of the request. */
     const requested = new Map<number, string>()
     if (edits) {
       // Positions are the reader's; both alignments split the Markdown identically.
-      const { byIndex } = resolveMarkdownEdits(alignMarkdownBlocks(sourceMarkdown, readerContentMappings(mappings)), edits, sha256)
+      const { byIndex } = resolveMarkdownEdits(canonical, edits, sha256, sourceVersion)
       for (const [index, entry] of byIndex) {
         if (!sourceBlocks[index]) continue
         if (entry.deletedAt) deleted.add(index)
@@ -390,6 +397,7 @@ export class MarkdownTranslationPlanManager {
     const expectedPlanId = stableUuid(`plan|${binding.taskId}|${binding.jobId}|${binding.translationProvider}`)
     const planId = existing?.planId === expectedPlanId ? existing.planId : expectedPlanId
     const state: PlanState = {
+      sourceVersion, editRevision,
       binding,
       taskId: binding.taskId,
       jobId: binding.jobId,
@@ -889,16 +897,6 @@ export class MarkdownTranslationPlanManager {
     } catch {
       return null
     }
-  }
-
-  private async readMappings(root: string): Promise<BlockMapping[]> {
-    const parsed = parseJson(await this.readOutputFile(root, 'block_list.json'))
-    const list = z.object({
-      version: z.literal(this.blockMappingVersion),
-      mappings: z.array(blockMappingSchema).max(100_000)
-    }).strict().safeParse(parsed)
-    if (!list.success) throw new Error('block_list.json 内容无效或版本不匹配')
-    return list.data.mappings
   }
 
   private async readOutputFile(root: string, relativePath: string): Promise<string> {

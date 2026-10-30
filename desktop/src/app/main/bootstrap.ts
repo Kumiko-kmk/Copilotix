@@ -1,3 +1,4 @@
+import { sharedModelRuntime } from '@platform/models/main/modelRuntime'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { app, dialog, nativeImage, net, protocol, session, shell } from 'electron'
@@ -80,6 +81,7 @@ export async function bootstrap(): Promise<void> {
   await settings.initialize()
   const logger = new JsonLineLogger(join(userData, 'copilotix-desktop.log'))
   const usageAnalytics = new UsageAnalyticsService(join(userData, 'usage-analytics-v1.json'))
+  sharedModelRuntime.onUsage(result => usageAnalytics.recordTokens(result.provider, result.usage!))
   const codex = new CodexRuntime(join(userData, 'codex-runtime'), async () => (await settings.get()).codex ?? DEFAULT_CODEX_SETTINGS, (event, details) => logger.info(event, details))
   services.codex = codex
   const chatProvider = new ChatProvider(fetcher, { invalidate: (provider) => settings.invalidateCredential(provider) })
@@ -103,7 +105,7 @@ export async function bootstrap(): Promise<void> {
       const jpeg = image.toJPEG(98)
       return jpeg.length < png.length ? { bytes: jpeg, mimeType: 'image/jpeg', jpegQuality: 98 } : { bytes: png, mimeType: 'image/png' }
     },
-    recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
+    recordUsage: async () => undefined,
     canStart: canStartBackground,
     changed: (request, state) => {
       const contents = toRenderer()
@@ -122,7 +124,7 @@ export async function bootstrap(): Promise<void> {
     key: providerKey,
     buildContext: (request, signal) => utility.request('chat:build-context', request, { signal, timeoutMs: 10_000 }),
     stream: (input) => modelGateway.stream(input),
-    recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
+    recordUsage: async () => undefined,
     log: (details) => logger.info('paper-chat', details),
     figure: (request, signal) => utility.request('compute:paper-chat-figure', request, { signal, timeoutMs: 30_000 }),
     imageInput: async (provider, model) => provider === 'codex'
@@ -144,7 +146,7 @@ export async function bootstrap(): Promise<void> {
     context: (documentId, signal) => loadFullBriefContext(documentId, signal, () => utility.request('insight:brief-source', { documentId }, { signal, timeoutMs: 10_000 })),
     save: (documentId, brief, anchors) => utility.request('insight:save-brief', { documentId, brief, anchors }),
     stream: (input) => modelGateway.stream(input),
-    recordUsage: (provider, usage) => usageAnalytics.recordTokens(provider, usage),
+    recordUsage: async () => undefined,
     canStart: canStartBackground,
     hasText: async documentId => (await utility.request('insight:brief-source', { documentId }, { timeoutMs: 10_000 })).sources.length > 0,
     log: (details) => logger.info('paper-insight', details),
@@ -251,7 +253,11 @@ export async function bootstrap(): Promise<void> {
     figureDisplay: new FigureDisplayStore(async (documentId) => (await repository.getTask(documentId))?.outputDir ?? null),
     notes,
     annotations: () => repository,
-    applyEdit: (request) => utility.request('markdown-edits:apply', request, { timeoutMs: 30_000 }),
+    applyEdit: async (request) => {
+      const result = await utility.request('markdown-edits:apply', request, { timeoutMs: 30_000 })
+      feed.refresh({ documentId: request.documentId, kind: 'edit', version: String(result.revision) })
+      return result
+    },
     resolvedEdits: (documentId) => tasks.resolvedEdits(documentId),
     cacheFigure: (request) => tasks.cacheFigure(request)
   })

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CodexBackoff, CodexRuntime, CODEX_OVERRIDES, CODEX_BACKGROUND_CONCURRENCY, turnError } from '../../src/platform/codex/runtime/codexRuntime'
+import { CodexRuntime, CODEX_OVERRIDES, CODEX_BACKGROUND_CONCURRENCY, turnError } from '../../src/platform/codex/runtime/codexRuntime'
+import { sharedModelRuntime } from '@platform/models/runtime/modelRuntime'
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 
 const state = vi.hoisted(() => ({ scenario: 'success', starts: [] as unknown[], turns: [] as unknown[], connections: [] as EventEmitter[], snapshot: '', failTurns: 0, errorInfo: null as unknown }))
@@ -50,15 +51,16 @@ afterEach(() => { state.snapshot = ''; state.scenario = 'success'; state.starts 
 const RATE_LIMITED = { responseTooManyFailedAttempts: { httpStatusCode: 429 } }
 function fixture() {
   const log = vi.fn()
-  const runtime = new CodexRuntime('C:/work', async () => ({ ...DEFAULT_CODEX_SETTINGS, executable: 'C:/Codex/codex.exe' }), log, { attempts: 3, rateLimitMs: 1, transientMs: 1, maxMs: 4 })
+  const runtime = new CodexRuntime('C:/work', async () => ({ ...DEFAULT_CODEX_SETTINGS, executable: 'C:/Codex/codex.exe' }), log)
   const delta = vi.fn(), controller = new AbortController()
   const input = { model: 'test-model', messages: [{ role: 'user' as const, content: 'question' }], signal: controller.signal, onDelta: delta }
   return { runtime, delta, controller, input, log }
 }
 describe('Codex generation lifecycle', () => {
   it('lets an available process take queued work while another process is slow', async () => {
-    state.scenario = 'first-hangs'
     const f = fixture(), slow = new AbortController()
+    await f.runtime.generate(f.input)
+    state.turns = []; state.scenario = 'first-hangs'
     const first = f.runtime.generate({ ...f.input, signal: slow.signal })
     const rejected = expect(first).rejects.toThrow('stop slow')
     const fast = Array.from({ length: CODEX_BACKGROUND_CONCURRENCY }, () => f.runtime.generate(f.input))
@@ -103,8 +105,9 @@ describe('Codex generation lifecycle', () => {
     f.runtime.close()
   })
   it('cancels active and queued jobs without accepting late writes', async () => {
-    state.scenario = 'hang'
     const f = fixture(), queued = new AbortController()
+    await f.runtime.generate(f.input)
+    state.turns = []; f.delta.mockClear(); state.scenario = 'hang'
     const active = Array.from({ length: CODEX_BACKGROUND_CONCURRENCY }, () => f.runtime.generate(f.input))
     const second = f.runtime.generate({ ...f.input, signal: queued.signal })
     const one = Promise.all(active.map(p => expect(p).rejects.toThrow())), two = expect(second).rejects.toThrow()
@@ -114,44 +117,31 @@ describe('Codex generation lifecycle', () => {
     await Promise.all([one, two]); expect(f.delta).not.toHaveBeenCalled()
     f.runtime.close()
   })
-  it('retries a rate-limited background turn on the same process after narrowing concurrency', async () => {
+  it('sends a rate-limited request once and skips subsequent requests during cooldown', async () => {
     state.failTurns = 2; state.errorInfo = RATE_LIMITED
     const f = fixture()
-    await expect(f.runtime.generate(f.input)).resolves.toEqual({ promptTokens: 2, completionTokens: 2, totalTokens: 4 })
-    expect(state.turns).toHaveLength(3); expect(state.connections).toHaveLength(1)
-    expect(f.delta.mock.calls.flat().join('')).toBe('答案')
-    expect(f.log).toHaveBeenCalledWith('codex.generation.failed', expect.objectContaining({ lane: 'background', attempt: 1, category: 'responseTooManyFailedAttempts:429', willRetry: true, concurrency: 4 }))
-    expect(f.log).toHaveBeenCalledWith('codex.concurrency', { lane: 'background', concurrency: 2 })
+    await expect(f.runtime.generate(f.input)).rejects.toMatchObject({ code: 'MODEL_RATE_LIMITED', retryable: false })
+    await expect(f.runtime.generate(f.input)).rejects.toMatchObject({ code: 'MODEL_CONNECTION_UNAVAILABLE' })
+    expect(state.turns).toHaveLength(1); expect(f.delta).not.toHaveBeenCalled()
     expect(JSON.stringify(f.log.mock.calls)).not.toMatch(/upstream text|question/u)
     f.runtime.close()
   })
   it('fails without retrying interactive, partial-output, non-retryable or exhausted turns', async () => {
     state.failTurns = 99; state.errorInfo = RATE_LIMITED
     const f = fixture()
-    await expect(f.runtime.generate({ ...f.input, lane: 'interactive' })).rejects.toMatchObject({ code: 'EMBEDDING_RATE_LIMITED', retryable: true })
+    await expect(f.runtime.generate({ ...f.input, lane: 'interactive' })).rejects.toMatchObject({ code: 'MODEL_RATE_LIMITED', retryable: false })
     expect(state.turns).toHaveLength(1)
+    sharedModelRuntime.clear()
     state.errorInfo = 'usageLimitExceeded'
     await expect(f.runtime.generate(f.input)).rejects.toThrow('额度'); expect(state.turns).toHaveLength(2)
+    sharedModelRuntime.clear()
     state.scenario = 'partial-fail'; state.errorInfo = { responseStreamDisconnected: { httpStatusCode: null } }
-    await expect(f.runtime.generate(f.input)).rejects.toThrow('连接中断'); expect(state.turns).toHaveLength(3)
+    await expect(f.runtime.generate(f.input)).rejects.toMatchObject({ code: 'MODEL_CONNECTION_FAILED', partialOutput: true }); expect(state.turns).toHaveLength(3)
     expect(f.log).toHaveBeenCalledWith('codex.generation.failed', expect.objectContaining({ category: 'responseStreamDisconnected', partialOutput: true, willRetry: false }))
+    sharedModelRuntime.clear()
     state.scenario = 'success'; state.errorInfo = RATE_LIMITED
-    await expect(f.runtime.generate(f.input)).rejects.toThrow('限流'); expect(state.turns).toHaveLength(6)
+    await expect(f.runtime.generate(f.input)).rejects.toMatchObject({ code: 'MODEL_RATE_LIMITED', retryable: false }); expect(state.turns).toHaveLength(4)
     f.runtime.close()
-  })
-  it('narrows once per cooldown window and restores slots after sustained success', () => {
-    let now = 0
-    const backoff = new CodexBackoff(8, { attempts: 6, rateLimitMs: 1000, transientMs: 100, maxMs: 4000 }, () => now, () => 0.5)
-    const inFlight = backoff.epoch
-    expect(backoff.failed(true, inFlight)).toBe(1000); expect(backoff.limit).toBe(4)
-    now = 500; expect(backoff.failed(true, inFlight)).toBe(500); expect(backoff.limit).toBe(4)
-    now = 1000; expect(backoff.failed(true, backoff.epoch)).toBe(2000); expect(backoff.limit).toBe(2)
-    for (let i = 0; i < 4; i++) backoff.succeeded()
-    expect(backoff.limit).toBe(2)
-    now = 3000
-    for (let i = 0; i < 4; i++) backoff.succeeded()
-    expect(backoff.limit).toBe(3)
-    backoff.failed(false, backoff.epoch); expect(backoff.limit).toBe(3)
   })
   it.each([
     ['rateLimitExceeded', 'EMBEDDING_RATE_LIMITED', true, 'rateLimitExceeded'],

@@ -94,10 +94,11 @@ export class V2TaskRepositoryCompat {
     const enabledTranslationProviders = normalizeEnabledProviders(stored.enabledTranslationProviders, translationProviderOrder)
     return {
       ...DEFAULT_SETTINGS,
+      modelConnections: stored.modelConnections ?? DEFAULT_SETTINGS.modelConnections,
       outputRoot: stored.outputRoot ?? outputRoot,
       formulaEnabled: true,
       tableEnabled: true,
-      translationProvider: enabledTranslationProviders[0]!,
+      translationProvider: enabledTranslationProviders[0] ?? null,
       translationProviderOrder,
       enabledTranslationProviders,
       codex: stored.codex ?? DEFAULT_SETTINGS.codex,
@@ -187,6 +188,8 @@ export class V2TaskRepositoryCompat {
 
   private projectSummary(task: CopilotixTask, job: CompatJobRow | undefined): DocumentSummary {
     const summary = projectDocumentSummary(task)
+    const version = (kind: Parameters<V2TaskRepositoryCompat['getLatestArtifactReference']>[1]) => { const ref = this.getLatestArtifactReference(task.id, kind); return ref ? `${ref.revision}:${ref.contentHash}` : 'none' }
+    summary.contentVersions = { body: version('parsed_markdown') + ':' + version('block_mappings') + ':' + version('layout'), translation: version('translated_markdown') }
     // A failed translation keeps its counts, so the failure can be shown at the translation step.
     const failedTranslation = task.status === 'failed' && (job?.status === 'failed' || job?.status === 'cancelled')
     if (!job || (task.status !== 'translating' && task.status !== 'partial' && task.status !== 'completed' && !failedTranslation)) return summary

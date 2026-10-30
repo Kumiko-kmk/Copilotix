@@ -81,6 +81,8 @@ export interface UnitState {
 }
 
 export interface PlanState {
+  sourceVersion: string
+  editRevision: number
   binding: TranslationJobBinding
   taskId: string
   jobId: string

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { BlockMapping } from '@features/parsing/contract/blocks'
 import type { RagChunk, RagChunkContentType, RagMappingConfidence } from '../contract/ragChunk'
-import { alignMarkdownBlocks, parseMarkdownAst, stringifyMarkdownAst } from '@features/parsing/core'
+import { buildReaderBase, parseMarkdownAst, stringifyMarkdownAst, type AlignedMarkdownBlock } from '@features/document/core'
 
 /** Bumping either value intentionally creates a new content-revision identity. */
 export const STRUCTURE_AWARE_CHUNKER_VERSION = 1
@@ -17,6 +17,7 @@ export interface StructureAwareChunkInput {
   contentHash: string
   sourceText: string
   mappings?: readonly BlockMapping[]
+  alignedBlocks?: readonly AlignedMarkdownBlock[]
 }
 
 type AstNode = {
@@ -76,7 +77,7 @@ export function structureAwareChunk(input: StructureAwareChunkInput): readonly R
   if (!input.documentId || !input.contentRevisionId || !input.contentHash) throw new Error('RAG_CHUNK_INVALID_INPUT')
   const markdown = input.sourceText
   const mappings = input.mappings ?? []
-  const aligned = alignMarkdownBlocks(markdown, [...mappings])
+  const aligned = input.alignedBlocks ?? buildReaderBase(markdown, [...mappings]).content
   const root = parseMarkdownAst(markdown) as AstNode
   const children = Array.isArray(root.children) ? root.children : []
   const leaves: Leaf[] = []

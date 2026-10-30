@@ -235,7 +235,7 @@ async function writeV1(f: Awaited<ReturnType<typeof diskFixture>>, sourceRevisio
 async function briefFor(f: Awaited<ReturnType<typeof diskFixture>>) {
   const context = await f.store.briefContext(f.id, new AbortController().signal)
   const brief = assembleBrief(briefContent, context.context, { provider: 'deepseek', model: 'deepseek-flash', sourceRevision: context.sourceRevision })
-  return { context, brief, anchors: context.context.excerpts.map(({ id, section, text }) => ({ id, section, text })) }
+  return { context, brief, anchors: context.context.excerpts.map(({ id, section, text }) => ({ id, section, text: text.trim() })) }
 }
 describe('paper insight atomic storage', () => {
   it('keeps an original-text analysis fresh when only the translated artifact changes', async () => {

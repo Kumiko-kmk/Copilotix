@@ -4,6 +4,8 @@ import { libraryCategoriesPageSchema, libraryCategoriesRequestSchema, type Libra
 import { libraryRequestSchema, libraryResultSchema, type LibraryRequest, type LibraryResult } from './librarySchemas'
 import type { ImportFileOptions } from './pdfImport'
 import {
+  documentListSnapshotSchema,
+  type DocumentListSnapshot,
   deleteDocumentRequestSchema,
   documentChangeEventSchema,
   documentDetailsSchema,
@@ -29,6 +31,7 @@ export const libraryChannels = {
   manage: invokeChannel('library:manage', libraryRequestSchema, libraryResultSchema),
   importDocuments: invokeChannel('documents:import', importDocumentsIpcRequestSchema, importDocumentsResultSchema),
   importTutorialPaper: invokeChannel('tutorial:import-paper', tutorialImportRequestSchema, documentSummarySchema.nullable()),
+  snapshot: invokeChannel('documents:snapshot', noRequestSchema, documentListSnapshotSchema),
   list: invokeChannel('documents:list', noRequestSchema, documentSummarySchema.array()),
   retry: invokeChannel('documents:retry', documentIdRequestSchema, voidResponseSchema),
   delete: invokeChannel('documents:delete', deleteDocumentRequestSchema, voidResponseSchema),
@@ -46,6 +49,7 @@ export interface LibraryDesktopApi {
   manageLibrary(request: LibraryRequest): Promise<LibraryResult>
   importDocuments(request: ImportDocumentsRequest, droppedFiles?: File[], fileOptions?: ImportFileOptions[]): Promise<ImportDocumentsResult>
   importTutorialPaper(createDuplicate?: boolean): Promise<DocumentSummary | null>
+  listDocumentSnapshot?(): Promise<DocumentListSnapshot>
   listDocuments(): Promise<DocumentSummary[]>
   retryDocument(documentId: string): Promise<void>
   deleteDocument(request: DeleteDocumentRequest): Promise<void>
@@ -79,6 +83,7 @@ export function createLibraryApi(ipc: IpcBridge, pathForFile: (file: File) => st
       return ipc.invoke(libraryChannels.importDocuments, internalRequest)
     },
     importTutorialPaper: (createDuplicate = false) => ipc.invoke(libraryChannels.importTutorialPaper, { createDuplicate }),
+    listDocumentSnapshot: () => ipc.invoke(libraryChannels.snapshot, undefined),
     listDocuments: () => ipc.invoke(libraryChannels.list, undefined),
     retryDocument: documentId => ipc.invoke(libraryChannels.retry, documentId),
     deleteDocument: request => ipc.invoke(libraryChannels.delete, request),

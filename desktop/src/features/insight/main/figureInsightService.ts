@@ -125,7 +125,7 @@ export class FigureInsightService {
         let answer = ''
         const usage = await this.deps.stream({ provider: auth.provider, model: auth.model.name, key: auth.key,
           baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
-          messages, signal, lane: 'background', ...(auth.provider === 'codex' ? { outputSchema: z.toJSONSchema(figureInsightContentSchema) } : {}), temperature: 0.2, maxOutputTokens: 1400, responseFormat: { type: 'json_object' },
+          messages, signal, purpose: 'figure', lane: 'background', ...(auth.provider === 'codex' ? { outputSchema: z.toJSONSchema(figureInsightContentSchema) } : {}), temperature: 0.2, maxOutputTokens: 1400, responseFormat: { type: 'json_object' },
           maxRequestBytes: FIGURE_INSIGHT_MAX_REQUEST_BYTES,
           firstByteMs: 120_000,
           onDelta: delta => { signal.throwIfAborted(); if (answer.length + delta.length > 8192) throw new Error('output too large'); answer += delta }

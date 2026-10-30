@@ -1,3 +1,5 @@
+import type { DocumentBase } from '@features/document/contract/documentModel'
+import { documentModelDescriptor } from '@features/document/contract/rpc'
 /** IPC schemas for documents, imports and their legacy task projection. */
 import { resolvedMarkdownEditsSchema } from '@features/reader/contract/markdownEdits'
 import { z } from 'zod'
@@ -48,6 +50,7 @@ export const documentProcessingSchema = z.object({
 }).strict()
 
 export const documentSummarySchema = z.object({
+  contentVersions: z.object({ body: z.string().max(1024), translation: z.string().max(1024), edit: z.string().max(256).optional() }).strict().optional(),
   id: uuid,
   originalName: documentFilename,
   displayName: documentFilename,
@@ -61,7 +64,14 @@ export type DocumentSummary = z.infer<typeof documentSummarySchema>
 
 export const tutorialImportRequestSchema = z.object({ createDuplicate: z.boolean() }).strict()
 
+export const documentChangeKindSchema = z.enum(['progress', 'metadata', 'body', 'translation', 'edit', 'delete'])
+export type DocumentChangeKind = z.infer<typeof documentChangeKindSchema>
+export interface DocumentMutation { documentId: string; kind: DocumentChangeKind; version?: string }
+export const documentListSnapshotSchema = z.object({ sessionId: uuid, revision: z.number().int().nonnegative(), documents: z.array(documentSummarySchema) }).strict()
+export type DocumentListSnapshot = z.infer<typeof documentListSnapshotSchema>
 export const documentChangeEventSchema = z.object({
+  sessionId: uuid.optional(),
+  changes: z.array(z.object({ documentId: uuid, kinds: z.array(documentChangeKindSchema).max(6), versions: z.record(z.string(), z.string().max(256)).optional() }).strict()).max(1_000).optional(),
   revision: z.number().int().positive(),
   upserted: z.array(documentSummarySchema).max(1_000),
   removedIds: z.array(uuid).max(1_000)
@@ -91,11 +101,12 @@ export const documentDetailsSchema = z.object({
   layoutJson: documentContent,
   mappings: z.array(blockMappingSchema).max(100_000),
   // Added with in-reader editing; older Main processes omit it.
+  modelDescriptor: documentModelDescriptor.optional(),
   markdownEdits: resolvedMarkdownEditsSchema.nullable().optional(),
   pdfUrl: documentUrl,
   assetBaseUrl: documentUrl
 }).strict()
-export type DocumentDetails = z.infer<typeof documentDetailsSchema>
+export type DocumentDetails = z.infer<typeof documentDetailsSchema> & { base?: DocumentBase }
 
 export const importDocumentsRequestSchema = z.object({
   createDuplicates: z.boolean().optional(),

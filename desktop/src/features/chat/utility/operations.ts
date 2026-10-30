@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto'
+import { documentModels } from '@features/document/utility'
+import { getSnapshot } from '@features/document/core'
 import type { CoreUtilityOperationHandler } from '@platform/rpc/utility/coreUtilityRuntime'
 import type { FigureInsightStore } from '@features/insight/utility'
 import type { MarkdownEditStore } from '@features/reader/utility'
@@ -41,10 +44,11 @@ export function createChatOperations(deps: ChatOperationDeps) {
     },
     'chat:build-context': async (request, signal) => {
       const input = paperContextRequestSchema.parse(request.payload)
-      // An unreadable edit layer falls back to the parsed text; saving an edit reports the problem.
-      const edits = await deps.edits.read(input.documentId).catch(() => null)
-      const order = edits?.order ? await deps.edits.readingOrder(input.documentId).catch(() => null) : null
-      return new PaperContextBuilder(deps.ragRepository()).build(input, signal, edits, order)
+      const task = deps.repository().getTask(input.documentId)
+      if (!task) throw new Error('文档不存在')
+      const [base, edits] = await Promise.all([documentModels.ensureBase(input.documentId, task.outputDir), deps.edits.read(input.documentId)])
+      const snapshot = getSnapshot(base, '', null, edits, text => createHash('sha256').update(text).digest('hex'))
+      return new PaperContextBuilder(deps.ragRepository()).build(input, signal, undefined, undefined, snapshot)
     },
     'compute:paper-chat-figure': (request, signal) => new PaperChatFigureStore(deps.repository(), deps.figureInsightStore()).source(paperChatFigureRequestSchema.parse(request.payload), signal),
     'compute:rag-content-index': async (request, signal) => {

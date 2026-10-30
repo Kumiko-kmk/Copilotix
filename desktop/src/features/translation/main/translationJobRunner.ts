@@ -48,10 +48,8 @@ export class TranslationJobRunner implements JobRunner {
         : 'Parser API Token 尚未验证或已经失效'
       throw new JobRunnerError(`${stateMessage}，请在设置中验证后重试`, 'TRANSLATION_CREDENTIALS_REQUIRED', false)
     }
-    const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher, (provider, usage) =>
-      this.options.usageAnalytics?.recordTokens(provider, usage)
-    )
-    if (this.options.codex) providers.set('codex', new CodexTranslationProvider(settings.codex?.translationModel ?? 'default', this.options.codex, usage => this.options.usageAnalytics?.recordTokens('codex', usage)))
+    const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher)
+    if (this.options.codex) providers.set('codex', new CodexTranslationProvider(settings.codex?.translationModel ?? 'default', this.options.codex))
     const providerOrder = executableProviderOrder(
       settings.translationProviderOrder,
       settings.enabledTranslationProviders,
@@ -59,6 +57,7 @@ export class TranslationJobRunner implements JobRunner {
     )
     // Provider selection is resolved at execution time so a manual retry can
     // use the corrected setting instead of an old task snapshot.
+    if (!settings.translationProvider || !providerOrder.length) throw new JobRunnerError('请配置可用的翻译服务', 'TRANSLATION_CREDENTIALS_REQUIRED', false)
     const effectiveTask = { ...task, translationProvider: settings.translationProvider }
     const checkpointBase = {
       ...input.job.checkpoint,

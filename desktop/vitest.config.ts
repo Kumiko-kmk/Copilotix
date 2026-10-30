@@ -9,6 +9,7 @@ export default defineConfig({
     // Keep rehype's KaTeX import inside Vite resolution so tests use the renderer's engine.
     server: { deps: { inline: ['rehype-katex'] } },
     environment: 'node',
+    setupFiles: ['./tests/modelRuntimeSetup.ts'],
     // Windows + coverage instrumentation can exceed the default 5 s for React views.
     testTimeout: 15_000,
     // Bound CPU/memory contention from jsdom + Ant Design on hosted Windows runners.

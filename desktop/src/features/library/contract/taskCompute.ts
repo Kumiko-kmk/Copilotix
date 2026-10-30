@@ -1,3 +1,4 @@
+import type { DocumentModelDescriptor } from '@features/document/contract/documentModel'
 import type { CopilotixTask } from './documentTypes'
 import type {
   TranslationPlanFinalizeResult,
@@ -17,6 +18,7 @@ export interface NormalizeParserOutputResult {
 }
 
 export interface TaskComputePort {
+  ensureDocumentModel?(documentId: string): Promise<DocumentModelDescriptor>
   hashFile(path: string): Promise<string>
   importPdf(sourcePath: string, documentId: string, options?: { skipFirstPage?: boolean }): Promise<{ sha256: string; size: number }>
   normalizeParserOutput(task: CopilotixTask, extractedDir: string, jobId?: string): Promise<NormalizeParserOutputResult>

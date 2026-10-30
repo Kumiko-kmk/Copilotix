@@ -224,7 +224,8 @@ test('reorders and enables translation providers with explicit persistent saves'
       const bounds = element.getBoundingClientRect()
       return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
     }))
-    expect(modelCardBounds).toHaveLength(5)
+    expect(modelCardBounds).toHaveLength(3)
+    await expect(window.locator('[data-provider="bing"], [data-provider="transmart"]')).toHaveCount(0)
     for (const [index, bounds] of modelCardBounds.entries()) {
       expect(bounds.x).toBeCloseTo(modelCardBounds[0]!.x, 0)
       expect(bounds.height).toBeGreaterThanOrEqual(52)
@@ -238,17 +239,19 @@ test('reorders and enables translation providers with explicit persistent saves'
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await capture(window, 'settings-models-reference.png')
 
-    await window.getByRole('button', { name: '移动千问 / Qwen' }).dragTo(window.locator('[data-provider="bing"]'))
-    await expect(window.getByText('DeepSeek → Bing → 千问 → Transmart')).toBeVisible()
+    const requestOrder = window.locator('.model-request-order strong')
+    await expect(requestOrder).toHaveText('千问 → DeepSeek')
+    await window.getByRole('button', { name: '移动千问 / Qwen' }).dragTo(window.locator('[data-provider="codex"]'))
+    await expect(requestOrder).toHaveText('DeepSeek → 千问')
     await window.getByRole('button', { name: '保存全部更改' }).click()
     await expect.poll(async () => (await window.evaluate(() => window.copilotix.getSettings())).translationProviderOrder)
-      .toEqual(['deepseek', 'bing', 'qwen', 'transmart', 'codex'])
+      .toEqual(['deepseek', 'codex', 'qwen'])
 
     await window.getByRole('checkbox', { name: '启用DeepSeek' }).click()
-    await expect(window.getByText('Bing → 千问 → Transmart')).toBeVisible()
+    await expect(requestOrder).toHaveText('千问')
     await window.getByRole('button', { name: '保存全部更改' }).click()
     await expect.poll(async () => (await window.evaluate(() => window.copilotix.getSettings())).enabledTranslationProviders)
-      .toEqual(['bing', 'qwen', 'transmart'])
+      .toEqual(['qwen'])
 
     await app.close()
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
@@ -256,7 +259,7 @@ test('reorders and enables translation providers with explicit persistent saves'
     await window.locator('[data-edge-dock="top"]').hover()
     await window.getByRole('button', { name: '设置' }).click()
     await window.getByRole('button', { name: /模型设置/u }).click()
-    await expect(window.getByText('Bing → 千问 → Transmart')).toBeVisible()
+    await expect(window.locator('.model-request-order strong')).toHaveText('千问')
     await expect(window.getByRole('checkbox', { name: '启用DeepSeek' })).not.toBeChecked()
   } finally {
     await app.close()

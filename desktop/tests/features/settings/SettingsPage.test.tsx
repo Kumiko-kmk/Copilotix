@@ -188,12 +188,12 @@ describe('SettingsPage credential editor', () => {
     await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
     expect(saveSettings.mock.calls[0]![0]).toMatchObject({
       translationProvider: 'deepseek',
-      translationProviderOrder: ['deepseek', 'qwen', 'bing', 'transmart', 'codex']
+      translationProviderOrder: ['deepseek', 'qwen', 'codex']
     })
-    expect(screen.getByText('DeepSeek → 千问 → Bing → Transmart')).toBeTruthy()
+    expect(screen.getByText('DeepSeek → 千问')).toBeTruthy()
   })
 
-  it('keeps the last provider enabled and retains the draft after an unsuccessful policy save', async () => {
+  it('allows disabling the last provider and retains the draft after an unsuccessful policy save', async () => {
     const settings: AppSettings = {
       ...configuredSettings(),
       translationProvider: 'qwen',
@@ -215,7 +215,7 @@ describe('SettingsPage credential editor', () => {
     const onlyEnabled = screen.getByRole('checkbox', { name: '启用千问 / Qwen' })
     fireEvent.click(onlyEnabled)
     expect(saveSettings).not.toHaveBeenCalled()
-    expect((onlyEnabled as HTMLInputElement).checked).toBe(true)
+    expect((onlyEnabled as HTMLInputElement).checked).toBe(false)
 
     fireEvent.keyDown(screen.getByRole('button', { name: '移动千问 / Qwen' }), { key: 'ArrowDown' })
     expect(screen.getAllByRole('listitem')[0]!.textContent).toContain('DeepSeek')
@@ -223,7 +223,7 @@ describe('SettingsPage credential editor', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存全部更改' }))
     await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
     expect(screen.getAllByRole('listitem')[0]!.textContent).toContain('DeepSeek')
-    expect((screen.getByRole('checkbox', { name: '启用千问 / Qwen' }) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByRole('checkbox', { name: '启用千问 / Qwen' }) as HTMLInputElement).checked).toBe(false)
   })
 
   it('loads storage usage and offers library migration beside export and import', async () => {
