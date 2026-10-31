@@ -44,8 +44,7 @@ describe("credentialGate", () => {
       const settings = appSettings({ state })
       const runner = new TranslationJobRunner({
         repository: { getTask: async () => task } as never,
-        settingsService: { get: async () => settings } as never,
-        vault: emptyVault(),
+        settingsService: { get: async () => settings, providerKeys: async () => [] } as never,
         fetcher,
         compute: {} as never,
         pathPolicy: new PathPolicy()
@@ -97,15 +96,6 @@ describe("credentialGate", () => {
         qwen: { state: 'missing' },
         deepseek: { state: 'missing' }
       }
-    }
-  }
-
-  function emptyVault() {
-    return {
-      get: async () => null,
-      set: async (_account: string, _value: string): Promise<void> => undefined,
-      delete: async (_account: string): Promise<void> => undefined,
-      has: async () => false
     }
   }
 })

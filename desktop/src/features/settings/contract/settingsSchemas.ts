@@ -1,9 +1,9 @@
 import { codexSettingsSchema, DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { paperChatProviderSchema, qwenChatModelSchema, deepseekChatModelSchema } from '@features/chat/contract/paperChatSchemas'
 import { z } from 'zod'
-import { modelConnectionSchema, defaultConnections } from '@platform/models/contract/models'
+import { connectionIdSchema, defaultConnections, modelConnectionsSchema } from '@platform/models/contract/models'
 import { boundedPath, hasControlCharacters, noNul } from '@platform/ipc/contract/validation'
-import type { AppSettings, CredentialFieldError, CredentialMutation, CredentialName, CredentialStatus, CredentialStatuses, CredentialValidationResult, SettingsUpdate, SettingsSaveResult } from './settingsTypes'
+import type { AppSettings, CredentialFieldError, CredentialMutation, CredentialName, CredentialStatus, CredentialStatuses, CredentialValidationResult, KeyStatus, SettingsUpdate, SettingsSaveResult } from './settingsTypes'
 const activeProviderSchema = z.enum(['qwen', 'deepseek', 'codex'])
 
 /** IPC schemas for settings, credentials, storage and usage analytics. */
@@ -47,6 +47,17 @@ export function credentialStatusSchemaPlaceholder(): z.ZodType<CredentialStatus>
   }).strict()
 }
 
+export const keyStatusSchema: z.ZodType<KeyStatus> = z.object({
+  state: z.enum(['missing', 'unknown', 'valid', 'invalid']),
+  maskedValue: z.string().max(256).refine(noNul).optional(),
+  errorCode: z.string().max(128).refine(noNul).optional(),
+  message: z.string().max(1_024).refine(noNul).optional(),
+  health: z.enum(['cooldown', 'rejected']).optional(),
+  retryAt: z.number().int().nonnegative().optional()
+}).strict()
+
+const keyRecord = <T extends z.ZodTypeAny>(value: T) => z.record(connectionIdSchema, value).refine(record => Object.keys(record).length <= 16, '密钥数量超出上限')
+
 export const credentialFieldErrorSchema: z.ZodType<CredentialFieldError> = z.object({
   code: z.string().min(1).max(128).refine(noNul),
   message: z.string().min(1).max(1_024).refine(noNul)
@@ -60,11 +71,13 @@ export const credentialValidationResultSchema: z.ZodType<CredentialValidationRes
 
 export const credentialValidationRequestSchema = z.object({
   name: credentialNameSchema,
-  value: credentialValueSchema.optional()
+  value: credentialValueSchema.optional(),
+  /** A saved model key to check; without it qwen/deepseek mean their default key. */
+  connectionId: connectionIdSchema.optional()
 }).strict()
 
 export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
-  modelConnections: z.array(modelConnectionSchema).max(64).default(defaultConnections),
+  modelConnections: modelConnectionsSchema.default(defaultConnections),
   outputRoot: boundedPath,
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
@@ -82,14 +95,15 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   deepseekChatModel: deepseekChatModelSchema.default('deepseek-flash').catch('deepseek-flash'),
   chatConsentProvider: paperChatProviderSchema.nullable().default(null),
   chatConsentVersion: z.number().int().min(1).max(1000).nullable().default(null),
-  credentials: credentialStatusesSchema
+  credentials: credentialStatusesSchema,
+  keyStatuses: keyRecord(keyStatusSchema).optional()
 }).strict().refine(
   (settings) => (settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) ?? null) === settings.translationProvider,
   '首选翻译模型必须是顺序中第一个已启用模型'
 )
 
 export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
-  modelConnections: z.array(modelConnectionSchema).max(64).optional(),
+  modelConnections: modelConnectionsSchema.optional(),
   outputRoot: boundedPath,
   formulaEnabled: z.boolean(),
   tableEnabled: z.boolean(),
@@ -111,7 +125,10 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
     parser: credentialMutationSchema.optional(),
     qwen: credentialMutationSchema.optional(),
     deepseek: credentialMutationSchema.optional()
-  }).strict().optional()
+  }).strict().optional(),
+  keyMutations: keyRecord(credentialMutationSchema).optional(),
+  /** Derived on read; callers that spread getSettings() may send it back, and it is dropped here. */
+  keyStatuses: z.unknown().optional().transform(() => undefined)
 }).strict().refine(
   (settings) => (settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) ?? null) === settings.translationProvider,
   '首选翻译模型必须是顺序中第一个已启用模型'
@@ -123,7 +140,8 @@ export const settingsSaveResultSchema: z.ZodType<SettingsSaveResult> = z.object(
     parser: credentialFieldErrorSchema.optional(),
     qwen: credentialFieldErrorSchema.optional(),
     deepseek: credentialFieldErrorSchema.optional()
-  }).strict()
+  }).strict(),
+  keyErrors: keyRecord(credentialFieldErrorSchema).optional()
 }).strict()
 
 export const storageCategorySchema = z.object({

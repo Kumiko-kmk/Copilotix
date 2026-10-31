@@ -65,7 +65,8 @@ export async function runUninstallCleanup(): Promise<void> {
     const vault = new WindowsCredentialVault()
     const accounts: CredentialAccount[] = ['parser-token', 'qwen-api-key', 'deepseek-api-key',
       'parser-token-validation', 'qwen-api-key-validation', 'deepseek-api-key-validation']
-    for (const account of accounts) await vault.delete(account)
+    const added = (await vault.accounts()).filter((account): account is CredentialAccount => account.startsWith('api-key:'))
+    for (const account of new Set([...accounts, ...added])) await vault.delete(account)
     child.kill()
     app.exit(0)
   } catch {

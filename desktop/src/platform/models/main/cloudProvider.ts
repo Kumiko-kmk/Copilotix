@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { connectionFor, sharedModelRuntime } from './modelRuntime'
 import { MODEL_ENDPOINTS } from '../contract/models'
-import type { ModelProvider as PaperChatProvider } from '../contract/models'
+import type { ModelProvider as PaperChatProvider, ProviderKey } from '../contract/models'
 import type { ModelUsage as ProviderTokenUsage } from '../contract/models'
 import type { MultimodalChatMessage } from '@platform/codex/contract/chatMessages'
 export type { ChatMessage, ChatContentPart } from '@platform/codex/contract/chatMessages'
@@ -21,20 +21,24 @@ const packetSchema = z.object({
 export class ChatProvider {
   constructor(private readonly fetcher: ChatFetcher, private readonly options: { firstByteMs?: number; idleMs?: number; invalidate?(provider: Exclude<PaperChatProvider, 'codex'>): Promise<void> } = {}) {}
 
-  stream(input: { purpose?: 'translation' | 'chat' | 'brief' | 'figure'; provider: Exclude<PaperChatProvider, 'codex'>; baseUrl: string; model: string; key: string; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number; lane?: 'interactive' | 'background' }): Promise<ProviderTokenUsage | null> {
+  stream(input: { purpose?: 'translation' | 'chat' | 'brief' | 'figure'; provider: Exclude<PaperChatProvider, 'codex'>; baseUrl: string; model: string; key?: string; keys?: readonly ProviderKey[]; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number; lane?: 'interactive' | 'background' }): Promise<ProviderTokenUsage | null> {
     // The endpoint is never a renderer field, and even persisted settings must match the provider whitelist.
     const expected = MODEL_ENDPOINTS[input.provider]
     if (input.baseUrl !== expected) return Promise.reject(new ChatProviderError('PROVIDER_UNAVAILABLE', '问答服务地址不受支持'))
-    return sharedModelRuntime.execute({ purpose: input.purpose ?? 'chat', model: input.model, lane: input.lane ?? 'interactive', candidates: [connectionFor(input.provider, input.baseUrl, input.key)], signal: input.signal }, async () => {
+    // keys are tried in order; a single key stands for the provider's default connection.
+    const keys = input.keys ?? (input.key ? [{ connection: connectionFor(input.provider, input.baseUrl, input.key), key: input.key }] : [])
+    if (!keys.length) return Promise.reject(new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '请先保存模型 API Key'))
+    const byConnection = new Map(keys.map(entry => [entry.connection.connectionId, entry.key]))
+    return sharedModelRuntime.execute({ purpose: input.purpose ?? 'chat', model: input.model, lane: input.lane ?? 'interactive', candidates: keys.map(entry => entry.connection), signal: input.signal }, async connection => {
       let partial = false
       try {
-        const usage = await this.runStream({ ...input, onDelta: async text => { partial ||= Boolean(text); await input.onDelta(text) } })
+        const usage = await this.runStream({ ...input, key: byConnection.get(connection.connectionId)!, onDelta: async text => { partial ||= Boolean(text); await input.onDelta(text) } })
         return { value: usage, usage }
       } catch (error) { if (partial && error instanceof Error) Object.assign(error, { partialOutput: true }); throw error }
     }).then(result => result.value)
   }
 
-  private async runStream(input: Parameters<ChatProvider['stream']>[0]): Promise<ProviderTokenUsage | null> {
+  private async runStream(input: Parameters<ChatProvider['stream']>[0] & { key: string }): Promise<ProviderTokenUsage | null> {
     const controller = new AbortController()
     const relay = (): void => controller.abort(input.signal.reason)
     input.signal.addEventListener('abort', relay, { once: true })

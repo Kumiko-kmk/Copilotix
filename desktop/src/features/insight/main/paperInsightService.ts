@@ -1,3 +1,4 @@
+import type { ProviderKey } from '@platform/models/contract/models'
 import { ModelConnectionUnavailable } from '@platform/models/runtime/modelRuntime'
 import { z } from 'zod'
 import { lstat, open } from 'node:fs/promises'
@@ -47,7 +48,7 @@ export async function loadFullBriefContext(documentId: string, signal: AbortSign
 
 export interface PaperInsightDependencies {
   settings(): Promise<AppSettings>
-  key(provider: PaperChatProvider): Promise<string | null>
+  keys(provider: PaperChatProvider): Promise<readonly ProviderKey[]>
   get(documentId: string): Promise<PaperInsightState>
   listSaved?(documentIds: readonly string[]): Promise<ArchiveInsightSnapshot[]>
   context(documentId: string, signal: AbortSignal): Promise<BriefContextResult>
@@ -90,11 +91,11 @@ export class PaperInsightService {
     const settings = await this.deps.settings()
     const provider = resolvePaperChatProvider(settings, selected)
     if (!provider) return { reason: '请在设置中将已启用的 Qwen、DeepSeek 或 Codex 设为首选服务商。' } as const
-    const key = provider === 'codex' ? null : await this.deps.key(provider)
-    if (provider !== 'codex' && !key) return { reason: '请先在服务连接中保存模型 API Key。' } as const
+    const keys = provider === 'codex' ? [] : await this.deps.keys(provider)
+    if (provider !== 'codex' && !keys.length) return { reason: '请先在服务连接中保存模型 API Key。' } as const
     if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') return { reason: '请先在服务连接中验证模型 API Key。' } as const
     const model = resolvePaperChatModel(provider, provider === 'codex' ? settings.codex?.chatModel : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
-    return { settings, provider, key, model } as const
+    return { settings, provider, keys, model } as const
   }
 
   /** Next enabled Qwen/DeepSeek in the translation order with a saved, valid key; used after Codex exhausts its retries. */
@@ -219,7 +220,7 @@ export class PaperInsightService {
         try { usage = await withBriefTransportRetry(() => {
           answer = ''
           return this.deps.stream({
-          provider: streamAuth.provider, model: streamAuth.model, key: streamAuth.key,
+          provider: streamAuth.provider, model: streamAuth.model, keys: streamAuth.keys,
           baseUrl: streamAuth.provider === 'qwen' ? streamAuth.settings.qwenBaseUrl : streamAuth.settings.deepseekBaseUrl,
           signal, messages, purpose: 'brief', lane: 'background', firstByteMs: 120_000, ...(streamAuth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
           onDelta: (delta) => {

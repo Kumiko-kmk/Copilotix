@@ -7,6 +7,7 @@ import {
   type TableTranslationRequest
 } from '@features/translation/contract/translationPlanProtocol'
 import type { CredentialVault } from '@platform/credentials/main/credentialVault'
+import { keysFromVault } from '../../providerKeys'
 
 const vault: CredentialVault = {
   get: async () => null,
@@ -99,7 +100,7 @@ describe('table provider transports', () => {
       })
     }
     const request = tableRequest()
-    const provider = createTranslationProviders({ ...DEFAULT_SETTINGS, qwenModel: 'qwen-plus' }, keyVault, fetcher).get('qwen')!
+    const provider = createTranslationProviders({ ...DEFAULT_SETTINGS, qwenModel: 'qwen-plus' }, keysFromVault(keyVault), fetcher).get('qwen')!
     const response = await provider.translateTable(request)
 
     expect(requestBodies).toHaveLength(1)
@@ -123,7 +124,7 @@ describe('table provider transports', () => {
         usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 }
       }), { status: 200 })
     }
-    const provider = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher, usage).get('deepseek')!
+    const provider = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher, usage).get('deepseek')!
 
     await expect(provider.translate('source')).resolves.toBe('译文')
     expect(body?.model).toBe('deepseek-flash')
@@ -146,7 +147,7 @@ describe('table provider transports', () => {
         headers: { 'Content-Type': 'application/json' }
       })
     }
-    const provider = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+    const provider = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
 
     await expect(provider.translate('hello')).resolves.toBe('译:hello')
     const request = tableRequest()
@@ -170,14 +171,14 @@ describe('table provider transports', () => {
     const fetcher = async (): Promise<Response> => new Response(JSON.stringify({
       choices: [{ message: { content: { unexpected: true } } }]
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-    const provider = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+    const provider = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
 
     await expect(provider.translate('hello')).rejects.toThrow(/无法识别/)
   })
 
   it('never exposes removed providers or contacts their endpoints, even for historical settings', () => {
     let calls = 0
-    const providers = createTranslationProviders({ ...DEFAULT_SETTINGS, translationProvider: 'bing', translationProviderOrder: ['bing', 'transmart'], enabledTranslationProviders: ['bing', 'transmart'] }, vault, async () => { calls++; throw new Error('unexpected network') })
+    const providers = createTranslationProviders({ ...DEFAULT_SETTINGS, translationProvider: 'bing', translationProviderOrder: ['bing', 'transmart'], enabledTranslationProviders: ['bing', 'transmart'] }, keysFromVault(vault), async () => { calls++; throw new Error('unexpected network') })
     expect(providers.has('bing')).toBe(false)
     expect(providers.has('transmart')).toBe(false)
     expect(calls).toBe(0)
@@ -198,8 +199,8 @@ describe('table provider transports', () => {
       const body = JSON.parse(String(init?.body)) as OpenAiRequestBody
       return new Response(JSON.stringify({ choices: [{ message: { content: `译:${body.messages[0]!.content}` } }] }), { status: 200 })
     }
-    const first = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
-    const second = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+    const first = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
+    const second = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
 
     await Promise.all(Array.from({ length: 32 }, (_, index) =>
       (index % 2 === 0 ? first : second).translate(`request-${index}`)
@@ -219,8 +220,8 @@ describe('table provider transports', () => {
       if (calls === 1) return new Response('', { status: 429, headers: { 'Retry-After': '0' } })
       return new Response(JSON.stringify({ choices: [{ message: { content: '译文' } }] }), { status: 200 })
     }
-    const first = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
-    const second = createTranslationProviders(DEFAULT_SETTINGS, keyVault, fetcher).get('qwen')!
+    const first = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
+    const second = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
 
     await expect(first.translate('limited')).rejects.toMatchObject({ status: 429 })
     const startedAt = Date.now()

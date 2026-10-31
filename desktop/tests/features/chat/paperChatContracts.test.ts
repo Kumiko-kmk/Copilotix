@@ -63,7 +63,7 @@ describe('paper chat wire contracts', () => {
   it('checks trusted IPC senders, payload bounds and unknown request IDs through the actual registrations', async () => {
     const handlers = new Map<string, (event: IpcInvokeEventLike, request: unknown) => Promise<unknown>>()
     const service = new PaperChatService({
-      saveTurn: vi.fn(), load: vi.fn(), session: vi.fn(), saveSession: vi.fn(), deleteTurn: vi.fn(), clear: vi.fn(), settings: vi.fn(async () => DEFAULT_SETTINGS), key: vi.fn(), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
+      saveTurn: vi.fn(), load: vi.fn(), session: vi.fn(), saveSession: vi.fn(), deleteTurn: vi.fn(), clear: vi.fn(), settings: vi.fn(async () => DEFAULT_SETTINGS), keys: vi.fn(async () => []), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
     const owner = { isDestroyed: () => false }
     const entry = resolve('renderer/index.html')
     const url = pathToFileURL(entry).href

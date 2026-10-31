@@ -5,6 +5,7 @@ import { CHAT_CONSENT_VERSION, type PaperChatAskRequest, type PaperContext } fro
 import { canTransitionRagStreamEvent, type RagStreamEvent } from '@features/chat/contract/ragSchemas'
 import { ChatProviderError } from '../../../src/features/chat/main/chatProvider'
 import { buildPaperChatMessages, PaperChatService, type PaperChatDependencies } from '../../../src/features/chat/main/paperChatService'
+import { providerKey } from '../../providerKeys'
 
 const doc = '10000000-0000-4000-8000-000000000001'
 const request: PaperChatAskRequest = { documentId: doc, question: 'private question', pinned: [], history: [] }
@@ -21,7 +22,7 @@ function setup() {
     saveSession: vi.fn<PaperChatDependencies['saveSession']>(async () => ({ saved: true })),
     deleteTurn: vi.fn<PaperChatDependencies['deleteTurn']>(async () => ({ deleted: true })),
     clear: vi.fn<PaperChatDependencies['clear']>(async () => ({ cleared: true })),
-    settings: vi.fn(async () => settings), key: vi.fn(async () => 'private key'), buildContext: vi.fn(async () => context),
+    settings: vi.fn(async () => settings), keys: vi.fn(async () => [providerKey('private key')]), buildContext: vi.fn(async () => context),
     stream: vi.fn<PaperChatDependencies['stream']>(async ({ onDelta }) => { onDelta('private answer [E1] [E99]'); return { promptTokens: 3, completionTokens: 4, totalTokens: 7 } }),
     recordUsage: vi.fn(async () => undefined), log: vi.fn()
   }
@@ -100,7 +101,7 @@ describe('PaperChatService', () => {
   ])('rejects missing %s independently without any context or network request', async (gate, code) => {
     const f = setup()
     if (gate === 'provider') Object.assign(f.settings, { translationProvider: 'bing' })
-    if (gate === 'key') f.deps.key.mockResolvedValue(null as unknown as string)
+    if (gate === 'key') f.deps.keys.mockResolvedValue([])
     if (gate === 'unverified' || gate === 'invalid') Object.assign(f.settings.credentials.qwen, { state: gate === 'invalid' ? 'invalid' : 'unknown' })
     await expect(f.service.ask(request, f.send)).rejects.toMatchObject({ code })
     expect(f.deps.stream).not.toHaveBeenCalled(); expect(f.deps.buildContext).not.toHaveBeenCalled(); expect(f.events).toEqual([])
@@ -195,15 +196,15 @@ describe('PaperChatService', () => {
     const f = setup()
     Object.assign(f.settings, { chatProvider: 'deepseek' })
     await f.service.ask({ ...request, model: 'qwen3.8-flash' }, f.send); await f.terminal()
-    expect(f.deps.key).toHaveBeenCalledWith('qwen')
-    expect(f.deps.stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'qwen', key: 'private key', baseUrl: DEFAULT_SETTINGS.qwenBaseUrl, model: 'qwen3.8-flash' }))
+    expect(f.deps.keys).toHaveBeenCalledWith('qwen')
+    expect(f.deps.stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'qwen', keys: [providerKey('private key')], baseUrl: DEFAULT_SETTINGS.qwenBaseUrl, model: 'qwen3.8-flash' }))
     expect(f.settings.qwenModel).toBe('qwen-mt-plus')
   })
   it('rejects custom models and models belonging to a different provider before reading credentials', async () => {
     const f = setup()
     await expect(f.service.ask({ ...request, model: 'custom-model' } as never, f.send)).rejects.toThrow()
     await expect(f.service.ask({ ...request, provider: 'qwen', model: 'deepseek-flash' }, f.send)).rejects.toMatchObject({ code: 'RAG_INVALID_STATE' })
-    expect(f.deps.key).not.toHaveBeenCalled()
+    expect(f.deps.keys).not.toHaveBeenCalled()
     expect(f.deps.saveTurn).not.toHaveBeenCalled()
     expect(f.deps.stream).not.toHaveBeenCalled()
   })
@@ -211,7 +212,7 @@ describe('PaperChatService', () => {
     const f = setup()
     Object.assign(f.settings, { enabledTranslationProviders: ['deepseek'] })
     await expect(f.service.ask(request, f.send)).rejects.toMatchObject({ code: 'CHAT_PROVIDER_REQUIRED' })
-    expect(f.deps.key).not.toHaveBeenCalled(); expect(f.deps.stream).not.toHaveBeenCalled()
+    expect(f.deps.keys).not.toHaveBeenCalled(); expect(f.deps.stream).not.toHaveBeenCalled()
   })
   it('does not send evidence if the translation recipient changes during retrieval', async () => {
     const f = setup()
@@ -224,7 +225,7 @@ describe('PaperChatService', () => {
     const f = setup()
     Object.assign(f.settings.credentials, { deepseek: { state: 'valid' } }); f.settings.chatConsentProvider = 'deepseek'
     await f.service.ask({ ...request, provider: 'deepseek', model: 'deepseek-v4-pro' }, f.send); await f.terminal()
-    expect(f.deps.key).toHaveBeenCalledWith('deepseek')
+    expect(f.deps.keys).toHaveBeenCalledWith('deepseek')
     expect(f.deps.stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-pro', baseUrl: DEFAULT_SETTINGS.deepseekBaseUrl }))
     expect(f.settings.translationProvider).toBe('qwen')
     expect(f.deps.saveTurn.mock.calls.at(-1)).toEqual([doc, expect.objectContaining({ question: request.question, answer: 'private answer [E1] ', provider: 'deepseek', model: 'deepseek-v4-pro', status: 'completed', citations: { E1: expect.objectContaining({ documentId: doc, locator: context.evidence[0]!.locator }) } })])

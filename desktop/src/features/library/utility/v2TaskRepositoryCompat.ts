@@ -21,6 +21,7 @@ import { normalizeEnabledProviders, normalizeProviderOrder } from '@features/tra
 import type { ArtifactReference } from './taskRepositoryCompat'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { V2Database } from '@platform/database/utility/v2Database'
+import { modelConnectionsSchema } from '@platform/models/contract/models'
 import { projectDocumentSummary } from '../core/documentSummary'
 import { SqliteJobRepository } from '@platform/jobs/utility/sqliteJobRepository'
 import { RAG_DEFAULT_CHUNKER_FINGERPRINT, TERMINAL, WORKFLOW_JOB_QUERY_CHUNK, assertTranslationBatchWithinLimits, projectCompatTask, latestJobOfKind, checkpointForTask, toBatchBlock, parseObject, isTerminalJobStatus, metadataFingerprint, nextLexicalGeneration, toRelativePath, validateAnnotations, type CompatDocumentRow, type V2JobKind, type V2JobStatus, type ListCursor, type DocumentMetadataPatch, type CompatJobRow, type TranslationJobBinding, type ArtifactRevisionInput, type ArtifactBundleRow } from './compatRecords'
@@ -94,7 +95,8 @@ export class V2TaskRepositoryCompat {
     const enabledTranslationProviders = normalizeEnabledProviders(stored.enabledTranslationProviders, translationProviderOrder)
     return {
       ...DEFAULT_SETTINGS,
-      modelConnections: stored.modelConnections ?? DEFAULT_SETTINGS.modelConnections,
+      // A damaged connection list falls back to the defaults, so the default keys keep working.
+      modelConnections: modelConnectionsSchema.safeParse(stored.modelConnections).data ?? DEFAULT_SETTINGS.modelConnections,
       outputRoot: stored.outputRoot ?? outputRoot,
       formulaEnabled: true,
       tableEnabled: true,
@@ -118,7 +120,7 @@ export class V2TaskRepositoryCompat {
   }
 
   saveSettings(settings: AppSettings): void {
-    const hidden = new Set(['credentials', 'chatConsentProvider', 'chatConsentVersion'])
+    const hidden = new Set(['credentials', 'keyStatuses', 'chatConsentProvider', 'chatConsentVersion'])
     this.database.transaction(() => {
       this.database.connection.exec("DELETE FROM settings WHERE key IN ('chatConsentProvider', 'chatConsentVersion')")
       const statement = this.database.connection.prepare(

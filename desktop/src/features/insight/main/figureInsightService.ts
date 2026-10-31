@@ -1,3 +1,4 @@
+import type { ProviderKey } from '@platform/models/contract/models'
 import type { ModelGateway } from '@features/chat/main'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
@@ -13,7 +14,7 @@ import type { ProviderTokenUsage } from '@features/settings/main'
 
 export interface FigureInsightDependencies {
   settings(): Promise<AppSettings>
-  key(provider: PaperChatProvider): Promise<string | null>
+  keys(provider: PaperChatProvider): Promise<readonly ProviderKey[]>
   descriptor(request: FigureInsightRequest, signal: AbortSignal): Promise<FigureInsightDescriptor>
   get(request: FigureInsightRequest): Promise<FigureInsightState>
   coverSource?(documentId: string): Promise<ArchiveCoverSource>
@@ -89,11 +90,11 @@ export class FigureInsightService {
   private async authorize() {
     const settings = await this.deps.settings(), provider = resolvePaperChatProvider(settings)
     if (!provider) throw new FigureAuthorizationError('请启用 Qwen、DeepSeek 或 Codex 服务。')
-    const key = provider === 'codex' ? null : await this.deps.key(provider)
-    if (provider !== 'codex' && (!key || settings.credentials[provider].state !== 'valid')) throw new FigureAuthorizationError('请先保存并验证模型 API Key。')
+    const keys = provider === 'codex' ? [] : await this.deps.keys(provider)
+    if (provider !== 'codex' && (!keys.length || settings.credentials[provider].state !== 'valid')) throw new FigureAuthorizationError('请先保存并验证模型 API Key。')
     const name = resolveFigureInsightModel(provider, provider === 'codex' ? settings.codex?.chatModel ?? 'default' : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
     const model = figureInsightModelSchema.parse({ provider, name })
-    return { settings, provider, key, model }
+    return { settings, provider, keys, model }
   }
 
   private async execute(run: Run): Promise<void> {
@@ -123,7 +124,7 @@ export class FigureInsightService {
         const auth = await this.authorize()
         signal.throwIfAborted()
         let answer = ''
-        const usage = await this.deps.stream({ provider: auth.provider, model: auth.model.name, key: auth.key,
+        const usage = await this.deps.stream({ provider: auth.provider, model: auth.model.name, keys: auth.keys,
           baseUrl: auth.provider === 'qwen' ? auth.settings.qwenBaseUrl : auth.settings.deepseekBaseUrl,
           messages, signal, purpose: 'figure', lane: 'background', ...(auth.provider === 'codex' ? { outputSchema: z.toJSONSchema(figureInsightContentSchema) } : {}), temperature: 0.2, maxOutputTokens: 1400, responseFormat: { type: 'json_object' },
           maxRequestBytes: FIGURE_INSIGHT_MAX_REQUEST_BYTES,

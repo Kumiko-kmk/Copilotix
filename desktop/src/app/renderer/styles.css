@@ -289,7 +289,7 @@ button, input, select { font: inherit; }
 .settings-page .ant-input-affix-wrapper > .ant-input { border: 0; }
 .settings-page :is(.ant-input, .ant-input-affix-wrapper):is(:focus, :focus-within, .ant-input-affix-wrapper-focused) { border-color: var(--ink); box-shadow: 0 1px 0 var(--shadow-ink); }
 /* One service per row so all services and the usage dashboard fit without scrolling. */
-.service-connections { display: grid; height: 100%; min-height: 0; grid-template-rows: repeat(4, auto) minmax(0, 1fr); gap: 10px; overflow: hidden; }
+.service-connections { display: grid; height: 100%; min-height: 0; grid-template-rows: repeat(3, auto) minmax(0, 1fr); gap: 10px; overflow: hidden; }
 .service-card { display: grid; margin: 0; padding: 10px 20px; grid-template-columns: 150px minmax(0, 1fr) 110px; align-items: center; column-gap: 20px; overflow: visible; }
 .service-card-identity, .service-card-summary, .credential-status, .credential-meta { display: flex; align-items: center; }
 .service-card-identity { min-width: 0; gap: 14px; }
@@ -358,17 +358,46 @@ button, input, select { font: inherit; }
 .model-priority-copy { display: grid; min-width: 0; gap: 3px; }
 .model-priority-copy strong { color: var(--ink); font-size: 16px; font-weight: 720; letter-spacing: .03em; }
 .model-priority-copy small { overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.model-credential-warning { margin-left: 20px; padding: 3px 8px; border: 1px solid #d9782b; border-radius: 2px; color: #c45f00; font-size: 12px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
+.model-credential-warning { margin-left: 20px; padding: 3px 8px; border: 1px solid #d9782b; border-radius: 2px; color: #c45f00; font-size: 12px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; background: transparent; cursor: pointer; }
+.model-credential-warning:hover, .model-credential-warning:focus-visible { background: color-mix(in srgb, #d9782b 8%, transparent); outline: 0; }
 .model-credential-warning.status-invalid { border-color: #cf5049; color: #cf5049; }
 .model-request-order { display: flex; min-width: 0; align-items: baseline; gap: 10px; }
 .model-request-order span { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .14em; }
 .model-request-order strong { color: var(--ink); overflow-wrap: anywhere; font-size: 13px; letter-spacing: .04em; }
+.model-key-summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--text); font-size: 13px; letter-spacing: .04em; }
+/* API keys: one provider at a time, at most five rows, so the view fits the 1100x700 window without scrolling. */
+.api-keys { display: grid; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; overflow: hidden; }
+.api-key-tabs { display: flex; gap: 28px; }
+.api-key-tabs button { position: relative; display: flex; align-items: baseline; gap: 8px; padding: 4px 0 8px; border: 0; color: var(--muted); background: transparent; cursor: pointer; font-size: 15px; font-weight: 650; letter-spacing: .04em; }
+.api-key-tabs button small { font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.api-key-tabs button::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: transparent; content: ""; transition: background-color .18s ease; }
+.api-key-tabs button.active { color: var(--ink); }
+.api-key-tabs button.active::after { background: var(--primary); }
+.api-key-tabs button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.api-key-card { display: grid; min-height: 0; padding: 14px 20px 14px; grid-template-rows: auto minmax(0, 1fr) auto; border-radius: 4px; background: var(--lift); }
+.api-key-list { display: grid; align-content: start; min-height: 0; overflow: hidden; }
+.api-key-empty { padding: 14px 6px; font-size: 13px; }
+.api-key-item { display: grid; min-height: 58px; min-width: 0; padding: 6px 6px 6px 0; grid-template-columns: 42px 36px 48px minmax(0, 1fr) 120px auto; align-items: center; column-gap: 4px; border-radius: 4px; transition: background-color .14s ease, opacity .14s ease; }
+.api-key-item:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.api-key-item.dragging { opacity: .55; background: color-mix(in srgb, var(--primary) 7%, transparent); }
+.api-key-item.disabled .api-key-identity, .api-key-item.disabled .model-priority-number { opacity: .5; }
+.api-key-item .model-priority-number { font-size: 22px; }
+.api-key-identity { display: grid; min-width: 0; gap: 2px; padding-right: 16px; }
+.api-key-label.ant-input { padding: 0; color: var(--ink); font-size: 15px; font-weight: 700; letter-spacing: .03em; }
+.api-key-masked { color: var(--muted); font-size: 12px; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+.api-key-identity .ant-input-affix-wrapper { max-width: 420px; }
+.api-key-error { font-size: 12px; }
+.api-key-actions { display: flex; align-items: center; gap: 8px; }
+.api-key-actions > .ant-btn:not(.ant-btn-icon-only) { min-width: 64px; }
+.api-key-add { display: grid; margin-top: 14px; grid-template-columns: minmax(0, 180px) minmax(0, 1fr) auto; gap: 10px; }
 /* Short windows keep all five providers and the AI note on the page. */
 @media (max-height: 760px) {
   .model-priority-item { min-height: 52px; padding-block: 5px; }
   .model-priority-number { font-size: 22px; }
   .model-priority-copy small { font-size: 12px; }
   .model-priority-card > p { font-size: 12px; line-height: 1.6; }
+  .api-key-item { min-height: 50px; padding-block: 3px; }
+  .api-key-card { padding-block: 10px; }
 }
 .storage-management { display: grid; min-height: 0; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 14px; overflow: hidden; }
 .storage-location-card, .storage-usage-card { padding: 14px 20px 14px; }

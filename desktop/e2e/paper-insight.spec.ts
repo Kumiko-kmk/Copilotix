@@ -9,7 +9,8 @@ test('archive insight uses validated settings, provider HTTP and durable local s
   // Provider validation, generation, archive reload and durable recovery share this case.
   test.setTimeout(120_000)
   const workspace = await createE2EWorkspace()
-  const documentId = await seedReaderTask(workspace, { englishTitle: 'Insight test paper', sourceMarkdown: '# Original title\n\n# Abstract\n\nOriginal paper content.\n\n# Method\n\nStructured analysis.\n\n# Conclusion\n\nImproved reading.', translatedMarkdown: '# 论文标题\n\n# 摘要\n\n研究论文阅读效率。\n\n# 方法\n\n结构化提取。\n\n# 结论\n\n改进阅读。' })
+  // The archive opens a paper with figure hints only once its cover figure is ready.
+  const documentId = await seedReaderTask(workspace, { savedCoverFigure: true, englishTitle: 'Insight test paper', sourceMarkdown: '# Original title\n\n# Abstract\n\nOriginal paper content.\n\n# Method\n\nStructured analysis.\n\n# Conclusion\n\nImproved reading.', translatedMarkdown: '# 论文标题\n\n# 摘要\n\n研究论文阅读效率。\n\n# 方法\n\n结构化提取。\n\n# 结论\n\n改进阅读。' })
   let app: Awaited<ReturnType<typeof launchElectron>> | undefined
   try {
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })

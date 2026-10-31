@@ -6,7 +6,6 @@ import type { TaskComputePort } from '@features/library/contract/taskCompute'
 import { createTranslationProviders } from './providers'
 import { executableProviderOrder } from '../contract/providerPolicy'
 import { runTranslationPlan } from './translationPlanOrchestrator'
-import type { CredentialVault } from '@platform/credentials/main/credentialVault'
 import type { SettingsService, UsageAnalyticsRecorder } from '@features/settings/main'
 import type { TaskRepositoryCompat } from '@features/library/contract/taskRepository'
 import type { TaskLogger } from '@platform/log/main/logger'
@@ -19,7 +18,6 @@ export interface TranslationJobRunnerOptions {
   codex?: CodexRuntime
   repository: TaskRepositoryCompat
   settingsService: SettingsService
-  vault: CredentialVault
   fetcher: Fetcher
   compute: TaskComputePort
   pathPolicy: import('@platform/files/contract/pathPolicyPort').PathPolicyPort
@@ -48,7 +46,7 @@ export class TranslationJobRunner implements JobRunner {
         : 'Parser API Token 尚未验证或已经失效'
       throw new JobRunnerError(`${stateMessage}，请在设置中验证后重试`, 'TRANSLATION_CREDENTIALS_REQUIRED', false)
     }
-    const providers = createTranslationProviders(settings, this.options.vault, this.options.fetcher)
+    const providers = createTranslationProviders(settings, provider => this.options.settingsService.providerKeys(provider), this.options.fetcher)
     if (this.options.codex) providers.set('codex', new CodexTranslationProvider(settings.codex?.translationModel ?? 'default', this.options.codex))
     const providerOrder = executableProviderOrder(
       settings.translationProviderOrder,

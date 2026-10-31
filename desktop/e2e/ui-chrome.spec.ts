@@ -175,11 +175,10 @@ test('lays out service credentials as compact connection cards', async () => {
     const buttonCenter = buttonBounds!.y + buttonBounds!.height / 2
     expect(Math.abs(inputCenter - buttonCenter)).toBeLessThanOrEqual(1)
 
-    await expect(window.getByLabel('APIKey', { exact: true })).toHaveCount(3)
-    const qwenInput = window.locator('#credential-qwen')
-    await expect(qwenInput).toBeVisible()
-    await qwenInput.focus()
-    await expect(window.locator('#credential-qwen')).toHaveAttribute('type', 'password')
+    // Model keys moved to their own view; the services page keeps one summary row for them.
+    await expect(window.getByLabel('APIKey', { exact: true })).toHaveCount(1)
+    await expect(window.locator('#credential-qwen')).toHaveCount(0)
+    await expect(window.locator('[data-provider="model-keys"]')).toContainText('DeepSeek 0 个 · 千问 0 个')
     await expect(window.getByRole('region', { name: 'APIKey 用量分析' })).toBeVisible()
     await expect(window.locator('.settings-page')).toHaveCSS('overflow', 'hidden')
     expect(await window.locator('.settings-page').evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true)
@@ -190,6 +189,52 @@ test('lays out service credentials as compact connection cards', async () => {
     }
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await capture(window, 'settings-services-reference.png')
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
+test('manages up to five keys per provider on one screen without saving unverified keys', async () => {
+  const workspace = await createE2EWorkspace()
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await app.evaluate(({ BrowserWindow, nativeTheme }) => {
+      nativeTheme.themeSource = 'light'
+      BrowserWindow.getAllWindows()[0]?.setSize(1440, 900)
+    })
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.getByRole('button', { name: '设置' }).click()
+    await window.locator('[data-provider="model-keys"]').getByRole('button', { name: '管理密钥' }).click()
+    const view = window.getByRole('region', { name: 'API 密钥' })
+    await expect(view).toBeVisible()
+    await expect(view.getByText('尚未添加密钥', { exact: false })).toBeVisible()
+    // Drafts only: adding a key never contacts the provider until the page is saved.
+    for (const [index, label] of ['主账号', '实验室', '备用一', '备用二', '备用三'].entries()) {
+      await view.getByLabel('新密钥名称').fill(label)
+      await view.getByLabel('新 API Key').fill(`sk-e2e-draft-${index}`)
+      await view.getByRole('button', { name: /添加/u }).click()
+    }
+    await expect(view.locator('.api-key-item')).toHaveCount(5)
+    await expect(view.getByLabel('新 API Key')).toBeDisabled()
+    await expect(view.getByRole('tab', { name: /DeepSeek/u })).toContainText('5/5')
+    await expect(view.locator('.model-request-order strong')).toHaveText('主账号 → 实验室 → 备用一 → 备用二 → 备用三')
+    await view.getByRole('checkbox', { name: '启用实验室' }).click()
+    await view.getByRole('button', { name: '移动备用三' }).focus()
+    await window.keyboard.press('ArrowUp')
+    await expect(view.locator('.model-request-order strong')).toHaveText('主账号 → 备用一 → 备用三 → 备用二')
+    await expect(window.getByText('有未保存的更改')).toBeVisible()
+    for (const size of [[1440, 900], [1100, 700]] as const) {
+      await app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0]?.setSize(width, height), size)
+      await expect.poll(() => window.locator('.settings-content-body').evaluate((element) => {
+        const bottom = element.getBoundingClientRect().bottom + 1
+        return element.scrollHeight <= element.clientHeight && [...element.querySelectorAll('.api-key-item, .api-key-add')].every((row) => row.getBoundingClientRect().bottom <= bottom)
+      })).toBe(true)
+      await capture(window, `settings-api-keys-${size[0]}x${size[1]}.png`)
+    }
+    await window.getByRole('button', { name: '放弃更改' }).click()
+    await expect(view.locator('.api-key-item')).toHaveCount(0)
   } finally {
     await app.close()
     await workspace.cleanup()

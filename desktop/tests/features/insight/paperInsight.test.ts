@@ -11,6 +11,7 @@ import { paperInsightContentSchema, paperInsightRecordSchema, paperInsightReques
 import { PaperInsightService, loadFullBriefContext, type PaperInsightDependencies } from '../../../src/features/insight/main/paperInsightService'
 import { PaperInsightStore } from '../../../src/features/insight/utility/paperInsightStore'
 import { turnError } from '../../../src/platform/codex/runtime/codexRuntime'
+import { providerKey } from '../../providerKeys'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const fs = await importOriginal<typeof import('node:fs/promises')>()
@@ -29,7 +30,7 @@ function fixture() {
   settings.credentials.qwen = { state: 'valid' }
   const stored = new Map<string, PaperInsightState>()
   const deps: PaperInsightDependencies = {
-    settings: vi.fn(async () => settings), key: vi.fn(async () => 'never-persist-this-key'),
+    settings: vi.fn(async () => settings), keys: vi.fn(async () => [providerKey('never-persist-this-key')]),
     get: vi.fn(async (documentId: string): Promise<PaperInsightState> => stored.get(documentId) ?? { status: 'missing' }),
     context: vi.fn(async (documentId: string): Promise<BriefContextResult> => ({ documentId, sourceRevision: 'revision-1', context: buildBriefContext('# Title\n\n## Abstract\n\nPaper content.\n\n## Method\n\nStructured analysis.', '') })),
     save: vi.fn(async (documentId, brief, anchors) => { stored.set(documentId, { status: 'ready', brief, anchors, stale: false, promptOutdated: false }) }),
@@ -51,7 +52,7 @@ describe('structured paper insight', () => {
   })
   it.each(['key', 'unverified', 'provider'])('does not send paper content when %s is unavailable', async (kind) => {
     const f = fixture()
-    if (kind === 'key') f.deps.key = async () => null
+    if (kind === 'key') f.deps.keys = async () => []
     if (kind === 'unverified') f.settings.credentials.qwen = { state: 'invalid' }
     if (kind === 'provider') f.settings.enabledTranslationProviders = []
     expect((await f.service.get(f.id)).status).toBe('unavailable')

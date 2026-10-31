@@ -98,65 +98,75 @@ describe('SettingsPage credential editor', () => {
     expect(dashboard.querySelectorAll('.token-line')).toHaveLength(3)
   })
 
-  it('keeps all services open and sends direct replacement or delete mutations explicitly', async () => {
-    const settings = configuredSettings()
-    const saveSettings = vi.fn(async (update: Parameters<CopilotixDesktopApi['saveSettings']>[0]) => ({
-      settings: update.credentialMutations?.qwen?.action === 'clear'
-        ? { ...settings, credentials: { ...settings.credentials, qwen: { state: 'missing' as const } } }
-        : { ...settings, credentials: { ...settings.credentials, qwen: { state: 'valid' as const, maskedValue: 'new-****-key' } } },
-      fieldErrors: {}
-    }))
-    const api = {
-      saveSettings,
-      validateCredential: vi.fn(async () => ({ state: 'valid' as const })),
-      chooseOutputDirectory: vi.fn(async () => null),
-      getUsageAnalytics: vi.fn(async () => ({ days: [] }))
-    } as unknown as CopilotixDesktopApi
-    Object.defineProperty(window, 'copilotix', { configurable: true, value: api })
-    const onSaved = vi.fn()
-
-    render(<SettingsPage settings={settings} onSaved={onSaved} />)
+  it('keeps the services page to MinerU, a model key summary and Codex', async () => {
+    Object.defineProperty(window, 'copilotix', { configurable: true, value: { getUsageAnalytics: vi.fn(async () => ({ days: [] })), getSettings: vi.fn(async () => configuredSettings()) } as unknown as CopilotixDesktopApi })
+    render(<SettingsPage settings={configuredSettings()} onSaved={vi.fn()} />)
     expect(screen.getByRole('region', { name: '服务连接' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: '服务连接' })).toBeNull()
     expect(document.querySelector('.settings-content-body > .settings-section.service-connections')).toBeTruthy()
     expect(screen.queryByText('文档解析必需')).toBeNull()
-    expect(screen.queryByRole('button', { name: /更多/u })).toBeNull()
-    expect(screen.getAllByLabelText('APIKey')).toHaveLength(3)
+    expect(screen.getAllByLabelText('APIKey')).toHaveLength(1)
     expect(screen.queryByText('服务地址')).toBeNull()
-    expect(screen.queryByText('高级设置')).toBeNull()
-    expect(screen.getAllByRole('button', { name: '测试连接' })).toHaveLength(4)
-    expect(screen.queryByText('配置服务')).toBeNull()
-    expect(screen.queryByText('千问 / Qwen')).toBeNull()
-    expect(screen.getByText('Qwen')).toBeTruthy()
-    expect(screen.queryByText('翻译服务为可选配置；未配置时仍可使用文档解析。')).toBeNull()
-    const qwenCard = document.querySelector('[data-provider="qwen"]') as HTMLElement
-    expect(qwenCard).toBeTruthy()
-    expect(qwenCard.querySelector('.credential-control-masked')).toBeTruthy()
-    expect(screen.queryByDisplayValue('qwen-secret-wxyz')).toBeNull()
-
-    const maskedInput = within(qwenCard).getByLabelText('APIKey')
-    fireEvent.focus(maskedInput)
-    const input = within(qwenCard).getByPlaceholderText('输入新密钥')
-    expect(within(qwenCard).queryByRole('img', { name: /eye/u })).toBeNull()
-    expect(within(qwenCard).queryByRole('button', { name: /替换/u })).toBeNull()
-    fireEvent.change(input, { target: { value: 'new-qwen-secret' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存全部更改' }))
-    await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
-    const replacement = saveSettings.mock.calls[0]![0]
-    expect(replacement.credentialMutations).toEqual({ qwen: { action: 'set', value: 'new-qwen-secret' } })
-    expect(JSON.stringify(replacement)).not.toContain('qwen****wxyz')
-
-    const rowActions = within(qwenCard).getAllByRole('button')
-    expect(rowActions[0]!.textContent).toContain('删除')
-    expect(rowActions[1]!.textContent).toContain('测试连接')
-    fireEvent.click(within(qwenCard).getByRole('button', { name: /删除/u }))
-    fireEvent.click(screen.getByRole('button', { name: '保存全部更改' }))
-    await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(2))
-    expect(saveSettings.mock.calls[1]![0].credentialMutations).toEqual({ qwen: { action: 'clear' } })
-
+    expect(screen.getAllByRole('button', { name: '测试连接' })).toHaveLength(2)
+    const keys = document.querySelector('[data-provider="model-keys"]') as HTMLElement
+    expect(within(keys).getByText('DeepSeek 1 个 · 千问 1 个')).toBeTruthy()
+    expect(document.querySelector('[data-provider="qwen"]')).toBeNull()
+    fireEvent.click(within(keys).getByRole('button', { name: '管理密钥' }))
+    expect(screen.getByRole('region', { name: 'API 密钥' })).toBeTruthy()
     const settingsContent = document.querySelector('.settings-content')!
     expect(settingsContent.lastElementChild?.classList.contains('settings-actions')).toBe(true)
-  }, 15000)
+  })
+
+  it('manages several keys per provider and saves replacements, additions and deletions explicitly', async () => {
+    const settings = configuredSettings()
+    const saveSettings = vi.fn(async (update: Parameters<CopilotixDesktopApi['saveSettings']>[0]) => {
+      const { credentialMutations: _credentialMutations, keyMutations: _keyMutations, ...rest } = update
+      const modelConnections = rest.modelConnections ?? []
+      const keyStatuses = Object.fromEntries(modelConnections.filter(value => value.provider !== 'codex').map(value => [value.connectionId, { state: 'valid' as const, maskedValue: 'saved****key' }]))
+      return { settings: { ...settings, ...rest, keyStatuses, credentials: settings.credentials }, fieldErrors: {} }
+    })
+    Object.defineProperty(window, 'copilotix', {
+      configurable: true,
+      value: { saveSettings, getSettings: vi.fn(async () => settings), validateCredential: vi.fn(async () => ({ state: 'valid' as const })), getUsageAnalytics: vi.fn(async () => ({ days: [] })) } as unknown as CopilotixDesktopApi
+    })
+    render(<SettingsPage settings={settings} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /API 密钥/u }))
+    fireEvent.click(screen.getByRole('tab', { name: /千问/u }))
+    const saveAll = async (): Promise<void> => { fireEvent.click(await screen.findByRole('button', { name: '保存全部更改' }, { timeout: 5000 })) }
+    const row = (): HTMLElement => document.querySelector('[data-key="qwen:default"]') as HTMLElement
+    expect(within(row()).getByText('qwen-****-wxyz')).toBeTruthy()
+    expect(screen.queryByDisplayValue('qwen-secret-wxyz')).toBeNull()
+
+    fireEvent.click(within(row()).getByRole('button', { name: /^更\s?换$/u }))
+    fireEvent.change(within(row()).getByLabelText('新密钥'), { target: { value: 'new-qwen-secret' } })
+    await saveAll()
+    await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
+    const replacement = saveSettings.mock.calls[0]![0]
+    expect(replacement.keyMutations).toEqual({ 'qwen:default': { action: 'set', value: 'new-qwen-secret' } })
+    expect(replacement.credentialMutations).toBeUndefined()
+    expect(JSON.stringify(replacement)).not.toContain('qwen-****-wxyz')
+
+    await screen.findByRole('button', { name: '保存全部更改' }, { timeout: 5000 })
+    fireEvent.change(screen.getByLabelText('新密钥名称'), { target: { value: '备用' } })
+    fireEvent.change(screen.getByLabelText('新 API Key'), { target: { value: 'backup-key' } })
+    fireEvent.click(screen.getByRole('button', { name: /添加/u }))
+    expect(screen.getByDisplayValue('备用')).toBeTruthy()
+    await saveAll()
+    await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(2))
+    const addition = saveSettings.mock.calls[1]![0]
+    const [addedId, addedMutation] = Object.entries(addition.keyMutations ?? {})[0]!
+    expect(addedId).toMatch(/^qwen:[0-9a-f-]{36}$/u)
+    expect(addedMutation).toEqual({ action: 'set', value: 'backup-key' })
+    expect(addition.modelConnections?.filter(value => value.provider === 'qwen').map(value => [value.connectionId, value.label])).toEqual([['qwen:default', undefined], [addedId, '备用']])
+
+    await screen.findByRole('button', { name: '保存全部更改' }, { timeout: 5000 })
+    fireEvent.click(within(row()).getByRole('button', { name: '删除默认密钥' }))
+    await saveAll()
+    await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(3))
+    const deletion = saveSettings.mock.calls[2]![0]
+    expect(deletion.keyMutations).toBeUndefined()
+    expect(deletion.modelConnections?.map(value => value.connectionId)).not.toContain('qwen:default')
+    expect(deletion.modelConnections?.map(value => value.connectionId)).toContain(addedId)
+  }, 30000)
 
   it('reorders the model policy from the keyboard and saves it from the shared action bar', async () => {
     const settings = configuredSettings()
@@ -294,6 +304,10 @@ function configuredSettings(): AppSettings {
       parser: { state: 'valid', maskedValue: 'parse****ecret' },
       qwen: { state: 'valid', maskedValue: 'qwen-****-wxyz' },
       deepseek: { state: 'valid', maskedValue: 'deeps****ecret' }
+    },
+    keyStatuses: {
+      'qwen:default': { state: 'valid', maskedValue: 'qwen-****-wxyz' },
+      'deepseek:default': { state: 'valid', maskedValue: 'deeps****ecret' }
     }
   }
 }

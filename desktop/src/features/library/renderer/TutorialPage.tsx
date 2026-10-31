@@ -78,7 +78,7 @@ export default function TutorialPage(props: {
         setApiError(validation.message ?? 'MinerU API 验证失败，请检查 Token')
         return
       }
-      const { credentials: _credentials, ...publicSettings } = props.settings
+      const { credentials: _credentials, keyStatuses: _keyStatuses, ...publicSettings } = props.settings
       const update: SettingsUpdate = { ...publicSettings, credentialMutations: { parser: { action: 'set', value } } }
       const saved = await window.copilotix.saveSettings(update)
       const fieldError = saved.fieldErrors.parser

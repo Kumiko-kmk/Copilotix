@@ -1,11 +1,10 @@
 import { postCompletion, completionUsage, CompletionHttpError as TranslationHttpError } from '@platform/models/main/completionTransport'
 export { TranslationHttpError }
-import { connectionFor, sharedModelRuntime } from '@platform/models/main/modelRuntime'
-import type { ModelConnection, ModelUsage } from '@platform/models/contract/models'
+import { sharedModelRuntime } from '@platform/models/main/modelRuntime'
+import type { ModelConnection, ModelUsage, ProviderKey } from '@platform/models/contract/models'
 import type { AppSettings, CredentialName } from '@features/settings/contract/settingsTypes'
 import type { HealthResult } from '@features/library/contract/documentTypes'
 import type { TranslationProviderId } from '../contract/translationTypes'
-import type { CredentialVault } from '@platform/credentials/main/credentialVault'
 import {
   flattenSegments,
   parseTableTranslationResponse,
@@ -18,6 +17,8 @@ import type { ProviderTokenUsage } from '@features/settings/main'
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 type UsageObserver = (provider: 'qwen' | 'deepseek', usage: ProviderTokenUsage) => void | Promise<void>
+/** Verified, enabled keys of a provider in request order (SettingsService.providerKeys). */
+export type ProviderKeySource = (provider: 'qwen' | 'deepseek') => Promise<readonly ProviderKey[]>
 
 
 export interface TranslationProvider {
@@ -46,16 +47,28 @@ abstract class QueuedProvider implements TranslationProvider {
   abstract readonly id: TranslationProviderId
   abstract readonly model: string
   abstract isAvailable(): Promise<boolean>
-  protected abstract connection(): Promise<ModelConnection>
-  protected abstract translateDirect(text: string, signal?: AbortSignal): Promise<{ value: string; usage: ModelUsage | null }>
-  protected abstract translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<{ value: TableTranslationResponse; usage: ModelUsage | null }>
+  protected abstract keys(): Promise<readonly ProviderKey[]>
+  protected abstract translateDirect(text: string, key: string, signal?: AbortSignal): Promise<{ value: string; usage: ModelUsage | null }>
+  protected abstract translateTableDirect(request: TableTranslationRequest, key: string, signal?: AbortSignal): Promise<{ value: TableTranslationResponse; usage: ModelUsage | null }>
 
   translate(text: string, signal?: AbortSignal): Promise<string> {
-    return this.connection().then(connection => sharedModelRuntime.execute({ purpose: 'translation', model: this.model, lane: 'background', candidates: [connection], signal: signal ?? new AbortController().signal }, () => this.translateDirect(text, signal))).then(result => result.value)
+    return this.run(signal, key => this.translateDirect(text, key, signal))
   }
 
   translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
-    return this.connection().then(connection => sharedModelRuntime.execute({ purpose: 'translation', model: this.model, lane: 'background', candidates: [connection], signal: signal ?? new AbortController().signal }, () => this.translateTableDirect(request, signal))).then(result => result.value)
+    return this.run(signal, key => this.translateTableDirect(request, key, signal))
+  }
+
+  /** Each key is one candidate; the runtime moves to the next on cooldown or rejection and never retries the same key. */
+  private async run<T>(signal: AbortSignal | undefined, operation: (key: string) => Promise<{ value: T; usage: ModelUsage | null }>): Promise<T> {
+    const keys = await this.keys()
+    if (!keys.length) throw new TranslationCredentialError(`${this.id} 尚未配置可用的 API Key`, this.id as CredentialName)
+    const byConnection = new Map(keys.map(entry => [entry.connection.connectionId, entry.key]))
+    const result = await sharedModelRuntime.execute(
+      { purpose: 'translation', model: this.model, lane: 'background', candidates: keys.map(entry => entry.connection), signal: signal ?? new AbortController().signal },
+      (connection: ModelConnection) => operation(byConnection.get(connection.connectionId)!)
+    )
+    return result.value
   }
 }
 
@@ -64,17 +77,15 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     readonly id: 'qwen' | 'deepseek',
     readonly model: string,
     private readonly baseUrl: string,
-    private readonly credentialAccount: 'qwen-api-key' | 'deepseek-api-key',
-    private readonly vault: CredentialVault,
+    private readonly source: ProviderKeySource,
     private readonly fetcher: Fetcher,
-    private readonly credentialState: AppSettings['credentials']['qwen']['state'],
     private readonly onUsage?: UsageObserver
   ) {
     super()
   }
 
-  protected async connection(): Promise<ModelConnection> {
-    return connectionFor(this.id, this.baseUrl, await this.vault.get(this.credentialAccount) ?? '')
+  protected keys(): Promise<readonly ProviderKey[]> {
+    return this.source(this.id)
   }
 
   get credentialName(): 'qwen' | 'deepseek' {
@@ -82,7 +93,7 @@ class OpenAiCompatibleProvider extends QueuedProvider {
   }
 
   async isAvailable(): Promise<boolean> {
-    return this.credentialState === 'valid' && Boolean(await this.vault.get(this.credentialAccount))
+    return (await this.keys()).length > 0
   }
 
   override async translateTable(request: TableTranslationRequest, signal?: AbortSignal): Promise<TableTranslationResponse> {
@@ -109,10 +120,8 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     return validateTableTranslationResponse({ protocol: TABLE_TRANSLATION_PROTOCOL, translations }, request)
   }
 
-  protected async translateDirect(text: string, signal?: AbortSignal): Promise<{ value: string; usage: ModelUsage | null }> {
-    const apiKey = await this.vault.get(this.credentialAccount)
-    if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
-    return this.translateText(apiKey, text, signal)
+  protected translateDirect(text: string, key: string, signal?: AbortSignal): Promise<{ value: string; usage: ModelUsage | null }> {
+    return this.translateText(key, text, signal)
   }
 
   private async translateText(apiKey: string, text: string, signal?: AbortSignal): Promise<{ value: string; usage: ModelUsage | null }> {
@@ -121,9 +130,7 @@ class OpenAiCompatibleProvider extends QueuedProvider {
     return { value: openAiResponseContent(payload, this.id), usage: completionUsage(payload) }
   }
 
-  protected async translateTableDirect(request: TableTranslationRequest, signal?: AbortSignal): Promise<{ value: TableTranslationResponse; usage: ModelUsage | null }> {
-    const apiKey = await this.vault.get(this.credentialAccount)
-    if (!apiKey) throw new TranslationCredentialError(`${this.id} 尚未配置 API Key`, this.id)
+  protected async translateTableDirect(request: TableTranslationRequest, apiKey: string, signal?: AbortSignal): Promise<{ value: TableTranslationResponse; usage: ModelUsage | null }> {
     const payload = await postCompletion(this.fetcher, this.id, this.baseUrl, apiKey, {
         model: this.model,
         ...(this.id === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
@@ -183,25 +190,13 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 export function createTranslationProviders(
   settings: AppSettings,
-  vault: CredentialVault,
+  keys: ProviderKeySource,
   fetcher: Fetcher,
   onUsage?: UsageObserver
 ): Map<TranslationProviderId, TranslationProvider> {
   return new Map<TranslationProviderId, TranslationProvider>([
-    ['qwen', new OpenAiCompatibleProvider('qwen', settings.qwenModel, settings.qwenBaseUrl, 'qwen-api-key', vault, fetcher, settings.credentials.qwen.state, onUsage)],
-    [
-      'deepseek',
-      new OpenAiCompatibleProvider(
-        'deepseek',
-        settings.deepseekModel,
-        settings.deepseekBaseUrl,
-        'deepseek-api-key',
-        vault,
-        fetcher,
-        settings.credentials.deepseek.state,
-        onUsage
-      )
-    ]
+    ['qwen', new OpenAiCompatibleProvider('qwen', settings.qwenModel, settings.qwenBaseUrl, keys, fetcher, onUsage)],
+    ['deepseek', new OpenAiCompatibleProvider('deepseek', settings.deepseekModel, settings.deepseekBaseUrl, keys, fetcher, onUsage)]
   ])
 }
 

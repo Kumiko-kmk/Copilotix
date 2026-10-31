@@ -1,4 +1,4 @@
-import { Entry } from '@napi-rs/keyring'
+import { Entry, findCredentials } from '@napi-rs/keyring'
 import { createHash } from 'node:crypto'
 
 /** Windows Credential Manager service name; changing it would orphan every stored key. */
@@ -21,6 +21,8 @@ export type CredentialAccount =
   | 'parser-token-validation'
   | 'qwen-api-key-validation'
   | 'deepseek-api-key-validation'
+  /** Extra model keys added in the API key manager, named by their connection's UUID. */
+  | `api-key:${string}`
 
 export interface CredentialVault {
   get(account: CredentialAccount): Promise<string | null>
@@ -68,5 +70,14 @@ export class WindowsCredentialVault implements CredentialVault {
 
   async has(account: CredentialAccount): Promise<boolean> {
     return (await this.get(account)) !== null
+  }
+
+  /** Every account stored under this service, so uninstall also removes keys added later. */
+  async accounts(): Promise<string[]> {
+    try {
+      return findCredentials(this.service).map(credential => credential.account)
+    } catch {
+      return []
+    }
   }
 }

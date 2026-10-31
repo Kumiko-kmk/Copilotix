@@ -16,6 +16,9 @@ type Failure = 'credentials' | 'transient' | 'request' | 'cancelled'
 export class ModelRuntime {
   private usageObserver?: (result: Omit<ModelResult<unknown>, 'value'> & { purpose: ModelRequest['purpose'] }) => void | Promise<void>
   onUsage(observer: NonNullable<ModelRuntime['usageObserver']>): void { this.usageObserver = observer }
+  private rejectedObserver?: (connectionId: string) => void | Promise<void>
+  /** Called once when a connection's credentials are rejected, so settings can persist that key's state. */
+  onCredentialRejected(observer: (connectionId: string) => void | Promise<void>): void { this.rejectedObserver = observer }
   private readonly entries = new Map<string, Entry>()
   private readonly queues = new Map<string, { interactive: PQueue; background: PQueue }>()
   constructor(private readonly now: () => number = Date.now) {}
@@ -97,7 +100,11 @@ export class ModelRuntime {
         } catch (error) {
           if (this.entries.get(connection.connectionId) === e) {
             const kind = classifyModelFailure(error, signal)
-            if (kind === 'credentials') Object.assign(e, { status: 'invalid', reason: 'credentials', nextAllowedAt: 0 })
+            if (kind === 'credentials') {
+              const first = e.status !== 'invalid'
+              Object.assign(e, { status: 'invalid', reason: 'credentials', nextAllowedAt: 0 })
+              if (first) void Promise.resolve().then(() => this.rejectedObserver?.(connection.connectionId)).catch(() => undefined)
+            }
             else if (kind === 'transient' && e.status !== 'cooldown' && e.status !== 'invalid') {
               e.failures++
               const retryAfter = numericField(error, 'retryAfterMs')
@@ -146,6 +153,10 @@ export function configureModelConnections(connections?: readonly ModelConnection
 export function connectionFor(provider: ModelProvider, endpoint: string, credential: string, configured?: readonly ModelConnection[]): ModelConnection {
   const base = (configured ?? configuredConnections).find(value => value.provider === provider && value.connectionId === `${provider}:default`)
     ?? defaultConnections().find(value => value.provider === provider)!
-  return { ...base, endpoint, configVersion: createHash('sha256').update(`${base.configVersion}\0${endpoint}\0${credential}`).digest('hex') }
+  return keyConnection({ ...base, endpoint }, credential)
+}
+/** Binds a stored connection to its current key, so replacing the key resets only that connection's health. */
+export function keyConnection(connection: ModelConnection, credential: string): ModelConnection {
+  return { ...connection, configVersion: createHash('sha256').update(`${connection.configVersion}\0${connection.endpoint}\0${credential}`).digest('hex') }
 }
 export const sharedModelRuntime = new ModelRuntime()

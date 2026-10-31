@@ -84,15 +84,16 @@ export async function bootstrap(): Promise<void> {
   sharedModelRuntime.onUsage(result => usageAnalytics.recordTokens(result.provider, result.usage!))
   const codex = new CodexRuntime(join(userData, 'codex-runtime'), async () => (await settings.get()).codex ?? DEFAULT_CODEX_SETTINGS, (event, details) => logger.info(event, details))
   services.codex = codex
-  const chatProvider = new ChatProvider(fetcher, { invalidate: (provider) => settings.invalidateCredential(provider) })
+  // Any feature's 401/403 marks only the rejected key invalid; the others stay in rotation.
+  sharedModelRuntime.onCredentialRejected(connectionId => settings.invalidateKey(connectionId))
+  const chatProvider = new ChatProvider(fetcher)
   const modelGateway = new ModelGateway(chatProvider, codex)
-  const providerKey = (provider: 'qwen' | 'deepseek' | 'codex'): Promise<string | null> =>
-    provider === 'codex' ? Promise.resolve(null) : vault.get(provider === 'qwen' ? 'qwen-api-key' : 'deepseek-api-key')
+  const providerKeys = (provider: 'qwen' | 'deepseek' | 'codex') => provider === 'codex' ? Promise.resolve([]) : settings.providerKeys(provider)
   const canStartBackground = (): boolean => !libraryGate.busy && !libraryGate.restarting && !appShell.isQuitting
   const toRenderer = (): Electron.WebContents | null => appShell.mainWindow && !appShell.mainWindow.webContents.isDestroyed() ? appShell.mainWindow.webContents : null
   const figureInsight = new FigureInsightService({
     settings: () => settings.get(),
-    key: providerKey,
+    keys: providerKeys,
     descriptor: (request, signal) => utility.request('compute:figure-insight-descriptor', request, { signal, timeoutMs: 30_000 }),
     get: request => utility.request('figureInsight:get', request),
     coverSource: documentId => utility.request('figureInsight:cover-source', { documentId }, { timeoutMs: 30_000 }),
@@ -121,7 +122,7 @@ export async function bootstrap(): Promise<void> {
     deleteTurn: (request) => utility.request('chat:delete-turn', request),
     clear: (documentId) => utility.request('chat:clear', { documentId }),
     settings: () => settings.get(),
-    key: providerKey,
+    keys: providerKeys,
     buildContext: (request, signal) => utility.request('chat:build-context', request, { signal, timeoutMs: 10_000 }),
     stream: (input) => modelGateway.stream(input),
     recordUsage: async () => undefined,
@@ -140,7 +141,7 @@ export async function bootstrap(): Promise<void> {
   services.paperChat = paperChat
   const paperInsight = new PaperInsightService({
     settings: () => settings.get(),
-    key: providerKey,
+    keys: providerKeys,
     get: (documentId) => utility.request('insight:get', { documentId }),
     listSaved: documentIds => utility.request('insight:list', { documentIds: [...documentIds] }, { timeoutMs: 30_000 }),
     context: (documentId, signal) => loadFullBriefContext(documentId, signal, () => utility.request('insight:brief-source', { documentId }, { signal, timeoutMs: 10_000 })),
@@ -228,13 +229,16 @@ export async function bootstrap(): Promise<void> {
     usageAnalytics,
     listTasks: () => tasks.list(),
     afterSave: (before, update, result) => {
-      if (before.enabledTranslationProviders.join(',') !== result.settings.enabledTranslationProviders.join(',') || before.translationProvider !== result.settings.translationProvider || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) paperChat.cancelAll()
       const next = result.settings
+      // Running answers keep the key set they started with; a changed set cancels them like a changed key did.
+      const enabledKeys = (settings: typeof next): string => (settings.modelConnections ?? []).filter(value => value.enabled && value.provider !== 'codex').map(value => value.connectionId).join(',')
+      const keysChanged = Boolean(update.credentialMutations?.qwen || update.credentialMutations?.deepseek || Object.keys(update.keyMutations ?? {}).length) || enabledKeys(before) !== enabledKeys(next)
+      if (before.enabledTranslationProviders.join(',') !== next.enabledTranslationProviders.join(',') || before.translationProvider !== next.translationProvider || keysChanged) paperChat.cancelAll()
       if (before.enabledTranslationProviders.join(',') !== next.enabledTranslationProviders.join(',')
         || before.translationProvider !== next.translationProvider
         || before.qwenChatModel !== next.qwenChatModel
         || before.deepseekChatModel !== next.deepseekChatModel
-        || update.credentialMutations?.qwen || update.credentialMutations?.deepseek) { paperInsight.cancelAll(); figureInsight.cancelAll() }
+        || keysChanged) { paperInsight.cancelAll(); figureInsight.cancelAll() }
     },
     chooseDirectory: async () => {
       const result = await dialog.showOpenDialog(mainWindow(), { properties: ['openDirectory', 'createDirectory'] })
@@ -300,7 +304,6 @@ export async function bootstrap(): Promise<void> {
     codex,
     repository,
     settingsService: settings,
-    vault,
     fetcher,
     compute,
     pathPolicy,
