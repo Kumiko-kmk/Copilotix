@@ -17,7 +17,9 @@ Markdown 翻譯：可恢復的翻譯計劃（Utility）、服務商與回退策�
 
 文檔調度上限 4、每篇 64 個在途計劃單元不變。傳輸與健康狀態由 [platform/models](../../platform/models/README.md) 共用：Qwen／DeepSeek 每額度組 15 背景＋1 互動；Codex 8 背景＋1 互動。Qwen MT 表格最多 4 個單元格共用背景預算。相同候選只發送一次，所有候選不可用立即結束本輪，保留已完成結果與 pending 檢查點；部分輸出不回退。輸入校驗失敗仍由功能處理。
 
-finalize 成功寫入並校驗產物後釋放該計劃的全文／表格 AST 記憶體，重試仍從原有磁碟計劃與 SQLite 塊記錄恢復，保留已完成塊；manifest 額外記錄 sourceVersion；歷史 v4/v5/v6 仍由 document 相容層讀取。恢復入口為 `markdownTranslationPlan`、`translationPlanOrchestrator`、`translationProviders` 用例。
+Codex 把同一作業的多個段落合為一次請求（≤16 段、8000 字），協定 `copilotix-translation-segments-v2`：每項須回 `source`（該段開頭數詞）。`segmentsAligned` 逐段核對回顯是否為本段開頭，並拒絕不含本段數字／縮寫卻含相鄰段兩個以上的譯文；任一段不符則整批作廢、逐段單獨重發，單段仍不符即失敗且不寫快取。v1 未做此核對，曾出現整批錯位一段（標題標記按位置重套，正文顯示成標題）；Codex 快取鍵帶 `CODEX_SEGMENT_ALIGNMENT_VERSION`，舊 Codex 快取不再命中，Qwen／DeepSeek 快取不變。已錯位的既有譯文不自動改寫，需對受影響段落「重新翻譯此段」（加鹽快取，略過沿用）。
+
+finalize 成功寫入並校驗產物後釋放該計劃的全文／表格 AST 記憶體，重試仍從原有磁碟計劃與 SQLite 塊記錄恢復，保留已完成塊；manifest 額外記錄 sourceVersion；歷史 v4/v5/v6 仍由 document 相容層讀取。恢復入口為 `markdownTranslationPlan`、`translationPlanOrchestrator`、`translationProviders` 用例；錯位回歸在 `codexTranslationProvider` 用例。
 
 ## 測試
 
