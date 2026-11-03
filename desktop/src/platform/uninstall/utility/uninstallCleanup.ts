@@ -53,14 +53,15 @@ async function ancestors(path: string): Promise<void> {
   }
 }
 
-async function snapshot(path: string, records: string[]): Promise<void> {
+async function snapshot(path: string, records: string[], ignored: ReadonlySet<string>): Promise<void> {
+  if (ignored.has(path)) return
   await ancestors(path)
   const stat = await inspect(path)
   if (!stat) { records.push(JSON.stringify([path, 'missing'])); return }
   if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) throw failure()
   records.push(JSON.stringify([path, stat.isDirectory() ? 'directory' : 'file', stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs]))
   if (stat.isDirectory()) {
-    for (const name of (await readdir(path)).sort()) await snapshot(join(path, name), records)
+    for (const name of (await readdir(path)).sort()) await snapshot(join(path, name), records, ignored)
   }
 }
 
@@ -104,9 +105,18 @@ export async function prepareUninstallCleanup(options: UninstallCleanupOptions):
   })
   if (new Set(libraryPaths.map(normalized)).size !== libraryPaths.length) throw failure()
   const records: string[] = [JSON.stringify({ userData, libraryPaths, rows, outputRoot, installDirectory, protectedDirectories, forbiddenDirectories })]
-  for (const path of [...libraryPaths, userData]) await snapshot(path, records)
+  // Merely opening a write-ahead-log database read-only touches these two, so their dates cannot show a
+  // change. The -shm index holds no data; the log does, and is compared by content below.
+  const walPath = `${databasePath}-wal`
+  const sidecars = new Set([walPath, `${databasePath}-shm`])
+  for (const path of [...libraryPaths, userData]) await snapshot(path, records, sidecars)
   // Include database bytes so even same-size database updates invalidate confirmation.
-  if (databaseStat) records.push(createHash('sha256').update(await readFile(databasePath)).digest('hex'))
+  if (databaseStat) {
+    records.push(createHash('sha256').update(await readFile(databasePath)).digest('hex'))
+    const wal = await inspect(walPath)
+    if (wal && (!wal.isFile() || wal.isSymbolicLink())) throw failure()
+    records.push(createHash('sha256').update(wal ? await readFile(walPath) : '').digest('hex'))
+  }
   return { userData, libraryPaths, documentCount: rows.length, ...(outputRoot ? { outputRoot } : {}), token: createHash('sha256').update(records.join('\n')).digest('hex'), options: { appData, installDirectory, protectedDirectories, forbiddenDirectories } }
 }
 

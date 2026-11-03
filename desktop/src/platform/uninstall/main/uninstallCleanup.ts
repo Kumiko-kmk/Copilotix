@@ -1,4 +1,5 @@
 import { app, dialog, utilityProcess, type UtilityProcess } from 'electron'
+import { mkdtemp } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { WindowsCredentialVault, type CredentialAccount } from '@platform/credentials/main/credentialVault'
 import { resolveUtilityEntryPath } from '@platform/rpc/main/utilityEntryPath'
@@ -22,6 +23,10 @@ export async function runUninstallCleanup(): Promise<void> {
       app.exit(2)
       return
     }
+    // The lock has answered that no instance is running. Now this process must keep out of the folder
+    // it may remove: Chromium would hold files there and rewrite others, and removal would always fail.
+    app.releaseSingleInstanceLock()
+    app.setPath('userData', await mkdtemp(join(app.getPath('temp'), 'copilotix-uninstall-cleanup-')))
     await app.whenReady()
     const entry = join(dirname(resolveUtilityEntryPath({
       isPackaged: app.isPackaged, bundleDirectory: __dirname, resourcesPath: process.resourcesPath

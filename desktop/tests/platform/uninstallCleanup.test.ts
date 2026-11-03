@@ -56,6 +56,32 @@ describe('uninstall data cleanup', () => {
     expect(await readFile(join(f.output, 'unrelated.pdf'), 'utf8')).toBe('unrelated shared file')
   })
 
+  it('removes a real write-ahead-log database: reopening it read-only is not a change', async () => {
+    const f = await fixture()
+    const writer = new DatabaseSync(f.databasePath)
+    writer.exec('PRAGMA journal_mode=WAL')
+    writer.exec("UPDATE settings SET value=value WHERE key='outputRoot'")
+    writer.close()
+    const plan = await prepareUninstallCleanup(f.options)
+    await executeUninstallCleanup(plan)
+    await expect(readFile(f.databasePath)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(f.library, 'original.pdf'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('still aborts when a change reaches only the write-ahead log after the preview', async () => {
+    const f = await fixture()
+    const writer = new DatabaseSync(f.databasePath)
+    try {
+      writer.exec('PRAGMA journal_mode=WAL')
+      writer.exec('PRAGMA wal_autocheckpoint=0')
+      writer.prepare('INSERT INTO settings VALUES(?,?)').run('before', '1')
+      const plan = await prepareUninstallCleanup(f.options)
+      writer.prepare('INSERT INTO settings VALUES(?,?)').run('after', '2')
+      await expect(executeUninstallCleanup(plan)).rejects.toThrow('safely')
+      expect(await readFile(join(f.library, 'original.pdf'), 'utf8')).toBe('imported copy')
+    } finally { writer.close() }
+  })
+
   it.each(['unsafe-id', 'unsafe-path', 'protected-path'])('rejects %s before deleting anything', async (kind) => {
     const f = await fixture()
     const db = new DatabaseSync(f.databasePath)
