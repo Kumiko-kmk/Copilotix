@@ -6,12 +6,15 @@ export const CREDENTIAL_SERVICE = 'Copilotix-Translation'
 
 /** Test workspaces must never read or overwrite the user's native credentials. */
 export function credentialServiceForRuntime(options: {
+  /** A separately installed edition keeps its keys under its own service name. */
+  service?: string
   isPackaged: boolean
   nodeEnv?: string
   e2eUserData?: string
 }): string {
-  if (options.isPackaged || options.nodeEnv !== 'test' || !options.e2eUserData) return CREDENTIAL_SERVICE
-  return `${CREDENTIAL_SERVICE}-e2e-${createHash('sha256').update(options.e2eUserData).digest('hex')}`
+  const service = options.service ?? CREDENTIAL_SERVICE
+  if (options.isPackaged || options.nodeEnv !== 'test' || !options.e2eUserData) return service
+  return `${service}-e2e-${createHash('sha256').update(options.e2eUserData).digest('hex')}`
 }
 
 export type CredentialAccount =

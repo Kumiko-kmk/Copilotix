@@ -43,7 +43,7 @@ import {
   type ReaderViewId
 } from './readerLayout'
 
-export default function ReaderPage(props: { documentId: string; enterFromLibrary?: boolean; insights?: PaperInsightSource; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
+export default function ReaderPage(props: { documentId: string; enterFromLibrary?: boolean; insights?: PaperInsightSource; showBack?: boolean; resumePosition?: boolean; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
   const queryClient = useQueryClient()
   const chat = usePaperChat(props.documentId)
   const readerNotes = useReaderNotes(props.documentId)
@@ -352,7 +352,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
     <section className={`reader-page${props.enterFromLibrary ? ' reader-from-library' : ''}`}>
       {contextHolder}
       <header className="reader-header">
-        <div className="reader-header-heading"><Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" /><Typography.Text strong ellipsis className="reader-title">{document.summary.displayName.replace(/\.pdf\s*$/iu, '')}</Typography.Text></div>
+        <div className="reader-header-heading">{props.showBack === false ? null : <Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" />}<Typography.Text strong ellipsis className="reader-title">{document.summary.displayName.replace(/\.pdf\s*$/iu, '')}</Typography.Text></div>
         <Space className="reader-header-actions">
           <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
           <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
@@ -398,7 +398,8 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           notes: readerNotes.notes,
           onSaveNote: readerNotes.saveNote,
           onDeleteNote: readerNotes.deleteNote,
-          chat: chatOptions
+          chat: chatOptions,
+          resumePosition: props.resumePosition
         }}
       />
     </section>

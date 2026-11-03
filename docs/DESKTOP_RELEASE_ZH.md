@@ -52,10 +52,32 @@ build 僅 contents:read，publish 僅 contents:write。自1.2.0起草稿只上�
 
 下載驗收證據：desktop/test-artifacts/release-download-acceptance.json、isolated-launcher-acceptance.json。packaged smoke 前須有 Setup、uninstaller、manifest、ZIP，其餘源碼 E2E 只需 bundle。真實付費服務與個人安裝不在這些驗收範圍。
 
+## Lite 版獨立安裝
+
+Lite 與完整版是兩個互不相干的安裝。差異集中在 `src/app/contract/appIdentity.mjs`（Main、卸載 Utility、打包腳本共用）；完整版的值已在使用者機器上生效，不得改動。
+
+| | 完整版 | Lite |
+|---|---|---|
+| appId／產品名／執行檔 | `com.kumiko.copilotix.translation`／Copilotix／Copilotix.exe | `com.kumiko.copilotix.lite`／Copilotix Lite／CopilotixLite.exe |
+| userData（%APPDATA%） | Copilotix-Translation-v2 | Copilotix-Lite |
+| Windows 憑據服務 | Copilotix-Translation | Copilotix-Lite |
+| 預設文檔目錄（文檔） | Copilotix | Copilotix Lite |
+| 安裝 GUID | 14328922-… | 0bd267d6-… |
+| 發布目錄 | release/ | release-lite/ |
+
+- 資料與密鑰不共用；使用者可用「導出／導入論文數據」帶走資料，API 密鑰仍須重新填寫。單實例鎖跟隨 userData，兩版可同時運行。
+- 卸載清理的 userData 資料夾在 Utility 建構時固定（`--mode lite`），不取自請求，因此 Lite 卸載不會碰到完整版的資料或憑據，反之亦然；憑據服務由 Main 依同一身份傳入。
+- `pnpm desktop:release:lite` 先建構 out-lite，打包期間暫時把它放到 desktop/out（asar 內路徑各版相同），結束後刪除 out；重跑完整版 E2E 或打包前須重建。中斷時殘留的標記會讓 `from-built` 拒絕打包。其他門禁（fuses、簽章、packaged smoke、ZIP 校驗、體積上限）與完整版相同。
+- electron-builder 合併陣列，覆寫只用純量；教程 PDF（約 2 MB）因此仍隨 Lite 打包而不使用。
+
+`pnpm desktop:test:installer:lite` 用真實 Setup 在 Temp 內的中文／空格路徑驗收：向導文案、拒絕全機安裝、安裝與啟動、單實例、運行中拒絕安裝／卸載且不強殺、覆蓋安裝保留資料、卸載保留資料、下載版 uninstall.exe 只跟隨 Lite 的登記、清資料（確認框須只列 Lite 路徑才點確認，否則取消）。開始前記錄完整版的登記值、程式雜湊、快捷方式、資料、文庫清單與憑據名稱，每階段比對，只讀不啟動；若 Lite 資料或憑據已存在則拒絕執行，證據在 desktop/test-artifacts/lite-installer。向導與對話框窗口會短暫出現，可真正點擊的只有測試自己建立的資料。
+
+尚未接入：CI 建構／E2E、tag 與 GitHub Release、簽章。`test-installer-*` 其餘腳本只驗完整版的 GUID 與路徑。
+
 ## 安裝、資料與許可邊界
 
 appId、四 bundle、單實例與 userData 保持兼容。只裝當前使用者，運行中提示正常退出不強殺；更改安裝位置不等於文庫遷移。下載 uninstall.exe 只轉交已登記安裝的真實卸載器，不清下載目錄。
 
-升級／靜默卸載預設保留資料與憑據；清資料須向導明確選擇＋Main 第二次原生確認，獨立 Utility 驗 token／唯讀清單／固定 userData 邊界。junction／漂移拒絕，保護來源 PDF、共享檔、外部備份。新儲存／憑據／原生資源同步打包與卸載清單；退出／備份／維護先等聊天取消落盤，文庫遷移包含 chat。自動更新、MSIX／Store、其他平台尚未接入。
+升級／靜默卸載預設保留資料與憑據；清資料須向導明確選擇＋Main 第二次原生確認，獨立 Utility 驗 token／唯讀清單／固定 userData 邊界。清理程序只用單實例鎖確認沒有實例運行，隨後釋放並改以臨時 userData 運行，不得持有或改寫待刪目錄；token 比對資料庫與 -wal 內容，-shm 不含資料故不比（只讀打開 WAL 資料庫也會動到 -shm／-wal 日期）。junction／漂移拒絕，保護來源 PDF、共享檔、外部備份。新儲存／憑據／原生資源同步打包與卸載清單；退出／備份／維護先等聊天取消落盤，文庫遷移包含 chat。自動更新、MSIX／Store、其他平台尚未接入。
 
 自有代碼 MIT，不覆蓋第三方及歷史許可。打包匯總第三方（含開發依賴）並保留 Electron 聲明，放 resources/licenses；缺文本如實列出。使用者操作見 [安裝指南](WINDOWS_INSTALLATION_ZH.md)、[文庫恢復](LIBRARY_MANAGEMENT_ZH.md)。

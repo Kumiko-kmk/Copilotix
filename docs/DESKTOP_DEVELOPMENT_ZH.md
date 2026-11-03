@@ -9,6 +9,16 @@ pnpm desktop:dev
 
 只在新環境或依賴／lockfile 改變時安裝，依賴構建腳本先審閱。必要時用正確 Node 執行 Corepack 快取的 pnpm.mjs，不偽造版本或 user-agent。
 
+## Lite 版
+
+同一份代碼按建構模式出兩個版本：`pnpm desktop:dev:lite` 開發（輸出仍在 out/，切回完整版請重建）；`pnpm desktop:build:lite` 輸出到 `desktop/out-lite/`，與完整版的 out/ 並存。版本由 Vite `define` 的 `__COPILOTIX_LITE__` 在建構時決定；只有組裝層（`app/renderer/main.tsx`、`app/main/bootstrap.ts`）讀它，模組不感知版本。
+
+Lite 組裝器是 `LiteApp.tsx`；完整版是 `App.tsx`，共用邏輯在 `useAppData.ts`、`useGuardedViews.tsx`。Lite 無檔案卡生成：不掛解析完成的自動生成與啟動恢復，也不把來源傳給閱讀器。資料庫、IPC、RPC 與磁碟格式兩版相同，無 migration，但資料不共用。
+
+Lite 是獨立安裝的產品，開發時同樣使用自己的資料目錄（%APPDATA%\Copilotix-Lite、憑據服務 Copilotix-Lite），見[發布](DESKTOP_RELEASE_ZH.md#lite-版獨立安裝)。
+
+`e2e/lite.spec.ts` 跑 out-lite 產物，含打包內容檢查（無 three.js、文庫、主頁字陣、自動生成、完整版資料目錄）；沒有 out-lite 時跳過，須先建構。
+
 ## 测试与实际门禁
 
 代碼修改依序跑 `desktop:typecheck`、`desktop:lint`、`desktop:deps`、受影響測試、`desktop:build:bundles`。文件改動查連結與 diff，不為此打包。

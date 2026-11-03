@@ -266,6 +266,18 @@ describe('workbench keyboard shortcuts and maximize', () => {
     await waitFor(() => expect(view.container.querySelectorAll('.reader-group')).toHaveLength(1))
   })
 
+  it('ignores shortcuts while another page covers the kept-mounted workbench', () => {
+    const view = render(<div data-testid="host"><Harness /></div>)
+    view.getByTestId('host').setAttribute('inert', '')
+    const tabs = (): number => view.getAllByRole('tab', { hidden: true }).length
+    const before = tabs()
+    fireEvent.keyDown(window, { key: 'w', ctrlKey: true })
+    expect(tabs()).toBe(before)
+    view.getByTestId('host').removeAttribute('inert')
+    fireEvent.keyDown(window, { key: 'w', ctrlKey: true })
+    expect(tabs()).toBe(before - 1)
+  })
+
   it('maximizes a group on tab double-click and restores with Escape', () => {
     const twoGroups = normalizeLayout({
       version: 1,

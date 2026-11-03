@@ -66,10 +66,10 @@ export class AppShell {
 
   createTray(): void {
     this.tray = new Tray(this.iconPath())
-    this.tray.setToolTip('Copilotix')
+    this.tray.setToolTip(app.getName())
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: '打开 Copilotix', click: () => this.show() },
+        { label: `打开 ${app.getName()}`, click: () => this.show() },
         {
           label: '退出',
           click: () => {

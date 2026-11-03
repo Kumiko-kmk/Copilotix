@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import { executeUninstallCleanup, prepareUninstallCleanup } from '../../src/platform/uninstall/utility/uninstallCleanup'
 
+const FOLDER = 'Copilotix-Translation-v2'
 const roots: string[] = []
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
 
@@ -40,7 +41,7 @@ describe('uninstall data cleanup', () => {
   it('previews without changing data and removes only registered document copies plus application data', async () => {
     const f = await fixture()
     const originalDatabase = await readFile(f.databasePath)
-    const plan = await prepareUninstallCleanup(f.options)
+    const plan = await prepareUninstallCleanup(f.options, FOLDER)
     expect(plan).toMatchObject({ userData: f.userData, libraryPaths: [f.library], documentCount: 1, outputRoot: f.output })
     expect(await readFile(f.databasePath)).toEqual(originalDatabase)
     expect(await readFile(join(f.library, 'insight', 'insight.v1.json'), 'utf8')).toBe('stored insight')
@@ -62,7 +63,7 @@ describe('uninstall data cleanup', () => {
     writer.exec('PRAGMA journal_mode=WAL')
     writer.exec("UPDATE settings SET value=value WHERE key='outputRoot'")
     writer.close()
-    const plan = await prepareUninstallCleanup(f.options)
+    const plan = await prepareUninstallCleanup(f.options, FOLDER)
     await executeUninstallCleanup(plan)
     await expect(readFile(f.databasePath)).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(join(f.library, 'original.pdf'))).rejects.toMatchObject({ code: 'ENOENT' })
@@ -75,11 +76,25 @@ describe('uninstall data cleanup', () => {
       writer.exec('PRAGMA journal_mode=WAL')
       writer.exec('PRAGMA wal_autocheckpoint=0')
       writer.prepare('INSERT INTO settings VALUES(?,?)').run('before', '1')
-      const plan = await prepareUninstallCleanup(f.options)
+      const plan = await prepareUninstallCleanup(f.options, FOLDER)
       writer.prepare('INSERT INTO settings VALUES(?,?)').run('after', '2')
       await expect(executeUninstallCleanup(plan)).rejects.toThrow('safely')
       expect(await readFile(join(f.library, 'original.pdf'), 'utf8')).toBe('imported copy')
     } finally { writer.close() }
+  })
+
+  it('removing a separately installed edition leaves the other edition data untouched', async () => {
+    const f = await fixture()
+    const liteData = join(f.options.appData, 'Copilotix-Lite')
+    await mkdir(liteData, { recursive: true })
+    await writeFile(join(liteData, 'lite-settings.json'), 'lite settings')
+    const plan = await prepareUninstallCleanup(f.options, 'Copilotix-Lite')
+    expect(plan).toMatchObject({ userData: liteData, libraryPaths: [], documentCount: 0 })
+    await executeUninstallCleanup(plan)
+    await expect(readFile(join(liteData, 'lite-settings.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readFile(f.databasePath)).toBeTruthy()
+    expect(await readFile(join(f.userData, 'settings.json'), 'utf8')).toBe('settings')
+    expect(await readFile(join(f.library, 'original.pdf'), 'utf8')).toBe('imported copy')
   })
 
   it.each(['unsafe-id', 'unsafe-path', 'protected-path'])('rejects %s before deleting anything', async (kind) => {
@@ -89,7 +104,7 @@ describe('uninstall data cleanup', () => {
     if (kind === 'unsafe-path') db.prepare('UPDATE documents SET storage_path=?').run(f.output)
     db.close()
     const options = kind === 'protected-path' ? { ...f.options, protectedDirectories: [f.library] } : f.options
-    await expect(prepareUninstallCleanup(options)).rejects.toThrow('safely')
+    await expect(prepareUninstallCleanup(options, FOLDER)).rejects.toThrow('safely')
     expect(await readFile(join(f.library, 'original.pdf'), 'utf8')).toBe('imported copy')
     expect(await readFile(join(f.userData, 'settings.json'), 'utf8')).toBe('settings')
   })
@@ -97,7 +112,7 @@ describe('uninstall data cleanup', () => {
   it('rejects a corrupt database while retaining all folders', async () => {
     const f = await fixture()
     await writeFile(f.databasePath, 'not SQLite')
-    await expect(prepareUninstallCleanup(f.options)).rejects.toThrow('safely')
+    await expect(prepareUninstallCleanup(f.options, FOLDER)).rejects.toThrow('safely')
     expect(await readFile(join(f.library, 'original.pdf'), 'utf8')).toBe('imported copy')
   })
 
@@ -107,7 +122,7 @@ describe('uninstall data cleanup', () => {
     await mkdir(external)
     await writeFile(join(external, 'keep.txt'), 'preserve')
     await symlink(external, join(f.library, 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
-    await expect(prepareUninstallCleanup(f.options)).rejects.toThrow('safely')
+    await expect(prepareUninstallCleanup(f.options, FOLDER)).rejects.toThrow('safely')
     expect(await readFile(join(external, 'keep.txt'), 'utf8')).toBe('preserve')
     await rm(join(f.library, 'linked'))
     const alias = join(f.root, 'alias')
@@ -115,12 +130,12 @@ describe('uninstall data cleanup', () => {
     const db = new DatabaseSync(f.databasePath)
     db.prepare('UPDATE documents SET storage_path=?').run(join(alias, 'documents-v2', 'document_1'))
     db.close()
-    await expect(prepareUninstallCleanup(f.options)).rejects.toThrow('safely')
+    await expect(prepareUninstallCleanup(f.options, FOLDER)).rejects.toThrow('safely')
   })
 
   it.each(['tree', 'database'])('aborts when %s changes after confirmation preview', async (kind) => {
     const f = await fixture()
-    const plan = await prepareUninstallCleanup(f.options)
+    const plan = await prepareUninstallCleanup(f.options, FOLDER)
     if (kind === 'tree') await writeFile(join(f.library, 'new.md'), 'new result')
     else {
       const db = new DatabaseSync(f.databasePath)
@@ -135,7 +150,7 @@ describe('uninstall data cleanup', () => {
   it('allows retry after the application data directory is already absent', async () => {
     const f = await fixture()
     await rm(f.userData, { recursive: true })
-    const plan = await prepareUninstallCleanup(f.options)
+    const plan = await prepareUninstallCleanup(f.options, FOLDER)
     expect(plan.documentCount).toBe(0)
     await executeUninstallCleanup(plan)
     expect(await readFile(join(f.library, 'original.pdf'), 'utf8')).toBe('imported copy')
@@ -143,14 +158,14 @@ describe('uninstall data cleanup', () => {
 
   it('permits normal user data and library children of protected home and documents folders', async () => {
     const f = await fixture()
-    const plan = await prepareUninstallCleanup({ ...f.options, protectedDirectories: [f.root, f.output] })
+    const plan = await prepareUninstallCleanup({ ...f.options, protectedDirectories: [f.root, f.output] }, FOLDER)
     await executeUninstallCleanup(plan)
     expect(await readFile(join(f.output, 'unrelated.pdf'), 'utf8')).toBe('unrelated shared file')
   })
 
   it('rejects libraries anywhere inside forbidden system folders', async () => {
     const f = await fixture()
-    await expect(prepareUninstallCleanup({ ...f.options, forbiddenDirectories: [f.output] })).rejects.toThrow('safely')
+    await expect(prepareUninstallCleanup({ ...f.options, forbiddenDirectories: [f.output] }, FOLDER)).rejects.toThrow('safely')
     expect(await readFile(join(f.library, 'original.pdf'), 'utf8')).toBe('imported copy')
   })
 })

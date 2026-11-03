@@ -100,7 +100,7 @@ export default function ZoteroImportDialog(props: {
       const result = await window.copilotix.zotero.importItems({ snapshotId: catalog.snapshotId, itemKeys: [...selected] })
       const parts = [
         result.created > 0 ? `新建 ${result.created} 篇` : null,
-        result.linked > 0 ? `${result.linked} 篇已在文库中，已关联 Zotero 条目` : null
+        result.linked > 0 ? `${result.linked} 篇此前已导入，已关联 Zotero 条目` : null
       ].filter(Boolean)
       if (result.failed.length > 0) {
         const examples = result.failed.slice(0, 3).map((item) => `${item.name}（${item.message}）`).join('；')

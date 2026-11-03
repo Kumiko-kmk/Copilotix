@@ -1,4 +1,6 @@
+export { default as DecoratedHomePage } from './DecoratedHomePage'
 export { default as NewParsePage } from './NewParsePage'
+export { default as PaperSidebar } from './PaperSidebar'
 export { default as TutorialPage } from './TutorialPage'
 export { loadLibraryCategories } from './archive/libraryCategoriesClient'
 export { requestLibraryFocus } from './archive/libraryFocus'

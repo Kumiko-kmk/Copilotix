@@ -8,7 +8,7 @@
 - `core/index.ts`：`extractPaperProfile`、`displayPaperTitle` 等標題與論文資訊提取（Zotero 與文庫頁共用）。
 - `main/index.ts`：`TaskService`（文獻指令的入口：導入、重試、刪除、導出、閱讀文件）、`RpcTaskRepository`、`RpcTaskCompute`、`DocumentFeed`、`LibraryAccessGate`、`registerLibraryIpc`、`registerTaskNotifications`。
 - `utility/index.ts`：`V2TaskRepositoryCompat`（SQLite 文獻倉庫）、`createLibraryOperations`、`assertLibraryIdle`／`manageLibrary`。
-- `renderer/index.ts`：`NewParsePage`（首頁與導入）、`TutorialPage`、文獻列表快取與狀態工具；`LibraryPage` 由組裝層懶載入（`App.tsx`），不經 index，以保留 Three.js 分包。
+- `renderer/index.ts`：`NewParsePage`（導入頁，未傳 `decoration` 時只有標題與導入入口，供 Lite 使用）、`DecoratedHomePage`（完整版首頁，加上字陣、字標與問候；裝飾只經此引入，Lite 才不打包）、`PaperSidebar`（Lite 的論文列表）、`TutorialPage`、文獻列表快取與狀態工具；`LibraryPage` 由組裝層懶載入（`App.tsx`），不經 index，以保留 Three.js 分包。
 
 文庫進入時經 insight 的只讀批量 catalog 取得全庫的小型檔案狀態、譯名、關鍵詞與總結，每頁 200 篇；依文檔與來源版本隔離，移除文檔時釋放快取。進入權限只依已保存且當前有效的檔案與已完成工作流，滑鼠任意跨列點選、搜尋、拖動、滾輪、鍵盤共用同一份狀態，不依選中次序、相鄰預讀、圖片或封面是否已渲染。全庫已成熟論文另由 ArchiveCoverService 提前準備完整跨頁封面，不依賴相鄰位置；背景僅一個重任務，當前選擇優先、明確開檔可搶佔無關背景工作。已完成封面以 WebP 存入獨立 IndexedDB，完整卡片查詢仍最多 32 項、閒置 120 秒回收。
 

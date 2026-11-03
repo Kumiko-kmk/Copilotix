@@ -4,11 +4,12 @@ import { createRequire } from 'node:module'
 import { dirname, resolve, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { FULL_IDENTITY, LITE_IDENTITY } from '../src/app/contract/appIdentity.mjs'
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const desktopDirectory = resolve(scriptDirectory, '..')
 const execute = promisify(execFile)
-export const INSTALLATION_GUID = '14328922-5660-531d-8d5f-b169b5a958e0'
+export const INSTALLATION_GUID = FULL_IDENTITY.installGuid
 
 /** Fail closed for incomplete paths or registry commands containing arguments. */
 export function registeredUninstallerPath(root, command) {
@@ -28,11 +29,11 @@ export function nsisDefine(name, value) {
 }
 
 /** Compile using electron-builder's pinned/verified toolset; production signs via the same packager as Setup. */
-export async function buildStandaloneUninstaller({ outputPath, productionRelease = false, signerSubject = null, signFile = null, verifySignature = null, compiler = null, installGuid = INSTALLATION_GUID } = {}) {
+export async function buildStandaloneUninstaller({ outputPath, productionRelease = false, signerSubject = null, signFile = null, verifySignature = null, compiler = null, installGuid = INSTALLATION_GUID, productName = FULL_IDENTITY.productName, executableName = FULL_IDENTITY.executableName } = {}) {
   if (process.platform !== 'win32') throw new Error('The standalone uninstaller requires Windows')
   if (typeof outputPath !== 'string' || !win32.isAbsolute(outputPath) || win32.basename(outputPath).toLowerCase() !== 'uninstall.exe') throw new Error('An absolute uninstall.exe output path is required')
   if (productionRelease && (!signerSubject || typeof signFile !== 'function' || typeof verifySignature !== 'function')) throw new Error('Production uninstaller requires signing and trusted signature verification')
-  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu.test(installGuid) || (productionRelease && installGuid !== INSTALLATION_GUID)) throw new Error('Invalid installation identity for uninstall launcher')
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu.test(installGuid) || (productionRelease && ![FULL_IDENTITY, LITE_IDENTITY].some((identity) => identity.installGuid === installGuid && identity.productName === productName))) throw new Error('Invalid installation identity for uninstall launcher')
   const packageJson = JSON.parse(await readFile(resolve(desktopDirectory, 'package.json'), 'utf8'))
   const require = createRequire(resolve(desktopDirectory, 'package.json'))
   const builderRoot = dirname(require.resolve('app-builder-lib/package.json', { paths: [dirname(require.resolve('electron-builder/package.json'))] }))
@@ -41,7 +42,7 @@ export async function buildStandaloneUninstaller({ outputPath, productionRelease
   const version = /^([0-9]+\.[0-9]+\.[0-9]+)/u.exec(packageJson.version)?.[1]
   if (!version) throw new Error('Invalid launcher product version')
   await mkdir(dirname(outputPath), { recursive: true })
-  await execute(tool.path, ['/V2', '/INPUTCHARSET', 'UTF8', nsisDefine('OUTPUT_PATH', outputPath), nsisDefine('ICON_PATH', resolve(desktopDirectory, 'resources/icon.ico')), nsisDefine('PRODUCT_VERSION', `${version}.0`), nsisDefine('INSTALL_GUID', installGuid), resolve(desktopDirectory, 'resources/uninstall-launcher.nsi')], { env: { ...process.env, ...tool.env }, windowsHide: true, maxBuffer: 1024 * 1024 })
+  await execute(tool.path, ['/V2', '/INPUTCHARSET', 'UTF8', nsisDefine('OUTPUT_PATH', outputPath), nsisDefine('ICON_PATH', resolve(desktopDirectory, 'resources/icon.ico')), nsisDefine('PRODUCT_VERSION', `${version}.0`), nsisDefine('INSTALL_GUID', installGuid), nsisDefine('PRODUCT_NAME', productName), nsisDefine('EXECUTABLE_NAME', `${executableName}.exe`), resolve(desktopDirectory, 'resources/uninstall-launcher.nsi')], { env: { ...process.env, ...tool.env }, windowsHide: true, maxBuffer: 1024 * 1024 })
   if (productionRelease) {
     await signFile(outputPath)
     if (await verifySignature(outputPath) !== signerSubject) throw new Error('Standalone uninstaller signer does not match the runtime signer')

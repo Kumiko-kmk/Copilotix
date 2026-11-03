@@ -1,7 +1,7 @@
 import React from 'react'
 import { isActiveProvider } from '@features/translation/contract/providerPolicy'
 import { cachedStorageInfo, loadStorageInfo } from './storageInfoClient'
-import { DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, ReloadOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Button, Checkbox, Input, Typography, message } from 'antd'
 import type {
   AppSettings,
@@ -53,7 +53,10 @@ export default function SettingsPage(props: {
   settings: AppSettings
   onSaved(settings: AppSettings): void
   onNavigationGuardChange?(guard: SettingsNavigationGuard | null): void
+  /** Settings as a window of their own: no page heading, a back entry above the sections. */
+  onExit?(): void
 }): React.JSX.Element {
+  const collection = props.onExit ? '论文数据' : '文库'
   const [section, setSection] = React.useState<Section>('connections')
   const [draft, setDraft] = React.useState<AppSettings>(props.settings)
   const [credentials, setCredentials] = React.useState<DraftCredentials>(() => initialCredentials(props.settings))
@@ -340,11 +343,12 @@ export default function SettingsPage(props: {
   React.useLayoutEffect(() => () => onNavigationGuardChange?.(null), [onNavigationGuardChange])
 
   return (
-    <section className="page settings-page">
+    <section className={`page settings-page${props.onExit ? ' is-plain' : ''}`}>
       {contextHolder}
-      <PageBrand eyebrow="COPILOTIX / SETTINGS" title="设置" />
+      {props.onExit ? null : <PageBrand eyebrow="COPILOTIX / SETTINGS" title="设置" />}
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="设置分类">
+          {props.onExit ? <button type="button" className="settings-exit" onClick={props.onExit}><ArrowLeftOutlined aria-hidden="true" />返回</button> : null}
           <button className={section === 'connections' ? 'active' : ''} onClick={() => setSection('connections')}><small aria-hidden="true">01</small>服务连接</button>
           <button className={section === 'keys' ? 'active' : ''} onClick={() => setSection('keys')}><small aria-hidden="true">02</small>API 密钥</button>
           <button className={section === 'models' ? 'active' : ''} onClick={() => setSection('models')}><small aria-hidden="true">03</small>模型设置</button>
@@ -462,9 +466,9 @@ export default function SettingsPage(props: {
                   <Input aria-label="文档保存位置" readOnly value={draft.outputRoot} />
                 </label>
                 <div className="storage-location-actions" aria-busy={libraryAction !== null}>
-                  <Button loading={libraryAction === 'backup'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('backup')}>导出文库</Button>
-                  <Button loading={libraryAction === 'restore'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('restore')}>导入文库</Button>
-                  <Button loading={libraryAction === 'migrate'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('migrate')}>迁移文库</Button>
+                  <Button loading={libraryAction === 'backup'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('backup')}>导出{collection}</Button>
+                  <Button loading={libraryAction === 'restore'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('restore')}>导入{collection}</Button>
+                  <Button loading={libraryAction === 'migrate'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('migrate')}>迁移{collection}</Button>
                   <Button disabled={libraryAction !== null} icon={<FolderOpenOutlined aria-hidden="true" />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
                 </div>
               </div>
@@ -483,7 +487,7 @@ export default function SettingsPage(props: {
                 <StorageComposition info={storageInfo} />
                 <StorageGrowth info={storageInfo} />
               </div>
-              <Typography.Text className="storage-note" type="secondary">导出文库包含文档、标注和设置，不包含 API 密钥；导入或迁移会保留旧库并在完成后重启。</Typography.Text>
+              <Typography.Text className="storage-note" type="secondary">导出{collection}包含文档、标注和设置，不包含 API 密钥；导入或迁移会保留旧库并在完成后重启。</Typography.Text>
             </section>
           ) : null}
           {section === 'theme' ? <ThemeSettings value={appearance} onChange={changeAppearance} /> : null}

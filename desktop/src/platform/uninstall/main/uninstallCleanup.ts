@@ -13,12 +13,19 @@ interface CleanupPlan {
   token: string
 }
 
+/** Which installation's data this is; a separately installed edition never reaches another's. */
+export interface UninstallIdentity {
+  name: string
+  userDataFolder: string
+  credentialService: string
+}
+
 /** An explicit uninstall action: no renderer, queues, migrations or network. */
-export async function runUninstallCleanup(): Promise<void> {
+export async function runUninstallCleanup(identity: UninstallIdentity): Promise<void> {
   let child: UtilityProcess | undefined
   try {
-    app.setName('Copilotix')
-    app.setPath('userData', join(app.getPath('appData'), 'Copilotix-Translation-v2'))
+    app.setName(identity.name)
+    app.setPath('userData', join(app.getPath('appData'), identity.userDataFolder))
     if (!app.requestSingleInstanceLock()) {
       app.exit(2)
       return
@@ -50,8 +57,8 @@ export async function runUninstallCleanup(): Promise<void> {
     if (libraryRoots.length > 20) throw new Error('Too many distinct library locations')
     const english = process.argv.includes('--lang=1033')
     const confirmation = await dialog.showMessageBox({
-      type: 'warning', title: english ? 'Remove Copilotix data' : '清除 Copilotix 文庫與資料',
-      message: english ? 'Permanently remove the following Copilotix data?' : '永久移除以下 Copilotix 文庫與資料？',
+      type: 'warning', title: english ? `Remove ${identity.name} data` : `清除 ${identity.name} 文庫與資料`,
+      message: english ? `Permanently remove the following ${identity.name} data?` : `永久移除以下 ${identity.name} 文庫與資料？`,
       detail: (english
         ? `Application data: ${plan.userData}\nDocuments: ${plan.documentCount}\nLibrary folders:\n`
         : `應用資料：${plan.userData}\n文檔數量：${plan.documentCount}\n文庫資料夾：\n`) +
@@ -67,7 +74,7 @@ export async function runUninstallCleanup(): Promise<void> {
       return
     }
     await request(child, { action: 'apply', token: plan.token })
-    const vault = new WindowsCredentialVault()
+    const vault = new WindowsCredentialVault(identity.credentialService)
     const accounts: CredentialAccount[] = ['parser-token', 'qwen-api-key', 'deepseek-api-key',
       'parser-token-validation', 'qwen-api-key-validation', 'deepseek-api-key-validation']
     const added = (await vault.accounts()).filter((account): account is CredentialAccount => account.startsWith('api-key:'))
@@ -76,7 +83,7 @@ export async function runUninstallCleanup(): Promise<void> {
     app.exit(0)
   } catch {
     child?.kill()
-    dialog.showErrorBox('Copilotix', '無法完成資料清理，解除安裝已停止。資料庫可能損壞、路徑含連結，或檔案／憑證無法移除。已清理的項目不會復原；請保留程式並重試，或取消清除選項以保留其餘資料。')
+    dialog.showErrorBox(identity.name, '無法完成資料清理，解除安裝已停止。資料庫可能損壞、路徑含連結，或檔案／憑證無法移除。已清理的項目不會復原；請保留程式並重試，或取消清除選項以保留其餘資料。')
     app.exit(1)
   }
 }

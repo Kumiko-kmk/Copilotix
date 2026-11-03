@@ -9,7 +9,7 @@
 - `runtime/index.ts`：`readMarkdownEditsFile`（翻譯計劃讀取編輯層）。
 - `main/index.ts`：`ArtifactService`（閱讀文件、Markdown／ZIP 導出、裁圖）、`FigureDisplayStore`、`registerReaderIpc`。
 - `utility/index.ts`：`createReaderOperations`、`MarkdownEditStore`（問答上下文也讀編輯層）、`ReaderNoteStore`。
-- `renderer/index.ts`：`loadReaderPage`／`loadedReaderPage`（`ReaderPage` 只經此懶載入，保留分包）、`loadFigureArtifacts`（同理）、`SafeMarkdown`、`ReaderAnnotationToolbar`、`useReaderNoteLayer`、選區與標註工具。
+- `renderer/index.ts`：`loadReaderPage`／`loadedReaderPage`（`ReaderPage` 只經此懶載入，保留分包；`showBack={false}` 去掉返回鍵，`resumePosition` 按 `readerPositions.ts` 的會話記憶繼續閱讀位置，兩者供 Lite 使用）、`loadFigureArtifacts`（同理）、`SafeMarkdown`、`ReaderAnnotationToolbar`、`useReaderNoteLayer`、選區與標註工具。
 
 ## 資料（文獻目錄，均無 migration）
 

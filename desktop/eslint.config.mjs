@@ -14,7 +14,7 @@ const layerImports = (...layers) => layers.flatMap(layer => [`@app/${layer}/**`,
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'release/**', 'node_modules/**', 'dist/**']
+    ignores: ['out/**', 'out-lite/**', 'release/**', 'node_modules/**', 'dist/**']
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

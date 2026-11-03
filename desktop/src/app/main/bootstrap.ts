@@ -7,6 +7,7 @@ import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { registerCodexIpc } from '@platform/codex/main/ipc'
 import { CodexRuntime } from '@platform/codex/runtime/codexRuntime'
 import { credentialServiceForRuntime, WindowsCredentialVault } from '@platform/credentials/main/credentialVault'
+import { APP_IDENTITY } from './identity'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { createIpcRegistrar, emitEvent } from '@platform/ipc/main/ipc'
 import { JobScheduler } from '@platform/jobs/main/jobScheduler'
@@ -46,7 +47,7 @@ export async function bootstrap(): Promise<void> {
     fork: forkUtilityProcess,
     bootstrap: {
       databasePath: join(app.getPath('userData'), 'copilotix-desktop-v2.sqlite3'),
-      outputRoot: join(app.getPath('documents'), 'Copilotix')
+      outputRoot: join(app.getPath('documents'), APP_IDENTITY.documentsFolder)
     }
   })
   services.utility = utility
@@ -60,6 +61,7 @@ export async function bootstrap(): Promise<void> {
   await mkdir(userData, { recursive: true })
   const repository = new RpcTaskRepository(utility)
   const vault = new WindowsCredentialVault(credentialServiceForRuntime({
+    service: APP_IDENTITY.credentialService,
     isPackaged: app.isPackaged,
     nodeEnv: process.env.NODE_ENV,
     e2eUserData: process.env.COPILOTIX_E2E_USER_DATA
@@ -67,7 +69,7 @@ export async function bootstrap(): Promise<void> {
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
     net.fetch(input instanceof URL ? input.toString() : input, init)
   const parserClient = new OfficialParserClient(fetcher, new ElectronFileUploader())
-  const settings = new SettingsService(repository, vault, join(app.getPath('documents'), 'Copilotix'), {
+  const settings = new SettingsService(repository, vault, join(app.getPath('documents'), APP_IDENTITY.documentsFolder), {
     parser: async (value) => {
       await refreshNetworkProxy(session.defaultSession)
       return parserClient.verifyToken(value)
@@ -157,11 +159,13 @@ export async function bootstrap(): Promise<void> {
     }
   })
   services.paperInsight = paperInsight
+  // Lite has nowhere to show an archive card, so it never spends model quota generating one.
   const recoverPaperInsight = (): void => {
+    if (__COPILOTIX_LITE__) return
     void repository.listDocumentSummaries().then(documents => paperInsight.recover(documents.map(document => document.id)))
       .catch(() => logger.info('paper-insight', { status: 'recovery-stopped' }))
   }
-  jobScheduler.on('job-changed', (job) => { void paperInsight.onJobChanged(job).catch(() => logger.info('paper-insight', { status: 'refresh-failed' })) })
+  if (!__COPILOTIX_LITE__) jobScheduler.on('job-changed', (job) => { void paperInsight.onJobChanged(job).catch(() => logger.info('paper-insight', { status: 'refresh-failed' })) })
   const compute = new RpcTaskCompute(utility)
   const pathPolicy = new PathPolicy()
   const tasks = new TaskService(repository, settings, compute, pathPolicy, {

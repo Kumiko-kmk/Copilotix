@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { assertReleaseMetadata, assertReleaseRootContents, assertWindowsX64, createBuildId, createProductionInstallerInclude, writeReleaseMetadata } from '../scripts/package-directory.mjs'
+import { assertReleaseMetadata, assertReleaseRootContents, assertWindowsX64, builderIdentityConfig, createBuildId, createProductionInstallerInclude, installInstructions, writeReleaseMetadata } from '../scripts/package-directory.mjs'
+import { FULL_IDENTITY, LITE_IDENTITY } from '../src/app/contract/appIdentity.mjs'
 import { stampRuntimeFileTimes } from '../scripts/runtime-file-times.mjs'
 import { verifyUninstallerSignature } from '../scripts/verify-uninstaller-signature.mjs'
 import {
@@ -59,6 +60,38 @@ describe('Windows release rename locks', () => {
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+})
+
+describe('separately installed Lite release', () => {
+  it('publishes to its own folder and refuses any folder that is not a known release', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'copilotix-release-layout-'))
+    roots.push(root)
+    const layout = createReleaseLayout({ repositoryRoot: root, buildId: 'lite', releaseName: 'Copilotix-Lite-1.0.0-win-x64', releaseDirectory: LITE_IDENTITY.releaseDirectory })
+    expect(layout.releaseRoot).toBe(join(root, 'release-lite'))
+    expect(layout.setupPath).toBe(join(layout.stagingRoot, 'setup.exe'))
+    expect(() => assertReleaseLayout({ ...layout, releaseRoot: join(root, 'somewhere-else') })).toThrow(/Unexpected release directory/)
+    expect(() => createReleaseLayout({ repositoryRoot: root, buildId: 'bad', releaseName: 'Copilotix-Lite-1.0.0-win-x64', releaseDirectory: 'other' })).toThrow(/Unexpected release directory/)
+  })
+
+  it('changes nothing in the full edition builder config and gives Lite its own identity', () => {
+    expect(builderIdentityConfig(FULL_IDENTITY)).toEqual({})
+    const config = builderIdentityConfig(LITE_IDENTITY)
+    expect(config).toMatchObject({ appId: 'com.kumiko.copilotix.lite', productName: 'Copilotix Lite', executableName: 'CopilotixLite' })
+    expect(config.nsis).toEqual({ shortcutName: 'Copilotix Lite', uninstallDisplayName: 'Copilotix Lite ${version}' })
+    // electron-builder merges arrays with package.json, so an override could not remove anything.
+    expect(Object.values(config).some(Array.isArray)).toBe(false)
+  })
+
+  it('keeps the full edition install instructions and tells Lite users the data is separate', () => {
+    const full = installInstructions('setup.exe')
+    expect(full.startsWith('﻿Copilotix 安装说明\r\n')).toBe(true)
+    expect(full).toContain('从桌面打开 Copilotix；首次使用按应用内引导配置文库和翻译服务。')
+    expect(full).not.toContain('Lite')
+    const lite = installInstructions('setup.exe', true)
+    expect(lite.startsWith('﻿Copilotix Lite 安装说明\r\n')).toBe(true)
+    expect(lite).toContain('资料和密钥互不共用')
+    expect(lite).not.toContain('文库')
+  })
 })
 
 describe('release transaction boundaries', () => {

@@ -16,6 +16,7 @@ dist/
 
 # Desktop build, test, and release output
 desktop/out/
+desktop/out-lite/
 desktop/dist/
 desktop/coverage/
 desktop/test-results/

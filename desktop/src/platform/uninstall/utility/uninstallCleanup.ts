@@ -65,11 +65,14 @@ async function snapshot(path: string, records: string[], ignored: ReadonlySet<st
   }
 }
 
-/** Reads the existing SQLite file without migrations or starting the translation queue. */
-export async function prepareUninstallCleanup(options: UninstallCleanupOptions): Promise<UninstallCleanupPlan> {
+/**
+ * Reads the existing SQLite file without migrations or starting the translation queue.
+ * userDataFolder is fixed when this worker is built, never taken from the cleanup request.
+ */
+export async function prepareUninstallCleanup(options: UninstallCleanupOptions, userDataFolder: string): Promise<UninstallCleanupPlan> {
   const appData = absolute(options.appData)
   const installDirectory = absolute(options.installDirectory)
-  const userData = join(appData, 'Copilotix-Translation-v2')
+  const userData = join(appData, userDataFolder)
   if (overlaps(userData, installDirectory)) throw failure()
   const protectedDirectories = (options.protectedDirectories ?? []).map(absolute)
   const forbiddenDirectories = (options.forbiddenDirectories ?? []).map(absolute)
@@ -144,7 +147,7 @@ async function removeTree(path: string): Promise<void> {
 
 /** Complete safety preflight happens before any removal; only database-recorded library folders are eligible. */
 export async function executeUninstallCleanup(plan: UninstallCleanupPlan, options: UninstallCleanupOptions = plan.options): Promise<void> {
-  const current = await prepareUninstallCleanup(options)
+  const current = await prepareUninstallCleanup(options, basename(plan.userData))
   if (current.token !== plan.token) throw failure()
   for (const path of current.libraryPaths) await removeTree(path)
   await removeTree(current.userData)

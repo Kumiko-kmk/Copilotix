@@ -1,0 +1,59 @@
+/* ───────────── Lite edition: a paper list on the left, no top navigation ───────────── */
+.lite-shell { --titlebar-height: 37px; --sidebar-width: 256px; --sidebar-surface: color-mix(in srgb, var(--muted-surface) 62%, var(--surface)); padding: 0; }
+.lite-body { display: flex; width: 100%; height: 100%; min-height: 0; }
+/* Under settings the page keeps its layout and scroll position but paints nothing, so nothing shows through. */
+.lite-body[inert] { visibility: hidden; }
+.lite-main { position: relative; flex: 1; width: auto; }
+.lite-drag-strip { position: absolute; z-index: 1; top: 0; right: 0; left: 0; height: 36px; -webkit-app-region: drag; }
+.lite-sidebar-toggle { position: fixed; z-index: 2001; top: 5px; left: 82px; display: grid; width: 28px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: 4px; color: var(--muted); background: transparent; cursor: pointer; font-size: 15px; -webkit-app-region: no-drag; transition: color .15s ease, background-color .15s ease; }
+.lite-sidebar-toggle:hover { color: var(--ink); background: color-mix(in srgb, var(--muted-surface) 80%, transparent); }
+.lite-sidebar-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+/* Sidebar */
+.paper-sidebar { display: flex; width: var(--sidebar-width); flex: none; min-height: 0; flex-direction: column; padding: 0 8px 8px; background: var(--sidebar-surface); }
+.paper-sidebar-head { flex: none; height: 44px; margin: 0 -8px; -webkit-app-region: drag; }
+.paper-sidebar-nav { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 10px; }
+.paper-sidebar-action, .paper-sidebar-item { width: 100%; border: 0; border-radius: 4px; color: var(--text); background: transparent; cursor: pointer; font: inherit; text-align: left; transition: background-color .12s ease; }
+.paper-sidebar-action { display: flex; flex: none; height: 34px; padding: 0 10px; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+.paper-sidebar-action .anticon { color: var(--muted); font-size: 14px; }
+.paper-sidebar-action:hover, .paper-sidebar-item:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.paper-sidebar-action[aria-current="page"], .paper-sidebar-item[aria-current="page"] { color: var(--ink); background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.paper-sidebar-action:focus-visible, .paper-sidebar-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.paper-sidebar-list { display: grid; flex: 1; min-height: 0; margin: 0 -4px 0 0; padding: 0 4px 0 0; align-content: start; gap: 2px; overflow: hidden auto; list-style: none; scrollbar-width: thin; }
+.paper-sidebar-item { display: grid; padding: 7px 10px; gap: 2px; }
+/* Two lines: truncated titles cannot be revealed by a hover tooltip, and papers often share a first line. */
+.paper-sidebar-title { display: -webkit-box; overflow: hidden; font-size: 12.5px; line-height: 1.4; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.paper-sidebar-item small { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.paper-sidebar-item[data-status="failed"] small { color: #cf5049; }
+.paper-sidebar-empty { margin: 4px 10px; color: var(--muted); font-size: 12px; }
+.paper-sidebar-settings { margin-top: 6px; }
+
+/* The reader's own header is the title bar here. */
+.lite-shell .reader-header { -webkit-app-region: drag; }
+.lite-shell .reader-header :is(.ant-btn, .reader-header-actions) { -webkit-app-region: no-drag; }
+.lite-shell .reader-header-heading { padding-left: 8px; }
+.lite-shell[data-sidebar="collapsed"] .reader-header-heading { padding-left: 106px; }
+
+/* Home without the cipher field or entrance effects */
+.new-parse-page.is-minimal { padding: 64px 32px 32px; }
+.new-parse-page.is-minimal .new-parse-hero { width: min(720px, 100%); gap: 28px; }
+.new-parse-page.is-minimal :is(.new-parse-heading, .new-parse-content, .drop-veil-frame rect, .upload-glyph-front) { animation: none; }
+.new-parse-page.is-minimal .new-parse-heading h1::after, .new-parse-page.is-minimal .upload-halo, .new-parse-page.is-minimal .upload-entry::before { display: none; }
+.new-parse-page.is-minimal .new-parse-heading h1 { font-size: 26px; font-weight: 700; }
+.new-parse-page.is-minimal .new-parse-content { margin-top: 0; }
+.new-parse-page.is-minimal .upload-entry { box-shadow: none; transition: border-color .15s ease; }
+.new-parse-page.is-minimal .upload-entry:hover, .new-parse-page.is-minimal .upload-entry:focus-within { box-shadow: none; transform: none; }
+.new-parse-page.is-minimal .upload-entry .ant-btn, .new-parse-page.is-minimal .upload-entry .ant-btn:not(:disabled):hover { box-shadow: none; transform: none; }
+.new-parse-page.is-minimal :is(.upload-glyph-back, .upload-glyph-front) { transform: none !important; }
+
+/* Settings take over the window, with their section list where the paper list was. */
+.lite-settings-layer { position: absolute; z-index: 50; inset: 0; background: var(--surface); }
+.lite-settings-layer .settings-page.is-plain { height: 100%; padding: 0; grid-template-rows: minmax(0, 1fr); animation: none; }
+.settings-page.is-plain .settings-layout { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); gap: 0; }
+.settings-page.is-plain .settings-nav { padding: 44px 8px 8px; gap: 2px; background: var(--sidebar-surface); }
+.settings-page.is-plain .settings-nav button { height: 34px; padding: 0 10px; gap: 10px; border-radius: 4px; font-size: 13px; letter-spacing: 0; }
+.settings-page.is-plain .settings-nav button::before, .settings-page.is-plain .settings-nav button small { display: none; }
+.settings-page.is-plain .settings-nav button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.settings-page.is-plain .settings-nav button.active { background: color-mix(in srgb, var(--ink) 10%, transparent); font-weight: 600; }
+.settings-page.is-plain .settings-nav button.settings-exit { margin-bottom: 10px; color: var(--text); font-weight: 600; }
+.settings-page.is-plain .settings-content { max-width: none; padding: 44px 40px 0; justify-self: center; width: min(1080px, 100%); }

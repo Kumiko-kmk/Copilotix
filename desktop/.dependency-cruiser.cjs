@@ -104,7 +104,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '^(?:out|node_modules)/' },
+    exclude: { path: '^(?:out|out-lite|node_modules)/' },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: { extensions: ['.ts', '.tsx', '.mjs', '.js', '.d.ts'] },

@@ -43,7 +43,7 @@ export default function DocumentLifecycleActions(props: {
     <Button type="text" danger icon={<DeleteOutlined />} onClick={() => { setDeleteFiles(true); setConfirming(true) }} aria-label="删除论文" />
     <Modal title="删除论文" open={confirming} okText="删除" okButtonProps={{ danger: true }} confirmLoading={deleting}
       onOk={() => void remove()} onCancel={() => { if (!deleting) setConfirming(false) }}>
-      <p>确定从文库删除“{summary.displayName}”吗？</p>
+      <p>确定删除“{summary.displayName}”吗？</p>
       <Checkbox checked={deleteFiles} onChange={(event) => setDeleteFiles(event.target.checked)}>同时删除本地结果文件（不可恢复）</Checkbox>
     </Modal>
   </>

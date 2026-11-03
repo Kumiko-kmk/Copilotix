@@ -5,6 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 const BUILD_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u
 const RELEASE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u
+/** Each separately installed edition publishes to its own folder and never replaces the other's. */
+const RELEASE_DIRECTORIES = Object.freeze(['release', 'release-lite'])
 
 /** Retry only transient Windows locks; never replace rename with copy/delete. */
 export async function renameReleasePath(from, to, fileSystem = {}) {
@@ -26,14 +28,14 @@ export async function renameReleasePath(from, to, fileSystem = {}) {
  * Build every release path once.  The caller only receives paths whose lexical
  * parent is the repository root or the build's own staging directory.
  */
-export function createReleaseLayout({ repositoryRoot, buildId, releaseName }) {
+export function createReleaseLayout({ repositoryRoot, buildId, releaseName, releaseDirectory = 'release' }) {
   const root = resolveRequiredDirectory(repositoryRoot, 'repository root')
   assertSafeSegment(buildId, BUILD_ID_PATTERN, 'build id')
   assertSafeSegment(releaseName, RELEASE_NAME_PATTERN, 'release name')
 
   const layout = {
     repositoryRoot: root,
-    releaseRoot: join(root, 'release'),
+    releaseRoot: join(root, releaseDirectory),
     stagingRoot: join(root, `.release-next-${buildId}`),
     previousRoot: join(root, `.release-previous-${buildId}`),
     artifactsRoot: join(root, 'release-artifacts'),
@@ -67,7 +69,9 @@ export function assertReleaseLayout(layout) {
   if (stagingBuildId !== previousBuildId || !BUILD_ID_PATTERN.test(stagingBuildId)) {
     throw new Error('Release transaction paths do not share a valid build id')
   }
-  assertExactChild(root, layout.releaseRoot, 'release')
+  const releaseDirectory = basenameOf(layout.releaseRoot)
+  if (!RELEASE_DIRECTORIES.includes(releaseDirectory)) throw new Error(`Unexpected release directory: ${String(layout.releaseRoot)}`)
+  assertExactChild(root, layout.releaseRoot, releaseDirectory)
   assertExactChild(root, layout.stagingRoot, `.release-next-${stagingBuildId}`)
   assertExactChild(root, layout.previousRoot, `.release-previous-${previousBuildId}`)
   assertExactChild(root, layout.artifactsRoot, 'release-artifacts')
