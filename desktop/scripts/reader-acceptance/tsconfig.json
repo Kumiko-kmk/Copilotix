@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["entry.tsx", "parse.ts", "translate.ts", "../../src/**/*.d.ts", "../../src/app/contract/desktopApi.ts"],
+  "exclude": []
+}

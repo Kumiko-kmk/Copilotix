@@ -146,7 +146,7 @@ export function setScrollerTop(scroller: HTMLElement, target: number): void {
 
 export function scrollScrollerTo(scroller: HTMLElement, target: number): void {
   const top = clamp(target, 0, maximumScroll(scroller))
-  if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top, behavior: 'smooth' })
+  if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top, behavior: 'instant' })
   else scroller.scrollTop = top
 }
 

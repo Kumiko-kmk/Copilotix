@@ -1,15 +1,17 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import BlockContextMenu, { type BlockMenuItem } from './BlockContextMenu'
-import { LeftOutlined, MinusOutlined, PlusOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons'
-import { Alert, Button, Progress, Space } from 'antd'
+import { ReloadOutlined } from '@ant-design/icons'
+import { Alert, Button, Progress } from 'antd'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { BlockMapping } from '@features/parsing/contract/blocks'
 import type { BlockSelection } from '../../contract/readerTypes'
 import { acquirePdfDocument } from '@platform/pdf/renderer/pdfDocumentCache'
 import { SYNC_READING_LINE, trackScrollIntent, type ScrollIntent, type ScrollSyncChannel } from '../readerScrollSync'
-import { DEFAULT_PDF_PAGE_SIZE, EMPTY_PAGE_MAPPINGS, indexMappingsByPage, capturePdfScrollAnchor, pdfScrollTopForAnchor, buildPdfPageLayout, pageIndexAtOffset, pdfRenderWindow, remainingPdfLayoutHeight, pdfSyncPosition, findTargetBox, readPdfContentWidth, pdfErrorMessage, type PdfBaseSize, type PdfScrollAnchor, PDF_VIEWPORT_FOCUS, type ScrollMetrics } from './pdfLayout'
+import { DEFAULT_PDF_PAGE_SIZE, EMPTY_PAGE_MAPPINGS, indexMappingsByPage, capturePdfScrollAnchor, pdfScrollTopForAnchor, buildPdfPageLayout, pageIndexAtOffset, remainingPdfLayoutHeight, pdfSyncPosition, findTargetBox, readPdfContentWidth, pdfErrorMessage, type PdfBaseSize, type PdfScrollAnchor, PDF_VIEWPORT_FOCUS, type ScrollMetrics } from './pdfLayout'
 import { PdfScrollbar, PdfPage } from './PdfPageView'
+import { PdfControls } from './PdfControls'
+import { pdfViewportWindow } from './pdfLayout'
 
 export { indexMappingsByPage, capturePdfScrollAnchor, pdfScrollTopForAnchor, buildPdfPageLayout, pageIndexAtOffset, pdfRenderWindow, pdfSyncPosition, pdfPageMetrics, pdfCanvasOutput, readPdfContentWidth } from './pdfLayout'
 export type { PdfPageLayout, PdfScrollAnchor } from './pdfLayout'
@@ -19,7 +21,6 @@ type LoadingState =
   | { status: 'ready' }
   | { status: 'error'; message: string }
 
-const PAGE_RENDER_RADIUS = 1
 const SCROLLBAR_HOT_ZONE_PX = 16
 const SCROLLBAR_HIDE_DELAY_MS = 300
 
@@ -69,6 +70,7 @@ export default function PdfPane(props: {
   const [loadingState, setLoadingState] = React.useState<LoadingState>({ status: 'loading', progress: null })
   const [currentPage, setCurrentPage] = React.useState(1)
   const [zoom, setZoom] = React.useState(() => props.initialViewState?.zoom ?? 1)
+  const [showBounds, setShowBounds] = React.useState(true)
   const restoreAnchorRef = React.useRef(props.initialViewState?.anchor ?? null)
   const onViewStateChangeRef = React.useRef(props.onViewStateChange)
   onViewStateChangeRef.current = props.onViewStateChange
@@ -99,7 +101,7 @@ export default function PdfPane(props: {
   const pageLayoutRef = React.useRef(pageLayout)
   const layoutDocumentRef = React.useRef(document)
   const scrollAnchorRef = React.useRef<PdfScrollAnchor | null>(null)
-  const renderWindow = pdfRenderWindow(currentPage - 1, pageSizes.length, PAGE_RENDER_RADIUS)
+  const renderWindow = pdfViewportWindow(pageLayout, scrollMetrics.top, scrollMetrics.height)
   const viewportRef = React.useRef<HTMLDivElement>(null)
   const scrollIntentRef = React.useRef<ScrollIntent | null>(null)
   const mappingsByPageRef = React.useRef(mappingsByPage)
@@ -128,13 +130,15 @@ export default function PdfPane(props: {
       intent.markProgrammatic()
       scrollAnchorRef.current = anchor
       scroller.scrollTo({ top: pdfScrollTopForAnchor(pageLayoutRef.current, anchor, scroller.clientHeight), behavior: 'instant' })
+      setCurrentPage(box.pageIndex + 1)
+      updateScrollMetrics()
     })
     return () => {
       unregister()
       intent.dispose()
       scrollIntentRef.current = null
     }
-  }, [props.scrollSync])
+  }, [props.scrollSync, updateScrollMetrics])
 
   const cancelScrollbarHide = React.useCallback(() => {
     if (scrollbarHideTimerRef.current === null) return
@@ -213,6 +217,7 @@ export default function PdfPane(props: {
       }
     })
     setDocument(null)
+    setPageSizes([])
     setLoadingState({ status: 'loading', progress: null })
     void handle.promise
       .then((value) => {
@@ -289,39 +294,41 @@ export default function PdfPane(props: {
     if (document) onViewStateChangeRef.current?.({ zoom, anchor: scrollAnchorRef.current })
   }, [currentPage, document, zoom])
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const selection = props.selection
-    if (!selection || (selection.origin !== 'markdown' && selection.origin !== 'citation')) return
+    if (!document || !selection || (selection.origin !== 'markdown' && selection.origin !== 'citation')) return
     const mapping = props.mappings.find((item) => item.id === selection.mappingId)
     const targetBox = mapping ? findTargetBox(mapping, selection.blockPosition) : undefined
     const pageIndex = targetBox?.pageIndex
-    if (!mapping || !targetBox || pageIndex === undefined) return
+    const scroller = scrollerRef.current
+    if (!mapping || !targetBox || pageIndex === undefined || !scroller || !pageLayoutRef.current.pages[pageIndex]) return
     scrollAnchorRef.current = {
       pageIndex,
       pageFraction: (targetBox.bbox[1] + targetBox.bbox[3]) / (2 * targetBox.pageSize[1]),
       viewportFraction: 0.5
     }
-    setCurrentPage(pageIndex + 1)
-    requestAnimationFrame(() => {
-      const page = scrollerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${pageIndex}"]`)
-      if (!page) return
-      const target = Array.from(page.querySelectorAll<HTMLElement>('[data-block-id]')).find(
-        (element) => element.dataset.blockId === mapping.id && element.dataset.blockPosition === targetBox.blockPosition
-      )
-      const destination = target ?? page
-      destination.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    scrollIntentRef.current?.markProgrammatic()
+    const pageWidth = pageLayoutRef.current.pages[pageIndex]!.width
+    const centerX = (targetBox.bbox[0] + targetBox.bbox[2]) / (2 * targetBox.pageSize[0]) * pageWidth
+    scroller.scrollTo({
+      top: pdfScrollTopForAnchor(pageLayoutRef.current, scrollAnchorRef.current, scroller.clientHeight),
+      left: Math.max(0, Math.min(pageWidth - scroller.clientWidth, centerX - scroller.clientWidth / 2)),
+      behavior: 'instant'
     })
-  }, [props.mappings, props.selection])
+    setCurrentPage(pageIndex + 1)
+    updateScrollMetrics()
+  }, [document, props.mappings, props.selection, updateScrollMetrics])
 
   const goToPage = React.useCallback((page: number) => {
-    if (!document) return
-    const next = Math.max(1, Math.min(document.numPages, page))
+    const scroller = scrollerRef.current
+    if (!document || !scroller || !Number.isFinite(page)) return
+    const next = Math.max(1, Math.min(document.numPages, Math.trunc(page)))
     scrollAnchorRef.current = { pageIndex: next - 1, pageFraction: 0, viewportFraction: 0 }
+    scrollIntentRef.current?.markProgrammatic()
+    scroller.scrollTo({ top: pdfScrollTopForAnchor(pageLayoutRef.current, scrollAnchorRef.current, scroller.clientHeight), behavior: 'instant' })
     setCurrentPage(next)
-    requestAnimationFrame(() => {
-      scrollerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${next - 1}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-  }, [document])
+    updateScrollMetrics()
+  }, [document, updateScrollMetrics])
 
   const onPageSize = React.useCallback((pageIndex: number, size: PdfBaseSize) => {
     setPageSizes((current) => {
@@ -359,19 +366,11 @@ export default function PdfPane(props: {
   }, [props.onSelect])
 
   const embedded = props.toolbarHost !== undefined
-  const controls = (
-        <Space size="small">
-          <Button disabled={!document} type="text" icon={<LeftOutlined />} onClick={() => goToPage(currentPage - 1)} aria-label="上一页" />
-          <span>{currentPage} / {document?.numPages ?? '-'}</span>
-          <Button disabled={!document} type="text" icon={<RightOutlined />} onClick={() => goToPage(currentPage + 1)} aria-label="下一页" />
-          <Button disabled={!document} type="text" icon={<MinusOutlined />} onClick={() => setZoom((value) => Math.max(0.6, value - 0.1))} aria-label="缩小" />
-          <span>{Math.round(zoom * 100)}%</span>
-          <Button disabled={!document} type="text" icon={<PlusOutlined />} onClick={() => setZoom((value) => Math.min(2, value + 0.1))} aria-label="放大" />
-        </Space>
-  )
+  const controls = <PdfControls page={currentPage} pages={document?.numPages ?? 0} zoom={zoom}
+    showBounds={showBounds} onPage={goToPage} onZoom={setZoom} onToggleBounds={() => setShowBounds((value) => !value)} />
 
   return (
-    <div className={embedded ? 'pdf-pane embedded' : 'pdf-pane'}>
+    <div className={embedded ? 'pdf-pane embedded' : 'pdf-pane'} data-show-bounds={showBounds}>
       {embedded
         ? props.toolbarHost ? createPortal(<div className="pdf-toolbar">{controls}</div>, props.toolbarHost) : null
         : <div className="pdf-toolbar"><strong>原文件</strong>{controls}</div>}

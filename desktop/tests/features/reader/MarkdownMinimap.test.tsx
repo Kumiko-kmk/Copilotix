@@ -90,7 +90,7 @@ describe('MarkdownMinimap', () => {
     const scrollTo = vi.fn()
     Object.defineProperty(scroller, 'scrollTo', { configurable: true, value: scrollTo })
     fireEvent.click(view.getByRole('button', { name: '跳转到Chapter' }))
-    expect(scrollTo).toHaveBeenCalledWith({ top: 824, behavior: 'smooth' })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 824, behavior: 'instant' })
   })
 
   it('maps static document positions to reflowed block positions in both directions', () => {
@@ -400,7 +400,7 @@ describe('MarkdownMinimap', () => {
     expect(scroller.scrollTop).toBe(0)
 
     fireEvent.click(view.getByRole('button', { name: '跳转到Chapter' }))
-    expect(scrollTo).toHaveBeenCalledWith({ top: 84, behavior: 'smooth' })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 84, behavior: 'instant' })
   })
 })
 

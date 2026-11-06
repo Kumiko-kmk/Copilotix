@@ -35,6 +35,7 @@ renderer 與測試統一解析直接依賴的 KaTeX：rehype-katex 及所匯入�
 ## 工作台契約
 
 - PDF 貼合完整 clientWidth，無外圍 padding／邊框／陰影、原生捲動條、頁間或末頁 gap；浮動捲動條支援拖曳／鍵盤且不佔位。透明欄分隔器覆蓋右欄。寬度／縮放／延遲尺寸改變時，layout effect 按頁號與頁內比例恢復，停用 overflow anchoring 並取消舊 frame；人工翻頁與引用定位正常更新頁碼。
+- PDF 按整個視口的首末可見頁加前後各一頁掛載，避免窄欄／橫版頁在縮小後留白；仍使用共用 worker、排程器與畫布像素上限。原文／引用與直接跳頁以累積頁面幾何定位，不依賴未掛載的 DOM；初始選段在 PDF 載入完成後定位，程式跳轉不回報為人工同步。頁碼可點擊輸入（Enter 確認、Escape 取消），提供適合寬度與區塊邊框開關；隱藏邊框不取消點擊、鍵盤聚焦與選中高亮。不改持久化格式或圖片排版。
 - 只提供 PDF、原文、中文、問答四視圖，JSON 僅保留底層產物與 ZIP。`readerLayout.ts` 為 split／group 純函式樹，每視圖僅出現一次、最後一個不可關閉；localStorage `copilotix.reader.layout.v1` 校驗修復後載入，缺省「PDF｜原文·中文·問答」，首次沿用舊 sessionStorage 欄寬。
 - 工作台分組最小 240×140；拆分、移動、關閉／重開、拖曳（5px 起拖、Esc 取消；邊緣四分之一拆分，中間合併）不得破壞唯一視圖。拖曳預覽走獨立 DragContext；分隔器拖動僅本地更新、放開提交。最大化純 CSS、其他分組保持掛載、不持久化；split pane 不设 position，分隔線用 ::after。
 - Markdown 僅選中時掛載並恢復 `initialScrollTop`；PDF／問答首次顯示後保持掛載。工具列 portal 到所在分組；PdfPane 的 `toolbarHost`、`initialViewState`／`onViewStateChange` 保持移動／重開錨點。頂欄不再提供複製；另存作用於聚焦分組。
@@ -47,3 +48,5 @@ renderer 與測試統一解析直接依賴的 KaTeX：rehype-katex 及所匯入�
 ## 統一文檔模型
 
 通用塊、對齊、圖組與編輯解析已歸 [document](../document/README.md)。原有 core／contract／runtime 路徑只轉出以相容舊引用。閱讀與導出使用同一 getSnapshot 投影；Renderer 讀取 Utility 建立的 base 模型，編輯不重跑全文對齊。新文字錨點含來源版本與塊 ID，舊筆記／標註經唯一文字及上下文適配；不確定時保留記錄而不掛到另一段。
+
+- 阅读定位统一为 instant：缩略图标题、PDF 跳页与段落联动不使用平滑滚动；工作台进入／最大化、拖放预览位置及缩略框尺寸不做滑移动画。滚动容器 CSS 使用 auto，避免继承平滑滚动。

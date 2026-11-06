@@ -413,7 +413,7 @@ describe('MarkdownPane', () => {
 
     await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto', block: 'center' })
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', block: 'center' })
     expect(onSelect).not.toHaveBeenCalled()
   })
 

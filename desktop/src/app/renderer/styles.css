@@ -265,8 +265,7 @@ button, input, select { font: inherit; }
 .settings-page, .tutorial-page { animation: page-enter .45s var(--ease-out) both; }
 @keyframes page-enter { from { opacity: 0; } }
 .reader-page { display: grid; grid-template-rows: 36px minmax(0, 1fr); height: 100%; }
-.reader-from-library { animation: reader-from-library 180ms ease-out both; }
-@keyframes reader-from-library { from { opacity: 0; } to { opacity: 1; } }
+.reader-from-library { animation: none; }
 @media (prefers-reduced-motion: reduce) { .reader-from-library { animation: none; } }
 .reader-header { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px 0 8px; }
 /* Quiet chrome: icons stay muted until pointed at, and delete only turns red on hover. */
@@ -291,7 +290,7 @@ button, input, select { font: inherit; }
 .reader-split.column { flex-direction: column; }
 .reader-split-pane { display: grid; min-width: 0; min-height: 0; flex-basis: 0; }
 .reader-split-handle { position: relative; z-index: 2; width: 8px; min-width: 8px; margin-right: -8px; min-height: 0; outline: 0; background: transparent; cursor: col-resize; touch-action: none; user-select: none; }
-.reader-split-handle::after { position: absolute; top: 0; bottom: 0; left: 0; width: 1px; background: var(--rule); content: ""; transition: width .12s ease, background-color .12s ease, transform .12s ease; }
+.reader-split-handle::after { position: absolute; top: 0; bottom: 0; left: 0; width: 1px; background: var(--rule); content: ""; transition: background-color .12s ease; }
 .reader-split-handle:hover::after, .reader-split-handle:focus-visible::after, .reader-split[data-dragging="true"] .reader-split-handle::after { width: 3px; background: var(--primary); transform: translateX(-1px); }
 .reader-split[data-dragging="true"] { cursor: col-resize; user-select: none; }
 .reader-split.column > .reader-split-handle { width: auto; min-width: 0; height: 8px; min-height: 8px; margin-right: 0; margin-bottom: -8px; cursor: row-resize; }
@@ -306,7 +305,7 @@ button, input, select { font: inherit; }
 .reader-tabs { display: flex; min-width: 0; align-self: stretch; align-items: stretch; flex: 0 1 auto; gap: 4px; padding: 0; overflow-x: auto; border-radius: 0; background: transparent; scrollbar-width: none; }
 .reader-tabs::-webkit-scrollbar { display: none; }
 .reader-tab { position: relative; display: flex; flex: 0 0 auto; align-items: center; border-radius: 0; color: var(--muted); transition: color .16s ease; }
-.reader-tab::after { position: absolute; right: 8px; bottom: 0; left: 8px; height: 2px; background: var(--primary); content: ""; transform: scaleX(0); transform-origin: left; transition: transform .2s var(--ease-out); }
+.reader-tab::after { position: absolute; right: 8px; bottom: 0; left: 8px; height: 2px; background: var(--primary); content: ""; transform: scaleX(0); transform-origin: left; }
 .reader-tab:hover { color: var(--ink); }
 .reader-tab.active { color: var(--ink); }
 .reader-tab.active::after { transform: scaleX(1); }
@@ -336,10 +335,9 @@ button, input, select { font: inherit; }
 .reader-view-panel { display: grid; min-width: 0; min-height: 0; grid-area: 1 / 1; overflow: hidden; }
 .reader-view-panel.inactive { pointer-events: none; visibility: hidden; }
 /* Maximized group covers the workbench; the others stay mounted underneath. */
-.reader-group.maximized { position: absolute; z-index: 6; inset: 0; animation: reader-maximize .2s var(--ease-out); }
-@keyframes reader-maximize { from { opacity: .55; transform: scale(.985); } }
+.reader-group.maximized { position: absolute; z-index: 6; inset: 0; animation: none; }
 /* Tab drag & drop */
-.reader-drop-preview { position: absolute; z-index: 20; top: 8px; right: 8px; bottom: 8px; left: 8px; display: grid; place-items: center; border: 1px dashed var(--primary); border-radius: 2px; background: color-mix(in srgb, var(--primary) 8%, transparent); pointer-events: none; transition: top .14s var(--ease-out), right .14s var(--ease-out), bottom .14s var(--ease-out), left .14s var(--ease-out), background-color .14s ease, border-color .14s ease; }
+.reader-drop-preview { position: absolute; z-index: 20; top: 8px; right: 8px; bottom: 8px; left: 8px; display: grid; place-items: center; border: 1px dashed var(--primary); border-radius: 2px; background: color-mix(in srgb, var(--primary) 8%, transparent); pointer-events: none; transition: background-color .14s ease, border-color .14s ease; }
 .reader-drop-preview.zone-left { right: 50%; }
 .reader-drop-preview.zone-right { left: 50%; }
 .reader-drop-preview.zone-top { bottom: 50%; }
@@ -366,7 +364,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .pdf-pane.embedded { grid-template-rows: minmax(0, 1fr); }
 .pdf-toolbar { display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 0 20px; border-bottom: 1px solid var(--rule); background: var(--surface); }
 .pdf-viewport { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: white; }
-.pdf-scroll { width: 100%; height: 100%; padding: 0; border: 0; overflow: auto; overflow-anchor: none; scroll-behavior: smooth; scrollbar-width: none; }
+.pdf-scroll { width: 100%; height: 100%; padding: 0; border: 0; overflow: auto; overflow-anchor: none; scroll-behavior: auto; scrollbar-width: none; }
 .pdf-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .pdf-scrollbar { position: absolute; z-index: 3; opacity: 0; pointer-events: none; touch-action: none; transition: opacity .15s ease; }
 .pdf-scrollbar.visible, .pdf-scrollbar:focus-visible { opacity: 1; pointer-events: auto; }
@@ -385,6 +383,11 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .pdf-block { position: absolute; z-index: 1; padding: 0; border: 1px solid rgba(47, 94, 234, .78); background: rgba(47, 94, 234, .015); cursor: pointer; }
 .pdf-block:hover { border-color: #2f5eea; background: rgba(66, 99, 255, .08); }
 .pdf-block.active { border: 2px solid #4465ff; background: rgba(68, 101, 255, .13); }
+.pdf-pane[data-show-bounds="false"] .pdf-block:not(.active):not(:hover):not(:focus-visible) { border-color: transparent; background: transparent; }
+.pdf-pane[data-show-bounds="false"] .pdf-merge-layer,
+.pdf-pane[data-show-bounds="false"] .pdf-merge-badge { visibility: hidden; }
+.pdf-page-input { width: 54px; height: 26px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); color: var(--text); text-align: center; font: inherit; }
+.reader-group-actions .pdf-toolbar .ant-btn[aria-label="跳转到页"] { width: auto; padding-inline: 4px; }
 .pdf-block.discarded { border-color: rgba(125, 132, 145, .7); background: rgba(125, 132, 145, .025); }
 .pdf-merge-badge { position: absolute; min-width: 36px; padding: 2px 6px; color: white; background: #2f5eea; font-size: 11px; line-height: 17px; white-space: nowrap; pointer-events: none; }
 .pdf-merge-badge { top: auto; bottom: -21px; left: 50%; border-radius: 0 0 3px 3px; opacity: 1; transform: translateX(-50%); }
@@ -406,7 +409,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-minimap-formula { position: absolute; display: block; overflow: visible; color: var(--text); line-height: 1; white-space: nowrap; transform-origin: 0 0; }
 .markdown-minimap-heading { position: absolute; z-index: 2; display: block; padding: 0; overflow: hidden; border: 0; outline: 0; color: transparent; background: transparent; cursor: pointer; }
 .markdown-minimap-heading:focus-visible { background: color-mix(in srgb, var(--primary) 12%, transparent); box-shadow: inset 2px 0 0 var(--primary); }
-.markdown-minimap-frame { --markdown-minimap-frame-offset: 0px; --markdown-minimap-frame-height: 100%; position: absolute; z-index: 3; top: 0; right: 2px; left: 2px; height: var(--markdown-minimap-frame-height); border: 0; border-radius: 0; background: color-mix(in srgb, var(--ink) 7%, transparent); box-shadow: inset 2px 0 0 var(--primary); pointer-events: none; transform: translate3d(0, var(--markdown-minimap-frame-offset), 0); transition: height .12s ease, background-color .12s ease; will-change: transform, height; }
+.markdown-minimap-frame { --markdown-minimap-frame-offset: 0px; --markdown-minimap-frame-height: 100%; position: absolute; z-index: 3; top: 0; right: 2px; left: 2px; height: var(--markdown-minimap-frame-height); border: 0; border-radius: 0; background: color-mix(in srgb, var(--ink) 7%, transparent); box-shadow: inset 2px 0 0 var(--primary); pointer-events: none; transform: translate3d(0, var(--markdown-minimap-frame-offset), 0); transition: background-color .12s ease; will-change: transform, height; }
 .markdown-minimap-frame[data-preview="true"] { background: color-mix(in srgb, var(--primary) 13%, transparent); }
 .markdown-minimap-frame-hit { --markdown-minimap-frame-hit-offset: 0px; --markdown-minimap-frame-hit-height: 100%; position: absolute; z-index: 4; top: 0; right: 0; left: 0; height: var(--markdown-minimap-frame-hit-height); pointer-events: none; transform: translate3d(0, var(--markdown-minimap-frame-hit-offset), 0); }
 .markdown-render-status { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px; color: var(--muted); background: var(--surface); }
@@ -649,3 +652,6 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .workflow-step[data-state="partial"] { color: #ad6800; font-weight: 650; }
 .workflow-step-check { margin-right: 2px; color: #25976d; }
 .workflow-step-arrow { color: var(--muted); opacity: .6; }
+
+/* Reader navigation never inherits smooth scrolling from a theme or host. */
+.reader-workbench, .reader-workbench *, .markdown-scroll, .pdf-scroll { scroll-behavior: auto; }

@@ -444,7 +444,7 @@ export default function MarkdownPane(props: {
     if (!element) return
     lastNavigatedSelectionRef.current = props.selection
     suppressScrollSelectionRef.current = true
-    element.scrollIntoView({ behavior: 'auto', block: 'center' })
+    element.scrollIntoView({ behavior: 'instant', block: 'center' })
     releaseScrollSelectionSuppression()
   }, [props.active, props.selection, ready, releaseScrollSelectionSuppression])
 
