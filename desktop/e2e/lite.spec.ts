@@ -60,8 +60,11 @@ test.describe('lite edition', () => {
         const overflow = await page.locator('.settings-content-body').evaluate((body) => body.scrollHeight - body.clientHeight)
         expect(overflow, `${name} fits on one screen`).toBeLessThanOrEqual(1)
       }
-      await expect(page.locator('.reader-page[data-kept="yes"]')).toBeHidden()
-      await sections.getByRole('button', { name: '返回' }).click()
+      // A window over the app, not a page in its place: the paper stays on screen behind it.
+      await expect(page.locator('.settings-dialog .ant-modal-content')).toBeVisible()
+      await expect(page.locator('.reader-page[data-kept="yes"]')).toBeVisible()
+      await page.getByRole('button', { name: '关闭设置' }).click()
+      await expect(sections).toHaveCount(0)
       await expect(page.locator('.reader-page[data-kept="yes"]')).toBeVisible()
 
       // Collapsing keeps the title clear of the window controls and the sidebar toggle.

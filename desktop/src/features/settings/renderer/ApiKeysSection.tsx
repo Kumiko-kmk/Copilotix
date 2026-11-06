@@ -149,7 +149,7 @@ export function ApiKeysSection(props: {
           <span className="model-request-order"><span>使用顺序</span><strong>{order.join(' → ') || '未配置'}</strong></span>
         </div>
         <div className="api-key-list" role="list" aria-label="密钥列表">
-          {keys.length === 0 ? <Typography.Text className="api-key-empty" type="secondary">尚未添加密钥。添加后按顺序使用，某个密钥限流、冷却或失效时自动换用下一个。</Typography.Text> : null}
+          {keys.length === 0 ? <Typography.Text className="api-key-empty" type="secondary">尚未添加密钥</Typography.Text> : null}
           {keys.map((connection, index) => {
             const id = connection.connectionId
             const status = { ...props.statuses[id], ...props.drafts.live[id] } as KeyStatus | Partial<KeyStatus>
@@ -181,7 +181,7 @@ export function ApiKeysSection(props: {
                   }}
                 ><HolderOutlined /></button>
                 <Checkbox aria-label={`启用${keyLabel(connection, index)}`} checked={connection.enabled} disabled={props.saving} onChange={() => update(id, { enabled: !connection.enabled })} />
-                <span className="model-priority-number">{String(index + 1).padStart(2, '0')}</span>
+                <span className="model-priority-number">{index + 1}</span>
                 <span className="api-key-identity">
                   <Input
                     className="api-key-label"
@@ -222,7 +222,6 @@ export function ApiKeysSection(props: {
           <Button htmlType="submit" icon={<PlusOutlined />} disabled={!value.trim() || keys.length >= MAX_KEYS_PER_PROVIDER || props.saving}>添加</Button>
         </form>
       </div>
-      <Typography.Text className="storage-note" type="secondary">保存时逐个验证新密钥；密钥只存于 Windows 凭据管理器，不进入设置、日志与文库备份。</Typography.Text>
     </section>
   )
 }

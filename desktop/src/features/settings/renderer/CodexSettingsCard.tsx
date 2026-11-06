@@ -53,16 +53,15 @@ export function CodexSettingsCard({ value = DEFAULT_CODEX_SETTINGS, onChange }: 
   return (
     <ServiceCard
       title="Codex"
-      badge="可选"
       name="codex"
       label="Codex 连接"
       state={state.state}
       stateLabel={state.label}
       footer={<>
         <div className="codex-model-fields">
-          <Select title="" variant="underlined" aria-label="Codex 翻译模型" prefix="翻译" placeholder="检测后选择" value={value.translationModel || undefined} options={options} disabled={disabled} popupMatchSelectWidth={false} onChange={translationModel => onChange({ ...value, translationModel })} />
-          <Select title="" variant="underlined" aria-label="Codex 问答模型" prefix="问答" placeholder="检测后选择" value={value.chatModel || undefined} options={options} disabled={disabled} popupMatchSelectWidth={false} onChange={chatModel => onChange({ ...value, chatModel })} />
-          <Select title="" variant="underlined" aria-label="Codex 推理强度" prefix="推理" value={value.effort ?? 'default'} disabled={busy !== null} popupMatchSelectWidth={false} options={[{ value: 'default', label: '模型默认', title: '' }, ...efforts.map(effort => ({ value: effort, label: effort, title: '' }))]} onChange={effort => onChange({ ...value, effort: effort === 'default' ? null : effort as CodexSettings['effort'] })} />
+          <Select title="" aria-label="Codex 翻译模型" prefix="翻译" placeholder="检测后选择" value={value.translationModel || undefined} options={options} disabled={disabled} popupMatchSelectWidth={false} onChange={translationModel => onChange({ ...value, translationModel })} />
+          <Select title="" aria-label="Codex 问答模型" prefix="问答" placeholder="检测后选择" value={value.chatModel || undefined} options={options} disabled={disabled} popupMatchSelectWidth={false} onChange={chatModel => onChange({ ...value, chatModel })} />
+          <Select title="" aria-label="Codex 推理强度" prefix="推理" value={value.effort ?? 'default'} disabled={busy !== null} popupMatchSelectWidth={false} options={[{ value: 'default', label: '模型默认', title: '' }, ...efforts.map(effort => ({ value: effort, label: effort, title: '' }))]} onChange={effort => onChange({ ...value, effort: effort === 'default' ? null : effort as CodexSettings['effort'] })} />
           <Button loading={busy === 'test'} disabled={busy !== null || status?.state !== 'ready' || !models.length} onClick={() => void inspect(models)}>测试模型</Button>
         </div>
         {message ? <p className="codex-message" role="status">{message}</p> : null}

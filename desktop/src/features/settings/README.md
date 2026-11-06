@@ -6,7 +6,11 @@
 
 - `contract/ipc.ts`：`settingsChannels`（`settings:get`／`save`／`validate-credential`、`dialog:output-directory`、`storage:info`、`storage:open-location`、`analytics:usage`）與 `createSettingsApi`；`settingsTypes.ts`、`settingsSchemas.ts`（設定、憑據、存儲與用量的型別與 schema）、`defaultSettings.ts`（`DEFAULT_SETTINGS`）。
 - `main/index.ts`：`SettingsService`、`UsageAnalyticsService`（`UsageAnalyticsRecorder`、`ProviderTokenUsage` 供解析、翻譯、問答記錄用量）、`registerSettingsIpc`。
-- `renderer/index.ts`：`SettingsPage`（傳 `onExit` 時不顯示頁首，分類上方多一個「返回」，供 Lite 使用）、主題（`restoreTheme`、`currentTheme`、`onThemeChange`、`mixHex`、`rgbChannels`）、`refreshCodexStatus`／`useCodexStatus`、`loadStorageInfo`、`SettingsNavigationGuard`。
+- `renderer/index.ts`：`SettingsPage`（分類配細線條圖標 `settingsIcons.tsx`；傳 `onExit` 時為視窗版：右上關閉、不顯示用量與存儲圖表、保存欄只在有改動時出現）、`SettingsDialog`（Lite 的設定視窗，antd Modal 包住視窗版 `SettingsPage`，關閉經呼叫方的未保存確認）、主題（`restoreTheme`、`currentTheme`、`onThemeChange`、`mixHex`、`rgbChannels`）、`refreshCodexStatus`／`useCodexStatus`、`loadStorageInfo`、`SettingsNavigationGuard`。
+
+## 版面
+
+左列分類、右列面板，只放標題、控件與狀態或錯誤，不加說明行；兩版共用，樣式在 `renderer/settings.css`（Lite 只在 `app/renderer/lite.css` 覆寫側欄寬與底色）。規則見 [介面偏好](../../../../docs/UI_PREFERENCES_ZH.md#设置页版式)。
 
 ## 資料
 
@@ -22,7 +26,7 @@
 
 ## 例外
 
-無超過 600 行的檔案（`SettingsPage.tsx` 的用量與存儲面板拆在 `SettingsDashboards.tsx`）。
+無超過 600 行的檔案（`SettingsPage.tsx` 的用量與存儲面板拆在 `SettingsDashboards.tsx`，存儲區在 `StorageSettings.tsx`，MinerU 憑據編輯在 `CredentialEditor.tsx`）。
 
 ## 多 API 密鍵
 

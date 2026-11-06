@@ -1,34 +1,38 @@
 import React from 'react'
 import { isActiveProvider } from '@features/translation/contract/providerPolicy'
 import { cachedStorageInfo, loadStorageInfo } from './storageInfoClient'
-import { ArrowLeftOutlined, DatabaseOutlined, DeleteOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, HolderOutlined, ReloadOutlined } from '@ant-design/icons'
-import { Button, Checkbox, Input, Typography, message } from 'antd'
+import { HolderOutlined } from '@ant-design/icons'
+import { Button, Checkbox, Typography, message } from 'antd'
 import type {
   AppSettings,
   CredentialMutation,
   CredentialName,
-  CredentialStatus,
   CredentialValidation,
   SettingsUpdate
 } from '../contract/settingsTypes'
 import type { ActiveTranslationProviderId } from '@features/translation/contract/translationTypes'
 import type { StorageInfo, UsageAnalytics } from '../contract/settingsSchemas'
-import { formatBytes, StorageComposition, StorageGrowth, StorageMetric, UsageDashboard } from './SettingsDashboards'
+import { UsageDashboard } from './SettingsDashboards'
+import { StorageSettings, type LibraryAction } from './StorageSettings'
+import { CredentialEditor, initialCredentialDraft, type DraftCredential } from './CredentialEditor'
+import { AppearanceIcon, CloseIcon, ConnectionIcon, KeyIcon, ModelIcon, StorageIcon } from './settingsIcons'
 import ThemeSettings from './ThemeSettings'
 import { previewAppearance, saveAppearance, storedAppearance, type Appearance } from './theme'
 import { CodexSettingsCard } from './CodexSettingsCard'
 import { ServiceCard } from './ServiceCard'
 import { ApiKeysSection, useKeyDrafts } from './ApiKeysSection'
-import PageBrand from './PageBrand'
+import './settings.css'
 import type { SettingsNavigationGuard } from './settingsNavigation'
 
 type Section = 'connections' | 'keys' | 'models' | 'storage' | 'theme'
 
-interface DraftCredential {
-  value: string
-  editing: boolean
-  clear: boolean
-}
+const SECTIONS: ReadonlyArray<[Section, string, () => React.JSX.Element]> = [
+  ['connections', '服务连接', ConnectionIcon],
+  ['keys', 'API 密钥', KeyIcon],
+  ['models', '模型设置', ModelIcon],
+  ['storage', '文件存储', StorageIcon],
+  ['theme', '显示设置', AppearanceIcon]
+]
 
 /** Only the MinerU token is edited here; model keys are managed in the API key view. */
 type DraftCredentials = Record<'parser', DraftCredential>
@@ -43,20 +47,20 @@ const STATUS_LABELS: Record<CredentialValidation, string> = {
   invalid: '验证失败'
 }
 
-const MODEL_DETAILS: Record<ActiveTranslationProviderId, { label: string; description: string }> = {
-  codex: { label: 'Codex', description: '通过本机 Codex 提供大语言模型翻译与论文分析' },
-  deepseek: { label: 'DeepSeek', description: '通过 DeepSeek API 提供大语言模型翻译' },
-  qwen: { label: '千问 / Qwen', description: '通过阿里云百炼 API 提供专业翻译模型' },
+const MODEL_LABELS: Record<ActiveTranslationProviderId, string> = {
+  codex: 'Codex',
+  deepseek: 'DeepSeek',
+  qwen: '千问 / Qwen'
 }
 
 export default function SettingsPage(props: {
   settings: AppSettings
   onSaved(settings: AppSettings): void
   onNavigationGuardChange?(guard: SettingsNavigationGuard | null): void
-  /** Settings as a window of their own: no page heading, a back entry above the sections. */
+  /** Settings in a window over the app: a close button, and only what is needed on each section. */
   onExit?(): void
 }): React.JSX.Element {
-  const collection = props.onExit ? '论文数据' : '文库'
+  const windowed = Boolean(props.onExit)
   const [section, setSection] = React.useState<Section>('connections')
   const [draft, setDraft] = React.useState<AppSettings>(props.settings)
   const [credentials, setCredentials] = React.useState<DraftCredentials>(() => initialCredentials(props.settings))
@@ -66,7 +70,7 @@ export default function SettingsPage(props: {
   const [storageInfo, setStorageInfo] = React.useState<StorageInfo | null>(() => cachedStorageInfo(props.settings.outputRoot))
   const [usageAnalytics, setUsageAnalytics] = React.useState<UsageAnalytics | null>(null)
   const [storageLoading, setStorageLoading] = React.useState(false)
-  const [libraryAction, setLibraryAction] = React.useState<'backup' | 'restore' | 'migrate' | null>(null)
+  const [libraryAction, setLibraryAction] = React.useState<LibraryAction | null>(null)
   const libraryActionRef = React.useRef(false)
   const [draggingProvider, setDraggingProvider] = React.useState<ActiveTranslationProviderId | null>(null)
   const previousSettingsRef = React.useRef(props.settings)
@@ -115,7 +119,7 @@ export default function SettingsPage(props: {
     }
   }, [messageApi, props.settings.outputRoot])
 
-  const runLibraryAction = React.useCallback(async (action: 'backup' | 'restore' | 'migrate') => {
+  const runLibraryAction = React.useCallback(async (action: LibraryAction) => {
     if (libraryActionRef.current) return
     libraryActionRef.current = true
     setLibraryAction(action)
@@ -160,14 +164,15 @@ export default function SettingsPage(props: {
     return () => { active = false }
   }, [section, setLiveKeys])
 
+  // The window shows no usage charts, so it does not ask for them.
   React.useEffect(() => {
-    if (section !== 'connections') return
+    if (section !== 'connections' || windowed) return
     let active = true
     void window.copilotix.getUsageAnalytics()
       .then((analytics) => { if (active) setUsageAnalytics(analytics) })
       .catch(() => { if (active) setUsageAnalytics(null) })
     return () => { active = false }
-  }, [section, props.settings])
+  }, [section, props.settings, windowed])
 
   const validate = React.useCallback(async (name: 'parser') => {
     const entry = credentials[name]
@@ -343,25 +348,27 @@ export default function SettingsPage(props: {
   React.useLayoutEffect(() => () => onNavigationGuardChange?.(null), [onNavigationGuardChange])
 
   return (
-    <section className={`page settings-page${props.onExit ? ' is-plain' : ''}`}>
+    <section className={`page settings-page${windowed ? ' is-window' : ''}`}>
       {contextHolder}
-      {props.onExit ? null : <PageBrand eyebrow="COPILOTIX / SETTINGS" title="设置" />}
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="设置分类">
-          {props.onExit ? <button type="button" className="settings-exit" onClick={props.onExit}><ArrowLeftOutlined aria-hidden="true" />返回</button> : null}
-          <button className={section === 'connections' ? 'active' : ''} onClick={() => setSection('connections')}><small aria-hidden="true">01</small>服务连接</button>
-          <button className={section === 'keys' ? 'active' : ''} onClick={() => setSection('keys')}><small aria-hidden="true">02</small>API 密钥</button>
-          <button className={section === 'models' ? 'active' : ''} onClick={() => setSection('models')}><small aria-hidden="true">03</small>模型设置</button>
-          <button className={section === 'storage' ? 'active' : ''} onClick={() => setSection('storage')}><small aria-hidden="true">04</small>文件存储</button>
-          <button className={section === 'theme' ? 'active' : ''} onClick={() => setSection('theme')}><small aria-hidden="true">05</small>显示设置</button>
+          <h1 className="settings-title">设置</h1>
+          {SECTIONS.map(([id, label, SectionIcon]) => (
+            <button key={id} type="button" className={section === id ? 'active' : ''} aria-current={section === id ? 'page' : undefined} onClick={() => setSection(id)}><SectionIcon />{label}</button>
+          ))}
         </nav>
         <div className="settings-content">
+          {props.onExit ? (
+            <header className="settings-window-header">
+              <h2>{SECTIONS.find(([id]) => id === section)![1]}</h2>
+              <button type="button" className="settings-close" aria-label="关闭设置" onClick={props.onExit}><CloseIcon /></button>
+            </header>
+          ) : null}
           <div className="settings-content-body">
           {section === 'connections' ? (
             <section className="settings-section service-connections" aria-label="服务连接">
               <ServiceCard
                 title="MinerU"
-                badge="必需"
                 name="parser"
                 state={draft.credentials.parser.state}
                 stateLabel={draft.credentials.parser.message ?? STATUS_LABELS[draft.credentials.parser.state]}
@@ -378,7 +385,6 @@ export default function SettingsPage(props: {
               </ServiceCard>
               <ServiceCard
                 title="模型密钥"
-                badge="可选"
                 name="model-keys"
                 state={keySummary.state}
                 stateLabel={keySummary.label}
@@ -389,7 +395,7 @@ export default function SettingsPage(props: {
                 </div>
               </ServiceCard>
               <CodexSettingsCard value={draft.codex} onChange={codex => setDraft(current => ({ ...current, codex }))} />
-              <UsageDashboard analytics={usageAnalytics} />
+              {windowed ? null : <UsageDashboard analytics={usageAnalytics} />}
             </section>
           ) : null}
           {section === 'keys' ? (
@@ -404,10 +410,10 @@ export default function SettingsPage(props: {
           {section === 'models' ? (
             <section className="settings-section model-priority" aria-label="模型设置">
               <div className="model-priority-card">
-                <div className="model-priority-heading"><strong>大语言模型优先级</strong><span className="model-request-order"><span>请求顺序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).filter(isActiveProvider).map((provider) => MODEL_DETAILS[provider].label.replace(' / Qwen', '')).join(' → ') || '未配置'}</strong></span></div>
+                <div className="model-priority-heading"><strong>大语言模型优先级</strong><span className="model-request-order"><span>请求顺序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).filter(isActiveProvider).map((provider) => MODEL_LABELS[provider].replace(' / Qwen', '')).join(' → ') || '未配置'}</strong></span></div>
                 <div className="model-priority-list" role="list" aria-label="翻译模型优先级">
                   {draft.translationProviderOrder.filter(isActiveProvider).map((provider, index) => {
-                    const details = MODEL_DETAILS[provider]
+                    const label = MODEL_LABELS[provider]
                     const credentialStatus = provider === 'qwen' || provider === 'deepseek' ? draft.credentials[provider] : null
                     return (
                       <div
@@ -424,7 +430,7 @@ export default function SettingsPage(props: {
                         <button
                           type="button"
                           className="model-drag-handle"
-                          aria-label={`移动${details.label}`}
+                          aria-label={`移动${label}`}
                           draggable={!saving}
                           disabled={saving}
                           onDragStart={(event) => {
@@ -439,13 +445,13 @@ export default function SettingsPage(props: {
                           }}
                         ><HolderOutlined /></button>
                         <Checkbox
-                          aria-label={`启用${details.label}`}
+                          aria-label={`启用${label}`}
                           checked={draft.enabledTranslationProviders.includes(provider)}
                           disabled={saving}
                           onChange={() => toggleTranslationProvider(provider)}
                         />
-                        <span className="model-priority-number">{String(index + 1).padStart(2, '0')}</span>
-                        <span className="model-priority-copy"><strong>{details.label}</strong><small>{details.description}</small></span>
+                        <span className="model-priority-number">{index + 1}</span>
+                        <span className="model-priority-copy">{label}</span>
                         {credentialStatus && credentialStatus.state !== 'valid' ? <button type="button" className={`model-credential-warning status-${credentialStatus.state}`} onClick={() => setSection('keys')}>{credentialStatus.state === 'missing' ? '未添加密钥' : STATUS_LABELS[credentialStatus.state]}</button> : null}
                       </div>
                     )
@@ -455,50 +461,19 @@ export default function SettingsPage(props: {
             </section>
           ) : null}
           {section === 'storage' ? (
-            <section className="settings-section storage-management" aria-label="文件存储">
-              <div className="storage-location-card">
-                <div className="storage-card-heading">
-                  <span className="storage-card-icon"><FolderOutlined /></span>
-                  <span><strong>文档保存位置</strong><small>新建解析任务及其翻译结果会保存到此目录</small></span>
-                </div>
-                <label className="storage-location-field">
-                  <span>目录位置</span>
-                  <Input aria-label="文档保存位置" readOnly value={draft.outputRoot} />
-                </label>
-                <div className="storage-location-actions" aria-busy={libraryAction !== null}>
-                  <Button loading={libraryAction === 'backup'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('backup')}>导出{collection}</Button>
-                  <Button loading={libraryAction === 'restore'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('restore')}>导入{collection}</Button>
-                  <Button loading={libraryAction === 'migrate'} disabled={libraryAction !== null || saving || storageLoading} onClick={() => void runLibraryAction('migrate')}>迁移{collection}</Button>
-                  <Button disabled={libraryAction !== null} icon={<FolderOpenOutlined aria-hidden="true" />} onClick={() => void openStorageLocation()}>打开当前目录</Button>
-                </div>
-              </div>
-              <div className="storage-usage-card" aria-busy={storageLoading}>
-                <div className="storage-usage-heading">
-                  <span><strong>存储用量</strong><small>{storageInfo?.exists === false ? '文档目录尚未建立' : '当前已保存内容'}</small></span>
-                  <Button disabled={libraryAction !== null} icon={<ReloadOutlined />} loading={storageLoading} onClick={() => void refreshStorageInfo()}>刷新用量</Button>
-                </div>
-                <div className="storage-usage-grid">
-                  <StorageMetric icon={<FileTextOutlined />} label="文档" value={storageInfo ? String(storageInfo.documentCount) : '—'} />
-                  <StorageMetric icon={<FileOutlined />} label="文件" value={storageInfo ? String(storageInfo.fileCount) : '—'} />
-                  <StorageMetric icon={<DatabaseOutlined />} label="占用空间" value={storageInfo ? formatBytes(storageInfo.totalBytes) : '—'} />
-                </div>
-              </div>
-              <div className="storage-insights">
-                <StorageComposition info={storageInfo} />
-                <StorageGrowth info={storageInfo} />
-              </div>
-              <Typography.Text className="storage-note" type="secondary">导出{collection}包含文档、标注和设置，不包含 API 密钥；导入或迁移会保留旧库并在完成后重启。</Typography.Text>
-            </section>
+            <StorageSettings compact={windowed} outputRoot={draft.outputRoot} info={storageInfo} loading={storageLoading} action={libraryAction} saving={saving}
+              onAction={(action) => void runLibraryAction(action)} onOpen={() => void openStorageLocation()} onRefresh={() => void refreshStorageInfo()} />
           ) : null}
           {section === 'theme' ? <ThemeSettings value={appearance} onChange={changeAppearance} /> : null}
           </div>
-          <div className="settings-actions">
+          {/* In the window the save bar only appears once there is something to save. */}
+          {windowed && !hasUnsavedChanges && !saving ? null : <div className="settings-actions">
             <Typography.Text type={hasUnsavedChanges ? 'warning' : 'secondary'}>{hasUnsavedChanges ? '有未保存的更改' : '所有更改均已保存'}</Typography.Text>
             <div className="settings-action-buttons">
-              <Button size="large" disabled={!hasUnsavedChanges || saving || libraryAction !== null} onClick={discard}>放弃更改</Button>
-              <Button type="primary" size="large" loading={saving} disabled={!hasUnsavedChanges || libraryAction !== null} onClick={() => void save()}>保存全部更改</Button>
+              <Button disabled={!hasUnsavedChanges || saving || libraryAction !== null} onClick={discard}>放弃更改</Button>
+              <Button type="primary" loading={saving} disabled={!hasUnsavedChanges || libraryAction !== null} onClick={() => void save()}>保存全部更改</Button>
             </div>
-          </div>
+          </div>}
         </div>
       </div>
     </section>
@@ -507,62 +482,6 @@ export default function SettingsPage(props: {
 
 function initialCredentials(settings: AppSettings): DraftCredentials {
   return { parser: initialCredentialDraft(settings.credentials.parser) }
-}
-
-function initialCredentialDraft(status: CredentialStatus): DraftCredential {
-  return { value: '', editing: status.state === 'missing', clear: false }
-}
-
-function CredentialEditor(props: {
-  name: CredentialName
-  status: CredentialStatus
-  draft: DraftCredential
-  error?: string
-  testing: boolean
-  onDraft(patch: Partial<DraftCredential>): void
-  onValidate(): void
-}): React.JSX.Element {
-  const configured = props.status.state !== 'missing'
-  const editing = props.draft.editing
-  const distinctError = props.error && props.error !== props.status.message ? props.error : undefined
-  return (
-    <div className="credential-editor">
-      <label className="credential-label" htmlFor={`credential-${props.name}`}>APIKey</label>
-      <div className={`credential-control${configured && !editing && !props.draft.clear ? ' credential-control-masked' : ''}`}>
-        {editing ? (
-          <Input.Password
-            id={`credential-${props.name}`}
-            autoComplete="new-password"
-            value={props.draft.value}
-            onChange={(event) => props.onDraft({ value: event.target.value, clear: false })}
-            placeholder="输入新密钥"
-            visibilityToggle={false}
-          />
-        ) : (
-          <Input
-            id={`credential-${props.name}`}
-            aria-label="APIKey"
-            value=""
-            readOnly
-            placeholder={configured ? undefined : '输入新密钥'}
-            onFocus={() => props.onDraft({ editing: true, value: '', clear: false })}
-          />
-        )}
-      </div>
-      <div className="credential-actions">
-        <Button
-          danger
-          icon={<DeleteOutlined />}
-          disabled={!configured && !props.draft.value && !props.draft.clear}
-          onClick={() => props.onDraft({ editing: true, value: '', clear: true })}
-        >删除</Button>
-        <Button className="credential-validate" loading={props.testing} disabled={props.draft.clear || (editing && !props.draft.value.trim())} onClick={props.onValidate}>测试连接</Button>
-      </div>
-      <div className="credential-meta">
-        {distinctError ? <Typography.Text type="danger">{distinctError}</Typography.Text> : null}
-      </div>
-    </div>
-  )
 }
 
 export function moveProviderBefore(

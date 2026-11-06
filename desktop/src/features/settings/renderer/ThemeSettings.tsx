@@ -41,16 +41,16 @@ function ThemePreview(): React.JSX.Element {
  */
 export default function ThemeSettings(props: { value: Appearance; onChange(next: Appearance): void }): React.JSX.Element {
   const { value, onChange } = props
-  const groups: Array<[string, string, readonly ThemeDefinition[]]> = [
-    ['浅色', 'Light', THEMES.filter((theme) => !theme.dark)],
-    ['深色', 'Dark', THEMES.filter((theme) => theme.dark)]
+  const groups: Array<[string, readonly ThemeDefinition[]]> = [
+    ['浅色', THEMES.filter((theme) => !theme.dark)],
+    ['深色', THEMES.filter((theme) => theme.dark)]
   ]
   return (
     <section className="settings-section theme-settings" aria-label="显示设置">
       <div className="theme-groups">
-        {groups.map(([name, label, themes]) => (
-          <div key={label} className="theme-group" role="radiogroup" aria-label={`${name}主题`}>
-            <span className="theme-group-label">{name}<small>{label}</small></span>
+        {groups.map(([name, themes]) => (
+          <div key={name} className="theme-group" role="radiogroup" aria-label={`${name}主题`}>
+            <span className="theme-group-label">{name}</span>
             <div className="theme-grid">
               {themes.map((theme) => (
                 <label key={theme.id} className={`theme-card${value.themeId === theme.id ? ' active' : ''}`} style={previewStyle(theme)}>
@@ -63,19 +63,7 @@ export default function ThemeSettings(props: { value: Appearance; onChange(next:
                     onChange={() => onChange({ ...value, themeId: theme.id })}
                   />
                   <ThemePreview />
-                  <span className="theme-card-copy">
-                    <span className="theme-card-heading">
-                      <strong>{theme.name}</strong>
-                      {value.themeId === theme.id ? <em>使用中</em> : <small>{theme.label}</small>}
-                    </span>
-                    <span className="theme-swatches" aria-hidden="true">
-                      <i style={{ background: theme.colors.surface }} />
-                      <i style={{ background: theme.colors.sheet }} />
-                      <i style={{ background: theme.colors.ink }} />
-                      <i style={{ background: theme.colors.primary }} />
-                      <i style={{ background: theme.colors.archiveFloor }} />
-                    </span>
-                  </span>
+                  <span className="theme-card-name">{theme.name}</span>
                 </label>
               ))}
             </div>
@@ -83,23 +71,21 @@ export default function ThemeSettings(props: { value: Appearance; onChange(next:
         ))}
       </div>
       <div className="theme-group reader-font-setting">
-        <span className="theme-group-label">阅读<small>Reader</small></span>
-        <div className="reader-font-control">
-          <ReaderStepper
-            id="reader-font-size" label="字号" name="阅读字号" range={READER_FONT_SIZES} value={value.readerFontSize}
-            decrease="A−" increase="A+" format={(size) => <>{size}<small>px</small></>}
-            onChange={(readerFontSize) => onChange({ ...value, readerFontSize })}
-          />
-          <ReaderStepper
-            id="reader-line-height" label="行间距" name="阅读行间距" range={READER_LINE_HEIGHTS} value={value.readerLineHeight}
-            decrease="−" increase="+" format={(height) => <>{height.toFixed(1)}<small>倍</small></>}
-            onChange={(readerLineHeight) => onChange({ ...value, readerLineHeight })}
-          />
-          <div className="reader-font-sample" style={{ fontSize: `${value.readerFontSize}px`, lineHeight: value.readerLineHeight }}>
-            <p>
-            注意力机制已成为序列建模中不可或缺的一部分，使模型能够不受距离限制地刻画依赖关系。Attention mechanisms have become an integral part of sequence modeling, allowing modeling of dependencies without regard to their distance in the input or output sequences. 在多数情况下，这类机制与循环网络结合使用；本文提出的 Transformer 则完全依赖注意力机制来建立输入与输出之间的全局依赖。</p>
-            <p>Transformer 允许显著更多的并行化，在八块 P100 GPU 上仅训练十二小时，就能在翻译质量上达到新的水平。The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs. 我们在后文中描述其结构，并说明自注意力相较于卷积与循环层的优势。</p>
-          </div>
+        <span className="theme-group-label">阅读</span>
+        <ReaderStepper
+          id="reader-font-size" label="字号" name="阅读字号" range={READER_FONT_SIZES} value={value.readerFontSize}
+          decrease="A−" increase="A+" format={(size) => <>{size}<small>px</small></>}
+          onChange={(readerFontSize) => onChange({ ...value, readerFontSize })}
+        />
+        <ReaderStepper
+          id="reader-line-height" label="行间距" name="阅读行间距" range={READER_LINE_HEIGHTS} value={value.readerLineHeight}
+          decrease="−" increase="+" format={(height) => <>{height.toFixed(1)}<small>倍</small></>}
+          onChange={(readerLineHeight) => onChange({ ...value, readerLineHeight })}
+        />
+        <div className="reader-font-sample" style={{ fontSize: `${value.readerFontSize}px`, lineHeight: value.readerLineHeight }}>
+          <p>
+          注意力机制已成为序列建模中不可或缺的一部分，使模型能够不受距离限制地刻画依赖关系。Attention mechanisms have become an integral part of sequence modeling, allowing modeling of dependencies without regard to their distance in the input or output sequences. 在多数情况下，这类机制与循环网络结合使用；本文提出的 Transformer 则完全依赖注意力机制来建立输入与输出之间的全局依赖。</p>
+          <p>Transformer 允许显著更多的并行化，在八块 P100 GPU 上仅训练十二小时，就能在翻译质量上达到新的水平。The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs. 我们在后文中描述其结构，并说明自注意力相较于卷积与循环层的优势。</p>
         </div>
       </div>
     </section>

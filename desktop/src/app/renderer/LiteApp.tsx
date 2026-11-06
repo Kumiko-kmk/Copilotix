@@ -1,5 +1,5 @@
 import React from 'react'
-import { SettingsPage } from '@features/settings/renderer'
+import { SettingsDialog } from '@features/settings/renderer'
 // Direct import: the reader barrel re-exports Markdown rendering (KaTeX CSS) that must stay in the lazy reader chunk.
 import { loadReaderPage } from '@features/reader/renderer/readerPageLoader'
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
@@ -13,7 +13,7 @@ import './lite.css'
 const ReaderPage = React.lazy(loadReaderPage)
 
 type PageView = { name: 'home' } | { name: 'reader'; documentId: string }
-/** Settings cover the page they were opened from, which stays mounted and is returned to as it was. */
+/** Settings open in a window over the page they came from, which stays mounted and is returned to as it was. */
 type View = PageView | { name: 'settings'; under: PageView }
 
 const SIDEBAR_COLLAPSED_KEY = 'copilotix.lite.sidebar-collapsed.v1'
@@ -69,7 +69,7 @@ export default function LiteApp(): React.JSX.Element {
       <div className="lite-body" inert={settingsOpen ? true : undefined}>
         {collapsed ? null : <PaperSidebar documents={documents} activeDocumentId={page.name === 'reader' ? page.documentId : null} onNew={goHome} onOpen={openPaper} onOpenSettings={openSettings} />}
         <main className="main-surface lite-main">
-          {page.name === 'home' && !settingsOpen && settings ? (
+          {page.name === 'home' && settings ? (
             <>
               <div className="lite-drag-strip" aria-hidden="true" />
               <NewParsePage settings={settings} onCreated={onImported} onOpenSettings={openSettings} />
@@ -84,11 +84,9 @@ export default function LiteApp(): React.JSX.Element {
           {!settings && page.name === 'home' ? <div className="page-loading">正在加载…</div> : null}
         </main>
       </div>
-      {settingsOpen && settings ? (
-        <div className="lite-settings-layer">
-          <div className="lite-drag-strip" aria-hidden="true" />
-          <SettingsPage settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange} onExit={() => requestViewChange(view.under)} />
-        </div>
+      {settings ? (
+        <SettingsDialog open={settingsOpen} settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange}
+          onClose={() => { if (view.name === 'settings') requestViewChange(view.under) }} />
       ) : null}
       {/* After the page: Chromium applies drag regions in document order, so these must come later to stay clickable. */}
       <div className="edge-dock-persistent"><WindowControls /></div>

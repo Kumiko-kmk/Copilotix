@@ -116,6 +116,24 @@ describe('SettingsPage credential editor', () => {
     expect(settingsContent.lastElementChild?.classList.contains('settings-actions')).toBe(true)
   })
 
+  it('shows titles, controls and states without lines of explanation', () => {
+    Object.defineProperty(window, 'copilotix', { configurable: true, value: { getUsageAnalytics: vi.fn(async () => ({ days: [] })), getSettings: vi.fn(async () => configuredSettings()) } as unknown as CopilotixDesktopApi })
+    render(<SettingsPage settings={configuredSettings()} onSaved={vi.fn()} />)
+    expect(screen.getByRole('heading', { name: '设置' })).toBeTruthy()
+    const nav = screen.getByRole('navigation', { name: '设置分类' })
+    expect(within(nav).getAllByRole('button').map((button) => button.textContent)).toEqual(['服务连接', 'API 密钥', '模型设置', '文件存储', '显示设置'])
+    expect(screen.queryByText('必需')).toBeNull()
+    expect(screen.queryByText('最近 12 周')).toBeNull()
+    fireEvent.click(within(nav).getByRole('button', { name: '模型设置' }))
+    expect(screen.queryByText(/通过.*提供/u)).toBeNull()
+    fireEvent.click(within(nav).getByRole('button', { name: '文件存储' }))
+    expect(screen.queryByText(/新建解析任务/u)).toBeNull()
+    expect(screen.queryByText(/导入或迁移会保留旧库/u)).toBeNull()
+    fireEvent.click(within(nav).getByRole('button', { name: '显示设置' }))
+    expect(screen.queryByText('使用中')).toBeNull()
+    expect(screen.queryByText(/^(Light|Dark|Reader)$/u)).toBeNull()
+  })
+
   it('manages several keys per provider and saves replacements, additions and deletions explicitly', async () => {
     const settings = configuredSettings()
     const saveSettings = vi.fn(async (update: Parameters<CopilotixDesktopApi['saveSettings']>[0]) => {

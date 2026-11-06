@@ -1,8 +1,6 @@
 /* ───────────── Lite edition: a paper list on the left, no top navigation ───────────── */
 .lite-shell { --titlebar-height: 37px; --sidebar-width: 256px; --sidebar-surface: color-mix(in srgb, var(--muted-surface) 62%, var(--surface)); padding: 0; }
 .lite-body { display: flex; width: 100%; height: 100%; min-height: 0; }
-/* Under settings the page keeps its layout and scroll position but paints nothing, so nothing shows through. */
-.lite-body[inert] { visibility: hidden; }
 .lite-main { position: relative; flex: 1; width: auto; }
 .lite-drag-strip { position: absolute; z-index: 1; top: 0; right: 0; left: 0; height: 36px; -webkit-app-region: drag; }
 .lite-sidebar-toggle { position: fixed; z-index: 2001; top: 5px; left: 82px; display: grid; width: 28px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: 4px; color: var(--muted); background: transparent; cursor: pointer; font-size: 15px; -webkit-app-region: no-drag; transition: color .15s ease, background-color .15s ease; }
@@ -46,14 +44,3 @@
 .new-parse-page.is-minimal .upload-entry .ant-btn, .new-parse-page.is-minimal .upload-entry .ant-btn:not(:disabled):hover { box-shadow: none; transform: none; }
 .new-parse-page.is-minimal :is(.upload-glyph-back, .upload-glyph-front) { transform: none !important; }
 
-/* Settings take over the window, with their section list where the paper list was. */
-.lite-settings-layer { position: absolute; z-index: 50; inset: 0; background: var(--surface); }
-.lite-settings-layer .settings-page.is-plain { height: 100%; padding: 0; grid-template-rows: minmax(0, 1fr); animation: none; }
-.settings-page.is-plain .settings-layout { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); gap: 0; }
-.settings-page.is-plain .settings-nav { padding: 44px 8px 8px; gap: 2px; background: var(--sidebar-surface); }
-.settings-page.is-plain .settings-nav button { height: 34px; padding: 0 10px; gap: 10px; border-radius: 4px; font-size: 13px; letter-spacing: 0; }
-.settings-page.is-plain .settings-nav button::before, .settings-page.is-plain .settings-nav button small { display: none; }
-.settings-page.is-plain .settings-nav button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.settings-page.is-plain .settings-nav button.active { background: color-mix(in srgb, var(--ink) 10%, transparent); font-weight: 600; }
-.settings-page.is-plain .settings-nav button.settings-exit { margin-bottom: 10px; color: var(--text); font-weight: 600; }
-.settings-page.is-plain .settings-content { max-width: none; padding: 44px 40px 0; justify-self: center; width: min(1080px, 100%); }

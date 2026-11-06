@@ -251,8 +251,9 @@ test('reorders and enables translation providers with explicit persistent saves'
     await window.getByRole('button', { name: /模型设置/u }).click()
 
     await expect(window.getByText('大语言模型优先级')).toBeVisible()
-    await expect(window.getByText('通过 DeepSeek API 提供大语言模型翻译')).toBeVisible()
-    await expect(window.getByText('通过阿里云百炼 API 提供专业翻译模型')).toBeVisible()
+    // Rows carry only the model name; no second line of explanation.
+    await expect(window.getByText('通过 DeepSeek API 提供大语言模型翻译')).toHaveCount(0)
+    await expect(window.getByText('通过阿里云百炼 API 提供专业翻译模型')).toHaveCount(0)
     await expect(window.getByRole('button', { name: '保存全部更改' })).toBeDisabled()
     await expect(window.getByText('拖动调整优先级，越靠上越优先使用')).toHaveCount(0)
     await expect(window.getByText('无需密钥')).toHaveCount(0)
@@ -334,7 +335,8 @@ test('shows live file storage usage and location controls', async () => {
     await expect(window.getByRole('img', { name: /存储构成，总计/u })).toBeVisible()
     await expect(window.getByRole('region', { name: '近期存储增长' })).toBeVisible()
     await expect(window.getByRole('img', { name: '近 14 日存储增长曲线' })).toBeVisible()
-    await expect(window.getByText(/导入或迁移会保留旧库并在完成后重启/u)).toBeVisible()
+    // The restart notice lives in the import/migrate confirmation, not as a note under the page.
+    await expect(window.getByText(/导入或迁移会保留旧库并在完成后重启/u)).toHaveCount(0)
     const changeLocationBounds = await window.getByRole('button', { name: '迁移文库' }).boundingBox()
     const openLocationBounds = await window.getByRole('button', { name: '打开当前目录' }).boundingBox()
     expect(changeLocationBounds).not.toBeNull()

@@ -20,7 +20,7 @@ function ActivityHeatmap(props: { days: UsageAnalyticsDay[] }): React.JSX.Elemen
   return (
     <article className="usage-panel activity-panel">
       <header className="usage-panel-header">
-        <span><strong>活动热力</strong><small>最近 12 周</small></span>
+        <strong>活动热力</strong>
         <span className="usage-panel-total">共计 {totalPages} 页</span>
       </header>
       <div className="activity-heatmap" role="img" aria-label={`最近十二週上傳 ${totalDocuments} 份文檔，共 ${totalPages} 頁`}>
@@ -54,7 +54,7 @@ function TokenTrendChart(props: { days: UsageAnalyticsDay[] }): React.JSX.Elemen
   return (
     <article className="usage-panel token-panel">
       <header className="usage-panel-header">
-        <span><strong>模型 Token</strong><small>最近 30 天</small></span>
+        <strong>模型 Token</strong>
         <span className="token-legend"><i className="deepseek" />DeepSeek {compactNumber(deepseekTotal)}<i className="qwen" />Qwen {compactNumber(qwenTotal)}<i className="codex" />Codex {compactNumber(codexTotal)}</span>
       </header>
       <svg className="token-trend-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={`DeepSeek ${deepseekTotal} Token，Qwen ${qwenTotal} Token`}>
@@ -107,7 +107,7 @@ export function StorageComposition({ info }: { info: StorageInfo | null }): Reac
   const background = stops.length > 0 ? `conic-gradient(${stops.join(', ')})` : 'var(--border)'
   return (
     <section className="storage-insight-panel" aria-label="存储构成">
-      <div className="storage-insight-heading"><strong>存储构成</strong><small>按实际文件类型统计</small></div>
+      <div className="storage-insight-heading"><strong>存储构成</strong></div>
       <div className="storage-composition-body">
         <div className="storage-donut" role="img" aria-label={`存储构成，总计 ${formatBytes(total)}`} style={{ background }}>
           <div><strong>{formatBytes(total)}</strong><span>总计</span></div>
@@ -133,7 +133,7 @@ export function StorageGrowth({ info }: { info: StorageInfo | null }): React.JSX
   }).join(' ')
   return (
     <section className="storage-insight-panel" aria-label="近期存储增长">
-      <div className="storage-insight-heading"><strong>近期存储增长</strong><small>近 14 日 · 按修改时间估算</small></div>
+      <div className="storage-insight-heading"><strong>近期存储增长</strong></div>
       <svg className="storage-growth-chart" role="img" aria-label="近 14 日存储增长曲线" viewBox="0 0 520 160" preserveAspectRatio="none">
         {[28, 80, 132].map((y) => <line className="storage-growth-grid" key={y} x1="20" x2="500" y1={y} y2={y} />)}
         {points ? <><polyline className="storage-growth-area" points={`20,132 ${points} 500,132`} /><polyline className="storage-growth-line" points={points} /></> : null}

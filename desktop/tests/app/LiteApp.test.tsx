@@ -68,7 +68,7 @@ function renderApp(): void {
 }
 const sidebar = () => within(screen.getByRole('navigation', { name: '论文导航' }))
 const paperButton = (name: RegExp) => sidebar().getByRole('button', { name })
-const dialogButton = (name: string) => within(screen.getByRole('dialog')).getByRole('button', { name })
+const dialogButton = (name: string) => within(screen.getByRole('dialog', { name: '有未保存的设置' })).getByRole('button', { name })
 
 it('starts on a plain home page with no top navigation, tutorial or library', () => {
   renderApp()
@@ -112,7 +112,7 @@ it('opens a single imported paper at once, but stays home after a batch', async 
   expect((await screen.findByRole('region', { name: '阅读页面' })).getAttribute('data-document')).toBe('c')
 })
 
-it('covers the open paper with settings and returns to it without remounting the reader', async () => {
+it('opens settings in a window over the open paper and returns to it without remounting the reader', async () => {
   renderApp()
   fireEvent.click(paperButton(/Older paper/u))
   await screen.findByRole('region', { name: '阅读页面' })
@@ -121,9 +121,20 @@ it('covers the open paper with settings and returns to it without remounting the
   expect(nav.getByRole('button', { name: /模型设置/u })).toBeTruthy()
   // The covered page cannot be reached with Tab or a click.
   expect(document.querySelector('.lite-body')?.hasAttribute('inert')).toBe(true)
-  fireEvent.click(nav.getByRole('button', { name: '返回' }))
+  // Only what needs attention: no usage charts, no save bar until something changed.
+  expect(document.querySelector('.settings-page.is-window')).toBeTruthy()
+  expect(document.querySelector('.usage-dashboard')).toBeNull()
+  expect(screen.queryByText('所有更改均已保存')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
   await waitFor(() => expect(screen.queryByRole('navigation', { name: '设置分类' })).toBeNull())
   expect(screen.getByRole('region', { name: '阅读页面' }).getAttribute('data-document')).toBe('older')
+  expect(readerMounts.count).toBe(1)
+
+  // Esc closes the window too.
+  fireEvent.click(screen.getByRole('button', { name: '设置' }))
+  const window = await screen.findByRole('navigation', { name: '设置分类' })
+  fireEvent.keyDown(window, { key: 'Escape', keyCode: 27 })
+  await waitFor(() => expect(screen.queryByRole('navigation', { name: '设置分类' })).toBeNull())
   expect(readerMounts.count).toBe(1)
 })
 
@@ -134,9 +145,9 @@ it('keeps the unsaved-settings guard when going back or when the OS opens a pape
   fireEvent.click(nav.getByRole('button', { name: /模型设置/u }))
   fireEvent.click(screen.getByLabelText('启用千问 / Qwen'))
 
-  fireEvent.click(nav.getByRole('button', { name: '返回' }))
+  fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
   fireEvent.click(dialogButton('继续编辑'))
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: '有未保存的设置' })).toBeNull())
   expect(screen.getByText('有未保存的更改')).toBeTruthy()
 
   act(() => openDocument('older'))
