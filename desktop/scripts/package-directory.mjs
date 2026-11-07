@@ -63,6 +63,7 @@ export function builderIdentityConfig(identity) {
     appId: identity.appId,
     productName: identity.productName,
     executableName: identity.executableName,
+    extraMetadata: { version: identity.version },
     nsis: { shortcutName: identity.productName, uninstallDisplayName: `${identity.productName} \${version}` }
   }
 }
@@ -78,7 +79,7 @@ export async function publishRelease({ fromBuilt = false, lite = false } = {}) {
   const identity = lite ? LITE_IDENTITY : FULL_IDENTITY
   const builderConfig = builderIdentityConfig(identity)
   const declaredPackage = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
-  const packageJson = { ...declaredPackage, build: { ...declaredPackage.build, ...builderConfig } }
+  const packageJson = { ...declaredPackage, ...(lite ? { version: identity.version } : {}), build: { ...declaredPackage.build, ...builderConfig } }
   if (productionRelease) assertDesktopReleaseLicenseMetadata(packageJson)
   const packagedSmokeVersions = assertPackagedSmokeVersions(packageJson)
   const productName = packageJson.build?.productName ?? 'Copilotix'

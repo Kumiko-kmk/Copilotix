@@ -76,6 +76,7 @@ describe('separately installed Lite release', () => {
   it('changes nothing in the full edition builder config and gives Lite its own identity', () => {
     expect(builderIdentityConfig(FULL_IDENTITY)).toEqual({})
     const config = builderIdentityConfig(LITE_IDENTITY)
+    expect(config.extraMetadata).toEqual({ version: '1.0.0' })
     expect(config).toMatchObject({ appId: 'com.kumiko.copilotix.lite', productName: 'Copilotix Lite', executableName: 'CopilotixLite' })
     expect(config.nsis).toEqual({ shortcutName: 'Copilotix Lite', uninstallDisplayName: 'Copilotix Lite ${version}' })
     // electron-builder merges arrays with package.json, so an override could not remove anything.

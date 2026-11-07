@@ -10,4 +10,4 @@ export interface AppIdentity {
 }
 
 export const FULL_IDENTITY: AppIdentity
-export const LITE_IDENTITY: AppIdentity
+export const LITE_IDENTITY: AppIdentity & { readonly version: string }

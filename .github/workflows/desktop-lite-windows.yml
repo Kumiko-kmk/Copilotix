@@ -1,0 +1,142 @@
+name: Desktop Lite Windows
+
+on:
+  push:
+    tags: ['desktop-lite-v*']
+  pull_request:
+    paths:
+      - '.github/workflows/desktop-lite-windows.yml'
+      - 'desktop/src/app/contract/appIdentity.mjs'
+      - 'desktop/scripts/**'
+      - 'docs/releases/lite/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lite-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  verify:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - name: Check exact Lite release version
+        if: startsWith(github.ref, 'refs/tags/desktop-lite-v')
+        run: node desktop/scripts/verify-release-tag.mjs
+      - name: Require trusted production signing
+        if: startsWith(github.ref, 'refs/tags/desktop-lite-v')
+        run: node desktop/scripts/verify-release-signing.mjs
+        env:
+          COPILOTIX_RELEASE_MODE: production
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - run: node desktop/scripts/verify-release-license.mjs
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm desktop:typecheck
+      - run: pnpm desktop:lint
+      - run: pnpm desktop:deps
+      - run: pnpm desktop:test:coverage
+      - name: Install Electron
+        working-directory: desktop
+        run: node -e "require('electron')"
+      - run: pnpm desktop:build:lite
+      - name: Lite Electron journeys
+        run: pnpm --dir desktop exec playwright test lite.spec.ts lite-reader-actions.spec.ts
+      - name: Package Lite with its independent version and identity
+        run: pnpm --dir desktop exec node scripts/package-directory.mjs --lite --from-built
+        env:
+          COPILOTIX_RELEASE_MODE: ${{ startsWith(github.ref, 'refs/tags/desktop-lite-v') && 'production' || 'development' }}
+          WIN_CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/desktop-lite-v') && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/desktop-lite-v') && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+      - name: Isolated install, upgrade, launch and uninstall
+        shell: pwsh
+        run: ./desktop/scripts/test-installer-lite.ps1
+      - name: Upload verified installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Copilotix-Lite-Windows-x64
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release-lite/setup.exe
+            release-lite/advanced/release-manifest.json
+      - name: Preserve verification evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Copilotix-Lite-verification
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            desktop/test-results/
+            desktop/playwright-report/
+            desktop/test-artifacts/lite-installer/
+            desktop/unit-test-results/
+            desktop/coverage/coverage-summary.json
+
+  publish:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/desktop-lite-v')
+    runs-on: windows-2025
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: Copilotix-Lite-Windows-x64
+          path: release-lite
+      - name: Verify installer, upload draft, download and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF_NAME
+          $repo = $env:GITHUB_REPOSITORY
+          $manifest = Get-Content release-lite/advanced/release-manifest.json -Raw | ConvertFrom-Json
+          $version = $tag.Substring('desktop-lite-v'.Length)
+          if ($manifest.version -ne $version -or $manifest.productName -ne 'Copilotix Lite') { throw 'Wrong Lite artifact identity or version.' }
+          $installer = 'release-lite/setup.exe'
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $manifest.installer.sha256) { throw 'Installer hash mismatch.' }
+          if ((Get-AuthenticodeSignature $installer).Status -ne 'Valid') { throw 'Installer signature is not valid.' }
+          $notes = "docs/releases/lite/$version.zh-CN.md"
+          $title = (Get-Content $notes -Encoding utf8 -TotalCount 1) -replace '^#\s*', ''
+          $existing = & gh release view $tag --repo $repo --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (-not ($existing | ConvertFrom-Json).isDraft) { throw 'Refusing to replace a published release.' }
+          } else {
+            & gh release create $tag --repo $repo --draft --verify-tag --notes-file $notes --title $title
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          & gh release upload $tag $installer --repo $repo --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $release = (& gh release view $tag --repo $repo --json isDraft,assets | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0 -or -not $release.isDraft) { throw 'Draft release could not be verified.' }
+          $env:COPILOTIX_RELEASE_ASSET_NAMES_JSON = ConvertTo-Json -InputObject @($release.assets | ForEach-Object name) -Compress
+          node desktop/scripts/verify-release-assets.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & gh release download $tag --repo $repo --dir release-remote-lite --pattern setup.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-FileHash release-remote-lite/setup.exe -Algorithm SHA256).Hash -ne $manifest.installer.sha256) { throw 'Downloaded installer hash mismatch.' }
+          if ((Get-AuthenticodeSignature release-remote-lite/setup.exe).Status -ne 'Valid') { throw 'Downloaded installer signature is not valid.' }
+          & gh release edit $tag --repo $repo --verify-tag --draft=false --latest=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((& gh release view $tag --repo $repo --json isDraft | ConvertFrom-Json).isDraft) { throw 'Release is still a draft.' }

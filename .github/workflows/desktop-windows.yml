@@ -185,6 +185,9 @@ jobs:
         working-directory: desktop
         run: node -e "require('electron')"
       - run: pnpm desktop:build:bundles
+      - name: Build Lite for its Electron journeys
+        if: matrix.shard == 3
+        run: pnpm desktop:build:lite
       - name: Electron regression shard
         shell: pwsh
         run: |

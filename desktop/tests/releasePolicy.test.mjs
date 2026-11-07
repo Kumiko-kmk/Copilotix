@@ -13,6 +13,9 @@ describe("releasePolicy", () => {
   describe('release policy', () => {
     it('requires desktop release tags to match the packaged version exactly', () => {
       expect(assertReleaseTagMatchesVersion('desktop-v1.0.0', '1.0.0')).toBe('desktop-v1.0.0')
+      expect(assertReleaseTagMatchesVersion('desktop-lite-v1.0.0', '1.0.0', 'lite')).toBe('desktop-lite-v1.0.0')
+      expect(() => assertReleaseTagMatchesVersion('desktop-v1.0.0', '1.0.0', 'lite')).toThrow(/does not match/)
+      expect(() => assertReleaseTagMatchesVersion('desktop-lite-v1.0.0', '1.0.0')).toThrow(/does not match/)
       expect(() => assertReleaseTagMatchesVersion('desktop-v0.1.1', '1.0.0')).toThrow(/does not match package version/)
       expect(() => assertReleaseTagMatchesVersion('desktop-v1.0.0', 'latest')).toThrow(/Invalid desktop release version/)
     })

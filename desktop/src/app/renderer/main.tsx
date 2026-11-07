@@ -25,6 +25,7 @@ function Root(): React.JSX.Element {
         algorithm: active.dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         // Archive language (文库): square corners, flat surfaces, ink primary actions that turn to the accent on hover.
         token: {
+          motion: !__COPILOTIX_LITE__,
           colorPrimary: colors.primary,
           borderRadius: 2,
           borderRadiusLG: 3,

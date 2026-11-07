@@ -1,0 +1,8 @@
+# README 图像
+
+- `demos/*.gif`：复用 `output/promo-20261019/` 的三段真实完整版录屏，未改动像素；展示日期为 2026-10-19。
+- `architecture-illustration.png`：通过内置 imagegen 生成的架构概念插图，非界面截图。结构依据当前 Electron Renderer / Main / Utility、SQLite 与文件存储、共享模型服务设计。
+
+架构插图提示词：
+
+> Create a polished, minimalist architecture illustration for the README of Copilotix, an academic PDF reading desktop app. Landscape 16:9 composition, warm ivory paper background, charcoal hairline strokes, restrained cobalt-blue accents and sage-green details, generous negative space, soft subtle shadows, precise editorial design. Three equally weighted aligned modules across the middle: on the left an elegant abstract split-page reading window with tiny paper and formula glyphs and the single label 'READER'; in the center a compact gateway/control module labelled 'MAIN'; on the right an organized document-processing module labelled 'UTILITY'. Thin clear bidirectional connectors only READER to MAIN, MAIN to UTILITY. Beneath UTILITY two small connected storage objects: a database cylinder labelled 'SQLite', and a neat stack of pages labelled 'Files'. Above MAIN and UTILITY a small shared cloud node labelled 'Models', with thin lines from the central and right modules. Preserve readable left-to-right hierarchy and calm visual balance. A small top-left wordmark text 'Copilotix' only. No subtitle, no paragraphs, no microtext, no legends, no counts, no extra labels, no simulated product screenshot, no excessive 3D effects, no glowing neon, no gradients. This is an architectural conceptual illustration, not a screenshot. All text must be precisely the seven specified labels. High quality elegant open-source software documentation graphic.

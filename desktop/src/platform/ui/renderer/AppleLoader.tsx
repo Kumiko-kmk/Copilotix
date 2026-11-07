@@ -17,6 +17,7 @@ const STREAKS = [
  */
 export default function AppleLoader(props: { label?: string; size?: 'small' | 'large'; className?: string }): React.JSX.Element {
   const label = props.label ?? '正在加载'
+  if (__COPILOTIX_LITE__) return <span className="apple-loader-label" role="status" aria-label={label}>{label}</span>
   return (
     <div className={`apple-loader is-${props.size ?? 'large'}${props.className ? ` ${props.className}` : ''}`} role="status" aria-label={label}>
       <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">

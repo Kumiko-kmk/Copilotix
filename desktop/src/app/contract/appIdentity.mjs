@@ -15,6 +15,7 @@ export const FULL_IDENTITY = Object.freeze({
 })
 
 export const LITE_IDENTITY = Object.freeze({
+  version: '1.0.0',
   appId: 'com.kumiko.copilotix.lite',
   productName: 'Copilotix Lite',
   executableName: 'CopilotixLite',
