@@ -17,7 +17,8 @@ import type { ReaderBlock } from '../core/readerDocument'
 import { useReaderNotes } from './useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
-import { Button, Dropdown, Space, Spin, Typography, message } from 'antd'
+import { Button, Dropdown, Space, Typography, message } from 'antd'
+import AppleLoader from '@platform/ui/renderer/AppleLoader'
 import type { DocumentAnnotation, ListReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '../contract/readerSchemas'
 import type { DocumentDetails } from '@features/library/contract/documentSchemas'
 import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView, ReaderChatSelection } from '../contract/readerTypes'
@@ -344,7 +345,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   }, [messageApi, props.documentId, queryClient, snapshots])
 
   if (documentQuery.isError) return <div className="reader-loading">文档加载失败：{documentQuery.error.message}</div>
-  if (documentQuery.isPending || !document) return <div className="reader-loading"><Spin size="large" /></div>
+  if (documentQuery.isPending || !document) return <div className="reader-loading"><AppleLoader label="正在打开论文" /></div>
 
   const translatedReady = Boolean(document.translatedMarkdown)
   return (

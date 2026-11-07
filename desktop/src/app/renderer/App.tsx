@@ -1,4 +1,5 @@
 import React from 'react'
+import AppleLoader from '@platform/ui/renderer/AppleLoader'
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
 import { refreshCodexStatus, loadStorageInfo, SettingsPage } from '@features/settings/renderer'
 // Direct import: the reader barrel re-exports Markdown rendering (KaTeX CSS) that must stay in the lazy reader chunk.
@@ -192,7 +193,7 @@ export default function App(): React.JSX.Element {
           />
         ) : null}
         {view.name === 'library' ? (
-          <React.Suspense fallback={<div className="page-loading">正在加载文库…</div>}>
+          <React.Suspense fallback={<div className="page-loading"><AppleLoader label="正在打开文库" /></div>}>
             <LibraryPage insights={insights} loadCategories={loadLibraryCategories} documents={documents} onOpen={openFromLibrary} onCreate={() => requestViewChange({ name: 'new' })} />
           </React.Suspense>
         ) : null}
@@ -211,11 +212,11 @@ export default function App(): React.JSX.Element {
         /> : null}
         {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange} /> : null}
         {view.name === 'reader' ? (
-          <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>
+          <React.Suspense fallback={<div className="reader-loading"><AppleLoader label="正在打开论文" /></div>}>
             <ActiveReaderPage documentId={view.documentId} enterFromLibrary={view.returnTo === 'library'} insights={insights} onBack={() => requestViewChange({ name: view.returnTo ?? 'new' })} onOpenSettings={() => requestViewChange({ name: 'settings' })} />
           </React.Suspense>
         ) : null}
-        {!settings && view.name !== 'reader' && view.name !== 'library' ? <div className="page-loading">正在加载…</div> : null}
+        {!settings && view.name !== 'reader' && view.name !== 'library' ? <div className="page-loading"><AppleLoader /></div> : null}
       </main>
       <Modal title="有未保存的设置" open={pendingView !== null} closable={!leaving} maskClosable={!leaving}
         onCancel={() => { if (!leaving) setPendingView(null) }}

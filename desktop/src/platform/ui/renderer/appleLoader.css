@@ -1,0 +1,32 @@
+/* Loading mark: one apple in the accent colour, always falling; speed lines in a quiet ink rush up past it. */
+.apple-loader { display: inline-grid; justify-items: center; gap: 10px; color: var(--muted); }
+.apple-loader svg { display: block; width: 80px; height: 80px; overflow: visible; }
+.apple-loader.is-small svg { width: 36px; height: 36px; }
+.apple-loader-label { color: var(--muted); font-size: 12.5px; letter-spacing: .04em; }
+.apple-loader-fruit, .apple-loader-leaf { fill: var(--primary); }
+.apple-loader-stem { fill: none; stroke: var(--primary); stroke-width: 1.1; stroke-linecap: round; }
+.apple-loader-shine { fill: none; stroke: color-mix(in srgb, #fff 55%, transparent); stroke-width: .8; stroke-linecap: round; }
+/* Turns about its own middle as it drops, with a slight sway so the turn reads as tumbling, not a wheel. */
+.apple-loader-apple { transform-box: fill-box; transform-origin: 50% 55%; animation: apple-loader-tumble 1.6s linear infinite; }
+.apple-loader-streaks line { stroke: color-mix(in srgb, currentColor 55%, transparent); stroke-width: 1.4; stroke-linecap: round; transform-box: fill-box; animation: apple-loader-streak .8s linear infinite; }
+.is-small .apple-loader-streaks line { stroke-width: 2.2; }
+
+@keyframes apple-loader-tumble {
+  0% { transform: translateY(-1.5px) rotate(0deg); }
+  25% { transform: translateY(0) rotate(90deg); }
+  50% { transform: translateY(1.5px) rotate(180deg); }
+  75% { transform: translateY(0) rotate(270deg); }
+  100% { transform: translateY(-1.5px) rotate(360deg); }
+}
+/* Lines enter below, race upward and thin out: the apple seems to fall past them. */
+@keyframes apple-loader-streak {
+  0% { opacity: 0; transform: translateY(26px) scaleY(.6); }
+  25% { opacity: 1; }
+  80% { opacity: .5; }
+  100% { opacity: 0; transform: translateY(-18px) scaleY(1.2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apple-loader-apple, .apple-loader-streaks line { animation: none; }
+  .apple-loader-streaks line { opacity: .5; }
+}

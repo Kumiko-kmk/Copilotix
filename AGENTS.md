@@ -15,7 +15,7 @@
 代碼只在 `desktop/src` 三處：
 
 - `app/`：Main／Preload／Renderer／Utility 入口與組裝、Core RPC 註冊表（`app/contract/coreRpc.ts`）、`CopilotixDesktopApi`；不放業務邏輯。
-- `platform/<關注點>/<層>/`：ipc、rpc、jobs、database、files、log、network、assets、credentials、uninstall、codex、markdown、pdf；不得引用 `features/`。
+- `platform/<關注點>/<層>/`：ipc、rpc、jobs、database、files、log、network、assets、credentials、uninstall、codex、markdown、pdf、ui（共用介面元件，如載入動畫）；不得引用 `features/`。
 - `features/<模組>/<層>/`：`library`、`parsing`、`translation`、`reader`、`chat`、`insight`、`zotero`、`settings`。層為 `contract`（zod 契約，純資料）、`core`（純邏輯）、`runtime`（Node、無 Electron）、`main`、`utility`、`renderer`，每層一個 `index.ts` 公開入口。
 
 規則（`pnpm desktop:deps` 全部為 error，CI 執行）：模組間只能引用對方 `contract/` 或某層 `index.ts`；禁止循環；進程層互不越界（renderer 不碰 main／node／electron，contract／core 不碰 node／electron）。

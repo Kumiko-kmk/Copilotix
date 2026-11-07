@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { emptyPaperChatSession, type PaperChatSession, type PaperChatPage } from '@features/chat/contract/paperChatStorageSchemas'
@@ -189,15 +189,15 @@ describe('ReaderChatPanel and local paper sessions', () => {
   })
   it('sends with Enter, keeps Shift+Enter and IME composition as input, and fills suggestions', async () => {
     const f = setup()
-    fireEvent.click(await screen.findByRole('button', { name: '总结这篇论文的主要贡献' }))
+    fireEvent.click(await screen.findByRole('button', { name: '用三句话说清这篇论文解决了什么问题、怎么做、效果如何' }))
     const question = screen.getByLabelText('向当前论文提问') as HTMLTextAreaElement
-    expect(question.value).toBe('总结这篇论文的主要贡献')
+    expect(question.value).toBe('用三句话说清这篇论文解决了什么问题、怎么做、效果如何')
     await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.keyDown(question, { key: 'Enter', shiftKey: true })
     fireEvent.keyDown(question, { key: 'Enter', isComposing: true })
     expect(f.ask).not.toHaveBeenCalled()
     fireEvent.keyDown(question, { key: 'Enter' })
-    await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ question: '总结这篇论文的主要贡献' })))
+    await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ question: '用三句话说清这篇论文解决了什么问题、怎么做、效果如何' })))
     expect(question.value).toBe('')
   })
   it('keeps citation navigation without a hover preview and clears the conversation from the menu', async () => {
@@ -207,10 +207,14 @@ describe('ReaderChatPanel and local paper sessions', () => {
     expect(document.querySelector('.ant-popover')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '引用 1' }))
     await waitFor(() => expect(f.onSelect).toHaveBeenCalledWith({ mappingId: 'm1', origin: 'citation' }))
+    // The latest finished answer offers follow-ups; one fills the composer without sending.
+    fireEvent.click(within(screen.getByRole('group', { name: '继续追问' })).getByRole('button', { name: '原文哪些地方支持这个结论？' }))
+    expect((screen.getByRole('textbox', { name: '向当前论文提问' }) as HTMLTextAreaElement).value).toBe('原文哪些地方支持这个结论？')
+    expect(f.ask).toHaveBeenCalledTimes(1)
     await openMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: '清空对话' }))
     await waitFor(() => expect(screen.queryByRole('log', { name: '问答记录' })).toBeNull())
-    expect(screen.getByRole('button', { name: '总结这篇论文的主要贡献' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '用三句话说清这篇论文解决了什么问题、怎么做、效果如何' })).toBeTruthy()
   })
   it('selects DeepSeek independently from the translation provider and sends the selected model', async () => {
     const f = setup()

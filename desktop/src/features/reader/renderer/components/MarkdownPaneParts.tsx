@@ -1,5 +1,6 @@
 import React from 'react'
-import { Alert, Button, Spin } from 'antd'
+import { Alert, Button } from 'antd'
+import AppleLoader from '@platform/ui/renderer/AppleLoader'
 import type { ReaderBlock } from '../../core/readerDocument'
 import type { ReaderFigureGroup } from '../../core/readerFigureGroups'
 import BlockContextMenu, { type BlockMenuItem } from './BlockContextMenu'
@@ -29,8 +30,7 @@ export function MarkdownRenderStatus(props: {
     <>
       {(renderState.status === 'loading' || renderState.status === 'preparing') && !props.progressive ? (
         <div className="markdown-render-status" role="status">
-          <Spin size="large" />
-          <span>正在渲染 Markdown…</span>
+          <AppleLoader label="正在排版正文" />
           {props.mounted ? <small>段落 {props.mounted.count} / {props.mounted.total}</small> : null}
           {renderState.status === 'loading' && renderState.totalImages > 0 ? (
             <small>图片 {renderState.completedImages} / {renderState.totalImages}</small>
