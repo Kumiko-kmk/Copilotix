@@ -1,5 +1,4 @@
-export { default as SettingsPage } from './SettingsPage'
-export { default as SettingsDialog } from './SettingsDialog'
+export { loadSettingsPage, loadSettingsDialog } from './settingsLoader'
 export { refreshCodexStatus, useCodexStatus } from './codexStatusClient'
 export type { SettingsNavigationGuard } from './settingsNavigation'
 export { loadStorageInfo } from './storageInfoClient'

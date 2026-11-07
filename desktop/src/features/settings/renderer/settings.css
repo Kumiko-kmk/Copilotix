@@ -249,8 +249,7 @@
 .is-window .credential-status.status-invalid::before { background: #d4574f; }
 .is-window .credential-status.status-valid::before { background: #3a9a62; }
 .is-window .model-key-summary { min-height: 32px; color: var(--muted); }
-.is-window .codex-model-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.is-window .codex-model-fields > .ant-btn { grid-column: 1 / -1; justify-self: start; }
+.is-window .codex-model-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .settings-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; column-gap: 20px; }
 .settings-row + .settings-row { margin-top: 22px; }
 .settings-row-control { min-width: 0; }
@@ -272,17 +271,29 @@
 .is-window .api-key-tabs button { height: 28px; font-weight: 500; }
 
 /* Appearance: each theme a plain swatch in its own colours, then a reading sample that takes the rest of the height. */
-.is-window .theme-groups { gap: 24px; }
-.is-window .theme-group-label { color: var(--muted); font-size: 12px; font-weight: 500; }
+.is-window .theme-groups { gap: 12px; }
+.is-window .theme-group-label { display: none; }
 .is-window :is(.theme-preview-eyebrow, .theme-preview-tabs, .theme-preview-floor, .theme-preview-sheet) { display: none !important; }
 .is-window .theme-preview { aspect-ratio: 16 / 9; border-radius: 8px; }
 .is-window .theme-preview-title { top: 50%; left: 12%; transform: translateY(-50%); font-size: 13px; }
 .is-window .theme-preview::after { position: absolute; top: 50%; right: 12%; width: 8px; height: 8px; border-radius: 50%; background: var(--t-primary); content: ""; transform: translateY(-50%); }
 .is-window .theme-card-name { font-size: 12px; }
-.is-window .reader-font-setting { margin-top: 24px; gap: 12px; }
+.is-window .reader-font-setting { margin-top: 28px; gap: 14px; }
+.is-window .reader-font-stepper > button { display: none; }
 .is-window .theme-settings { height: 100%; overflow: hidden; }
 .is-window .reader-font-sample { max-height: none; }
+
+/* 服务 (Lite): one flat row per service: name, its key and actions, state, and whether translation uses it. */
+.lite-services { display: grid; align-content: start; }
+.lite-service { display: grid; min-height: 52px; grid-template-columns: 84px minmax(0, 1fr) 64px 32px; align-items: center; column-gap: 16px; }
+.lite-service-name { color: var(--text); font-size: 13px; font-weight: 500; }
+.lite-service-control { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.lite-service-control > :is(.ant-input, .ant-input-affix-wrapper) { flex: 1; min-width: 0; }
+.lite-service-control > .ant-btn-text { width: 28px; flex: none; color: var(--muted); }
+.lite-service-control > .ant-btn-text:not(:disabled):hover { color: #d4574f; }
+.lite-service-toggle { justify-self: end; }
 
 /* Save bar, only while there are changes */
 .is-window .settings-actions { min-height: 56px; border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); background: var(--sheet); }
 .is-window .settings-action-buttons .ant-btn { min-width: 72px; }
+.codex-effort { min-width: 180px; margin-top: 8px; }

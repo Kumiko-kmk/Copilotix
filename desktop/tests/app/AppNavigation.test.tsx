@@ -49,6 +49,7 @@ async function edit() {
   // Navigation guards need the real settings page and modal, without exit animations.
   render(<QueryClientProvider client={client}><ConfigProvider theme={{ token: { motion: false } }}><App /></ConfigProvider></QueryClientProvider>)
   fireEvent.click(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('button', { name: /设置$/u }))
+  await screen.findByRole('navigation', { name: '设置分类' })
   fireEvent.click(settingsNavigation().getByRole('button', { name: /模型设置/u }))
   fireEvent.click(screen.getByLabelText('启用千问 / Qwen'))
   expect(screen.getByText('有未保存的更改')).toBeTruthy()

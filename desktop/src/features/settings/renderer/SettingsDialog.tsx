@@ -1,5 +1,5 @@
 import React from 'react'
-import { Modal } from 'antd'
+import { ConfigProvider, Modal } from 'antd'
 import SettingsPage from './SettingsPage'
 
 type SettingsPageProps = React.ComponentProps<typeof SettingsPage>
@@ -17,12 +17,17 @@ export default function SettingsDialog(props: Omit<SettingsPageProps, 'onExit'> 
       footer={null}
       closable={false}
       centered
+      transitionName=""
+      maskTransitionName=""
       destroyOnHidden
       width="clamp(min(880px, calc(100vw - 48px)), calc(100vw - 280px), 1000px)"
       rootClassName="settings-dialog"
       aria-label="设置"
     >
-      <SettingsPage {...page} onExit={onClose} />
+      {/* Two-character labels such as 测试 stay as written instead of being spread apart. */}
+      <ConfigProvider button={{ autoInsertSpace: false }}>
+        <SettingsPage {...page} onExit={onClose} />
+      </ConfigProvider>
     </Modal>
   )
 }

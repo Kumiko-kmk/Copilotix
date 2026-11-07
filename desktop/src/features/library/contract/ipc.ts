@@ -7,6 +7,7 @@ import {
   documentListSnapshotSchema,
   type DocumentListSnapshot,
   deleteDocumentRequestSchema,
+  renameDocumentRequestSchema,
   documentChangeEventSchema,
   documentDetailsSchema,
   documentIdRequestSchema,
@@ -17,6 +18,7 @@ import {
   saveDocumentAsResultSchema,
   tutorialImportRequestSchema,
   type DeleteDocumentRequest,
+  type RenameDocumentRequest,
   type DocumentChangeEvent,
   type DocumentDetails,
   type DocumentSummary,
@@ -35,6 +37,7 @@ export const libraryChannels = {
   list: invokeChannel('documents:list', noRequestSchema, documentSummarySchema.array()),
   retry: invokeChannel('documents:retry', documentIdRequestSchema, voidResponseSchema),
   delete: invokeChannel('documents:delete', deleteDocumentRequestSchema, voidResponseSchema),
+  rename: invokeChannel('documents:rename', renameDocumentRequestSchema, voidResponseSchema),
   get: invokeChannel('documents:get', documentIdRequestSchema, documentDetailsSchema),
   openOutput: invokeChannel('documents:open-output', documentIdRequestSchema, voidResponseSchema),
   saveAs: invokeChannel('documents:save-as', saveDocumentAsRequestSchema, saveDocumentAsResultSchema),
@@ -53,6 +56,7 @@ export interface LibraryDesktopApi {
   listDocuments(): Promise<DocumentSummary[]>
   retryDocument(documentId: string): Promise<void>
   deleteDocument(request: DeleteDocumentRequest): Promise<void>
+  renameDocument(request: RenameDocumentRequest): Promise<void>
   getDocument(documentId: string): Promise<DocumentDetails>
   openDocumentOutput(documentId: string): Promise<void>
   saveDocumentAs(request: SaveDocumentAsRequest): Promise<SaveDocumentAsResult>
@@ -87,6 +91,7 @@ export function createLibraryApi(ipc: IpcBridge, pathForFile: (file: File) => st
     listDocuments: () => ipc.invoke(libraryChannels.list, undefined),
     retryDocument: documentId => ipc.invoke(libraryChannels.retry, documentId),
     deleteDocument: request => ipc.invoke(libraryChannels.delete, request),
+    renameDocument: request => ipc.invoke(libraryChannels.rename, request),
     getDocument: documentId => ipc.invoke(libraryChannels.get, documentId),
     openDocumentOutput: documentId => ipc.invoke(libraryChannels.openOutput, documentId),
     saveDocumentAs: request => ipc.invoke(libraryChannels.saveAs, request),

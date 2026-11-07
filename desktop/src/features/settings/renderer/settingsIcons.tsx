@@ -16,5 +16,5 @@ export const ModelIcon = (): React.JSX.Element => <Icon><path d="M3 4.5h10M3 8h1
 export const StorageIcon = (): React.JSX.Element => <Icon><path d="M2.5 5a1.5 1.5 0 0 1 1.5-1.5h2.4l1.4 1.5H12a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 12 12.5H4A1.5 1.5 0 0 1 2.5 11Z" /></Icon>
 export const AppearanceIcon = (): React.JSX.Element => <Icon><circle cx="8" cy="8" r="5.25" /><path d="M8 2.75v10.5" /><path d="M8 5.5 10.5 3.8M8 8.5l4.6-3M8 11.5l4.9-3.3" /></Icon>
 export const CloseIcon = (): React.JSX.Element => <Icon><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></Icon>
-export const RefreshIcon = (): React.JSX.Element => <Icon><path d="M12.8 7.2A4.8 4.8 0 1 0 11.4 11" /><path d="M13 3.5v3.7H9.3" /></Icon>
 export const OpenFolderIcon = (): React.JSX.Element => <Icon><path d="M2.5 11V5a1.5 1.5 0 0 1 1.5-1.5h2.4l1.4 1.5H11a1.5 1.5 0 0 1 1.5 1.5v.7" /><path d="M2.5 11l1.6-3.6a1 1 0 0 1 .9-.6h8.1a.6.6 0 0 1 .6.8l-1.3 3.4a1.5 1.5 0 0 1-1.4 1H4a1.5 1.5 0 0 1-1.5-1Z" /></Icon>
+export const DeleteIcon = (): React.JSX.Element => <Icon><path d="M3 4.5h10" /><path d="M6.5 4.5V3h3v1.5" /><path d="M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1" /></Icon>

@@ -82,6 +82,23 @@ afterEach(() => {
 })
 
 describe('MarkdownPane', () => {
+  it('does not edit on single clicks and edits on double click, including an unmapped paragraph', async () => {
+    const save = vi.fn(async () => undefined)
+    const paragraph = { ...block('paragraph', 'Editable paragraph'), annotationKey: 'content:0', contentIndex: 0, mappingIds: [] }
+    const view = render(<MarkdownPane active blocks={[paragraph]} assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]}
+      highlightColor="yellow" onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null} onSelect={vi.fn()}
+      blockEditing={{ view: 'original', save }} />)
+    await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
+    fireEvent.click(view.getByText('Editable paragraph'))
+    fireEvent.click(view.getByText('Editable paragraph'))
+    await new Promise(resolve => setTimeout(resolve, 300))
+    expect(view.queryByRole('textbox', { name: '编辑原文段落' })).toBeNull()
+    fireEvent.doubleClick(view.getByText('Editable paragraph'))
+    const editor = view.getByRole('textbox', { name: '编辑原文段落' })
+    fireEvent.change(editor, { target: { value: 'Edited paragraph' } })
+    fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ contentIndex: 0 }), 'Edited paragraph'))
+  })
   it('renders preserved merged HTML cells, superscripts, and repaired cell math through the reader model', async () => {
     const source = '<table><tr><td rowspan="2">Group<sup>12</sup></td><td colspan="2">$\\left.{x}$</td></tr><tr><td>A<sub>i</sub></td><td>B</td></tr></table>'
     const blocks = buildReaderDocumentBlocks(source, '', null, []).original
@@ -436,7 +453,7 @@ describe('MarkdownPane', () => {
     expect(onSelect).toHaveBeenLastCalledWith({ mappingId: 'target', origin: 'markdown' })
   })
 
-  it('moves a whole block on a long press, leaves quick drags to text selection, and offers menu moves', async () => {
+  it('keeps drag reordering and reset, without up/down menu actions', async () => {
     const move = vi.fn(), reset = vi.fn(), select = vi.fn()
     const blocks = ['First', 'Second', 'Third'].map((text, index) => ({ ...block(`m${index}`, text), annotationKey: `content:${index}`, contentIndex: index, order: index }))
     const view = render(<MarkdownPane active blocks={blocks} assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]}
@@ -463,14 +480,12 @@ describe('MarkdownPane', () => {
     // The click that ends the drag does not select the block under it.
     fireEvent.click(third)
     expect(select).not.toHaveBeenCalled()
-    // The same moves from the right-click menu.
+    // Only resetting an existing order remains in the menu.
     fireEvent.contextMenu(view.getByText('Second'))
-    expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['上移', '下移', '恢复原始顺序'])
-    fireEvent.click(view.getByRole('menuitem', { name: '下移' }))
-    expect(move).toHaveBeenLastCalledWith([1], null)
-    fireEvent.contextMenu(view.getByText('Second'))
-    fireEvent.click(view.getByRole('menuitem', { name: '上移' }))
-    expect(move).toHaveBeenLastCalledWith([1], 0)
+    expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['恢复原始顺序'])
+    fireEvent.click(view.getByRole('menuitem', { name: '恢复原始顺序' }))
+    expect(reset).toHaveBeenCalledOnce()
+    expect(move).toHaveBeenCalledTimes(1)
   })
 
   it('renders supplemental HTML as display-only gray content', async () => {

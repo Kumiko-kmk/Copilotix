@@ -1,7 +1,7 @@
 /* ───────────── Lite edition: a paper list on the left, no top navigation ───────────── */
 .lite-shell { --titlebar-height: 37px; --sidebar-width: 256px; --sidebar-surface: color-mix(in srgb, var(--muted-surface) 62%, var(--surface)); padding: 0; }
 .lite-body { display: flex; width: 100%; height: 100%; min-height: 0; }
-.lite-main { position: relative; flex: 1; width: auto; }
+.lite-main { position: relative; display: flex; flex: 1; width: auto; }
 .lite-drag-strip { position: absolute; z-index: 1; top: 0; right: 0; left: 0; height: 36px; -webkit-app-region: drag; }
 .lite-sidebar-toggle { position: fixed; z-index: 2001; top: 5px; left: 82px; display: grid; width: 28px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: 4px; color: var(--muted); background: transparent; cursor: pointer; font-size: 15px; -webkit-app-region: no-drag; transition: color .15s ease, background-color .15s ease; }
 .lite-sidebar-toggle:hover { color: var(--ink); background: color-mix(in srgb, var(--muted-surface) 80%, transparent); }
@@ -17,20 +17,43 @@
 .paper-sidebar-action:hover, .paper-sidebar-item:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .paper-sidebar-action[aria-current="page"], .paper-sidebar-item[aria-current="page"] { color: var(--ink); background: color-mix(in srgb, var(--ink) 10%, transparent); }
 .paper-sidebar-action:focus-visible, .paper-sidebar-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-.paper-sidebar-list { display: grid; flex: 1; min-height: 0; margin: 0 -4px 0 0; padding: 0 4px 0 0; align-content: start; gap: 2px; overflow: hidden auto; list-style: none; scrollbar-width: thin; }
-.paper-sidebar-item { display: grid; padding: 7px 10px; gap: 2px; }
+.paper-sidebar-scroll { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.paper-sidebar-list { display: grid; flex: 1; min-height: 0; margin: 0 -4px 0 0; padding: 0 4px 8px 0; align-content: start; gap: 2px; overflow: hidden auto; list-style: none; scrollbar-width: thin; }
+.paper-sidebar-list:has(> .paper-sidebar-section) { gap: 12px; }
+.paper-sidebar-group { display: grid; margin: 0; padding: 0; gap: 2px; list-style: none; }
+/* Section headings: quiet labels, the fold chevron shows on hover or while folded. */
+.paper-sidebar-section-head { display: flex; width: 100%; height: 26px; padding: 0 10px; align-items: center; gap: 6px; border: 0; border-radius: 4px; color: var(--muted); background: transparent; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; text-align: left; }
+.paper-sidebar-section-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paper-sidebar-section-chevron { flex: none; font-size: 9px; opacity: 0; transform: rotate(90deg); transition: opacity .12s ease, transform .12s ease; }
+.paper-sidebar-section-head[aria-expanded="false"] .paper-sidebar-section-chevron { opacity: 1; transform: none; }
+.paper-sidebar-section-head:hover { color: var(--ink); }
+.paper-sidebar-section-head:hover .paper-sidebar-section-chevron, .paper-sidebar-section-head:focus-visible .paper-sidebar-section-chevron { opacity: 1; }
+.paper-sidebar-section-head:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.paper-sidebar-item { position: relative; display: grid; padding: 7px 10px; gap: 2px; }
+.paper-sidebar-item:is([data-menu-open], [data-open]) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.paper-sidebar-item:has(.paper-sidebar-pin) { padding-right: 26px; }
+.paper-sidebar-pin { position: absolute; top: 9px; right: 9px; color: var(--muted); font-size: 11px; }
+.paper-sidebar-rename { box-sizing: border-box; width: 100%; min-width: 0; padding: 6px 9px; border: 1px solid var(--primary); border-radius: 4px; color: var(--ink); background: var(--surface); font: inherit; font-size: 12.5px; outline: 0; }
 /* Two lines: truncated titles cannot be revealed by a hover tooltip, and papers often share a first line. */
 .paper-sidebar-title { display: -webkit-box; overflow: hidden; font-size: 12.5px; line-height: 1.4; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .paper-sidebar-item small { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.3; }
 .paper-sidebar-item[data-status="failed"] small { color: #cf5049; }
 .paper-sidebar-empty { margin: 4px 10px; color: var(--muted); font-size: 12px; }
 .paper-sidebar-settings { margin-top: 6px; }
+.paper-sidebar-actions { display: flex; gap: 4px; }
+.paper-sidebar-actions .paper-sidebar-action { flex: 1; width: auto; }
+.paper-sidebar-search-toggle { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+.paper-sidebar-search-toggle:hover { background: var(--muted-surface); color: var(--ink); }
+.paper-sidebar-search-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.paper-sidebar-search { box-sizing: border-box; width: 100%; min-width: 0; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+.paper-sidebar-search:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
+.lite-settings-loading { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; background: color-mix(in srgb, var(--surface) 90%, transparent); }
 
 /* The reader's own header is the title bar here. */
 .lite-shell .reader-header { -webkit-app-region: drag; }
 .lite-shell .reader-header :is(.ant-btn, .reader-header-actions) { -webkit-app-region: no-drag; }
 .lite-shell .reader-header-heading { padding-left: 8px; }
-.lite-shell[data-sidebar="collapsed"] .reader-header-heading { padding-left: 106px; }
+.lite-shell[data-sidebar="collapsed"] .lite-pane:first-child .reader-header-heading { padding-left: 106px; }
 
 /* Home without the cipher field or entrance effects */
 .new-parse-page.is-minimal { padding: 64px 32px 32px; }
@@ -44,3 +67,9 @@
 .new-parse-page.is-minimal .upload-entry .ant-btn, .new-parse-page.is-minimal .upload-entry .ant-btn:not(:disabled):hover { box-shadow: none; transform: none; }
 .new-parse-page.is-minimal :is(.upload-glyph-back, .upload-glyph-front) { transform: none !important; }
 
+
+/* Recently read papers stay mounted; only the open one is shown and receives input. Hidden ones keep
+   their layout (visibility, not content-visibility), so showing one again costs no relayout of the paper. */
+.lite-pane { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; height: 100%; }
+.lite-reader-slot { position: absolute; inset: 0; }
+.lite-reader-slot:not([data-active]) { visibility: hidden; pointer-events: none; }

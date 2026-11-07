@@ -1,7 +1,5 @@
 import React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
-import { refreshCodexStatus, loadStorageInfo } from '@features/settings/renderer'
 import { documentEventDisposition, applyDocumentChange, getDocumentRefreshPlan, patchDocumentDetails, type DocumentListCache } from '@features/library/renderer'
 import type { AppSettings } from '@features/settings/contract/settingsTypes'
 import type { DocumentChangeEvent, DocumentDetails, DocumentSummary } from '@features/library/contract/documentSchemas'
@@ -50,21 +48,6 @@ export function useAppData() {
   const onSettingsSaved = React.useCallback((next: AppSettings) => {
     queryClient.setQueryData(['settings'], next)
   }, [queryClient])
-
-  const codexStartupChecked = React.useRef(false)
-  React.useEffect(() => {
-    if (!settings || codexStartupChecked.current) return
-    codexStartupChecked.current = true
-    void refreshCodexStatus(settings.codex ?? DEFAULT_CODEX_SETTINGS).catch(() => undefined)
-  }, [settings])
-
-  React.useEffect(() => {
-    if (!settings?.outputRoot) return
-    const preload = (): void => { void loadStorageInfo(settings.outputRoot).catch(() => undefined) }
-    preload()
-    const timer = setInterval(preload, 60_000)
-    return () => clearInterval(timer)
-  }, [settings?.outputRoot, documents.length])
 
   React.useEffect(() => window.copilotix.onDocumentsChanged((change) => {
     const current = queryClient.getQueryData<DocumentListCache>(['documents'])

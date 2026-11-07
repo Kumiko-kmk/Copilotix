@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import BlockContextMenu, { type BlockMenuItem } from './BlockContextMenu'
 import { ReloadOutlined } from '@ant-design/icons'
 import { Alert, Button, Progress } from 'antd'
+import AppleLoader from '@platform/ui/renderer/AppleLoader'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { BlockMapping } from '@features/parsing/contract/blocks'
 import type { BlockSelection } from '../../contract/readerTypes'
@@ -384,7 +385,7 @@ export default function PdfPane(props: {
         >
           {loadingState.status === 'loading' ? (
             <div className="pdf-loading">
-              <span>正在加载 PDF…</span>
+              <AppleLoader label="正在打开 PDF" />
               {loadingState.progress === null ? null : <Progress percent={loadingState.progress} size="small" />}
             </div>
           ) : null}

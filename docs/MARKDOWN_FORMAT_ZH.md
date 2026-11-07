@@ -15,7 +15,7 @@ UTF-8／LF、CommonMark＋GFM＋$／$$ 數學；HTML 表格展平為 GFM，合�
 - `edits/markdown-edits.v1.json` 是獨立使用者層；Utility 每文獻序列化、樂觀 revision、fsync／rename。損壞保留，閱讀可回退並報錯，導出須失敗避免默默丟編輯。
 - `content:N` 結合 mapping／base hash 定位：原位置的 mapping 或 hash 相同 → 唯一 mapping → 唯一 hash；都不能確認則保留 orphan、不套錯塊。supplementalDeleted 按 mapping ID；不改 annotationKey 或原偏移。
 - 閱讀、翻譯、問答與導出都套編輯／刪除／順序；解析、文字修復、翻譯不能覆蓋它。Brief 與圖片解讀仍讀解析原文。
-- 合併段落即使對應多個 PDF 框也整塊處理；快速連刪等 mutation 同一序列。boxMarks 獨立於 SQLite annotation kind；PDF 右鍵或無框時相鄰塊可恢復。
+- 正文只在雙擊時原地編輯，單擊只保留選段／定位。合併段落即使對應多個 PDF 框也整塊處理；快速連刪等 mutation 同一序列。已移除整段邊框及上移／下移選單；拖曳與恢復原始順序保留。`boxMarks` 僅讀取歷史資料，編輯 IPC／RPC 不再接受 `box`／`unbox`；其他編輯不刪除歷史記錄。PDF 右鍵或無框時相鄰塊仍可恢復已刪除段落。
 - 只對請求重翻譯且變更的塊用 retranslateAt 加鹽快取，保留其他完成／失敗狀態；generatedAt 標 fulfilled。sourceChanged／fallbackProvider 僅展示或選單，不混入複製文字。
 - 可選 order 含塊數、完整排列與 updatedAt，包含已刪除塊；塊數不符忽略但保留，重置移除欄位。拖曳整段／整圖組、不拆圖說；順序變動不作廢翻譯快取，不能盲排未對齊譯文。讀取／導出／問答遵守順序。
 - 新可選欄位可能被舊 strict schema 拒絕，不能聲稱可直接降版；須備份並重置新欄位或用兼容版本。

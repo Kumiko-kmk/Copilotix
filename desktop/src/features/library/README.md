@@ -31,6 +31,14 @@
 
 `tests/features/library/`（`pnpm desktop:test --module library`）；E2E `e2e/library.spec.ts`、`paper-archive.spec.ts`、`archive-layout.spec.ts`、`qa-fixes.spec.ts`。
 
+## Lite 搜尋與初始化
+
+側欄分組、置頂與右鍵操作見 [UI 偏好](../../../../docs/UI_PREFERENCES_ZH.md#lite-版外殼)；分節規則是 `core/sidebarSections.ts`。`documents:rename` 寫入 `display_title`（去掉 .pdf、1–200 字、無控制字元）並發 metadata 變化；解析只填缺失或暫定標題，不覆蓋使用者的命名。
+
+Lite 的 `PaperSidebar` 在「新建」旁提供標題搜尋：本地匹配顯示名與原檔名，忽略大小寫、全半形與變音符，支援中英文連續文字或依序縮寫；多個空格分詞須全部匹配，不調用模型翻譯。Escape 清除並關閉，Enter 開啟第一項，中文輸入法組字時不處理快捷鍵。
+
+Main 在窗口建立及 IPC 註冊後讀取初始文庫摘要；`DocumentFeed.load` 合併並發讀取，首次增量事件等待初始化，不重複建立會話。既有全庫預熱與封面門檻不變。
+
 ## 例外（超過 600 行）
 
 - `utility/v2TaskRepositoryCompat.ts`（超過600行）：一個持有預備語句與事務的 SQLite 倉庫類；行型別、限制與投影已拆至 `compatRecords.ts`。按表拆類需重新劃分事務邊界，留待功能分支。

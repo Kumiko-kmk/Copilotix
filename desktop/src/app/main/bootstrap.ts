@@ -92,7 +92,6 @@ export async function bootstrap(): Promise<void> {
   const modelGateway = new ModelGateway(chatProvider, codex)
   const providerKeys = (provider: 'qwen' | 'deepseek' | 'codex') => provider === 'codex' ? Promise.resolve([]) : settings.providerKeys(provider)
   const canStartBackground = (): boolean => !libraryGate.busy && !libraryGate.restarting && !appShell.isQuitting
-  const toRenderer = (): Electron.WebContents | null => appShell.mainWindow && !appShell.mainWindow.webContents.isDestroyed() ? appShell.mainWindow.webContents : null
   const figureInsight = new FigureInsightService({
     settings: () => settings.get(),
     keys: providerKeys,
@@ -110,10 +109,7 @@ export async function bootstrap(): Promise<void> {
     },
     recordUsage: async () => undefined,
     canStart: canStartBackground,
-    changed: (request, state) => {
-      const contents = toRenderer()
-      if (contents) emitEvent(contents, figureInsightChannels.changed, { ...request, state })
-    }
+    changed: (request, state) => appShell.broadcast(figureInsightChannels.changed, { ...request, state })
   })
   services.figureInsight = figureInsight
   const paperChat = new PaperChatService({
@@ -153,10 +149,7 @@ export async function bootstrap(): Promise<void> {
     canStart: canStartBackground,
     hasText: async documentId => (await utility.request('insight:brief-source', { documentId }, { timeoutMs: 10_000 })).sources.length > 0,
     log: (details) => logger.info('paper-insight', details),
-    changed: (documentId, state) => {
-      const contents = toRenderer()
-      if (contents) emitEvent(contents, paperInsightChannels.changed, { documentId, state })
-    }
+    changed: (documentId, state) => appShell.broadcast(paperInsightChannels.changed, { documentId, state })
   })
   services.paperInsight = paperInsight
   // Lite has nowhere to show an archive card, so it never spends model quota generating one.
@@ -173,22 +166,18 @@ export async function bootstrap(): Promise<void> {
     jobRepository,
     scheduler: jobScheduler
   })
-  startup.phase = 'documents-load'
-  const feed = new DocumentFeed(repository, (event) => {
-    if (appShell.mainWindow) emitEvent(appShell.mainWindow.webContents, libraryChannels.changed, event)
-  }, () => logger.error('documents.refresh.failed', {}))
-  await feed.load()
+  const feed = new DocumentFeed(repository, (event) => appShell.broadcast(libraryChannels.changed, event), () => logger.error('documents.refresh.failed', {}))
 
   startup.phase = 'protocol-register'
   protocol.handle('copilotix-asset', (request) => createAssetResponse(request, (taskId, path) => tasks.resolveAsset(taskId, path)))
 
   const ipc = createIpcRegistrar({
     gate: libraryGate,
-    getMainWindow: () => appShell.mainWindow,
+    getWindows: () => appShell.windows(),
     rendererEntryPath: appShell.rendererEntryPath,
     rendererOrigin: process.env.ELECTRON_RENDERER_URL
   })
-  const mainWindow = (): Electron.BrowserWindow => appShell.mainWindow!
+  const dialogParent = (): Electron.BrowserWindow => appShell.dialogParent()
   registerPaperInsightHandlers(paperInsight, ipc)
   registerFigureInsightHandlers(figureInsight, ipc)
   registerZoteroHandlers(createZoteroImportService({ tasks, repository, tempRoot: app.getPath('temp') }), ipc)
@@ -204,7 +193,7 @@ export async function bootstrap(): Promise<void> {
     feed,
     gate: libraryGate,
     scheduler: jobScheduler,
-    mainWindow,
+    mainWindow: dialogParent,
     bundleDirectory: __dirname,
     utility: {
       categories: (request) => utility.request('compute:library-categories', request, { timeoutMs: 120_000 }),
@@ -224,7 +213,7 @@ export async function bootstrap(): Promise<void> {
   registerCodexIpc(ipc, {
     codex: () => codex,
     chooseExecutable: async () => {
-      const result = await dialog.showOpenDialog(mainWindow(), { title: '选择 codex.exe', properties: ['openFile'], filters: [{ name: 'Codex', extensions: ['exe'] }] })
+      const result = await dialog.showOpenDialog(dialogParent(), { title: '选择 codex.exe', properties: ['openFile'], filters: [{ name: 'Codex', extensions: ['exe'] }] })
       return result.canceled ? null : result.filePaths[0] ?? null
     }
   })
@@ -245,7 +234,7 @@ export async function bootstrap(): Promise<void> {
         || keysChanged) { paperInsight.cancelAll(); figureInsight.cancelAll() }
     },
     chooseDirectory: async () => {
-      const result = await dialog.showOpenDialog(mainWindow(), { properties: ['openDirectory', 'createDirectory'] })
+      const result = await dialog.showOpenDialog(dialogParent(), { properties: ['openDirectory', 'createDirectory'] })
       return result.canceled ? null : (result.filePaths[0] ?? null)
     },
     openPath: (path) => shell.openPath(path)
@@ -314,6 +303,8 @@ export async function bootstrap(): Promise<void> {
     logger,
     usageAnalytics
   }))
+  startup.phase = 'documents-load'
+  await feed.load()
   startup.phase = 'scheduler-start'
   await jobScheduler.start()
   recoverPaperInsight()

@@ -7,7 +7,7 @@ import { BLOCK_MAPPING_VERSION } from '@features/parsing/core/blockMapping'
 import type { RagChunk } from '@features/chat/contract/ragChunk'
 import type { BlockMapping } from '@features/parsing/contract/blocks'
 import type { CopilotixTask } from '@features/library/contract/documentTypes'
-import { MARKDOWN_EDITS_FILE, emptyMarkdownEdits, inReadingOrder, moveInOrder, optimisticEdits, resolveMarkdownEdits, validOrder, type MarkdownEditsFile } from '@features/reader/contract/markdownEdits'
+import { MARKDOWN_EDITS_FILE, markdownEditRequestSchema, emptyMarkdownEdits, inReadingOrder, moveInOrder, optimisticEdits, resolveMarkdownEdits, validOrder, type MarkdownEditsFile } from '@features/reader/contract/markdownEdits'
 import { buildOriginalReaderBlocks, buildTranslatedReaderBlocks } from '@features/reader/core/readerDocument'
 import { readMarkdownEditsFile } from '@features/reader/runtime/markdownEditsFile'
 import { resolveReaderEdits } from '../../../src/features/reader/main/artifactService'
@@ -141,18 +141,19 @@ describe('reader edit layer', () => {
     } finally { repository.close() }
   })
 
-  it('frames whole blocks from the PDF view, content or page furniture, and removes the frame again', async () => {
+  it('keeps historical frames readable while refusing new frame mutations', async () => {
     const root = await paperDir()
     const store = new MarkdownEditStore(() => root)
-    await store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'block', mappingId: 'm1' }, action: 'box' })
-    await store.apply({ documentId: DOC, expectedRevision: 1, target: { kind: 'block', mappingId: 'h0' }, action: 'box' })
-    expect(() => store.apply({ documentId: DOC, expectedRevision: 2, target: target(1), action: 'box' })).toThrow('Frames')
+    const file = { ...emptyMarkdownEdits(DOC), boxMarks: ['m1', 'h0'].map(mappingId => ({ mappingId, markedAt: '2026-10-22T00:00:00.000Z' })) }
+    await mkdir(join(root, 'edits'), { recursive: true })
+    await writeFile(join(root, MARKDOWN_EDITS_FILE), JSON.stringify(file))
+    for (const action of ['box', 'unbox']) expect(markdownEditRequestSchema.safeParse({ documentId: DOC, expectedRevision: 0, target: { kind: 'block', mappingId: 'm1' }, action }).success).toBe(false)
     const edits = resolveReaderEdits(MARKDOWN, MAPPINGS, null, await readMarkdownEditsFile(root, DOC))
     expect(edits.boxMarks).toEqual(['m1', 'h0'])
     const blocks = buildOriginalReaderBlocks(MARKDOWN, MAPPINGS, edits)
     expect(blocks.filter(block => block.boxed).map(block => block.annotationKey)).toEqual(['content:1'])
-    await store.apply({ documentId: DOC, expectedRevision: 2, target: { kind: 'block', mappingId: 'm1' }, action: 'unbox' })
-    expect((await readMarkdownEditsFile(root, DOC)).boxMarks.map(item => item.mappingId)).toEqual(['h0'])
+    await store.apply({ documentId: DOC, expectedRevision: 0, target: target(1), action: 'set-original', markdown: 'Corrected paragraph.' })
+    expect((await readMarkdownEditsFile(root, DOC)).boxMarks).toEqual(file.boxMarks)
   })
 
   it('gives chat the edited text and drops deleted blocks without losing chunk locators', () => {

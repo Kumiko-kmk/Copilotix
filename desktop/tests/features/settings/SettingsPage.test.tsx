@@ -106,7 +106,9 @@ describe('SettingsPage credential editor', () => {
     expect(screen.queryByText('文档解析必需')).toBeNull()
     expect(screen.getAllByLabelText('APIKey')).toHaveLength(1)
     expect(screen.queryByText('服务地址')).toBeNull()
-    expect(screen.getAllByRole('button', { name: '测试连接' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: '测试连接' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: '验证连接' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '测试模型' })).toBeNull()
     const keys = document.querySelector('[data-provider="model-keys"]') as HTMLElement
     expect(within(keys).getByText('DeepSeek 1 个 · 千问 1 个')).toBeTruthy()
     expect(document.querySelector('[data-provider="qwen"]')).toBeNull()
@@ -290,6 +292,7 @@ describe('SettingsPage credential editor', () => {
     })
 
     render(<SettingsPage settings={settings} onSaved={vi.fn()} />)
+    expect(getStorageInfo).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /文件存储/u }))
     expect(screen.getByRole('region', { name: '文件存储' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: '文件管理' })).toBeNull()

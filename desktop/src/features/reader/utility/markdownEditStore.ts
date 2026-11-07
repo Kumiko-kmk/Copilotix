@@ -63,9 +63,6 @@ export class MarkdownEditStore {
         if (!isPermutation(target.sequence, count)) throw new Error('段落位置已变化，请刷新后重试')
         if (!isIdentity(target.sequence)) next.order = { sourceVersion: (await documentModels.ensureBase(request.documentId, root)).sourceVersion, count, sequence: [...target.sequence], updatedAt: now }
       }
-    } else if (target.kind === 'block') {
-      next.boxMarks = next.boxMarks.filter(item => item.mappingId !== target.mappingId)
-      if (request.action === 'box') next.boxMarks.push({ mappingId: target.mappingId, markedAt: now })
     } else if (target.kind === 'supplemental') {
       next.supplementalDeleted = next.supplementalDeleted.filter(item => item.mappingId !== target.mappingId)
       if (request.action === 'delete') next.supplementalDeleted.push({ mappingId: target.mappingId, deletedAt: now })

@@ -8,12 +8,14 @@ export class DocumentFeed {
   private revision = 0
   private sessionId = randomUUID()
   private loaded = false
+  private loading?: Promise<void>
   private pending = new Map<string, DocumentMutation[]>()
   private fullRefresh = false
   readonly refresh: (change?: DocumentMutation) => void
   constructor(private readonly repository: Pick<TaskRepositoryCompat, 'listDocumentSummaries'> & Partial<Pick<TaskRepositoryCompat, 'getDocumentSummary'>>,
     emit: (event: DocumentChangeEvent) => void, onRefreshError: () => void) {
     const flush = createCoalescedRefresh(async () => {
+      if (!this.loaded) await this.load()
       const pending = this.pending
       this.pending = new Map()
       const full = this.fullRefresh
@@ -69,9 +71,13 @@ export class DocumentFeed {
     }
   }
   private emptyEvent(): DocumentChangeEvent { return { sessionId: this.sessionId, revision: this.revision + 1, upserted: [], removedIds: [], changes: [] } }
-  async load(): Promise<void> {
-    this.summaries = new Map((await this.repository.listDocumentSummaries()).map(summary => [summary.id, summary]))
-    this.sessionId = randomUUID(); this.revision = 0; this.loaded = true
+  load(): Promise<void> {
+    if (this.loading) return this.loading
+    this.loading = Promise.resolve().then(() => this.repository.listDocumentSummaries()).then(summaries => {
+      this.summaries = new Map(summaries.map(summary => [summary.id, summary]))
+      this.sessionId = randomUUID(); this.revision = 0; this.loaded = true
+    }).finally(() => { this.loading = undefined })
+    return this.loading
   }
   async list(): Promise<DocumentSummary[]> { if (!this.loaded) await this.load(); return [...this.summaries.values()] }
   async snapshot(): Promise<DocumentListSnapshot> {

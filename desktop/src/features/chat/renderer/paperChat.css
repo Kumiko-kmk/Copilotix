@@ -4,14 +4,19 @@
 .paper-chat-scroll { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent; }
 
 .paper-chat-turns.markdown-body { width: 100%; box-sizing: border-box; padding-bottom: 24px; }
-.paper-chat-turn + .paper-chat-turn { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--rule); }
-/* The question is the turn's heading: ink, set off by the archive's accent tick. */
-.paper-chat-question { margin: 4px 0 10px; padding: 1px 0 1px 12px; border-left: 2px solid var(--primary); color: var(--ink); font-size: 15px; font-weight: 700; letter-spacing: .02em; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.paper-chat-answer { overflow-wrap: anywhere; }
+/* A conversation: the question as a soft bubble on the right, the answer as plain text below it. */
+.paper-chat-turns.markdown-body { padding-top: 28px; }
+.paper-chat-turn + .paper-chat-turn { margin-top: 34px; }
+.markdown-body .paper-chat-question { max-width: min(85%, 560px); margin: 0; padding: 9px 15px; border-radius: 16px 16px 4px 16px; color: var(--ink); background: color-mix(in srgb, var(--primary) 9%, var(--sheet)); font-size: 14px; font-weight: 500; letter-spacing: .01em; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.paper-chat-answer { margin-top: 16px; overflow-wrap: anywhere; }
 .paper-chat-answer > :first-child { margin-top: 0; }
-.paper-chat-caret { display: inline-block; width: 7px; height: 1.05em; margin-left: 2px; border-radius: 0; background: var(--primary); vertical-align: text-bottom; animation: paper-chat-blink 1s steps(2, start) infinite; }
-.paper-chat-status { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--muted); font-size: 13px; }
-@keyframes paper-chat-blink { to { visibility: hidden; } }
+.paper-chat-caret { display: inline-block; width: 8px; height: 8px; margin-left: 4px; border-radius: 50%; background: var(--primary); vertical-align: middle; animation: paper-chat-pulse 1s ease-in-out infinite; }
+/* Before the first words arrive, the app's small falling apple stands in for them. */
+.paper-chat-thinking { display: flex; justify-items: start; margin-left: -4px; }
+.paper-chat-status { display: flex; align-items: center; gap: 4px; margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+.paper-chat-follow-ups { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.paper-chat-follow-ups button { padding: 4px 11px; border: 1px solid var(--rule); border-radius: 999px; color: var(--text); background: transparent; cursor: pointer; font: inherit; font-size: 12.5px; transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
+.paper-chat-follow-ups button:hover, .paper-chat-follow-ups button:focus-visible { border-color: color-mix(in srgb, var(--primary) 45%, transparent); color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, transparent); outline: 0; }
 
 /* Plain inline (not an atomic box) so CJK punctuation after a marker never starts a new line. */
 .paper-chat-citation { display: inline; margin: 0 1px; padding: 1px 5px; border: 0; border-radius: 2px; color: var(--primary); background: var(--primary-soft); cursor: pointer; font-size: 11px; font-weight: 600; line-height: 1; vertical-align: 2px; transition: background-color .15s ease, color .15s ease; }
@@ -19,10 +24,15 @@
 
 .paper-chat-empty { max-width: 560px; margin: auto; padding: 32px 42px; color: var(--muted); text-align: center; }
 .paper-chat-index-progress { width: 220px; }
-.paper-chat-welcome p { margin: 0 0 18px; font-size: 14px; line-height: 1.7; }
-.paper-chat-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.paper-chat-suggestions button { padding: 6px 14px; border: 0; border-radius: 4px; color: var(--ink); background: var(--lift); cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .03em; transition: color .15s ease, background-color .15s ease; }
-.paper-chat-suggestions button:hover, .paper-chat-suggestions button:focus-visible { color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, transparent); outline: 0; }
+/* Welcome: a heading, one quiet line, and four starting questions as cards. */
+.paper-chat-welcome { width: 100%; max-width: 640px; margin: auto; padding: 32px 42px; box-sizing: border-box; }
+.paper-chat-welcome h3 { margin: 0; color: var(--ink); font-size: 18px; font-weight: 700; letter-spacing: .02em; }
+.paper-chat-welcome p { margin: 6px 0 22px; color: var(--muted); font-size: 13px; }
+.paper-chat-suggestions { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.paper-chat-suggestions button { display: grid; align-content: start; gap: 6px; min-height: 84px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 12px; color: var(--text); background: var(--sheet); cursor: pointer; font: inherit; text-align: left; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.paper-chat-suggestions button:hover, .paper-chat-suggestions button:focus-visible { border-color: color-mix(in srgb, var(--primary) 40%, transparent); box-shadow: 0 8px 20px -16px color-mix(in srgb, var(--shadow-ink) 60%, transparent); outline: 0; transform: translateY(-1px); }
+.paper-chat-suggestion-kind { color: var(--primary); font-size: 11.5px; font-weight: 700; letter-spacing: .12em; }
+.paper-chat-suggestion-text { color: var(--ink); font-size: 13px; line-height: 1.55; }
 
 /* Composer aligns with the markdown-body column above it. */
 .paper-chat-composer { display: grid; width: 100%; max-width: 900px; margin: 0 auto; padding: 8px 42px 16px; box-sizing: border-box; gap: 8px; }
@@ -40,15 +50,16 @@
 .paper-chat-figure-pin { height: 40px; padding-left: 4px; }
 /* Inside the conversation the pin sits in .markdown-body, whose img rule would show the figure full size. */
 .paper-chat-pin img.paper-chat-figure-thumb { display: block; flex: 0 0 auto; width: auto; max-width: 56px; height: 32px; margin: 0; object-fit: contain; background: var(--sheet); }
-.paper-chat-input { display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 6px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet); box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--shadow-ink) 45%, transparent); transition: border-color .15s ease, box-shadow .15s ease; }
-.paper-chat-input:focus-within { border-color: var(--rule-strong); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent); }
+.paper-chat-input { display: flex; flex-direction: column; gap: 4px; padding: 10px 10px 8px 16px; border: 1px solid var(--rule); border-radius: 16px; background: var(--sheet); box-shadow: 0 12px 28px -22px color-mix(in srgb, var(--shadow-ink) 55%, transparent); transition: border-color .15s ease, box-shadow .15s ease; }
+.paper-chat-input:focus-within { border-color: color-mix(in srgb, var(--primary) 40%, var(--rule)); box-shadow: 0 12px 28px -22px color-mix(in srgb, var(--shadow-ink) 55%, transparent), 0 0 0 3px color-mix(in srgb, var(--primary) 8%, transparent); }
+.paper-chat-input-footer .ant-btn-circle { width: 30px; min-width: 30px; height: 30px; }
 .paper-chat-input-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .paper-chat-input textarea.ant-input { padding: 3px 0; background: transparent; font-size: 14px; line-height: 1.6; }
 
 /* Toolbar controls shown beside the shared Segmented tabs. */
 .reader-chat-toolbar { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: auto; }
 .reader-chat-model-picker { display: flex; align-items: center; gap: 2px; min-width: 0; }
-.reader-chat-provider { padding: 0 6px; border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent); border-radius: 2px; color: var(--primary); font-size: 11px; font-weight: 600; letter-spacing: .08em; white-space: nowrap; }
+.reader-chat-provider { padding: 0 6px; border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent); border-radius: 999px; color: var(--primary); font-size: 11px; font-weight: 600; letter-spacing: .08em; white-space: nowrap; }
 .reader-chat-model { min-width: 0; max-width: 220px; }
 .reader-chat-model .ant-select-selection-item { color: var(--muted); font-size: 12px; }
 .reader-chat-tab { display: inline-flex; align-items: center; gap: 5px; }
@@ -58,12 +69,16 @@
 
 @media (prefers-reduced-motion: reduce) {
   .paper-chat-caret, .reader-chat-tab-busy { animation: none; }
-  .paper-chat-citation, .paper-chat-suggestions button, .paper-chat-input { transition: none; }
+  .paper-chat-citation, .paper-chat-suggestions button, .paper-chat-follow-ups button, .paper-chat-input { transition: none; }
+  .paper-chat-suggestions button:hover { transform: none; }
 }
 
-.paper-chat-metadata { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.paper-chat-metadata { display: flex; flex-wrap: wrap; gap: 4px 0; margin-top: 12px; color: color-mix(in srgb, var(--muted) 85%, transparent); font-size: 11px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.paper-chat-metadata > * + *::before { margin: 0 7px; content: "·"; }
 
-.paper-chat-question-row { display: flex; align-items: flex-start; gap: 12px; }
-.paper-chat-question-row .paper-chat-question { flex: 1; min-width: 0; }
-.paper-chat-question-row > .ant-dropdown-trigger { flex: none; margin-top: 4px; }
+/* The turn's menu waits beside the bubble until the pointer or focus reaches the question. */
+.paper-chat-question-row { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.paper-chat-question-row > .ant-dropdown-trigger { flex: none; opacity: 0; transition: opacity .15s ease; }
+.paper-chat-question-row:hover > .ant-dropdown-trigger, .paper-chat-question-row > .ant-dropdown-trigger:focus-visible, .paper-chat-question-row > .ant-dropdown-open { opacity: 1; }
+.paper-chat-turn-selections { justify-content: flex-end; }
 .paper-chat-delete-question { color: var(--muted); overflow-wrap: anywhere; }

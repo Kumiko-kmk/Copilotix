@@ -106,7 +106,7 @@ describe("ipcValidation", () => {
   function makeOptions(url: string) {
     const owner = { isDestroyed: () => false }
     return {
-      getMainWindow: () => owner,
+      getWindows: () => [owner],
       fromWebContents: () => owner,
       rendererEntryPath: resolve('renderer/index.html'),
       rendererOrigin: url.startsWith('http') ? url : undefined
@@ -122,6 +122,16 @@ describe("ipcValidation", () => {
       expect(isTrustedRendererUrl(`${entryUrl}?query=1`, options)).toBe(false)
       expect(() => assertTrustedSender(makeEvent(entryUrl), options)).not.toThrow()
       expect(() => assertTrustedSender(makeEvent('file:///untrusted/index.html'), options)).toThrow(/来源无效/)
+    })
+
+    it('accepts every app window, and no window outside them', () => {
+      const entryUrl = pathToFileURL(resolve('renderer/index.html')).href
+      const main = { isDestroyed: () => false }, reader = { isDestroyed: () => false }, foreign = { isDestroyed: () => false }
+      const options = (source: typeof main) => ({ ...makeOptions(entryUrl), getWindows: () => [main, reader], fromWebContents: () => source })
+      expect(() => assertTrustedSender(makeEvent(entryUrl), options(reader))).not.toThrow()
+      expect(() => assertTrustedSender(makeEvent(entryUrl), options(foreign))).toThrow(/来源无效/)
+      const closed = { isDestroyed: () => true }
+      expect(() => assertTrustedSender(makeEvent(entryUrl), { ...makeOptions(entryUrl), getWindows: () => [closed], fromWebContents: () => closed })).toThrow(/来源无效/)
     })
 
     it('wraps successful results and validation failures in one response envelope', async () => {
@@ -312,7 +322,7 @@ describe("paperInsightIpc", () => {
     const event = { sender: { mainFrame: frame, getURL: () => frame.url, isDestroyed: () => false, send: () => undefined }, senderFrame: frame }
     const get = vi.fn(async () => ({ status: 'missing' })), generate = vi.fn(async () => undefined), cancel = vi.fn(() => ({ cancelled: true }))
     registerPaperInsightHandlers({ get, generate, cancel } as unknown as PaperInsightService, createIpcRegistrar({
-      getMainWindow: () => owner, fromWebContents: () => owner, rendererEntryPath: resolve('renderer/index.html'),
+      getWindows: () => [owner], fromWebContents: () => owner, rendererEntryPath: resolve('renderer/index.html'),
       ipcMain: { handle: (channel, handler) => { handlers.set(channel, handler) } }
     }))
     const request = { documentId: randomUUID() }

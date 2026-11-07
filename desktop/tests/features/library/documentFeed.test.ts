@@ -4,6 +4,21 @@ import { documentEventDisposition, getDocumentRefreshPlan } from '../../../src/f
 import type { DocumentSummary, DocumentChangeEvent } from '@features/library/contract/documentSchemas'
 const summary: DocumentSummary = { id: '11111111-1111-4111-8111-111111111111', originalName: 'paper.pdf', displayName: 'paper', sourceHash: 'source', workflow: { status: 'parsing', progress: 20, activeJobKind: 'parse', error: null }, processing: { translationProvider: 'qwen' }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }
 describe('incremental document feed', () => {
+  it('shares startup loading with concurrent snapshots and retains queued progress', async () => {
+    let complete!: (value: DocumentSummary[]) => void
+    const repository = { listDocumentSummaries: vi.fn(() => new Promise<DocumentSummary[]>(resolve => { complete = resolve })), getDocumentSummary: vi.fn(async () => ({ ...summary, workflow: { ...summary.workflow, progress: 40 } })) }
+    const events: DocumentChangeEvent[] = []
+    const feed = new DocumentFeed(repository, event => events.push(event), () => { throw new Error('refresh failed') })
+    const loading = feed.load(), first = feed.snapshot(), second = feed.snapshot()
+    feed.refresh({ documentId: summary.id, kind: 'progress' })
+    await Promise.resolve()
+    complete([summary])
+    await loading
+    expect((await first).sessionId).toBe((await second).sessionId)
+    await vi.waitFor(() => expect(events).toHaveLength(1))
+    expect(repository.listDocumentSummaries).toHaveBeenCalledTimes(1)
+    expect((await feed.snapshot()).documents[0]!.workflow.progress).toBe(40)
+  })
   it('queries one document for progress without scanning the library or invalidating content', async () => {
     const repository = { listDocumentSummaries: vi.fn(async () => [summary]), getDocumentSummary: vi.fn(async () => ({ ...summary, workflow: { ...summary.workflow, progress: 21 } })) }
     const events: DocumentChangeEvent[] = []

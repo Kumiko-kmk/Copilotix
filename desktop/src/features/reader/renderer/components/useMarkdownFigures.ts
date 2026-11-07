@@ -82,22 +82,5 @@ export function useReorderUnits(blocks: ReaderBlock[], figureGroupByBlockIndex: 
     return [...unit].sort((a, b) => a - b)
   }, [figureGroupByBlockIndex, blocks])
   const contentIndexOf = React.useCallback((index: number) => blocks[index]?.role === 'content' ? blocks[index]!.contentIndex : undefined, [blocks])
-  /** Neighbouring units in reading order, for the menu's move up / move down. */
-  const reorderNeighbours = (index: number): { unit: number[]; up?: number; down?: number | null } | null => {
-    const unit = reorderUnitOf(index)
-    if (!unit) return null
-    const order: number[][] = []
-    const seen = new Set<number>()
-    blocks.forEach((block, at) => {
-      if (block.role !== 'content' || seen.has(at)) return
-      const members = reorderUnitOf(at) ?? [at]
-      members.forEach(member => seen.add(member))
-      order.push(members)
-    })
-    const position = order.findIndex(members => members.includes(unit[0]!))
-    const first = (members: number[] | undefined): number | undefined => members ? contentIndexOf(members[0]!) : undefined
-    return { unit, up: position > 0 ? first(order[position - 1]) : undefined,
-      down: position >= 0 && position < order.length - 1 ? (position + 2 < order.length ? first(order[position + 2]) ?? null : null) : undefined }
-  }
-  return { reorderUnitOf, contentIndexOf, reorderNeighbours }
+  return { reorderUnitOf, contentIndexOf }
 }

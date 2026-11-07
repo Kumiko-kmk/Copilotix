@@ -445,6 +445,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .markdown-scroll.reader-citation-pointer { cursor: pointer; }
 .reader-citation-card { position: fixed; z-index: 1210; display: grid; gap: 2px; overflow-y: auto; padding: 6px; border-radius: 4px; color: var(--text); background: var(--sheet); box-shadow: 0 16px 34px -16px color-mix(in srgb, var(--shadow-ink) 55%, transparent), 0 0 0 1px var(--rule); overscroll-behavior: contain; }
 .reader-citation-card.above { transform: translateY(-100%); }
+.reader-citation-copy-status { padding: 2px 8px; color: var(--muted); font-size: 12px; }
 .reader-citation-entry { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 4px; width: 100%; padding: 7px 8px; border: 0; border-radius: 2px; color: inherit; background: transparent; cursor: pointer; font: inherit; font-size: 13px; line-height: 1.55; text-align: left; }
 .reader-citation-entry:hover, .reader-citation-entry:focus-visible { background: var(--muted-surface); outline: none; }
 .reader-citation-number { grid-column: 1; color: var(--primary); font-variant-numeric: tabular-nums; font-weight: 600; }

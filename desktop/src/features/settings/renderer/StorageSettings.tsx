@@ -3,13 +3,13 @@ import { DatabaseOutlined, FileOutlined, FileTextOutlined, FolderOpenOutlined, R
 import { Button, Input } from 'antd'
 import type { StorageInfo } from '../contract/settingsSchemas'
 import { formatBytes, StorageComposition, StorageGrowth, StorageMetric } from './SettingsDashboards'
-import { OpenFolderIcon, RefreshIcon } from './settingsIcons'
+import { OpenFolderIcon } from './settingsIcons'
 
 export type LibraryAction = 'backup' | 'restore' | 'migrate'
 
 /**
- * 文件存储. The page shows usage with its charts; the settings window keeps to the location,
- * the data actions and one line of usage.
+ * 文件存储. The page shows usage with its charts; the settings window keeps to the location
+ * and the data actions.
  */
 export function StorageSettings(props: {
   compact: boolean
@@ -32,9 +32,8 @@ export function StorageSettings(props: {
     </>
   )
   if (props.compact) {
-    const usage = !info ? '—' : info.exists === false ? '尚无文档' : `${info.documentCount} 篇文档 · ${formatBytes(info.totalBytes)}`
     return (
-      <section className="settings-section storage-management" aria-label="文件存储">
+      <section className="settings-section storage-management" aria-label="存储">
         <div className="settings-row">
           <span className="settings-row-label">保存位置</span>
           <div className="settings-row-control storage-path">
@@ -45,13 +44,6 @@ export function StorageSettings(props: {
         <div className="settings-row">
           <span className="settings-row-label">论文数据</span>
           <div className="settings-row-control storage-location-actions" aria-busy={action !== null}>{actions}</div>
-        </div>
-        <div className="settings-row" aria-busy={loading}>
-          <span className="settings-row-label">用量</span>
-          <div className="settings-row-control storage-usage-line">
-            <span>{usage}</span>
-            <Button type="text" aria-label="刷新用量" disabled={action !== null} loading={loading} icon={<RefreshIcon />} onClick={props.onRefresh} />
-          </div>
         </div>
       </section>
     )

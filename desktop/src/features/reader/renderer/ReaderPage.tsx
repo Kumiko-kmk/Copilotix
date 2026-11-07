@@ -1,4 +1,4 @@
-import { loadDocumentBase } from '@features/document/renderer'
+import { readerDocumentQuery } from './readerDocumentQuery'
 import { paperSelectionText } from '../core/paperSelectionText'
 import { readerContentMappings, buildReaderBase, buildTranslatedBase, withReaderEdits } from '../core/readerDocument'
 import type { PdfBlockMenu } from './components/PdfPane'
@@ -17,8 +17,9 @@ import type { ReaderBlockMove } from './components/ReaderBlockReorder'
 import type { ReaderBlock } from '../core/readerDocument'
 import { useReaderNotes } from './useReaderNotes'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeftOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
-import { Button, Dropdown, Space, Spin, Typography, message } from 'antd'
+import { ArrowLeftOutlined, CloseOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons'
+import { Button, Dropdown, Space, Typography, message } from 'antd'
+import AppleLoader from '@platform/ui/renderer/AppleLoader'
 import type { DocumentAnnotation, ListReaderAnnotationsRequest, ReaderAnnotationSnapshot } from '../contract/readerSchemas'
 import type { DocumentDetails } from '@features/library/contract/documentSchemas'
 import type { BlockSelection, ReaderAnnotation, ReaderAnnotationView, ReaderChatSelection } from '../contract/readerTypes'
@@ -43,7 +44,7 @@ import {
   type ReaderViewId
 } from './readerLayout'
 
-export default function ReaderPage(props: { documentId: string; enterFromLibrary?: boolean; insights?: PaperInsightSource; showBack?: boolean; resumePosition?: boolean; onBack(): void; onOpenSettings(): void }): React.JSX.Element {
+export default function ReaderPage(props: { documentId: string; enterFromLibrary?: boolean; insights?: PaperInsightSource; showBack?: boolean; resumePosition?: boolean; onBack(): void; onOpenSettings(): void; /** Shown as one side of a split: a button closes that side. */ onClose?(): void }): React.JSX.Element {
   const queryClient = useQueryClient()
   const chat = usePaperChat(props.documentId)
   const readerNotes = useReaderNotes(props.documentId)
@@ -62,10 +63,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
     }
   }, [messageApi, props.documentId])
 
-  const documentQuery = useQuery<DocumentDetails>({
-    queryKey: ['document', props.documentId],
-    queryFn: () => window.copilotix.getDocument(props.documentId).then(loadDocumentBase)
-  })
+  const documentQuery = useQuery(readerDocumentQuery(props.documentId))
   const originalAnnotations = useAnnotationQuery(props.documentId, 'original')
   const translatedAnnotations = useAnnotationQuery(props.documentId, 'translated')
   const document = documentQuery.data
@@ -196,7 +194,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   // One set of paragraph and figure actions behind every right-click menu (PDF boxes, paragraphs,
   // page headers, figures). A merged paragraph has several PDF boxes but is one reader paragraph.
   const blockMenus = React.useMemo(() => {
-    type Subject = { contents: ReaderBlock[]; deleted: ResolvedMarkdownEdits['blocks']; furnitureId?: string; boxId?: string; figures: ReaderFigureGroup[]; stale: boolean; fallback?: string }
+    type Subject = { contents: ReaderBlock[]; deleted: ResolvedMarkdownEdits['blocks']; furnitureId?: string; figures: ReaderFigureGroup[]; stale: boolean; fallback?: string }
     const boxed = new Set(markdownEdits?.boxMarks ?? [])
     const originalByIndex = new Map(originalBlocks.flatMap(block => block.role === 'content' && block.contentIndex !== undefined ? [[block.contentIndex, block] as const] : []))
     const translatedByIndex = new Map(translatedBlocks.flatMap(block => block.role === 'content' && block.contentIndex !== undefined ? [[block.contentIndex, block] as const] : []))
@@ -205,12 +203,12 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
     const fromMapping = (id: string): Subject => {
       const contents = originalBlocks.filter(block => block.role === 'content' && block.contentIndex !== undefined && block.mappingIds.includes(id))
       return { contents, deleted: markdownEdits?.blocks.filter(block => block.deleted && block.mappingIds.includes(id)) ?? [],
-        ...(contentMappingIds.has(id) ? {} : { furnitureId: id }), boxId: id, figures: [], stale: contents.some(block => staleIndex(block.contentIndex)) }
+        ...(contentMappingIds.has(id) ? {} : { furnitureId: id }), figures: [], stale: contents.some(block => staleIndex(block.contentIndex)) }
     }
     const fromBlock = (block: ReaderBlock, figures: ReaderFigureGroup[]): Subject => {
       if (block.role !== 'content') {
         const id = (block.annotationKey ?? '').replace(/^supplemental:/u, '')
-        return { contents: [], deleted: [], furnitureId: id, boxId: id, figures: [], stale: false }
+        return { contents: [], deleted: [], furnitureId: id, figures: [], stale: false }
       }
       const original = block.contentIndex === undefined ? undefined : originalByIndex.get(block.contentIndex)
       // A figure is deleted with its caption: every paragraph of the group goes.
@@ -220,7 +218,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       const contents = [...new Set([...(original ? [original] : []), ...members])]
       // Deleted neighbours without a PDF box can only be restored from here.
       const unmappedDeleted = markdownEdits?.blocks.filter(entry => entry.deleted && !entry.mappingIds.length && block.contentIndex !== undefined && Math.abs(entry.index - block.contentIndex) === 1) ?? []
-      return { contents, deleted: unmappedDeleted, ...(block.mappingIds[0] ? { boxId: block.mappingIds[0] } : {}), figures,
+      return { contents, deleted: unmappedDeleted, figures,
         stale: staleIndex(block.contentIndex), ...(block.fallbackProvider ? { fallback: TRANSLATION_PROVIDER_LABELS[block.fallbackProvider] } : {}) }
     }
     const report = async (action: () => Promise<void>): Promise<void> => {
@@ -239,15 +237,13 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       }
       if (subject.contents.length && translationAvailable) result.push({ key: 'retranslate', label: '重新翻译此段' })
       if (subject.contents.length && !figure) result.push({ key: 'chat', label: '整段加入对话' })
-      if (subject.boxId) result.push(boxed.has(subject.boxId) ? { key: 'unbox', label: '取消边界框标记' } : { key: 'box', label: '整段加边界框标记' })
       if (subject.deleted.length || (subject.furnitureId && furnitureDeleted(subject.furnitureId))) result.push({ key: 'restore', label: subject.contents.length ? '恢复相邻的已删除段落' : '恢复此段' })
       if (subject.contents.length || (subject.furnitureId && !furnitureDeleted(subject.furnitureId))) result.push({ key: 'delete', label: figure ? '删除此图' : '删除此段', danger: true })
       return result
     }
     const select = (key: string, subject: Subject): void => {
       const [first] = subject.contents
-      if (key === 'box' || key === 'unbox') { if (subject.boxId) void report(() => applyEdit({ kind: 'block', mappingId: subject.boxId! }, key)) }
-      else if (key === 'retranslate' && first) void report(async () => {
+      if (key === 'retranslate' && first) void report(async () => {
         for (const block of subject.contents) await applyEdit(contentTarget(block), 'retranslate')
         await window.copilotix.retranslateEditedDocument(props.documentId)
         messageApi.success({ key: 'reader-edit', content: '已开始重新翻译此段，其他段落沿用已有译文' })
@@ -345,7 +341,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   }, [messageApi, props.documentId, queryClient, snapshots])
 
   if (documentQuery.isError) return <div className="reader-loading">文档加载失败：{documentQuery.error.message}</div>
-  if (documentQuery.isPending || !document) return <div className="reader-loading"><Spin size="large" /></div>
+  if (documentQuery.isPending || !document) return <div className="reader-loading"><AppleLoader label="正在打开论文" /></div>
 
   const translatedReady = Boolean(document.translatedMarkdown)
   return (
@@ -360,6 +356,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           </Dropdown>
           <ZoteroExportButton documentId={document.summary.id} messageApi={messageApi} />
           <DocumentLifecycleActions summary={document.summary} staleTranslation={document.translatedBlocks?.some((block) => block.sourceChanged)} messageApi={messageApi} onDeleted={props.onBack} />
+          {props.onClose ? <Button type="text" icon={<CloseOutlined />} onClick={props.onClose} aria-label="关闭分屏" /> : null}
         </Space>
       </header>
       <ReaderWorkspace

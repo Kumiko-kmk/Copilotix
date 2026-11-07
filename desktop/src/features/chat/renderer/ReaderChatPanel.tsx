@@ -9,10 +9,19 @@ import type { PaperChatFigurePin, PaperChatTurnFigure } from '../contract/paperC
 import { turnFigurePins, type PaperChatController, type PaperChatTurn } from './usePaperChat'
 import { usePaperChatRouting, type PaperChatRouting } from './usePaperChatRouting'
 import { SafeMarkdown, resolveAsset } from '@features/reader/renderer'
+import AppleLoader from '@platform/ui/renderer/AppleLoader'
 import './paperChat.css'
 
 const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek', codex: 'Codex' }
-const SUGGESTIONS = ['总结这篇论文的主要贡献', '解释论文的核心方法', '实验得出了哪些结论？']
+/** Starting points for a paper nobody has asked about yet, one per way of reading it. */
+const SUGGESTIONS = [
+  { kind: '速览', text: '用三句话说清这篇论文解决了什么问题、怎么做、效果如何' },
+  { kind: '方法', text: '核心方法的关键步骤是什么？依赖哪些假设？' },
+  { kind: '证据', text: '主要实验结论是什么？与哪些基线做了比较？' },
+  { kind: '延伸', text: '这项工作有哪些局限？可以从哪里继续研究？' }
+]
+/** Follow-ups offered under the latest answer. */
+const FOLLOW_UPS = ['展开讲讲这个回答', '用更通俗的话再解释一遍', '原文哪些地方支持这个结论？']
 /** Sent when the user attaches figures and presses send without typing a question. */
 export function defaultFigureQuestion(count: number): string {
   return count > 1 ? '结合上下文，逐个子图详细解读这几张图' : '结合上下文，逐个子图详细解读这张图'
@@ -136,6 +145,8 @@ export default function ReaderChatPanel(props: {
   React.useEffect(() => {
     if (!props.active) return
     const onKeyDown = (event: KeyboardEvent): void => {
+      // A reader kept mounted behind the open one must not take the shortcut.
+      if (inputRef.current?.closest('[inert]')) return
       const target = event.target as HTMLElement | null
       const typing = Boolean(target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)))
       if (event.key === '/' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -177,6 +188,7 @@ export default function ReaderChatPanel(props: {
                 onRetry={() => void chat.ask(turn.question, routing.model.trim(), routing.provider ?? undefined, turn.pinned ?? [], turnFigurePins(turn))}
                 onCitation={cite}
                 assetBaseUrl={props.assetBaseUrl}
+                onFollowUp={index === chat.turns.length - 1 && !chat.busy ? (text) => { chat.setDraft(text); inputRef.current?.focus() } : undefined}
               />
             ))}
           </div>
@@ -266,10 +278,16 @@ function ChatEmptyState(props: {
     )
   }
   return (
-    <div className="paper-chat-empty paper-chat-welcome">
-      <p>只依据当前论文回答，回答中的引用可以点击定位到原文。对话随论文保存在本地，下次打开时继续保留。</p>
+    <div className="paper-chat-welcome">
+      <h3>就这篇论文提问</h3>
+      <p>回答只依据本文，引用可点击跳到原文</p>
       <div className="paper-chat-suggestions">
-        {SUGGESTIONS.map((text) => <button type="button" key={text} onClick={() => props.onSuggest(text)}>{text}</button>)}
+        {SUGGESTIONS.map(({ kind, text }) => (
+          <button type="button" key={text} aria-label={text} onClick={() => props.onSuggest(text)}>
+            <span className="paper-chat-suggestion-kind">{kind}</span>
+            <span className="paper-chat-suggestion-text">{text}</span>
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -283,6 +301,8 @@ function ChatTurn(props: {
   onRetry(): void
   onCitation(citation: Citation): void
   assetBaseUrl?: string
+  /** Only the latest finished answer offers follow-up questions. */
+  onFollowUp?(text: string): void
 }): React.JSX.Element {
   const { turn } = props
   const figures: Array<PaperChatFigurePin & { images?: PaperChatTurnFigure['images'] }> = turn.figures ?? turn.figurePins ?? []
@@ -317,31 +337,38 @@ function ChatTurn(props: {
         </div>
       ) : null}
       <div className="paper-chat-question-row">
-        <h4 className="paper-chat-question">{turn.question}</h4>
         <Dropdown trigger={['click']} menu={{ items: [
           { key: 'collapse', label: collapsed ? '展开回复' : '折叠回复' },
           { key: 'delete', label: '删除聊天', danger: true, disabled: props.deleteDisabled || deleting }
         ], onClick: ({ key }) => { if (key === 'collapse') setCollapsed(value => !value); else setConfirming(true) } }}>
           <Button type="text" size="small" icon={<MoreOutlined />} aria-label="此条聊天操作" />
         </Dropdown>
+        <h4 className="paper-chat-question">{turn.question}</h4>
       </div>
       <div hidden={collapsed}>
 
       <div className="paper-chat-answer">
         <SafeMarkdown markdown={turn.answer} citations={citations ?? {}} citationLabels={labels} onCitation={props.onCitation} />
-        {turn.status === 'pending' ? <span className="paper-chat-caret" aria-label="正在生成" /> : null}
+        {turn.status === 'pending'
+          ? turn.answer ? <span className="paper-chat-caret" aria-label="正在生成" /> : <AppleLoader size="small" label="正在生成" className="paper-chat-thinking" />
+          : null}
       </div>
       {turn.status !== 'pending' ? (
         <div className="paper-chat-metadata" aria-label="回答信息">
           <span>{turn.model ?? '模型未记录'}</span>
-          {turn.completedAt || turn.createdAt ? <time dateTime={turn.completedAt ?? turn.createdAt}>{new Date(turn.completedAt ?? turn.createdAt!).toLocaleString('zh-CN', { hour12: false })}</time> : <span>时间未记录</span>}
-          <span>{turn.usage ? `${turn.usage.totalTokens.toLocaleString()} Tokens（输入 ${turn.usage.promptTokens.toLocaleString()} / 输出 ${turn.usage.completionTokens.toLocaleString()}）` : 'Token 用量未提供'}</span>
+          {turn.completedAt || turn.createdAt ? <time dateTime={turn.completedAt ?? turn.createdAt}>{new Date(turn.completedAt ?? turn.createdAt!).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time> : null}
+          {turn.usage ? <span>{turn.usage.totalTokens.toLocaleString()} tokens</span> : null}
         </div>
       ) : null}
       {turn.status === 'cancelled' || turn.status === 'failed' ? (
         <div className="paper-chat-status">
           <span>{turn.status === 'cancelled' ? '已停止' : '回答失败'}</span>
           {props.retryable ? <Button type="link" size="small" onClick={props.onRetry}>重试</Button> : null}
+        </div>
+      ) : null}
+      {props.onFollowUp && turn.status === 'completed' ? (
+        <div className="paper-chat-follow-ups" role="group" aria-label="继续追问">
+          {FOLLOW_UPS.map((text) => <button type="button" key={text} onClick={() => props.onFollowUp?.(text)}>{text}</button>)}
         </div>
       ) : null}
       </div>

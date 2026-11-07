@@ -16,6 +16,7 @@ import { UsageDashboard } from './SettingsDashboards'
 import { StorageSettings, type LibraryAction } from './StorageSettings'
 import { CredentialEditor, initialCredentialDraft, type DraftCredential } from './CredentialEditor'
 import { AppearanceIcon, CloseIcon, ConnectionIcon, KeyIcon, ModelIcon, StorageIcon } from './settingsIcons'
+import { LiteServices } from './LiteServices'
 import ThemeSettings from './ThemeSettings'
 import { previewAppearance, saveAppearance, storedAppearance, type Appearance } from './theme'
 import { CodexSettingsCard } from './CodexSettingsCard'
@@ -24,7 +25,7 @@ import { ApiKeysSection, useKeyDrafts } from './ApiKeysSection'
 import './settings.css'
 import type { SettingsNavigationGuard } from './settingsNavigation'
 
-type Section = 'connections' | 'keys' | 'models' | 'storage' | 'theme'
+type Section = 'connections' | 'keys' | 'models' | 'storage' | 'theme' | 'services'
 
 const SECTIONS: ReadonlyArray<[Section, string, () => React.JSX.Element]> = [
   ['connections', '服务连接', ConnectionIcon],
@@ -32,6 +33,12 @@ const SECTIONS: ReadonlyArray<[Section, string, () => React.JSX.Element]> = [
   ['models', '模型设置', ModelIcon],
   ['storage', '文件存储', StorageIcon],
   ['theme', '显示设置', AppearanceIcon]
+]
+/** The settings window (Lite) has three flat sections; services and their keys share one page. */
+const WINDOW_SECTIONS: ReadonlyArray<[Section, string, () => React.JSX.Element]> = [
+  ['services', '服务', ConnectionIcon],
+  ['storage', '存储', StorageIcon],
+  ['theme', '外观', AppearanceIcon]
 ]
 
 /** Only the MinerU token is edited here; model keys are managed in the API key view. */
@@ -61,7 +68,8 @@ export default function SettingsPage(props: {
   onExit?(): void
 }): React.JSX.Element {
   const windowed = Boolean(props.onExit)
-  const [section, setSection] = React.useState<Section>('connections')
+  const sections = windowed ? WINDOW_SECTIONS : SECTIONS
+  const [section, setSection] = React.useState<Section>(windowed ? 'services' : 'connections')
   const [draft, setDraft] = React.useState<AppSettings>(props.settings)
   const [credentials, setCredentials] = React.useState<DraftCredentials>(() => initialCredentials(props.settings))
   const [credentialErrors, setCredentialErrors] = React.useState<CredentialErrors>({})
@@ -149,16 +157,17 @@ export default function SettingsPage(props: {
   }, [messageApi])
 
   React.useEffect(() => {
+    if (section !== 'storage') return
     let active = true
     setStorageInfo(cachedStorageInfo(props.settings.outputRoot))
     void loadStorageInfo(props.settings.outputRoot).then(value => { if (active) setStorageInfo(value) }).catch(() => undefined)
     return () => { active = false }
-  }, [props.settings.outputRoot])
+  }, [props.settings.outputRoot, section])
 
   // Key health (cooldown, rejection) changes while the app runs; refresh it whenever the key view opens.
   const setLiveKeys = keyDrafts.setLive
   React.useEffect(() => {
-    if (section !== 'keys') return
+    if (section !== 'keys' && section !== 'services') return
     let active = true
     void window.copilotix.getSettings().then(settings => { if (active) setLiveKeys(settings.keyStatuses ?? {}) }).catch(() => undefined)
     return () => { active = false }
@@ -353,18 +362,22 @@ export default function SettingsPage(props: {
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="设置分类">
           <h1 className="settings-title">设置</h1>
-          {SECTIONS.map(([id, label, SectionIcon]) => (
+          {sections.map(([id, label, SectionIcon]) => (
             <button key={id} type="button" className={section === id ? 'active' : ''} aria-current={section === id ? 'page' : undefined} onClick={() => setSection(id)}><SectionIcon />{label}</button>
           ))}
         </nav>
         <div className="settings-content">
           {props.onExit ? (
             <header className="settings-window-header">
-              <h2>{SECTIONS.find(([id]) => id === section)![1]}</h2>
+              <h2>{sections.find(([id]) => id === section)![1]}</h2>
               <button type="button" className="settings-close" aria-label="关闭设置" onClick={props.onExit}><CloseIcon /></button>
             </header>
           ) : null}
           <div className="settings-content-body">
+          {section === 'services' ? (
+            <LiteServices draft={draft} onDraftChange={setDraft} keys={keyDrafts} saving={saving} onToggleProvider={toggleTranslationProvider}
+              parser={{ status: draft.credentials.parser, draft: credentials.parser, testing: testing === 'parser', error: credentialErrors.parser, onDraft: (patch) => updateCredentialDraft('parser', patch), onValidate: () => void validate('parser') }} />
+          ) : null}
           {section === 'connections' ? (
             <section className="settings-section service-connections" aria-label="服务连接">
               <ServiceCard

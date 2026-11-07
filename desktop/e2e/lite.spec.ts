@@ -55,7 +55,7 @@ test.describe('lite edition', () => {
       await page.evaluate(() => { document.querySelector('.reader-page')?.setAttribute('data-kept', 'yes') })
       await page.getByRole('button', { name: '设置' }).click()
       const sections = page.getByRole('navigation', { name: '设置分类' })
-      for (const name of ['服务连接', 'API 密钥', '模型设置', '文件存储', '显示设置']) {
+      for (const name of ['服务', '存储', '外观']) {
         await sections.getByRole('button', { name }).click()
         const overflow = await page.locator('.settings-content-body').evaluate((body) => body.scrollHeight - body.clientHeight)
         expect(overflow, `${name} fits on one screen`).toBeLessThanOrEqual(1)
@@ -77,6 +77,59 @@ test.describe('lite edition', () => {
 
       await nav.getByRole('button', { name: '新建' }).click()
       await expect(page.getByRole('heading', { name: '今天想读些什么？' })).toBeVisible()
+    } finally {
+      await app.close()
+      await workspace.cleanup()
+    }
+  })
+
+  test('a paper opens beside another, in a window of its own, and takes a new name', async () => {
+    const workspace = await createE2EWorkspace()
+    const first = await seedReaderTask(workspace, { englishTitle: 'First paper on fracture', createdAt: '2026-11-01T00:00:00.000Z' })
+    const second = await seedReaderTask(workspace, { taskId: '00000000-0000-4000-8000-0000000000b2', englishTitle: 'Second paper on fatigue', createdAt: '2026-11-02T00:00:00.000Z' })
+    const app = await launchElectron({ args: [LITE_ENTRY], env: workspace.env })
+    try {
+      const page = await app.firstWindow()
+      await page.setViewportSize({ width: 1400, height: 800 })
+      const nav = page.getByRole('navigation', { name: '论文导航' })
+      const menu = async (documentId: string, item: string): Promise<void> => {
+        await nav.locator(`[data-document-id="${documentId}"]`).click({ button: 'right' })
+        await page.getByRole('menuitem', { name: item }).click()
+      }
+      await nav.locator(`[data-document-id="${first}"]`).click()
+      await expect(page.locator('.lite-pane .reader-workbench')).toBeVisible()
+
+      await menu(second, '分屏打开')
+      const panes = page.locator('.lite-pane')
+      await expect(panes).toHaveCount(2)
+      await expect(panes.nth(1).locator('.reader-title')).toContainText('Second paper on fatigue')
+      await expect(panes.nth(1).locator('.reader-workbench')).toBeVisible()
+      const before = (await panes.nth(0).boundingBox())!
+      const handle = (await page.getByRole('separator', { name: '调整分屏宽度' }).boundingBox())!
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(handle.x - 120, handle.y + handle.height / 2, { steps: 4 })
+      await page.mouse.up()
+      expect((await panes.nth(0).boundingBox())!.width).toBeLessThan(before.width - 60)
+      await panes.nth(1).getByRole('button', { name: '关闭分屏' }).click()
+      await expect(panes).toHaveCount(1)
+
+      await menu(second, '重命名')
+      const field = nav.getByRole('textbox', { name: '论文标题' })
+      await field.fill('Renamed fatigue study')
+      await field.press('Enter')
+      await expect(nav.locator(`[data-document-id="${second}"]`)).toContainText('Renamed fatigue study')
+
+      // The reader window reads the paper through the same trusted IPC as the main window.
+      const opened = app.waitForEvent('window')
+      await menu(second, '在新窗口中打开')
+      const reader = await opened
+      await expect(reader.locator('.lite-reader-slot[data-active] .reader-title')).toContainText('Renamed fatigue study', { timeout: 30_000 })
+      await expect(reader.locator('.lite-reader-slot[data-active] .reader-workbench')).toBeVisible()
+      expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(2)
+      await reader.getByRole('button', { name: '关闭窗口' }).click()
+      await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1)
+      await expect(page.locator('.reader-title')).toContainText('First paper on fracture')
     } finally {
       await app.close()
       await workspace.cleanup()

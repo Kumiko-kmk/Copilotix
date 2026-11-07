@@ -147,6 +147,13 @@ export const deleteDocumentRequestSchema = z.object({
 }).strict()
 export type DeleteDocumentRequest = z.infer<typeof deleteDocumentRequestSchema>
 
+/** A title the user gives a paper; it replaces the one taken from the parsed text, and parsing no longer changes it. */
+export const renameDocumentRequestSchema = z.object({
+  documentId: uuid,
+  title: z.string().trim().min(1).max(200).refine((value) => [...value].every((character) => character.charCodeAt(0) > 0x1f && character.charCodeAt(0) !== 0x7f), '标题不能包含控制字符')
+}).strict()
+export type RenameDocumentRequest = z.infer<typeof renameDocumentRequestSchema>
+
 export const saveDocumentAsRequestSchema = z.object({
   documentId: uuid,
   kind: z.enum(['original-markdown', 'translated-markdown', 'result-zip'])

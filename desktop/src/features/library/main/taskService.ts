@@ -34,7 +34,7 @@ export class TaskService extends EventEmitter {
   private readonly artifacts: ArtifactService
 
   constructor(
-    repository: TaskRepositoryCompat,
+    private readonly repository: TaskRepositoryCompat,
     settingsService: SettingsService,
     compute: TaskComputePort,
     pathPolicy: PathPolicyPort = new PathPolicy(),
@@ -77,6 +77,14 @@ export class TaskService extends EventEmitter {
     await this.artifacts.freezeFigureWrites(taskId)
     try { await this.commands.delete(taskId, deleteFiles) } finally { this.artifacts.resumeFigureWrites(taskId) }
     this.emit('changed', { documentId: taskId, kind: 'delete' })
+  }
+
+  /** The user's own title; parsing keeps it (it only fills a title that is missing or still provisional). */
+  async rename(taskId: string, title: string): Promise<void> {
+    const displayTitle = title.trim().replace(/.pdf$/iu, '').trim()
+    if (!displayTitle) throw new Error('标题不能为空')
+    await this.repository.updateDocumentMetadata(taskId, { displayTitle })
+    this.emit('changed', { documentId: taskId, kind: 'metadata' })
   }
 
   resolvedEdits(taskId: string) {

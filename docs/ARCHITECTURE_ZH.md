@@ -11,7 +11,7 @@ Windows x64 Electron 客戶端；PDF 經 MinerU 在線解析，模型服務負�
 - Main：窗口、權限、Electron net、Credential Vault、模型請求、作業協調；不持有 SQLite 或執行重計算。
 - Utility：唯一 SQLite 與計算擁有者，透過小型 descriptor／ID 傳遞產物。RPC 不傳 PDF、ZIP、完整 Markdown、Buffer 或 stream。
 
-Main 驗證 sender 為當前窗口、主 frame、精確允許 origin；拒絕任意導航／新窗口。Key 只進原生憑據庫，不進 DB、renderer、備份、結果或日誌。日誌遮蔽認證和預簽名 URL，不記正文、圖片或上游敏感錯誤。來源內容皆不可信。
+Main 驗證 sender 為應用自己的窗口（主窗口或由 `window:open-document` 開的閱讀窗口）、主 frame、精確允許 origin；渲染頁不能自行導航或開窗口，閱讀窗口的論文由 Main 經 `window:initial-document` 交付，不放在 URL。Key 只進原生憑據庫，不進 DB、renderer、備份、結果或日誌。日誌遮蔽認證和預簽名 URL，不記正文、圖片或上游敏感錯誤。來源內容皆不可信。
 
 ## IPC／Core RPC
 

@@ -77,7 +77,7 @@ export const resolvedMarkdownEditsSchema = z.object({
 }).strict()
 export type ResolvedMarkdownEdits = z.infer<typeof resolvedMarkdownEditsSchema>
 
-export const markdownEditActionSchema = z.enum(['set-original', 'set-translated', 'revert-original', 'revert-translated', 'delete', 'restore', 'retranslate', 'box', 'unbox', 'reorder', 'reset-order'])
+export const markdownEditActionSchema = z.enum(['set-original', 'set-translated', 'revert-original', 'revert-translated', 'delete', 'restore', 'retranslate', 'reorder', 'reset-order'])
 export const markdownEditRequestSchema = z.object({
   documentId: z.string().uuid(),
   /** Optimistic concurrency: the revision the reader showed. */
@@ -85,8 +85,6 @@ export const markdownEditRequestSchema = z.object({
   target: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('content'), index: z.number().int().min(0).max(1_000_000), mappingIds: z.array(mappingIdSchema).max(512) }).strict(),
     z.object({ kind: z.literal('supplemental'), mappingId: mappingIdSchema }).strict(),
-    /** Any layout block, for the dashed frame. */
-    z.object({ kind: z.literal('block'), mappingId: mappingIdSchema }).strict(),
     /** The whole reading order; checked against the current parse when saved. */
     z.object({ kind: z.literal('order'), sequence: z.array(z.number().int().min(0).max(100_000)).max(100_000) }).strict()
   ]),
@@ -94,7 +92,6 @@ export const markdownEditRequestSchema = z.object({
   markdown: blockText.optional()
 }).strict().refine(value => !value.action.startsWith('set-') || Boolean(value.markdown?.trim()), 'Edited text is required')
   .refine(value => value.target.kind !== 'supplemental' || value.action === 'delete' || value.action === 'restore', 'Only deletion applies to page furniture')
-  .refine(value => (value.target.kind === 'block') === (value.action === 'box' || value.action === 'unbox'), 'Frames address layout blocks')
   .refine(value => (value.target.kind === 'order') === (value.action === 'reorder' || value.action === 'reset-order'), 'Reordering addresses the reading order')
 export type MarkdownEditRequest = z.infer<typeof markdownEditRequestSchema>
 // `edits`: the edit layer resolved after the change, so the reader need not reload the whole paper.
@@ -112,11 +109,6 @@ export function optimisticEdits(current: ResolvedMarkdownEdits | null, request: 
   if (target.kind === 'order') {
     delete edits.order
     if (action === 'reorder' && !isIdentity(target.sequence)) edits.order = [...target.sequence]
-    return edits
-  }
-  if (target.kind === 'block') {
-    edits.boxMarks = edits.boxMarks.filter(id => id !== target.mappingId)
-    if (action === 'box') edits.boxMarks.push(target.mappingId)
     return edits
   }
   if (target.kind === 'supplemental') {

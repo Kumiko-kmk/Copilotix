@@ -121,21 +121,11 @@ export default function MarkdownPane(props: {
   const openBlockMenu = React.useCallback((block: ReaderBlock, figures: ReaderFigureGroup[], x: number, y: number) => setBlockMenuAt({ block, figures, x, y }), [])
   const closeBlockMenu = React.useCallback(() => setBlockMenuAt(null), [])
   const closeBlockEditor = React.useCallback(() => setBlockEditor(null), [])
-  // A second single click on the current paragraph edits it. Waiting out the double-click interval
-  // keeps word and paragraph selection (for highlights and notes) working on that paragraph.
-  const pendingEditRef = React.useRef<number | null>(null)
-  const requestBlockEdit = React.useCallback((key: string, element: HTMLElement, clicks: number) => {
-    if (pendingEditRef.current !== null) window.clearTimeout(pendingEditRef.current)
-    pendingEditRef.current = null
-    if (clicks > 1) return
-    pendingEditRef.current = window.setTimeout(() => {
-      pendingEditRef.current = null
-      const selection = window.getSelection()
-      if (selection && !selection.isCollapsed) return
-      setBlockEditor({ key, typography: blockTypography(element) })
-    }, 260)
+  const requestBlockEdit = React.useCallback((key: string, element: HTMLElement) => {
+    setTextSelection(null)
+    setPaletteOpen(false)
+    setBlockEditor({ key, typography: blockTypography(element) })
   }, [])
-  React.useEffect(() => () => { if (pendingEditRef.current !== null) window.clearTimeout(pendingEditRef.current) }, [])
   const [annotationOwner] = React.useState(() => `reader-annotations-${crypto.randomUUID()}`)
   const selectionFrameRef = React.useRef<number | null>(null)
   const paletteTimerRef = React.useRef<number | null>(null)
@@ -200,7 +190,7 @@ export default function MarkdownPane(props: {
 
   const { figureGroupByBlockIndex, figureStates, readyFigureIds, figureMosaics, minimapVisualRevision, figuresSettled, setFigureState } =
     useMarkdownFigures(props.blocks, props.figureGroups, props.pdfUrl)
-  const { reorderUnitOf, contentIndexOf, reorderNeighbours } = useReorderUnits(props.blocks, figureGroupByBlockIndex)
+  const { reorderUnitOf, contentIndexOf } = useReorderUnits(props.blocks, figureGroupByBlockIndex)
   const moveBlocks = React.useCallback((unit: number[], before: number | null) => props.blockMove?.move(unit, before), [props.blockMove])
   const reorderLine = useBlockReorder({ container: containerRef, article: articleRef, enabled: Boolean(props.blockMove) && ready && !blockEditor,
     unitOf: reorderUnitOf, contentIndexOf, onMove: moveBlocks })
@@ -679,8 +669,7 @@ export default function MarkdownPane(props: {
         {noteLayer.layer}
         {citationLayer}
         {blockMenuAt && props.blockMenu ? (
-          <MarkdownBlockMenuPopup at={blockMenuAt} menu={props.blockMenu} blockMove={props.blockMove}
-            neighbours={props.blockMove ? reorderNeighbours(props.blocks.indexOf(blockMenuAt.block)) : null} contentIndexOf={contentIndexOf} onClose={closeBlockMenu} />
+          <MarkdownBlockMenuPopup at={blockMenuAt} menu={props.blockMenu} blockMove={props.blockMove} onClose={closeBlockMenu} />
         ) : null}
         {reorderLine}
       </div>

@@ -27,7 +27,7 @@ const SKIPPED = '.katex, code, pre, a, [data-reader-annotation-ignore]'
 /**
  * Citation markers of one Markdown view, resolved against the paper's own reference list
  * (readerCitations.ts): hovering a marker shows the cited entries — with the other view's text
- * when it differs — and clicking one scrolls to the entry in the list and flashes it.
+ * when it differs. Clicking a marker navigates to its entry; clicking the card copies its text.
  * Hovering is the user's requested exception to the no-hover rule (docs/UI_PREFERENCES_ZH.md).
  */
 export function useReaderCitationLayer(options: {
@@ -54,6 +54,8 @@ export function useReaderCitationLayer(options: {
   const openTimerRef = React.useRef<number | null>(null)
   const closeTimerRef = React.useRef<number | null>(null)
   const pendingRef = React.useRef<CitationHit | null>(null)
+  const cardHoveredRef = React.useRef(false)
+  const [copyStatus, setCopyStatus] = React.useState('')
   const flashRef = React.useRef<{ timer: number; release(): void } | null>(null)
   const navigateRef = React.useRef(options.onNavigate)
   navigateRef.current = options.onNavigate
@@ -79,6 +81,8 @@ export function useReaderCitationLayer(options: {
 
   const close = React.useCallback(() => {
     clearTimers()
+    cardHoveredRef.current = false
+    setCopyStatus('')
     setCard(null)
   }, [clearTimers])
 
@@ -88,6 +92,7 @@ export function useReaderCitationLayer(options: {
   }, [])
 
   const hover = React.useCallback((hit: CitationHit | null) => {
+    if (cardHoveredRef.current) return
     if (hit && cardRef.current?.hit === hit) { keepOpen(); return }
     if (hit) {
       if (pendingRef.current === hit) return
@@ -97,6 +102,7 @@ export function useReaderCitationLayer(options: {
         openTimerRef.current = null
         pendingRef.current = null
         keepOpen()
+        setCopyStatus('')
         setCard(placeCard(hit))
       }, HOVER_OPEN_MS)
       return
@@ -162,7 +168,13 @@ export function useReaderCitationLayer(options: {
       last = event
       if (frame === null) frame = window.requestAnimationFrame(test)
     }
-    const onLeave = (): void => { last = null; setPointer(false); hover(null) }
+    const onLeave = (): void => {
+      last = null
+      if (frame !== null) window.cancelAnimationFrame(frame)
+      frame = null
+      setPointer(false)
+      hover(null)
+    }
     const onClick = (event: MouseEvent): void => {
       if (event.button !== 0 || (window.getSelection() && !window.getSelection()!.isCollapsed)) return
       const hit = hitAt(article, hitsRef.current, event.clientX, event.clientY)
@@ -203,19 +215,26 @@ export function useReaderCitationLayer(options: {
       role="dialog"
       aria-label="参考文献"
       data-reader-annotation-ignore="true"
-      onMouseEnter={keepOpen}
-      onMouseLeave={() => hover(null)}
+      onMouseEnter={() => { cardHoveredRef.current = true; clearTimers() }}
+      onMouseLeave={() => { cardHoveredRef.current = false; hover(null) }}
+      onFocus={clearTimers}
     >
       {card.hit.entries.map((entry) => {
         const other = counterpartEntry(entry, index, counterpart)
         return (
-          <button key={entry.id} type="button" className="reader-citation-entry" onClick={() => navigate(entry)}>
+          <button key={entry.id} type="button" className="reader-citation-entry" aria-label={`复制参考文献${entry.number === undefined ? '' : ` ${entry.number}`}`} onClick={() => {
+            const current = cardRef.current
+            void Promise.resolve().then(() => navigator.clipboard.writeText(entry.text)).then(() => {
+              if (cardRef.current === current) setCopyStatus('已复制')
+            }).catch(() => { if (cardRef.current === current) setCopyStatus('复制失败，请重试') })
+          }}>
             {entry.number !== undefined ? <span className="reader-citation-number">[{entry.number}]</span> : null}
             <span className="reader-citation-text">{entry.text}</span>
             {other ? <span className="reader-citation-other"><em>{otherLabel}</em>{other.text}</span> : null}
           </button>
         )
       })}
+      {copyStatus ? <span role="status" className="reader-citation-copy-status">{copyStatus}</span> : null}
       {card.hit.missing.length ? (
         <p className="reader-citation-missing">[{card.hit.missing.join(', ')}] 未能从本文参考文献列表中解析</p>
       ) : null}
@@ -301,7 +320,7 @@ function placeCard(hit: CitationHit): CitationCard {
   const rect = hit.range.getClientRects()[0] ?? hit.range.getBoundingClientRect()
   const below = window.innerHeight - rect.bottom - 16
   const above = rect.top - 16
-  const placeAbove = below < 220 && above > below
+  const placeAbove = above >= 220 || above > below
   return {
     hit,
     left: Math.max(12, Math.min(window.innerWidth - CARD_WIDTH - 12, rect.left - 16)),

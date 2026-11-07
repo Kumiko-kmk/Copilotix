@@ -6,7 +6,7 @@
 
 - `contract/ipc.ts`：`settingsChannels`（`settings:get`／`save`／`validate-credential`、`dialog:output-directory`、`storage:info`、`storage:open-location`、`analytics:usage`）與 `createSettingsApi`；`settingsTypes.ts`、`settingsSchemas.ts`（設定、憑據、存儲與用量的型別與 schema）、`defaultSettings.ts`（`DEFAULT_SETTINGS`）。
 - `main/index.ts`：`SettingsService`、`UsageAnalyticsService`（`UsageAnalyticsRecorder`、`ProviderTokenUsage` 供解析、翻譯、問答記錄用量）、`registerSettingsIpc`。
-- `renderer/index.ts`：`SettingsPage`（分類配細線條圖標 `settingsIcons.tsx`；傳 `onExit` 時為視窗版：右上關閉、不顯示用量與存儲圖表、保存欄只在有改動時出現）、`SettingsDialog`（Lite 的設定視窗，antd Modal 包住視窗版 `SettingsPage`，關閉經呼叫方的未保存確認）、主題（`restoreTheme`、`currentTheme`、`onThemeChange`、`mixHex`、`rgbChannels`）、`refreshCodexStatus`／`useCodexStatus`、`loadStorageInfo`、`SettingsNavigationGuard`。
+- `renderer/index.ts`：`loadSettingsPage`／`loadSettingsDialog` 按需載入頁面／Lite 視窗（直接開關，無縮放過渡），關閉經呼叫方的未保存確認；視窗版只有「服務／存儲／外觀」三個單層分類（服務頁在 `LiteServices.tsx`：每個服務商一把密鑰、翻譯開關、Codex 自動偵測），不顯示用量與存儲圖表，保存欄只在有改動時出現。另提供主題（`restoreTheme`、`currentTheme`、`onThemeChange`、`mixHex`、`rgbChannels`）、`refreshCodexStatus`／`useCodexStatus`、`loadStorageInfo`、`SettingsNavigationGuard`。
 
 ## 版面
 
@@ -18,7 +18,9 @@
 - `userData/usage-analytics-v1.json`：每日頁數與各服務商 Token 用量。
 - localStorage `copilotix.theme.v1`、`copilotix.reader.font-size.v1`、`copilotix.reader.line-height.v1`：顯示設定，經「保存全部更改」寫入。
 
-存儲統計在啟動／文庫根目錄或文檔數量變化時預載，按文庫根目錄快取60秒並合併並發掃描；手動刷新強制更新。
+存儲統計僅在進入「文件存儲」時讀取，按文庫根目錄快取60秒並合併並發掃描；手動刷新強制更新。啟動與背景不輪詢。
+
+Codex 卡片只讀取保存的連接狀態，不自動啟動 CLI。單一「验证连接」入口依次發現程序、檢查登入與可用模型、驗證選定模型（翻譯／問答相同模型只測一次）；失敗即停止，使用者可重試。程序路徑與推理強度收於「高级设置」。模型選擇仍經設定保存，CLI 傳輸、登入方式及憑據存儲不變。
 
 ## 測試
 
