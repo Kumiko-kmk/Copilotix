@@ -44,7 +44,7 @@ interface MappingGroup {
   firstOrder: number
 }
 
-export const BLOCK_MAPPING_VERSION = 3
+export { BLOCK_MAPPING_VERSION } from '@features/document/contract/artifactVersions'
 
 export function buildBlockMappings(taskId: string, layout: unknown): BlockMapping[] {
   const existing = parseExistingBlockList(taskId, layout)

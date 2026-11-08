@@ -1,3 +1,4 @@
+import { sharedModelRuntime } from '@platform/models/runtime/modelRuntime'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@features/settings/contract/defaultSettings'
 import { abortable, ChatProvider, type ChatFetcher } from '../../../src/features/chat/main/chatProvider'
@@ -30,13 +31,12 @@ describe('ChatProvider', () => {
     await new ChatProvider(fetcher).stream({ ...input(), provider: 'deepseek', baseUrl: DEFAULT_SETTINGS.deepseekBaseUrl, model: 'deepseek-flash' })
     expect(fetcher.mock.calls.length).toBe(1)
   })
-  it('sends brief options, bounds the request and retries explicit unsupported options once', async () => {
+  it('sends brief options and bounds the request without replaying unsupported requests', async () => {
     const fetcher = vi.fn(async (_url: string, _init: RequestInit) => new Response('data: [DONE]\n\n'))
     fetcher.mockResolvedValueOnce(new Response('{"error":{"message":"response_format is not supported"}}', { status: 400 }))
-    await new ChatProvider(fetcher).stream({ ...input(), temperature: 0.2, maxOutputTokens: 3000, responseFormat: { type: 'json_object' }, maxRequestBytes: 49152 })
-    expect(fetcher).toHaveBeenCalledTimes(2)
+    await expect(new ChatProvider(fetcher).stream({ ...input(), temperature: 0.2, maxOutputTokens: 3000, responseFormat: { type: 'json_object' }, maxRequestBytes: 49152 })).rejects.toMatchObject({ status: 400 })
+    expect(fetcher).toHaveBeenCalledTimes(1)
     expect(JSON.parse(String(fetcher.mock.calls[0]![1].body))).toMatchObject({ temperature: 0.2, max_tokens: 3000, response_format: { type: 'json_object' } })
-    expect(JSON.parse(String(fetcher.mock.calls[1]![1].body))).not.toHaveProperty('response_format')
     fetcher.mockClear()
     await expect(new ChatProvider(fetcher).stream({ ...input(), maxRequestBytes: 10 })).rejects.toMatchObject({ code: 'RAG_LIMIT_EXCEEDED' })
     expect(fetcher).not.toHaveBeenCalled()
@@ -51,7 +51,7 @@ describe('ChatProvider', () => {
     const fetcher = vi.fn(async () => new Response('', { status: 429, headers: retry ? { 'Retry-After': retry } : {} }))
     const provider = new ChatProvider(fetcher)
     await expect(provider.stream(input())).rejects.toMatchObject({ code: 'EMBEDDING_RATE_LIMITED', retryAfterMs: retry === '2' ? 2000 : 1000 })
-    await expect(provider.stream(input())).rejects.toMatchObject({ code: 'EMBEDDING_RATE_LIMITED' })
+    await expect(provider.stream(input())).rejects.toMatchObject({ code: 'MODEL_CONNECTION_UNAVAILABLE' })
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
   it('accepts a date Retry-After header', async () => {
@@ -114,13 +114,15 @@ describe('ChatProvider', () => {
   })
   it('handles network and HTTP errors without forwarding raw exception text', async () => {
     await expect(new ChatProvider(async () => { throw new Error('secret question') }).stream(input())).rejects.toMatchObject({ message: '无法连接问答服务，请重试' })
+    sharedModelRuntime.clear()
     await expect(new ChatProvider(async () => new Response('secret', { status: 500 })).stream(input())).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
+    sharedModelRuntime.clear()
     await expect(new ChatProvider(async () => new Response(null)).stream(input())).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
   })
   it('handles already aborted operations and rejects broken UTF-8', async () => {
     const controller = new AbortController(); controller.abort()
     await expect(abortable(Promise.resolve(1), controller.signal)).rejects.toThrow()
-    await expect(new ChatProvider(async () => new Response(new Uint8Array([255]))).stream(input())).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
+    await expect(new ChatProvider(async () => new Response(new Uint8Array([255]))).stream(input())).rejects.toMatchObject({ code: 'MODEL_CONNECTION_FAILED' })
   })
   it.each([['deepseek-flash', 'disabled', 8192], ['deepseek-v4-pro', 'enabled', 32768]])('sets the documented thinking mode for %s and ignores reasoning packets', async (model, thinking, maxTokens) => {
     const fetcher = vi.fn<ChatFetcher>(async () => response('data: {"choices":[{"delta":{"reasoning_content":"internal reasoning"}}]}\n\n' + packet('final answer') + done))

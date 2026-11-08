@@ -1,6 +1,7 @@
 import type { DocumentChangeEvent, DocumentDetails, DocumentSummary } from '../contract/documentSchemas'
 
 export interface DocumentListCache {
+  sessionId?: string
   revision: number
   documents: DocumentSummary[]
 }
@@ -15,11 +16,12 @@ export function applyDocumentChange(
   current: DocumentListCache,
   change: DocumentChangeEvent
 ): DocumentListCache {
-  if (change.revision <= current.revision) return current
+  if (documentEventDisposition(current, change) !== 'apply') return current
   const documentsById = new Map(current.documents.map((document) => [document.id, document] as const))
   for (const document of change.upserted) documentsById.set(document.id, document)
   for (const documentId of change.removedIds) documentsById.delete(documentId)
   return {
+    sessionId: change.sessionId ?? current.sessionId,
     revision: change.revision,
     documents: [...documentsById.values()].sort((left, right) =>
       right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id)
@@ -34,8 +36,13 @@ export function applyDocumentChange(
  */
 export function getDocumentRefreshPlan(
   previous: DocumentSummary | undefined,
-  next: DocumentSummary
+  next: DocumentSummary,
+  kinds?: readonly string[]
 ): DocumentRefreshPlan {
+  if (kinds) {
+    const body = kinds.includes('body'), translation = kinds.includes('translation'), edit = kinds.includes('edit')
+    return { invalidateDocument: body || translation || edit, annotationViews: body ? ['original', 'translated'] : translation ? ['translated'] : [] }
+  }
   if (!previous) return { invalidateDocument: false, annotationViews: [] }
   const workflowChanged = previous.workflow.status !== next.workflow.status ||
     previous.workflow.activeJobKind !== next.workflow.activeJobKind
@@ -61,4 +68,11 @@ export function patchDocumentDetails(
 
 function isTerminalStatus(status: DocumentSummary['workflow']['status']): boolean {
   return status === 'partial' || status === 'completed' || status === 'failed'
+}
+
+export function documentEventDisposition(current: DocumentListCache | undefined, change: DocumentChangeEvent): 'apply' | 'ignore' | 'resync' {
+  if (!current || change.sessionId && current.sessionId !== change.sessionId) return 'resync'
+  if (change.revision <= current.revision) return 'ignore'
+  if (change.sessionId && change.revision !== current.revision + 1) return 'resync'
+  return 'apply'
 }

@@ -1,21 +1,19 @@
-# Copilotix 開發文檔
+# 文檔索引
 
-維護規則與当前交接入口在根 [AGENTS.md](../AGENTS.md)。此處只索引專項契約與已有產品指南。
+先讀根 [AGENTS](../AGENTS.md)，按改動只選一個所屬契約；模組 README 負責公開入口與資料定位，不預載全部文檔。
 
-- [中文 Wiki 版本化源文件與發布流程](wiki/README.md)
-- [實際運行截圖及采集範圍](images/screenshots/README.md)
+| 需求 | 唯一入口 |
+|---|---|
+| 現行交接／未決問題 | [交接](MILESTONE_1_3_ZH.md) |
+| 進程／IPC／RPC／DB／原子性／Codex | [架構](ARCHITECTURE_ZH.md)、[模組決策](adr/0001-feature-modules.md) |
+| 開發工具／測試選擇／夾具 | [開發](DESKTOP_DEVELOPMENT_ZH.md) |
+| CI／打包／安裝驗收／發布 | [發布](DESKTOP_RELEASE_ZH.md) |
+| 簽章授權／配置 | [政策](CODE_SIGNING_POLICY.md)、[接入](LICENSE_AND_SIGNING_ZH.md) |
+| Markdown／編輯／翻譯格式／導出 | [格式契約](MARKDOWN_FORMAT_ZH.md) |
+| 單篇問答／圖片加入／歷史恢復 | [問答](READER_AI_CHAT_PLAN_ZH.md) |
+| 檔案卡生命週期／輸出／圖片解讀 | [生命週期](PAPER_INSIGHT_ZH.md)、[Brief格式](PAPER_BRIEF_ZH.md)、[圖片](FIGURE_INSIGHT_ZH.md) |
+| UI偏好／校準／動畫 | [介面](UI_PREFERENCES_ZH.md) |
+| 文庫備份／分類／Zotero | [維護](LIBRARY_MANAGEMENT_ZH.md)、[分類](LIBRARY_CATEGORIES_ZH.md)、[Zotero](ZOTERO_BRIDGE_ZH.md) |
+| 使用者指南／安全／截圖 | [Wiki源](wiki/README.md)、[安裝](WINDOWS_INSTALLATION_ZH.md)、[安全](SECURITY.md)、[截圖](images/screenshots/README.md) |
 
-- [桌面開發說明](DESKTOP_DEVELOPMENT_ZH.md)
-- [桌面架構基線](ARCHITECTURE_ZH.md)
-- [單篇文獻 AI 問答：Agent 協作與維護契約](READER_AI_CHAT_PLAN_ZH.md)
-- [Markdown 閱讀與標準導出](MARKDOWN_FORMAT_ZH.md)
-- [安全策略](SECURITY.md)
-
-- [许可证与签名配置](LICENSE_AND_SIGNING_ZH.md)
-- [Windows 桌面发布](DESKTOP_RELEASE_ZH.md)
-- [Windows 安装、升级与卸载](WINDOWS_INSTALLATION_ZH.md)
-- [文档库备份、恢复与迁移](LIBRARY_MANAGEMENT_ZH.md)
-- [文庫內容分類](LIBRARY_CATEGORIES_ZH.md)
-- [AI 檔案卡生命週期](PAPER_INSIGHT_ZH.md)
-- [Paper Brief v2 欄位與生成](PAPER_BRIEF_ZH.md)
-- [介面偏好](UI_PREFERENCES_ZH.md)
+歷史版本說明留 docs/releases，歷史代碼／搬檔表查 Git，不複製到交接。

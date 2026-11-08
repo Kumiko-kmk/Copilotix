@@ -19,7 +19,7 @@ test('Codex settings and grounded chat use the local app-server without API keys
     await card.getByRole('button', { name: '测试连接' }).click()
     await expect(card.getByRole('status')).toContainText('本机 Codex 已登录', { timeout: 30_000 })
     await expect(page.locator('#codex-executable')).toHaveValue(/codex\.exe$/iu)
-    const remoteButton = page.locator('[data-provider="qwen"] .credential-validate')
+    const remoteButton = page.locator('[data-provider="parser"] .credential-validate')
     const localButton = card.getByRole('button', { name: '测试连接' })
     const remoteBox = await remoteButton.boundingBox(), localBox = await localButton.boundingBox()
     expect(Math.abs(remoteBox!.x - localBox!.x)).toBeLessThan(2)

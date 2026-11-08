@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { BLOCK_MAPPING_VERSION } from '@features/parsing/core'
 import { blockMappingSchema } from '@features/parsing/contract/blockSchemas'
-import { buildReaderFigureGeometries } from '@features/reader/core'
+import { documentModels } from '@features/document/utility'
 import { captionFigureKey } from '../contract/figureMentions'
 import { PAPER_CHAT_MAX_FIGURE_IMAGES, PAPER_CHAT_MAX_IMAGE_BYTES, paperChatFigureRequestSchema, paperChatFigureSourceSchema,
   type PaperChatFigureRequest, type PaperChatFigureSource } from '../contract/paperChatFigures'
@@ -43,10 +43,10 @@ export class PaperChatFigureStore {
     const root = task.outputDir
     const info = await lstat(root)
     if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('文献目录无效')
-    const [mappingBytes, layoutBytes] = await Promise.all([this.read(root, 'block_list.json', 32 * 1024 * 1024), this.read(root, 'layout.json', 32 * 1024 * 1024)])
+    const [mappingBytes] = await Promise.all([this.read(root, 'block_list.json', 32 * 1024 * 1024), this.read(root, 'layout.json', 32 * 1024 * 1024)])
     signal?.throwIfAborted()
     const mappings = mappingsSchema.parse(JSON.parse(mappingBytes.toString('utf8'))).mappings
-    const geometry = buildReaderFigureGeometries(mappings, layoutBytes.toString('utf8')).find(item => item.id === request.figureId)
+    const geometry = (await documentModels.ensureBase(request.documentId, root)).figures.find(item => item.id === request.figureId)
     if (!geometry) throw new Error('图片已不在当前解析版本中，请重新加入')
     const members = new Set(geometry.mappingIds)
     const captionMappings = mappings.filter(m => m.id === geometry.captionMappingId ||

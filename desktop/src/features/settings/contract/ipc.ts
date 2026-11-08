@@ -26,7 +26,8 @@ export const settingsChannels = {
 export interface SettingsDesktopApi {
   getSettings(): Promise<AppSettings>
   saveSettings(update: SettingsUpdate): Promise<SettingsSaveResult>
-  validateCredential(name: CredentialName, value?: string): Promise<CredentialValidationResult>
+  /** connectionId picks one saved model key; without it qwen/deepseek mean the default key. */
+  validateCredential(name: CredentialName, value?: string, connectionId?: string): Promise<CredentialValidationResult>
   chooseOutputDirectory(): Promise<string | null>
   getStorageInfo(): Promise<StorageInfo>
   getUsageAnalytics(): Promise<UsageAnalytics>
@@ -37,7 +38,7 @@ export function createSettingsApi(ipc: IpcBridge): SettingsDesktopApi {
   return {
     getSettings: () => ipc.invoke(settingsChannels.get, undefined),
     saveSettings: update => ipc.invoke(settingsChannels.save, update),
-    validateCredential: (name, value) => ipc.invoke(settingsChannels.validateCredential, { name, value }),
+    validateCredential: (name, value, connectionId) => ipc.invoke(settingsChannels.validateCredential, { name, value, ...(connectionId ? { connectionId } : {}) }),
     chooseOutputDirectory: () => ipc.invoke(settingsChannels.chooseOutputDirectory, undefined),
     getStorageInfo: () => ipc.invoke(settingsChannels.storageInfo, undefined),
     getUsageAnalytics: () => ipc.invoke(settingsChannels.usageAnalytics, undefined),

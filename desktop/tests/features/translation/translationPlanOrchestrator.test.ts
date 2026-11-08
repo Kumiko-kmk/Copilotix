@@ -341,20 +341,16 @@ describe('translation plan orchestrator', () => {
     expect(fixture.compute.failCalls).toEqual([])
   })
 
-  it('marks a unit failed after every provider fails', async () => {
+  it('preserves checkpoints and ends the round when all connections fail', async () => {
     const fixture = await makeFixture('No provider can translate')
     const calls: string[] = []
     const providers = new Map<TranslationProviderId, TranslationProvider>([
       ['qwen', provider('qwen', async () => { throw new TranslationHttpError('qwen down', 500, 0) }, calls)],
       ['deepseek', provider('deepseek', async () => { throw new TranslationHttpError('deepseek down', 500, 0) }, calls)]
     ])
-    const result = await run(fixture, providers)
-
-    expect(result.status).toBe('partial')
-    expect(fixture.compute.failCalls).toEqual([fixture.descriptor.unitId])
-    expect(calls).toHaveLength(6)
-    expect(calls.slice(0, 3).every((entry) => entry.startsWith('qwen:'))).toBe(true)
-    expect(calls.slice(3).every((entry) => entry.startsWith('deepseek:'))).toBe(true)
+    await expect(run(fixture, providers)).rejects.toMatchObject({ code: 'MODEL_CONNECTION_UNAVAILABLE' })
+    expect(fixture.compute.failCalls).toEqual([])
+    expect(calls).toHaveLength(2)
   })
 
   it('does not retry a provider after an authentication failure', async () => {
@@ -374,25 +370,16 @@ describe('translation plan orchestrator', () => {
       }
     }
 
-    const result = await run(fixture, new Map([['qwen', provider]]))
-    expect(result.status).toBe('partial')
+    await expect(run(fixture, new Map([['qwen', provider]]))).rejects.toMatchObject({ code: 'MODEL_CONNECTION_UNAVAILABLE' })
     expect(calls).toBe(1)
-    expect(fixture.compute.failCalls).toEqual([fixture.descriptor.unitId])
+    expect(fixture.compute.failCalls).toEqual([])
   })
 
-  it('retries request AbortError when the job itself was not cancelled', async () => {
-    vi.useFakeTimers()
-    try {
-      const error = new Error('transport aborted')
-      error.name = 'AbortError'
-      const operation = vi.fn().mockRejectedValueOnce(error).mockResolvedValue('translated')
-      const result = withRetry(operation, new AbortController().signal)
-      await vi.runAllTimersAsync()
-      await expect(result).resolves.toBe('translated')
-      expect(operation).toHaveBeenCalledTimes(2)
-    } finally {
-      vi.useRealTimers()
-    }
+  it('does not add retries for a transport AbortError', async () => {
+    const error = Object.assign(new Error('transport aborted'), { name: 'AbortError' })
+    const operation = vi.fn().mockRejectedValueOnce(error).mockResolvedValue('translated')
+    await expect(withRetry(operation, new AbortController().signal)).rejects.toBe(error)
+    expect(operation).toHaveBeenCalledTimes(1)
   })
 
   it('stops without failing the unit when the signal is aborted', async () => {

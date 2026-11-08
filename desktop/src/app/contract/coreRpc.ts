@@ -1,3 +1,4 @@
+import { documentOperations } from '@features/document/contract/rpc'
 import { createCoreProtocol, platformOperations, type CoreMessageOf, type CoreOperationOf, type CorePayloadOf, type CoreRequestOf, type CoreRequester, type CoreResultOf, type CoreResponse } from '@platform/rpc/contract/protocol'
 import { jobOperations } from '@platform/jobs/contract/rpc'
 import { readerOperations } from '@features/reader/contract/rpc'
@@ -13,7 +14,8 @@ import { translationOperations } from '@features/translation/contract/rpc'
  * types. Operations are declared next to their owner and combined here; Main
  * and Utility receive the bound protocol instead of importing this file.
  */
-export const coreOperationRegistry = { ...platformOperations, ...jobOperations, ...insightOperations, ...chatOperations, ...translationOperations, ...parsingOperations, ...settingsOperations, ...libraryOperations, ...readerOperations } as const
+export const coreOperationRegistry = { ...platformOperations, ...jobOperations, ...insightOperations, ...chatOperations, ...translationOperations, ...parsingOperations,
+  ...documentOperations, ...settingsOperations, ...libraryOperations, ...readerOperations } as const
 export type CoreOperationRegistryShape = typeof coreOperationRegistry
 
 export const coreProtocol = createCoreProtocol(coreOperationRegistry)

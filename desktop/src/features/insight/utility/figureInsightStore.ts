@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
 import { BLOCK_MAPPING_VERSION } from '@features/parsing/core'
 import { blockMappingSchema } from '@features/parsing/contract/blockSchemas'
-import { buildReaderFigureGeometries } from '@features/reader/core'
+import { documentModels, getDocumentSnapshot } from '@features/document/utility'
 import { buildBriefContext, clip } from '../core/paperBrief/context'
 import { FIGURE_INSIGHT_MAX_IMAGE_BYTES, FIGURE_INSIGHT_PROMPT_VERSION, figureInsightDescriptorSchema,
   figureInsightLocationSchema, figureInsightRecordSchema, figureInsightSaveSchema,
@@ -60,8 +60,11 @@ export class FigureInsightStore {
     signal?.throwIfAborted()
     const manifest = manifestSchema.parse(JSON.parse(manifestBytes.toString('utf8')))
     const mappings = mappingsSchema.parse(JSON.parse(mappingBytes.toString('utf8'))).mappings
-    const layout = layoutBytes.toString('utf8'), markdown = markdownBytes.toString('utf8')
-    const geometry = buildReaderFigureGeometries(mappings, layout).find(g => g.id === request.figureId && g.status === 'complete')
+    const layout = layoutBytes.toString('utf8')
+    const snapshot = await getDocumentSnapshot(request.documentId, root)
+    const markdown = snapshot.originalText
+    if (snapshot.base.markdown !== markdownBytes.toString('utf8')) throw new Error('文档版本已变化，请重新读取')
+    const geometry = (await documentModels.ensureBase(request.documentId, root)).figures.find(g => g.id === request.figureId && g.status === 'complete')
     const figure = manifest.figures.find(f => f.figureId === request.figureId)
     if (!geometry || !figure) throw new Error('尚无已确认的完整大图，请先提取或打开阅读器生成整图')
     const pdf = await lstat(this.policy.resolveChild(root, 'original.pdf'))

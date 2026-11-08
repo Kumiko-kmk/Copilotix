@@ -149,7 +149,7 @@ async function assertCompactMarkdownLayout(activeTextPanel: Locator): Promise<vo
   expect(tableMetrics).toMatchObject({ fontSize: '13px', paddingBlock: '3px 3px' })
 }
 
-test('fits PDF pages without an outer frame and preserves the current page while resizing', async () => {
+test('fits PDF pages without an outer frame and preserves the current page while resizing', async ({}, testInfo) => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, { sourcePdf: join(__dirname, '../resources/tutorial/Attention Is All You Need.pdf') })
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
@@ -198,6 +198,25 @@ test('fits PDF pages without an outer frame and preserves the current page while
     await window.getByLabel('放大').click()
     await expect(window.getByText('110%')).toBeVisible()
     await expectReadingPosition()
+    await window.getByLabel('适合宽度', { exact: true }).click()
+    await expect(window.getByText('100%')).toBeVisible()
+    await expectReadingPosition()
+    await window.getByLabel('跳转到页', { exact: true }).click()
+    await window.getByLabel('PDF 页码', { exact: true }).fill('15')
+    await window.getByLabel('PDF 页码', { exact: true }).press('Enter')
+    await expect(window.getByText('15 / 15')).toBeVisible()
+    await expect.poll(() => window.locator('[data-pdf-page="14"] canvas').evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
+    await expect.poll(() => scroller.evaluate((element) => {
+      const page = element.querySelector('[data-pdf-page="14"]')!.getBoundingClientRect()
+      return Math.abs(page.top - element.getBoundingClientRect().top - Math.max(0, element.clientHeight - page.height))
+    })).toBeLessThan(1)
+    await window.getByLabel('跳转到页', { exact: true }).click()
+    await window.getByLabel('PDF 页码', { exact: true }).fill('1')
+    await window.getByLabel('PDF 页码', { exact: true }).press('Enter')
+    await expect(window.getByText('1 / 15')).toBeVisible()
+    await window.getByLabel('显示区块边框', { exact: true }).click()
+    await expect(window.locator('.pdf-pane')).toHaveAttribute('data-show-bounds', 'false')
+    await window.screenshot({ path: testInfo.outputPath('reader-pdf-linking.png') })
   } finally {
     await app.close()
     await workspace.cleanup()
@@ -290,7 +309,7 @@ test('uses the entire PDF viewport without scrollbar gutters or page gaps on a r
   }
 })
 
-test('renders a local PDF with range requests before parsing succeeds', async () => {
+test('renders a local PDF with range requests before parsing succeeds', async ({}, testInfo) => {
   const workspace = await createE2EWorkspace()
   const taskId = await seedReaderTask(workspace, {
     translatedMarkdown: FIXTURE_TRANSLATED_MARKDOWN
@@ -335,6 +354,7 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     await expect.poll(() => isCentered(activeTextPanel.locator('.markdown-block', { hasText: 'First page continues in second column.' }), '.markdown-scroll')).toBe(true)
     await expect(window.locator('[data-block-position="0-3"]')).toHaveClass(/active/)
     await expect(window.locator('[data-block-position="0-4"]')).toHaveClass(/active/)
+    await window.screenshot({ path: testInfo.outputPath('reader-source-linking.png') })
 
     const markdownImageBlock = activeTextPanel.locator('.markdown-block:has(img)')
     const markdownImageMapping = await markdownImageBlock.getAttribute('data-block-ids')
@@ -397,6 +417,9 @@ test('renders a local PDF with range requests before parsing succeeds', async ()
     const originalWidth = await window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)
     await window.getByLabel('放大').click()
     await expect.poll(() => window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(originalWidth)
+    await expect(window.getByLabel('下一页')).toBeDisabled()
+    await window.getByLabel('上一页').click()
+    await expect(window.getByText('1 / 2')).toBeVisible()
     await window.getByLabel('下一页').click()
     await expect(window.getByText('2 / 2')).toBeVisible()
   } finally {

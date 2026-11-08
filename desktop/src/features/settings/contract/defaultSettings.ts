@@ -1,8 +1,10 @@
 import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
+import { defaultConnections } from '@platform/models/contract/models'
 import type { AppSettings } from './settingsTypes'
 import { TRANSLATION_PROVIDER_IDS } from '@features/translation/contract/providerPolicy'
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  modelConnections: defaultConnections(),
   codex: DEFAULT_CODEX_SETTINGS,
   outputRoot: '',
   formulaEnabled: true,

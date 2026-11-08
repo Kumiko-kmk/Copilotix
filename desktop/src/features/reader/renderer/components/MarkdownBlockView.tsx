@@ -31,8 +31,8 @@ export const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
   readyFigureIds: ReadonlySet<string>
   figureMosaics: ReadonlyMap<string, FigureMosaic>
   onFigureStateChange(id: string, state: FigureRenderState): void
-  /** Edit in place: offered on a single click on the text of the already current paragraph. */
-  onEditRequest?(annotationKey: string, element: HTMLElement, clicks: number): void
+  /** Text editing starts only on an explicit double click. */
+  onEditRequest?(annotationKey: string, element: HTMLElement): void
   /** Right click; a text selection keeps the system menu (copy). */
   onBlockMenu?(block: ReaderBlock, figures: ReaderFigureGroup[], x: number, y: number): void
   /** Replaces the rendered text while the block is edited. */
@@ -97,14 +97,17 @@ export const MarkdownBlockView = React.memo(function MarkdownBlockView(props: {
         const owned = props.figureGroups?.filter(group => group.ownerBlockIndex === props.blockIndex) ?? []
         props.onBlockMenu!(props.block, owned.length ? owned : props.figureGroups ?? [], event.clientX, event.clientY)
       } : undefined}
-      onClick={(event) => {
+      onClick={() => {
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return
-        if (props.active && props.onEditRequest && props.block.annotationKey && isEditableTarget(event.target)) {
-          props.onEditRequest(props.block.annotationKey, event.currentTarget, event.detail)
-          return
-        }
         const mappingId = navigationMappingIds[0]
         if (mappingId) props.onSelect({ mappingId, origin: 'markdown' })
+      }}
+      onDoubleClick={(event) => {
+        if (!props.onEditRequest || !props.block.annotationKey || !isEditableTarget(event.target)) return
+        event.preventDefault()
+        event.stopPropagation()
+        window.getSelection()?.removeAllRanges()
+        props.onEditRequest(props.block.annotationKey, event.currentTarget)
       }}
     >
       {props.editor ?? (props.figureGroups && props.pdfUrl ? (

@@ -13,7 +13,7 @@ test('archive renders maths across fields and tabs without clipping or changing 
   const documentText = text.replace('\\(\\frac{a}{b}\\)', '$\\frac{a}{b}$').replace('d_model=512', '$d_{\\mathrm{model}}=512$')
   try {
     await seedReaderTask(workspace, {
-      englishTitle: 'Model $x_i$',
+      englishTitle: 'Model $x_i$', savedCoverFigure: true,
       sourceMarkdown: `# Model $x_i$\n\n## Abstract\n\n${documentText}\n\n## Method\n\n${documentText}`,
       translatedMarkdown: `# 模型 $x_i$\n\n## 摘要\n\n${documentText}\n\n## 1 方法 $x_i$\n\n${documentText}`
     })

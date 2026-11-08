@@ -10,9 +10,9 @@ import { V2Database, V2_MIGRATIONS } from '@platform/database/utility/v2Database
 describe('Codex integration boundaries', () => {
   it('preserves old ordering without enabling Codex and falls back only to enabled providers', () => {
     const legacy = ['bing', 'qwen', 'transmart', 'deepseek']
-    expect(normalizeProviderOrder(legacy, 'bing')).toEqual([...legacy, 'codex'])
+    expect(normalizeProviderOrder(legacy, 'bing')).toEqual(['qwen', 'deepseek', 'codex'])
     expect(normalizeEnabledProviders(undefined, [...DEFAULT_SETTINGS.translationProviderOrder])).not.toContain('codex')
-    expect(executableProviderOrder(['codex', 'bing'], ['codex', 'bing'], DEFAULT_SETTINGS.credentials)).toEqual(['codex', 'bing'])
+    expect(executableProviderOrder(['codex', 'bing'], ['codex', 'bing'], DEFAULT_SETTINGS.credentials)).toEqual(['codex'])
     expect(executableProviderOrder(['codex', 'qwen', 'bing'], ['codex'], { qwen: { state: 'valid' }, deepseek: { state: 'valid' } })).toEqual(['codex'])
     expect(executableProviderOrder(['codex', 'qwen', 'deepseek'], ['codex', 'qwen', 'deepseek'], { qwen: { state: 'invalid' }, deepseek: { state: 'valid' } })).toEqual(['codex', 'deepseek'])
   })

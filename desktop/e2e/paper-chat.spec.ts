@@ -1,5 +1,6 @@
 import { _electron as electron, expect, test } from '@playwright/test'
 import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { createE2EWorkspace, openPaperFromLibrary, seedReaderTask } from './helpers'
 
 test('reuses the translation API and switches chat models without a second settings page', async () => {
@@ -19,6 +20,8 @@ test('reuses the translation API and switches chat models without a second setti
       Reflect.set(globalThis, '__chatCredentialProbeCount', 0)
       net.fetch = async (input, init) => {
         const body = JSON.parse(String(init?.body)) as { model?: string; stream?: boolean }
+        // Startup archives share this connection; model rejection is a request error, not a network outage.
+        if (body.model === 'qwen-plus') return new Response('{}', { status: 400 })
         if (input !== 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
           || init?.method !== 'POST'
           || new Headers(init.headers).get('Authorization') !== 'Bearer copilotix-e2e-not-a-real-api-key'
@@ -82,6 +85,9 @@ test('reuses the translation API and switches chat models without a second setti
     await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '设置' }).click()
     await expect(window.getByRole('region', { name: '服务连接' })).toBeVisible()
     await expect(window.getByRole('button', { name: 'Chat', exact: true })).toHaveCount(0)
+  } catch (error) {
+    await test.info().attach('application-log', { body: await readFile(join(workspace.userData, 'copilotix-desktop.log')), contentType: 'text/plain' })
+    throw error
   } finally {
     await app?.close()
     await workspace.cleanup()

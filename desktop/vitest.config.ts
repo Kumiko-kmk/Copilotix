@@ -5,10 +5,12 @@ export default defineConfig({
   resolve: { dedupe: ['katex'], alias: { '@app': resolve(__dirname, 'src/app'), '@platform': resolve(__dirname, 'src/platform'), '@features': resolve(__dirname, 'src/features') } },
   // Mirrors the renderer config: the paper archive embeds its cassette model with `?inline`.
   assetsInclude: ['**/*.glb'],
+  define: { __COPILOTIX_LITE__: 'false' },
   test: {
     // Keep rehype's KaTeX import inside Vite resolution so tests use the renderer's engine.
     server: { deps: { inline: ['rehype-katex'] } },
     environment: 'node',
+    setupFiles: ['./tests/modelRuntimeSetup.ts'],
     // Windows + coverage instrumentation can exceed the default 5 s for React views.
     testTimeout: 15_000,
     // Bound CPU/memory contention from jsdom + Ant Design on hosted Windows runners.
@@ -16,7 +18,7 @@ export default defineConfig({
     reporters: process.env.CI ? ['default', 'junit'] : ['default'],
     // Playwright clears test-results, so unit reports use a separate directory.
     outputFile: { junit: './unit-test-results/junit.xml' },
-    exclude: ['e2e/**', 'node_modules/**', 'dist/**', 'out/**'],
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**', 'out/**', 'out-lite/**'],
     coverage: {
       provider: 'v8',
       all: true,

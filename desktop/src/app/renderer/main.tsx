@@ -3,12 +3,14 @@ import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider, theme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import App from './App'
 import { currentTheme, mixHex, onThemeChange, restoreTheme, rgbChannels } from '@features/settings/renderer'
 import './styles.css'
 
 // Before the first render, so the stored theme is the first thing painted.
 restoreTheme()
+
+// Dynamic imports: the build drops the branch of the other edition, and everything only it uses.
+const App = React.lazy(__COPILOTIX_LITE__ ? () => import('./LiteApp') : () => import('./App'))
 
 function Root(): React.JSX.Element {
   const [active, setActive] = React.useState(() => currentTheme())
@@ -23,6 +25,7 @@ function Root(): React.JSX.Element {
         algorithm: active.dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         // Archive language (文库): square corners, flat surfaces, ink primary actions that turn to the accent on hover.
         token: {
+          motion: !__COPILOTIX_LITE__,
           colorPrimary: colors.primary,
           borderRadius: 2,
           borderRadiusLG: 3,
@@ -56,7 +59,7 @@ function Root(): React.JSX.Element {
         }
       }}
     >
-      <App />
+      <React.Suspense fallback={null}><App /></React.Suspense>
     </ConfigProvider>
   )
 }

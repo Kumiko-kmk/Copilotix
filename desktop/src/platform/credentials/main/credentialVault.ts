@@ -1,4 +1,4 @@
-import { Entry } from '@napi-rs/keyring'
+import { Entry, findCredentials } from '@napi-rs/keyring'
 import { createHash } from 'node:crypto'
 
 /** Windows Credential Manager service name; changing it would orphan every stored key. */
@@ -6,12 +6,15 @@ export const CREDENTIAL_SERVICE = 'Copilotix-Translation'
 
 /** Test workspaces must never read or overwrite the user's native credentials. */
 export function credentialServiceForRuntime(options: {
+  /** A separately installed edition keeps its keys under its own service name. */
+  service?: string
   isPackaged: boolean
   nodeEnv?: string
   e2eUserData?: string
 }): string {
-  if (options.isPackaged || options.nodeEnv !== 'test' || !options.e2eUserData) return CREDENTIAL_SERVICE
-  return `${CREDENTIAL_SERVICE}-e2e-${createHash('sha256').update(options.e2eUserData).digest('hex')}`
+  const service = options.service ?? CREDENTIAL_SERVICE
+  if (options.isPackaged || options.nodeEnv !== 'test' || !options.e2eUserData) return service
+  return `${service}-e2e-${createHash('sha256').update(options.e2eUserData).digest('hex')}`
 }
 
 export type CredentialAccount =
@@ -21,6 +24,8 @@ export type CredentialAccount =
   | 'parser-token-validation'
   | 'qwen-api-key-validation'
   | 'deepseek-api-key-validation'
+  /** Extra model keys added in the API key manager, named by their connection's UUID. */
+  | `api-key:${string}`
 
 export interface CredentialVault {
   get(account: CredentialAccount): Promise<string | null>
@@ -68,5 +73,14 @@ export class WindowsCredentialVault implements CredentialVault {
 
   async has(account: CredentialAccount): Promise<boolean> {
     return (await this.get(account)) !== null
+  }
+
+  /** Every account stored under this service, so uninstall also removes keys added later. */
+  async accounts(): Promise<string[]> {
+    try {
+      return findCredentials(this.service).map(credential => credential.account)
+    } catch {
+      return []
+    }
   }
 }

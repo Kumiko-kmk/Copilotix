@@ -5,12 +5,14 @@ RequestExecutionLevel user
 SilentInstall silent
 AutoCloseWindow true
 SetCompressor /SOLID lzma
-Name "Copilotix Uninstall"
+!define /ifndef PRODUCT_NAME "Copilotix"
+!define /ifndef EXECUTABLE_NAME "Copilotix.exe"
+Name "${PRODUCT_NAME} Uninstall"
 OutFile "${OUTPUT_PATH}"
 Icon "${ICON_PATH}"
 VIProductVersion "${PRODUCT_VERSION}"
-VIAddVersionKey /LANG=1033 "ProductName" "Copilotix"
-VIAddVersionKey /LANG=1033 "FileDescription" "Copilotix registered uninstall launcher"
+VIAddVersionKey /LANG=1033 "ProductName" "${PRODUCT_NAME}"
+VIAddVersionKey /LANG=1033 "FileDescription" "${PRODUCT_NAME} registered uninstall launcher"
 VIAddVersionKey /LANG=1033 "FileVersion" "${PRODUCT_VERSION}"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "Copilotix contributors"
 !include "LogicLib.nsh"
@@ -50,13 +52,13 @@ Section
   GetFullPathName $0 "$registeredRoot"
   StrCmp $0 $registeredRoot +2
   Goto invalid
-  IfFileExists "$registeredRoot\Copilotix.exe" +2 invalid
+  IfFileExists "$registeredRoot\${EXECUTABLE_NAME}" +2 invalid
   IfFileExists "$registeredRoot\resources\app.asar" +2 invalid
 
   StrCpy $target "$registeredRoot\uninstall.exe"
   StrCmp $registeredCommand '$\"$target$\" /currentuser' launch
   StrCmp $registeredCommand '$\"$target$\"' launch
-  StrCpy $target "$registeredRoot\Uninstall Copilotix.exe"
+  StrCpy $target "$registeredRoot\Uninstall ${PRODUCT_NAME}.exe"
   StrCmp $registeredCommand '$\"$target$\" /currentuser' launch
   StrCmp $registeredCommand '$\"$target$\"' launch invalid
 
@@ -80,13 +82,13 @@ launch:
 
 missing:
   ${If} $quiet == 0
-    MessageBox MB_OK|MB_ICONINFORMATION "未找到目前使用者的 Copilotix 安裝。請先執行 Setup；若已移除，無需再次卸載。$\r$\n$\r$\nNo Copilotix installation was found for this Windows account. Run Setup first, or no further removal is needed."
+    MessageBox MB_OK|MB_ICONINFORMATION "未找到目前使用者的 ${PRODUCT_NAME} 安裝。請先執行 Setup；若已移除，無需再次卸載。$\r$\n$\r$\nNo ${PRODUCT_NAME} installation was found for this Windows account. Run Setup first, or no further removal is needed."
   ${EndIf}
   SetErrorLevel 2
   Goto done
 invalid:
   ${If} $quiet == 0
-    MessageBox MB_OK|MB_ICONSTOP "無法安全確認 Copilotix 安裝位置，未執行任何卸載。請使用 Windows 設定中的已安裝應用程式，或重新執行 Setup 修復安裝。$\r$\n$\r$\nThe registered Copilotix installation could not be verified. No removal was performed. Use Windows Installed apps or repair the installation with Setup."
+    MessageBox MB_OK|MB_ICONSTOP "無法安全確認 ${PRODUCT_NAME} 安裝位置，未執行任何卸載。請使用 Windows 設定中的已安裝應用程式，或重新執行 Setup 修復安裝。$\r$\n$\r$\nThe registered ${PRODUCT_NAME} installation could not be verified. No removal was performed. Use Windows Installed apps or repair the installation with Setup."
   ${EndIf}
   SetErrorLevel 2
 done:

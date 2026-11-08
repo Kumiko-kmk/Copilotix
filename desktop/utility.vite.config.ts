@@ -1,7 +1,9 @@
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // The uninstall worker removes one edition's data, so which edition it belongs to is built in.
+  define: { __COPILOTIX_LITE__: JSON.stringify(mode === 'lite') },
   resolve: {
     // Utility is a Node-only process.  Vite's browser defaults can otherwise
     // select the `browser` export of packages that also ship a DOM build.
@@ -33,4 +35,4 @@ export default defineConfig({
       external: [/^node:/u, 'electron', 'katex']
     }
   }
-})
+}))

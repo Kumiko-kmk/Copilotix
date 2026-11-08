@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import PQueue from 'p-queue'
+import { classifyModelFailure, ModelConnectionUnavailable } from '@platform/models/runtime/modelRuntime'
 import type { TranslationPlanFinalizeResult, TranslationPlanCounts, TranslationPlanMutationResult, TranslationPlanRequest, TranslationPlanResponse, TranslationPlanWorkDescriptor, PlainTranslationResponse, TableTranslationResponse } from '../contract/translationPlanProtocol'
 import {
   plainTranslationRequestSchema,
@@ -26,7 +27,7 @@ import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 
 const MAX_TRANSLATION_SEGMENT_LENGTH = 4_000
 const MAX_TRANSLATION_PLAN_PAGE = 32
-const MAX_RETRY_ATTEMPTS = 3
+
 
 /** The only file operation the orchestrator needs from ArtifactService. */
 export interface TranslationPlanFileWriter {
@@ -89,6 +90,7 @@ export class TranslationPlanOrchestrator {
     const inFlight = new Set<Promise<void>>()
     let failure: { error: unknown } | null = null
     try { for (;;) {
+      if (failure) break
       throwIfAborted(signal)
       const page = translationPlanListResultSchema.parse(
         await compute.listTranslationWork(task.id, jobId, cursor, MAX_TRANSLATION_PLAN_PAGE, signal)
@@ -98,7 +100,8 @@ export class TranslationPlanOrchestrator {
       await this.report(page.counts)
       for (const descriptor of page.items) {
         if (descriptor.status !== 'pending') continue
-        while (inFlight.size >= 64) await Promise.race(inFlight)
+        while (inFlight.size >= 64 && !failure) await Promise.race(inFlight)
+        if (failure) break
         throwIfAborted(signal)
         const task: Promise<void> = queue.add(() => this.processUnit(descriptor, compute))
           .then(() => undefined, error => { failure ??= { error } })
@@ -129,12 +132,13 @@ export class TranslationPlanOrchestrator {
     const { task, jobId, providers, signal } = this.options
     throwIfAborted(signal)
     const errors: string[] = []
+    let unavailable = false
     const request = lazyRequest(() => this.readRequest(descriptor))
     for (const providerId of this.options.providerOrder) {
       throwIfAborted(signal)
       const provider = providers.get(providerId)
       if (!provider) continue
-      if (provider.credentialName && this.disabledCredentials.has(provider.credentialName)) continue
+      if (provider.credentialName && this.disabledCredentials.has(provider.credentialName)) { unavailable = true; continue }
 
       let available = false
       try {
@@ -145,7 +149,7 @@ export class TranslationPlanOrchestrator {
         errors.push(`${providerId}: ${readableError(error)}`)
         continue
       }
-      if (!available) continue
+      if (!available) { unavailable = true; continue }
 
       let cache: TranslationPlanMutationResult
       try {
@@ -194,6 +198,8 @@ export class TranslationPlanOrchestrator {
         throw new Error(`utility 未完成翻译单元（状态：${applied.status}）`)
       } catch (error) {
         if (isAbortError(error, signal)) throw abortError()
+        if (error && typeof error === 'object' && 'partialOutput' in error && error.partialOutput) throw error
+        unavailable ||= error instanceof ModelConnectionUnavailable || ['transient', 'credentials'].includes(classifyModelFailure(error, signal))
         const credentialName = credentialFailureFor(provider, error)
         if (credentialName) {
           this.disabledCredentials.add(credentialName)
@@ -204,6 +210,7 @@ export class TranslationPlanOrchestrator {
     }
 
     throwIfAborted(signal)
+    if (unavailable) throw new ModelConnectionUnavailable('translation', 0, 'connection')
     const message = (errors.length > 0 ? errors.join('；') : '没有可用的翻译源').slice(0, 32_768)
     const failed = translationPlanMutationResultSchema.parse(
       await compute.failTranslation(task.id, jobId, descriptor.unitId, message, signal)
@@ -357,24 +364,12 @@ export function splitText(text: string, limit = MAX_TRANSLATION_SEGMENT_LENGTH):
   return parts
 }
 
+/** Compatibility entry; connection recovery belongs to the shared runtime. */
 export async function withRetry<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
-  let lastError: unknown
-  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt += 1) {
-    throwIfAborted(signal)
-    try {
-      const value = await operation()
-      throwIfAborted(signal)
-      return value
-    } catch (error) {
-      if (isAbortError(error, signal)) throw abortError()
-      lastError = error
-      if (!isRetryableTranslationError(error)) throw error
-      if (attempt === MAX_RETRY_ATTEMPTS - 1) break
-      const retryAfter = error instanceof TranslationHttpError ? error.retryAfterMs : undefined
-      await delay(retryAfter ?? 1_000 * 2 ** attempt, signal)
-    }
-  }
-  throw lastError
+  throwIfAborted(signal)
+  const value = await operation()
+  throwIfAborted(signal)
+  return value
 }
 
 function credentialFailureFor(provider: TranslationProvider, error: unknown): CredentialName | undefined {
@@ -382,17 +377,6 @@ function credentialFailureFor(provider: TranslationProvider, error: unknown): Cr
   if (error instanceof TranslationCredentialError) return error.credentialName
   if (error instanceof TranslationHttpError && (error.status === 401 || error.status === 403)) return provider.credentialName
   return undefined
-}
-
-function isRetryableTranslationError(error: unknown): boolean {
-  if (error instanceof TranslationCredentialError) return false
-  if (error instanceof TranslationHttpError) return error.status === 408 || error.status === 429 || error.status >= 500
-  if (!error || typeof error !== 'object') return false
-  const status = (error as { status?: unknown }).status
-  if (typeof status === 'number') return status === 408 || status === 429 || status >= 500
-  const message = error instanceof Error ? error.message : ''
-  if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) return true
-  return /(?:timeout|timed out|timedout|network|fetch failed|failed to fetch|econn|socket|temporar|不可达|超时)/iu.test(message)
 }
 
 function lazyRequest(loader: () => Promise<TranslationPlanRequest>): () => Promise<TranslationPlanRequest> {
@@ -414,23 +398,6 @@ async function atomicWrite(path: string, content: string): Promise<void> {
   } finally {
     await rm(temporary, { force: true }).catch(() => undefined)
   }
-}
-
-function delay(milliseconds: number, signal: AbortSignal): Promise<void> {
-  throwIfAborted(signal)
-  if (milliseconds <= 0) return Promise.resolve()
-  return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort)
-      resolve()
-    }, milliseconds)
-    const onAbort = () => {
-      clearTimeout(timer)
-      signal.removeEventListener('abort', onAbort)
-      reject(abortError())
-    }
-    signal.addEventListener('abort', onAbort, { once: true })
-  })
 }
 
 function throwIfAborted(signal: AbortSignal): void {

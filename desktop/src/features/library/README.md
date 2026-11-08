@@ -8,7 +8,7 @@
 - `core/index.ts`：`extractPaperProfile`、`displayPaperTitle` 等標題與論文資訊提取（Zotero 與文庫頁共用）。
 - `main/index.ts`：`TaskService`（文獻指令的入口：導入、重試、刪除、導出、閱讀文件）、`RpcTaskRepository`、`RpcTaskCompute`、`DocumentFeed`、`LibraryAccessGate`、`registerLibraryIpc`、`registerTaskNotifications`。
 - `utility/index.ts`：`V2TaskRepositoryCompat`（SQLite 文獻倉庫）、`createLibraryOperations`、`assertLibraryIdle`／`manageLibrary`。
-- `renderer/index.ts`：`NewParsePage`（首頁與導入）、`TutorialPage`、文獻列表快取與狀態工具；`LibraryPage` 由組裝層懶載入（`App.tsx`），不經 index，以保留 Three.js 分包。
+- `renderer/index.ts`：`NewParsePage`（導入頁，未傳 `decoration` 時只有標題與導入入口，供 Lite 使用）、`DecoratedHomePage`（完整版首頁，加上字陣、字標與問候；裝飾只經此引入，Lite 才不打包）、`PaperSidebar`（Lite 的論文列表）、`TutorialPage`、文獻列表快取與狀態工具；`LibraryPage` 由組裝層懶載入（`App.tsx`），不經 index，以保留 Three.js 分包。
 
 文庫進入時經 insight 的只讀批量 catalog 取得全庫的小型檔案狀態、譯名、關鍵詞與總結，每頁 200 篇；依文檔與來源版本隔離，移除文檔時釋放快取。進入權限只依已保存且當前有效的檔案與已完成工作流，滑鼠任意跨列點選、搜尋、拖動、滾輪、鍵盤共用同一份狀態，不依選中次序、相鄰預讀、圖片或封面是否已渲染。全庫已成熟論文另由 ArchiveCoverService 提前準備完整跨頁封面，不依賴相鄰位置；背景僅一個重任務，當前選擇優先、明確開檔可搶佔無關背景工作。已完成封面以 WebP 存入獨立 IndexedDB，完整卡片查詢仍最多 32 項、閒置 120 秒回收。
 
@@ -16,13 +16,11 @@
 
 返回文庫時立即重查先前 missing／stale／failed 的狀態，避免閱讀器中完成生成、文庫未掛載而漏收事件後，被 30 秒快取保留為不可進入；已成熟快取仍保留原就緒畫面。回歸包含卸載期間生成再返回，端到端包含真實 provider mock／持久化與重開，不改資料格式或自動重發生成請求。
 
-展開前的右欄內容寬度是唯一基準：展開後標題、作者、主分隔線、分頁底線與四欄正文均維持相同寬度；外包絡額外容納 32px 筆記槽，不從正文扣減。作者格與欄位遵循既有截斷並限制在欄內，遮擋條先擴邊、再與內容欄及逐層 overflow 可視區相交，既不越過右邊界，也不覆蓋捲動區外的文字。正文僅首行縮排 `2em`，後續行回到整欄左邊界；段末行自然左對齊。背景、結論、討論各點統一使用 1、2、3 編號，數字列與間距共 32px，標題首字與正文首行兩字對齊；不顯示結論頁籤總數。
-
 完整跨頁封面在開檔動畫前完成 CPU 合成及 GPU 上傳；原有升起、鏡頭、玻璃曲線不等待外部工作。ArchiveDetail 只管理文字，不再清除／重建封面。尚未準備的冷檔先維持原瀏覽姿態，完整後才開始動畫；30 秒截止、失敗保留瀏覽，可重試，Esc／換篇／卸載取消並拒收晚到畫面，不能開到一半再補單頁或雙頁。封面按文檔版本、來源雜湊、整圖清單與已存評分指紋隔離；整圖已有可讀 PNG 時不重掃 PDF，缺圖不能誤存成合法單頁。
 
-只有 complete 圖組屬於可生成整圖清單的來源；僅有 ambiguous／unsupported 提示且無已保存整圖時使用合法單頁，不等待永遠不會生成的清單。已有有效圖組但裁圖或讀圖失敗仍拒絕半成品，不能退成單頁掩蓋缺圖。無可靠圖組的單頁由檔案 HTTP／持久化與版面 E2E 覆蓋。
+封面門檻計入全部圖組提示，不論 complete、ambiguous 或 unsupported：只要論文有任何圖組提示而沒有已保存整圖清單，就不生成單頁，保持瀏覽姿態；裁圖只輸出 complete 圖組，因此全是 ambiguous／unsupported 的論文不會開檔。只有完全沒有圖組提示（或 Markdown 來源）才使用合法單頁。1.3.0 曾以 complete 過濾把這類論文存成可開啟單頁；持久封面記錄帶 `rule`（`ARCHIVE_COVER_RULE`，現為 2），讀到舊規則下的 single 時視為未命中並刪除，重新判定，spread 不受影響、不需重建，資料庫版本不變。回歸：`archiveCover.test.ts`（拒絕開檔、無提示仍單頁）、`archiveCoverStore.test.ts`（舊單頁失效、spread 保留）、E2E `paper-archive.spec.ts`「never cropped」（未裁圖論文提示失敗並留在瀏覽）；需要開檔的文庫 E2E 以 `seedReaderTask({ savedCoverFigure: true })` 種入已保存整圖，走真實跨頁路徑。
 
-解碼後完整畫面以 48MiB LRU 限額保存，正在場景使用的畫面 pin 至紋理釋放；持久封面在獨立 `copilotix-archive-spreads` v1 庫，最多 128MiB／160 項，無需升級既有首頁庫。合成後清除首頁／圖頁 scratch canvas，位圖 decode 後釋放；IndexedDB／壓縮錯誤不阻止已準備畫面使用。只讀 `figureInsight.coverSource` 返回輕量指紋／幾何／權重，不讀全文、不觸發模型。文字進度事件不重傳紋理。
+首頁快取 copilotix-archive-pages 按 PDF 內容 hash 保存最多160頁 WebP，失敗回退重繪。解碼後完整畫面以 48MiB LRU 限額保存，正在場景使用的畫面 pin 至紋理釋放；持久封面在獨立 `copilotix-archive-spreads` v1 庫，最多 128MiB／160 項，無需升級既有首頁庫。合成後清除首頁／圖頁 scratch canvas，位圖 decode 後釋放；IndexedDB／壓縮錯誤不阻止已準備畫面使用。只讀 `figureInsight.coverSource` 返回輕量指紋／幾何／權重，不讀全文、不觸發模型。文字進度事件不重傳紋理。
 
 ## 資料
 
@@ -33,32 +31,19 @@
 
 `tests/features/library/`（`pnpm desktop:test --module library`）；E2E `e2e/library.spec.ts`、`paper-archive.spec.ts`、`archive-layout.spec.ts`、`qa-fixes.spec.ts`。
 
-2026-10-27 本地驗收：Windows／Electron 44.1.1／RTX3060、同一 production bundle、隔離三篇成熟論文副本；實際截圖並逐幀檢查冷首開、跨列首開、搜尋首開、熱重開及同 renderer 儲存重啟。opening 起封面均已是完整 spread，直到 open 的 key／尺寸／上傳次數不變；重啟持久命中沒有重新讀 PDF。四欄正文與展開前後主線／分頁線均為 560 CSS px，作者及遮擋邊界一致；結論編號與短公式斷行亦用實際 DOM／截圖檢查。Scene／封面服務用例包含取消、逾時、版本競態、pin／LRU 與持久命中。這是本地審閱構建驗證，不代表線上發布或安裝向導全流程驗收。
+## Lite 搜尋與初始化
+
+側欄分組、置頂與右鍵操作見 [UI 偏好](../../../../docs/UI_PREFERENCES_ZH.md#lite-版外殼)；分節規則是 `core/sidebarSections.ts`。`documents:rename` 寫入 `display_title`（去掉 .pdf、1–200 字、無控制字元）並發 metadata 變化；解析只填缺失或暫定標題，不覆蓋使用者的命名。
+
+Lite 的 `PaperSidebar` 在「新建」旁提供標題搜尋：本地匹配顯示名與原檔名，忽略大小寫、全半形與變音符，支援中英文連續文字或依序縮寫；多個空格分詞須全部匹配，不調用模型翻譯。Escape 清除並關閉，Enter 開啟第一項，中文輸入法組字時不處理快捷鍵。
+
+Main 在窗口建立及 IPC 註冊後讀取初始文庫摘要；`DocumentFeed.load` 合併並發讀取，首次增量事件等待初始化，不重複建立會話。既有全庫預熱與封面門檻不變。
 
 ## 例外（超過 600 行）
 
-- `utility/v2TaskRepositoryCompat.ts`（1064 行）：一個持有預備語句與事務的 SQLite 倉庫類；行型別、限制與投影已拆至 `compatRecords.ts`。按表拆類需重新劃分事務邊界，留待功能分支。
-- `renderer/archive/PaperArchiveScene.ts`（1520 行）：Three.js 場景類，渲染迴圈、材質池、相機與詳情動畫共用同一份可變狀態；常量、調色盤與型別已拆至 `archiveSceneConfig.ts`。
+- `utility/v2TaskRepositoryCompat.ts`（超過600行）：一個持有預備語句與事務的 SQLite 倉庫類；行型別、限制與投影已拆至 `compatRecords.ts`。按表拆類需重新劃分事務邊界，留待功能分支。
+- `renderer/archive/PaperArchiveScene.ts`（超過600行）：Three.js 場景類，渲染迴圈、材質池、相機與詳情動畫共用同一份可變狀態；常量、調色盤與型別已拆至 `archiveSceneConfig.ts`。
 
-## 契約（2026-10-26 自 AGENTS.md 遷入）
+## 增量事件
 
-### 2. 文檔格式接口（PDF / Markdown）
-
-- 現階段導入、解析、閱讀正式支持 PDF。列表僅按 `originalName` 顯示 `.md`／`.markdown` 為 Markdown，其餘舊記錄兼容顯示 PDF。
-- 正式接入 Markdown 時，在 IPC、Core RPC、資料庫及 migration 加入 `sourceFormat: 'pdf' | 'markdown'` 並回填舊資料，不得長期依賴副檔名推斷。
-- Markdown 導入接受 UTF-8 `.md`／`.markdown`（`text/markdown`），經 PathPolicy 原子落盤及摘要校驗，不走 PDF 上傳／解析器；在標準化邊界產生 canonical Markdown artifact。
-- 保持 PDF／舊資料可讀，維護重複判定、狀態投影、刪除／重試、artifact revision 及恢復測試。
-
-### 4. 文檔庫維護契約
-
-- 維護經 Main 原生選目錄與確認、IPC 維護鎖、Utility 持久化隊列；活動任務期間不可切庫。
-- manifest v1、schema_migrations 與 SQLite 結構共同約束兼容。恢復先校驗並保留舊庫；遷移複製完成後才事務切換路徑，不自動刪除舊文檔目錄。
-- API Key 不進備份。實現、恢復語義與回歸項見 `docs/LIBRARY_MANAGEMENT_ZH.md`。
-
-### 13. 文庫頁與 AI 解讀
-
-文庫資訊、互動、動畫與渲染契約統一見 [介面規範](docs/UI_PREFERENCES_ZH.md#文庫頁與-ai-解讀)。生成、存儲、兼容與恢復仍以各專項文檔為準；修改時先讀相關契約，不在本入口重複參數與歷史驗收紀錄。
-
-### 首頁背景（原 AGENTS §12）
-
-- 首頁背景使用 `homeCipher.ts`／`homeWave.ts`；已選定方案與文庫渲染契約見 [介面規範](docs/UI_PREFERENCES_ZH.md)。舊原型與候選方案由 Git 歷史保留。
+DocumentFeed 的初始 documents:snapshot 與增量事件攜帶 sessionId／revision。Main 合併同文檔變化，只查受影響摘要；progress、metadata、body、translation、edit、delete 分類，正文與譯文版本取 artifact revision/hash，編輯版本取編輯 revision。Renderer 忽略重複，遇缺口／會話重啟重新同步並合併期間事件。單次最多 100 行及約 512 KiB。progress 不失效正文、標註或封面。啟動、恢復與遷移可全量讀取。封面版本使用 contentVersions；全庫預熱範圍、容量、跳轉與完整圖組門檻不變。

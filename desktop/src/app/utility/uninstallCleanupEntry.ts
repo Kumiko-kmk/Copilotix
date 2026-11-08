@@ -1,5 +1,7 @@
 import { executeUninstallCleanup, prepareUninstallCleanup, type UninstallCleanupOptions, type UninstallCleanupPlan } from '@platform/uninstall/utility/uninstallCleanup'
+import { FULL_IDENTITY, LITE_IDENTITY } from '../contract/appIdentity'
 
+const USER_DATA_FOLDER = (__COPILOTIX_LITE__ ? LITE_IDENTITY : FULL_IDENTITY).userDataFolder
 const port = process.parentPort
 if (!port) throw new Error('Uninstall utility parent port is unavailable')
 let plan: UninstallCleanupPlan | undefined
@@ -10,7 +12,7 @@ port.on('message', async (event) => {
   try {
     const message = event.data as { action?: string; options?: UninstallCleanupOptions; token?: string }
     if (message.action === 'preview' && message.options && !plan) {
-      plan = await prepareUninstallCleanup(message.options)
+      plan = await prepareUninstallCleanup(message.options, USER_DATA_FOLDER)
       port.postMessage({ ok: true, plan })
     } else if (message.action === 'apply' && plan && message.token === plan.token) {
       await executeUninstallCleanup(plan)

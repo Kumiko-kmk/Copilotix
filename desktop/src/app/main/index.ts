@@ -3,6 +3,7 @@ import { app, dialog, protocol } from 'electron'
 import { runUninstallCleanup, UNINSTALL_CLEANUP_ARG } from '@platform/uninstall/main/uninstallCleanup'
 import { shouldRunPackagedSmoke } from '../contract/packagedSmoke'
 import { bootstrap } from './bootstrap'
+import { APP_IDENTITY } from './identity'
 import { runPackagedSmoke } from './packagedSmoke'
 import { appShell, libraryGate, services, startup } from './services'
 import { acquirePrimaryInstance } from './singleInstance'
@@ -12,7 +13,7 @@ import { acquirePrimaryInstance } from './singleInstance'
 const packagedSmokeMode = shouldRunPackagedSmoke(process.argv, app.isPackaged)
 
 if (app.isPackaged && process.argv.includes(UNINSTALL_CLEANUP_ARG)) {
-  void runUninstallCleanup()
+  void runUninstallCleanup({ name: APP_IDENTITY.productName, userDataFolder: APP_IDENTITY.userDataFolder, credentialService: APP_IDENTITY.credentialService })
 } else if (packagedSmokeMode) {
   void runPackagedSmoke()
 } else {
@@ -36,9 +37,9 @@ function startNormalApp(): void {
     }
   ])
 
-  app.setName('Copilotix')
+  app.setName(APP_IDENTITY.productName)
   const isolatedUserData = process.env.NODE_ENV === 'test' ? process.env.COPILOTIX_E2E_USER_DATA : undefined
-  app.setPath('userData', isolatedUserData || join(app.getPath('appData'), 'Copilotix-Translation-v2'))
+  app.setPath('userData', isolatedUserData || join(app.getPath('appData'), APP_IDENTITY.userDataFolder))
   if (!acquirePrimaryInstance(app, () => appShell.mainWindow)) return
 
   app.on('before-quit', (event) => {
@@ -69,7 +70,7 @@ function startNormalApp(): void {
       const message = (startup.phase === 'core-start' || startup.phase === 'repository-init')
         ? '核心服务或文档数据库无法初始化。请勿删除原数据库或使用更旧版本反复尝试。升级前快照（如已生成）保存在下方目录，名称含 pre-migration；恢复方法见文档库管理指南。\n\n' + app.getPath('userData')
         : '核心服务无法启动，请重试。'
-      dialog.showErrorBox('Copilotix 启动失败', message)
+      dialog.showErrorBox(`${APP_IDENTITY.productName} 启动失败`, message)
     }
     app.quit()
   })

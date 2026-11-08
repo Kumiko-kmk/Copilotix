@@ -1,9 +1,11 @@
+import { loadDocumentBase } from '@features/document/renderer'
 import type { DocumentDetails } from '../../contract/documentSchemas'
 import type { ArchivePaper } from './archiveShelves'
 
 const documentRequests = new Map<string, Promise<DocumentDetails>>()
 
 export function archivePaperRevision(paper: ArchivePaper): string {
+  if (paper.contentVersions) return JSON.stringify(paper.contentVersions)
   return `${paper.updatedAt ?? paper.createdAt}:${paper.workflow.status}`
 }
 
@@ -12,7 +14,7 @@ export function loadArchiveDocument(documentId: string, revision: string): Promi
   const key = `${documentId}:${revision}`
   const pending = documentRequests.get(key)
   if (pending) return pending
-  const request = window.copilotix.getDocument(documentId)
+  const request = window.copilotix.getDocument(documentId).then(loadDocumentBase)
   documentRequests.set(key, request)
   const clear = (): void => { if (documentRequests.get(key) === request) documentRequests.delete(key) }
   void request.then(clear, clear)

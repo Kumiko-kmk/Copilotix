@@ -16,6 +16,7 @@ dist/
 
 # Desktop build, test, and release output
 desktop/out/
+desktop/out-lite/
 desktop/dist/
 desktop/coverage/
 desktop/test-results/
@@ -53,3 +54,8 @@ debug/
 *.p12
 *.key
 *.pem
+
+# Workspace-local isolated test libraries
+desktop/.test-tmp/
+
+desktop/baseline-e2e-results/

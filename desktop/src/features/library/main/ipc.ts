@@ -113,11 +113,13 @@ export function registerLibraryIpc(ipc: IpcRegistrar, deps: LibraryIpcDeps): voi
     if (!existing) throw new Error('内置教程论文导入失败')
     return projectDocumentSummary(existing)
   })
+  ipc.handle(libraryChannels.snapshot, () => deps.feed.snapshot())
   ipc.handle(libraryChannels.list, () => deps.feed.list())
   ipc.handle(libraryChannels.retry, (_event, documentId) => {
     return tasks.retry(documentId)
   })
   ipc.handle(libraryChannels.delete, (_event, request) => deps.deleteDocument(request.documentId, request.deleteFiles))
+  ipc.handle(libraryChannels.rename, (_event, request) => deps.tasks.rename(request.documentId, request.title))
   ipc.handle(libraryChannels.get, async (_event, documentId) => {
     const details = projectDocumentDetails(await tasks.getDocument(documentId))
     const summary = await repository.getDocumentSummary(documentId)

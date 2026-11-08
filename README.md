@@ -1,93 +1,118 @@
-# 📚 Copilotix
+<div align="center">
 
-**把 PDF 解析、中文翻译、原文对照与论文 AI 问答，放进同一个阅读工作台。**
+# Copilotix
 
-Copilotix 是面向论文阅读的 Windows 桌面应用。导入 PDF，经 MinerU 在线解析和所选服务翻译；在 PDF、原文、中文和 AI 问答四个视图之间自由分组。文献产物、聊天与草稿保存在本地，重新打开后继续阅读。
+**读论文，也读懂论文。**
 
-**当前版本：1.2.0 · Windows x64**
+PDF · 中英对照 · 文献档案 · AI 问答
 
-[下载安装](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.2.0) · [中文 Wiki](https://github.com/Kumiko-kmk/Copilotix/wiki) · [完整更新说明](docs/releases/1.2.0.zh-CN.md) · [反馈问题](https://github.com/Kumiko-kmk/Copilotix/issues)
+[下载完整版](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.3.0) · [Lite 版](#copilotix-lite) · [使用指南](https://github.com/Kumiko-kmk/Copilotix/wiki) · [反馈](https://github.com/Kumiko-kmk/Copilotix/issues)
 
-![Copilotix 1.2.0 实际运行：文库档案与文本标注](docs/images/screenshots/library-1.2.0.png)
+Windows x64 · Electron / React · 本地文库 · MIT
 
-*实际运行截图：《Factorized Fourier Neural Operators》的独立示例文库，左侧为档案封面，右侧为背景分点及选区标注工具。*
+</div>
 
-## ✨ 1.2.0 的主要功能
+![完整版文库浏览](docs/images/demos/2-library-browse.gif)
 
-- **阅读工作台**：四视图自由拆分、拖动、关闭后重开与分组最大化；恢复布局，原文／中文按内容块联动，PDF 可单独启用同步。
-- **文库档案**：按内容分类、检索和展开论文，查看摘要、背景、结论、讨论；支持高亮、下划线及笔记，点击封面或按 Enter 进入阅读器。
-- **论文问答**：Qwen／DeepSeek 预设模型及本机 Codex，支持加入选区和引用定位；按文献保存对话、完整回答、草稿、选区与模型，重开后恢复。
-- **紧凑阅读**：清除 PDF 外围、右侧、底部及页间额外留白；浮动滚动条不占版面，调整宽度和缩放保留页码与页内位置；减小正文段落间距。
-- **翻译与标注**：翻译源顺序、失败回退与部分重试；保留 HTML 合并表格、LaTeX 数学和多子图，原文和中文分别标注并记录笔记。
-- **主题与字号**：三套浅色、三套深色主题及阅读字号，统一预览、保存与放弃更改。
-- **导出与文库**：另存标准 Markdown 及相邻图片、导出结果 ZIP；完整文库备份、恢复和迁移。
+Copilotix 把论文的解析、翻译、整理和问答放在同一个桌面工作台里。导入 PDF，打开原文与中文对照，把重要段落留下来，带着选区继续提问；回到文库时，论文以档案的形式排开。
 
-正式导入格式为 **PDF**。JSON 阅读视图和自定义模型入口已移除，底层版面产物与既有聊天历史保留。
+本页介绍仓库中的**完整版**。当前已发布完整版为 **1.3.0**；源码中的后续改进以对应版本发布说明为准。动图由实际运行录制于 2026-10-19，展示完整版的首页、文库与档案交互。
 
-## 🚀 三步开始
+## 从文库走进论文
 
-1. 从 [1.2.0 Release](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.2.0) 下载并运行 `setup.exe`；完整程序已内嵌，无需另外下载运行目录。
-2. 在「设置 → 服务连接」验证 MinerU Token 和所需服务，点击「保存全部更改」；确认翻译来源与文献保存位置。
-3. 选择或拖入 PDF，在文库中查看档案或打开文献；按需拆分对照阅读、标注和记笔记，使用在线服务前了解接收服务与发送内容。
+按内容分类浏览论文，检索标题，展开档案查看摘要、研究背景、结论与讨论。封面、图组和结构化内容一起呈现，选中论文后直接进入阅读。
 
-从 1.2.0 起，Release 只提供安装包和源代码下载，校验信息保留在构建流程内部。安装、覆盖升级及资料保留见 [Windows 安装指南](docs/WINDOWS_INSTALLATION_ZH.md)。
+![完整版档案展开：封面与论文摘要](docs/images/demos/3-archive-detail.gif)
 
-> ⚠️ 1.2.0 经维护者授权，以未签章形式发布；Windows 可能显示发布者未知或安全提示。此授权仅适用于本版本，请从上方 Release 链接下载。
+## 一张桌面，四种阅读方式
 
-<a id="api-keys"></a>
+PDF、原文、中文与问答可以自由拆分和分组。把原文放在译文旁边，或让问题留在阅读区一侧；按内容块定位，随时返回对应的论文位置。
 
-## 🔑 服务与模型
+- **对照阅读**：PDF 缩放、页码跳转、视图同步与布局恢复。
+- **保留内容结构**：公式、合并表格、多子图与图说按解析结果呈现。
+- **阅读即整理**：高亮、下划线、笔记；双击编辑正文，段落删除、恢复和拖曳排序。
+- **引用随手查**：悬停正文参考文献标号查看条目，移入卡片继续阅读，点击复制编号后的文字。
+- **带走结果**：导出 Markdown 与图片，或打包结果 ZIP。
 
-程序不附带 API Key。问答和翻译共用对应服务凭据，分别选择模型，切换问答模型不会修改翻译配置。
+<details>
+<summary>看看完整版的首页</summary>
 
-| 服务 | 解析／翻译 | 论文问答 |
-| --- | --- | --- |
-| MinerU | 在线 PDF 解析 | — |
-| Qwen／千问 | `qwen-mt-plus` | `qwen-plus`、`qwen3.8-flash`、`qwen3.8-max` |
-| DeepSeek | `deepseek-flash` | `deepseek-flash`、`deepseek-v4-pro` |
-| Codex | 本机账号可用模型 | 本机账号可用模型 |
-| Bing／腾讯 TranSmart | 无需 Key 的网页翻译来源 | — |
+![完整版首页与导入入口](docs/images/demos/1-home-cipher.gif)
 
-Qwen／DeepSeek 为 **1.2.0 预设选择项**，实际可用性以服务商、账号和地域为准；Codex 从本机登录账号读取可用模型。Qwen 接入北京地域 DashScope，Key 与地域须匹配。翻译按已保存的来源顺序执行，跳过未启用或缺少有效凭据的服务；只向指定来源发送时关闭其他来源。
+</details>
 
-凭据申请、验证与权限说明见 [Wiki 服务配置](https://github.com/Kumiko-kmk/Copilotix/wiki/Service-Setup)。
+## 带着上下文提问
 
-## 💾 本地资料与发送范围
+把选区、整段文字或图片加入问答，围绕当前论文继续追问。回答中的可定位引用可以带你返回原文；对话、草稿与所选模型按论文保存。
 
-文献保存在 `<文档保存位置>/documents-v2/<documentId>/`：PDF、原文、译文、图片和版面信息；`chat/` 保存会话及对话轮次，API Key 由 Windows 系统凭据存储管理。
+在线模型支持 Qwen / 千问、DeepSeek，也可以连接本机已登录的 Codex。各功能共享连接管理与凭据。具体模型和可用能力以应用设置与账号返回结果为准。
 
-解析上传 PDF 到 MinerU；翻译向实际来源发送文本；问答发送问题、近期对话、选区及文献片段，短论文可能发送完整已解析文本，首次发送需确认。
+完整版还提供论文档案生成、图片解读和 [Zotero 连接](docs/ZOTERO_BRIDGE_ZH.md)。AI 结果用于辅助理解，重要结论仍应对照论文核实。
 
-档案卡在解析后自动生成，向所选模型发送完整的已解析文本；图片解读按操作发送对应图片。原文、译文、档案及笔记分别保存，重新生成档案不会重新解析或翻译论文。
+<a id="copilotix-lite"></a>
 
-**结果 ZIP 包含已有聊天、草稿和选区，分享前检查内容。** 文库备份另含数据库及已保存设置，不含系统凭据；修改保存位置只影响新任务，搬移旧库使用迁移功能。
+## Copilotix Lite
 
-## 📖 分步指南
+Lite 保留阅读核心，以列表侧栏取代完整档案场景，适合希望直接打开论文的用户。
 
-| 想了解什么 | Wiki |
-| --- | --- |
-| 导入、任务状态、对照阅读与导出 | [第一篇论文](https://github.com/Kumiko-kmk/Copilotix/wiki/First-Paper) |
-| 拆分、同步、标注与快捷键 | [阅读工作台](https://github.com/Kumiko-kmk/Copilotix/wiki/Reader-Workbench) |
-| 模型、选区、引用与聊天恢复 | [论文 AI 问答](https://github.com/Kumiko-kmk/Copilotix/wiki/Paper-AI-Chat) |
-| 文件目录、导出、备份与迁移 | [本地资料与导出](https://github.com/Kumiko-kmk/Copilotix/wiki/Local-Data-and-Export) |
-| 凭据、任务或界面问题 | [常见问题](https://github.com/Kumiko-kmk/Copilotix/wiki/FAQ) |
+| | 完整版 | Lite 1.0 |
+|---|---|---|
+| 文献入口 | 可视化文库、档案展开 | 侧栏、标题搜索、置顶与分类 |
+| PDF / 原文 / 中文 / 问答 | 支持 | 支持 |
+| 档案场景与首页特效 | 支持 | 不包含 |
+| 同时阅读 | 工作台内四视图 | 四视图、双论文分屏、独立窗口 |
+| 设置 | 多密钥与模型配置 | 服务、存储、外观三个页面 |
+| 安装与数据 | 独立 | 独立，可与完整版并存 |
 
-Wiki 按主题提供截图，以及 [解析流程示意图](docs/images/pdf-structure-source.png) 和 [本地文件示意图](docs/images/local-paper-files-1.1.0.png)。
+[Lite 发布说明](docs/releases/lite/1.0.0.zh-CN.md) · [下载列表](https://github.com/Kumiko-kmk/Copilotix/releases)
 
-## 🛠️ 开发
+两版不自动共用文库和 API Key；可通过数据导出／导入迁移论文，密钥需分别配置。Lite 继续使用 Electron，不承诺未经测量的内存或速度改善。
 
-使用 **Node.js 24.19.0、pnpm 11.19.0**；桌面应用采用 Electron／React，SQLite 与文件处理在独立 Utility 中执行，不需要 Python 或 CUDA。
+## 开始使用
 
-```powershell
-pnpm install
-pnpm desktop:dev
-# 生成本地安装包
-pnpm desktop:build:bundles
-pnpm desktop:release:from-built
+1. 从对应的 [GitHub Release](https://github.com/Kumiko-kmk/Copilotix/releases) 下载 `setup.exe`，按向导安装。
+2. 在设置中配置 MinerU Token，以及准备使用的模型服务或本机 Codex，保存更改。
+3. 选择或拖入 PDF，等待解析后开始对照阅读；翻译与问答使用已启用的服务。
+
+程序不附带 API Key，也不需要安装 Python 或 CUDA。解析需要网络；服务费用、额度和可用地域由相应供应商决定。安装包的签章状态见对应 Release。
+
+[第一篇论文](https://github.com/Kumiko-kmk/Copilotix/wiki/First-Paper) · [服务配置](https://github.com/Kumiko-kmk/Copilotix/wiki/Service-Setup) · [阅读工作台](https://github.com/Kumiko-kmk/Copilotix/wiki/Reader-Workbench) · [安装与升级](docs/WINDOWS_INSTALLATION_ZH.md)
+
+## 资料保存在哪里
+
+PDF、解析正文、译文、图片和用户编辑保存在本地文献目录；聊天与草稿跟随论文保存。API Key 放在 Windows 系统凭据存储中，不写入文库备份。
+
+使用在线服务时，解析会向 MinerU 发送 PDF；翻译、问答、档案生成和图片解读会向实际启用的模型发送所需内容。**本地保存不等于离线处理。** 分享结果 ZIP 或备份前，请检查其中的聊天、笔记和文献内容。
+
+文库支持备份、恢复与迁移；卸载默认保留个人资料。详见 [本地数据与导出](https://github.com/Kumiko-kmk/Copilotix/wiki/Local-Data-and-Export) 和 [文库管理](docs/LIBRARY_MANAGEMENT_ZH.md)。
+
+## 项目结构
+
+![Copilotix 概念架构](docs/images/architecture-illustration-v2.png)
+
+*架构概念插图，由图像模型生成；界面展示使用上方真实录屏。*
+
+React 负责阅读界面，Electron Main 管理窗口、受控访问与功能调度，独立 Utility 承担文档模型、SQLite 和计算任务。统一文档模型连接阅读、编辑、翻译与导出，共享模型层管理供应商连接和调用。
+
+```text
+desktop/src/
+├── app/        进程入口与应用组装
+├── features/   文档、阅读、文库、解析、翻译、问答、设置
+└── platform/   数据库、模型连接、IPC、资源与系统能力
 ```
 
-源码构建的 `program/Copilotix.exe` 必须连同完整运行目录使用。开发流程见 [AGENTS.md](AGENTS.md) 和 [工程文档](docs/README.md)，Wiki 源文件在 [docs/wiki](docs/wiki)。正式合并与发布遵守 [Windows CI](https://github.com/Kumiko-kmk/Copilotix/actions/workflows/desktop-windows.yml) 和 [签章政策](docs/CODE_SIGNING_POLICY.md)。
+开发使用 **Node.js 24.19.0** 与 **pnpm 11.19.0**：
 
-## 📄 许可与致谢
+```powershell
+pnpm install --frozen-lockfile
+pnpm desktop:dev
+pnpm --dir desktop dev:lite
+```
 
-自有代码采用 [MIT](LICENSE.md)，依赖与服务保留各自条款，见 [第三方声明](THIRD_PARTY_NOTICES.md)。感谢 MinerU、Electron、React、PDF.js 等项目。示例论文：[Attention Is All You Need](https://arxiv.org/abs/1706.03762)。安全问题按 [Security Policy](docs/SECURITY.md) 报告。
+[架构与边界](docs/ARCHITECTURE_ZH.md) · [开发与测试](docs/DESKTOP_DEVELOPMENT_ZH.md) · [发布流程](docs/DESKTOP_RELEASE_ZH.md) · [贡献入口](AGENTS.md)
+
+## 许可与致谢
+
+自有代码采用 [MIT](LICENSE.md)。感谢 MinerU、Electron、React、PDF.js、KaTeX 等开源项目；依赖与服务保留各自条款，详见 [第三方声明](THIRD_PARTY_NOTICES.md)。论文演示中的内容归原作者所有。
+
+安全问题请按 [Security Policy](docs/SECURITY.md) 报告。

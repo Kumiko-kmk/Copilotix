@@ -49,6 +49,7 @@ async function edit() {
   // Navigation guards need the real settings page and modal, without exit animations.
   render(<QueryClientProvider client={client}><ConfigProvider theme={{ token: { motion: false } }}><App /></ConfigProvider></QueryClientProvider>)
   fireEvent.click(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('button', { name: /设置$/u }))
+  await screen.findByRole('navigation', { name: '设置分类' })
   fireEvent.click(settingsNavigation().getByRole('button', { name: /模型设置/u }))
   fireEvent.click(screen.getByLabelText('启用千问 / Qwen'))
   expect(screen.getByText('有未保存的更改')).toBeTruthy()
@@ -82,10 +83,11 @@ it('stays on the settings page and retains drafts when saving fails', async () =
 })
 it('guards native document-open requests and retains failed credential fields after a partial save', async () => {
   await edit()
-  saveSettings.mockResolvedValueOnce({ settings, fieldErrors: { qwen: { message: '密钥无效' } } })
-  fireEvent.click(settingsNavigation().getByRole('button', { name: /服务连接/u }))
-  const input = within(document.querySelector('[data-provider="qwen"]') as HTMLElement).getByPlaceholderText('输入新密钥')
-  fireEvent.change(input, { target: { value: 'invalid-test-key' } })
+  saveSettings.mockImplementationOnce(async (update: SettingsUpdate) => ({ settings, fieldErrors: {},
+    keyErrors: Object.fromEntries(Object.keys(update.keyMutations ?? {}).map(id => [id, { code: 'CREDENTIAL_INVALID', message: '密钥无效' }])) }))
+  fireEvent.click(settingsNavigation().getByRole('button', { name: /API 密钥/u }))
+  fireEvent.change(screen.getByLabelText('新 API Key'), { target: { value: 'invalid-test-key' } })
+  fireEvent.click(screen.getByRole('button', { name: /添加/u }))
   fireEvent.click(settingsNavigation().getByRole('button', { name: /模型设置/u }))
   await waitFor(() => expect(openDocument).toBeTypeOf('function'))
   // Use an actual event so React processes the native callback through its normal event boundary.
@@ -93,7 +95,7 @@ it('guards native document-open requests and retains failed credential fields af
   fireEvent.click(dialogButton('保存并离开'))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(screen.queryByRole('region', { name: '阅读页面' })).toBeNull()
-  fireEvent.click(settingsNavigation().getByRole('button', { name: /服务连接/u }))
+  fireEvent.click(settingsNavigation().getByRole('button', { name: /API 密钥/u }))
   expect(screen.getByDisplayValue('invalid-test-key')).toBeTruthy()
   expect(screen.getByText('密钥无效')).toBeTruthy()
 })

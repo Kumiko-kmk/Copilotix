@@ -1,7 +1,7 @@
 // Module boundaries from docs/adr/0001-feature-modules.md, run with `pnpm deps`.
 // Every rule is an error since M5; `pnpm deps` must report no violations.
 
-const FEATURES = ['library', 'parsing', 'translation', 'reader', 'chat', 'insight', 'zotero', 'settings']
+const FEATURES = ['document', 'library', 'parsing', 'translation', 'reader', 'chat', 'insight', 'zotero', 'settings']
 
 /** Files of one process layer: `<unit>/<layer>/` inside app, platform/<concern> or features/<name>. */
 function layer(...names) {
@@ -104,7 +104,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '^(?:out|node_modules)/' },
+    exclude: { path: '^(?:out|out-lite|node_modules)/' },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: { extensions: ['.ts', '.tsx', '.mjs', '.js', '.d.ts'] },

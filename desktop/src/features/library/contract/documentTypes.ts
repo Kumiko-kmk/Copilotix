@@ -1,3 +1,4 @@
+import type { DocumentBase, DocumentModelDescriptor } from '@features/document/contract/documentModel'
 import type { ResolvedMarkdownEdits } from '@features/reader/contract/markdownEdits'
 import { type TranslationProviderId, type TranslatedMarkdownBlock } from '@features/translation/contract/translationTypes'
 import { type BlockMapping } from '@features/parsing/contract/blocks'
@@ -46,6 +47,8 @@ export interface HealthResult {
 }
 
 export interface DocumentPayload {
+  base?: DocumentBase
+  modelDescriptor?: DocumentModelDescriptor
   task: CopilotixTask
   markdown: string
   translatedMarkdown: string

@@ -1,23 +1,24 @@
-import type { TranslationProviderId } from './translationTypes'
+import type { ActiveTranslationProviderId, TranslationProviderId } from './translationTypes'
 
-export const TRANSLATION_PROVIDER_IDS = ['qwen', 'deepseek', 'bing', 'transmart', 'codex'] as const satisfies readonly TranslationProviderId[]
+export const TRANSLATION_PROVIDER_IDS = ['qwen', 'deepseek', 'codex'] as const satisfies readonly ActiveTranslationProviderId[]
+export const HISTORICAL_TRANSLATION_PROVIDER_IDS = ['qwen', 'deepseek', 'bing', 'transmart', 'codex'] as const
+export const isActiveProvider = (value: unknown): value is ActiveTranslationProviderId =>
+  typeof value === 'string' && (TRANSLATION_PROVIDER_IDS as readonly string[]).includes(value)
 
-export function providerOrderForPreferred(preferred: TranslationProviderId): TranslationProviderId[] {
-  return [preferred, ...TRANSLATION_PROVIDER_IDS.filter((provider) => provider !== preferred)]
+export function providerOrderForPreferred(preferred: TranslationProviderId | null): ActiveTranslationProviderId[] {
+  return isActiveProvider(preferred) ? [preferred, ...TRANSLATION_PROVIDER_IDS.filter((provider) => provider !== preferred)] : [...TRANSLATION_PROVIDER_IDS]
 }
 
-export function normalizeProviderOrder(value: unknown, preferred: TranslationProviderId): TranslationProviderId[] {
+export function normalizeProviderOrder(value: unknown, preferred: TranslationProviderId | null): ActiveTranslationProviderId[] {
   if (!Array.isArray(value)) return providerOrderForPreferred(preferred)
-  const valid = value.filter((provider): provider is TranslationProviderId =>
-    typeof provider === 'string' && TRANSLATION_PROVIDER_IDS.includes(provider as TranslationProviderId))
-  if (new Set(valid).size !== valid.length || valid.length !== value.length) return providerOrderForPreferred(preferred)
+  const valid = [...new Set(value.filter(isActiveProvider))]
   return [...valid, ...TRANSLATION_PROVIDER_IDS.filter(id => !valid.includes(id))]
 }
 
-export function normalizeEnabledProviders(value: unknown, order: readonly TranslationProviderId[]): TranslationProviderId[] {
-  if (!Array.isArray(value)) return order.filter(id => id !== 'codex')
-  const enabled = order.filter((provider) => value.includes(provider))
-  return enabled.length > 0 ? enabled : order.filter(id => id !== 'codex')
+export function normalizeEnabledProviders(value: unknown, order: readonly TranslationProviderId[]): ActiveTranslationProviderId[] {
+  if (!Array.isArray(value)) return order.filter(isActiveProvider).filter(id => id !== 'codex')
+  const enabled = order.filter(isActiveProvider).filter((provider) => value.includes(provider))
+  return enabled
 }
 
 export function executableProviderOrder(
@@ -26,9 +27,8 @@ export function executableProviderOrder(
   credentialStates: { qwen: { state: string }; deepseek: { state: string } }
 ): TranslationProviderId[] {
   const enabledSet = new Set(enabled)
-  // Blocks that still fail on Codex after its own backoff fall through to the next enabled
-  // provider; disabling the others is the switch for Codex-only translation.
-  return order.filter((provider) => {
+  // Only explicitly enabled, executable connections participate in authorized fallback.
+  return order.filter(isActiveProvider).filter((provider) => {
     if (!enabledSet.has(provider)) return false
     if (provider === 'qwen' || provider === 'deepseek') return credentialStates[provider].state === 'valid'
     return true

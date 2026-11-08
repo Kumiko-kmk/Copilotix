@@ -207,7 +207,6 @@ describe("taskService", () => {
         const translationRunner = new TranslationJobRunner({
           repository,
           settingsService: settings,
-          vault,
           fetcher,
           compute,
           pathPolicy: new PathPolicy()

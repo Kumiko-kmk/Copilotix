@@ -1,19 +1,19 @@
 import React from 'react'
-import { DEFAULT_CODEX_SETTINGS } from '@platform/codex/contract/codex'
-import { refreshCodexStatus, loadStorageInfo, SettingsPage } from '@features/settings/renderer'
+import AppleLoader from '@platform/ui/renderer/AppleLoader'
+import { loadSettingsPage } from '@features/settings/renderer'
 // Direct import: the reader barrel re-exports Markdown rendering (KaTeX CSS) that must stay in the lazy reader chunk.
 import { loadReaderPage, loadedReaderPage } from '@features/reader/renderer/readerPageLoader'
-import { Button, Modal } from 'antd'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { AppstoreOutlined, FileAddOutlined, GithubOutlined, ReadOutlined, SettingOutlined } from '@ant-design/icons'
-import type { AppSettings } from '@features/settings/contract/settingsTypes'
-import type { DocumentDetails, DocumentSummary } from '@features/library/contract/documentSchemas'
+import type { DocumentSummary } from '@features/library/contract/documentSchemas'
 import EdgeDock from './EdgeDock'
 import WindowControls from './WindowControls'
-import { NewParsePage, TutorialPage, applyDocumentChange, getDocumentRefreshPlan, patchDocumentDetails, type DocumentListCache, loadLibraryCategories, requestLibraryFocus, ACTIVE_STATUSES } from '@features/library/renderer'
-import type { SettingsNavigationGuard } from '@features/settings/renderer'
+import { useAppData } from './useAppData'
+import { useGuardedViews } from './useGuardedViews'
+import { DecoratedHomePage, TutorialPage, type DocumentListCache, loadLibraryCategories, requestLibraryFocus, ACTIVE_STATUSES } from '@features/library/renderer'
 
 const ReaderPage = React.lazy(loadReaderPage)
+const SettingsPage = React.lazy(loadSettingsPage)
 // Three.js is only loaded once the archive is opened.
 const LibraryPage = React.lazy(() => import('@features/library/renderer/LibraryPage'))
 
@@ -30,54 +30,8 @@ export default function App(): React.JSX.Element {
     generate: (documentId) => window.copilotix.paperInsight.generate({ documentId }),
     subscribe: (listener) => window.copilotix.paperInsight.onChanged(({ documentId, state }) => listener(documentId, state))
   }), [])
-  const [view, setView] = React.useState<View>({ name: 'new' })
-  const viewRef = React.useRef(view)
-  viewRef.current = view
-  const settingsGuard = React.useRef<SettingsNavigationGuard | null>(null)
-  const [guardBusy, setGuardBusy] = React.useState(false)
-  const [pendingView, setPendingView] = React.useState<View | null>(null)
-  const [leaving, setLeaving] = React.useState(false)
-  const leavingRef = React.useRef(false)
-  const onNavigationGuardChange = React.useCallback((guard: SettingsNavigationGuard | null) => {
-    settingsGuard.current = guard
-    setGuardBusy(Boolean(guard?.busy))
-  }, [])
-  const requestViewChange = React.useCallback((next: View) => {
-    if (leavingRef.current) return
-    if (viewRef.current.name === 'settings' && next.name !== 'settings' && (settingsGuard.current?.dirty || settingsGuard.current?.busy)) {
-      setPendingView(next)
-    } else setView(next)
-  }, [])
-  const saveAndLeave = async (): Promise<void> => {
-    const guard = settingsGuard.current
-    if (!pendingView || !guard || guard.busy || leavingRef.current) return
-    const destination = pendingView
-    leavingRef.current = true
-    setLeaving(true)
-    try {
-      if (await guard.save()) setView(destination)
-    } finally {
-      setPendingView(null)
-      leavingRef.current = false
-      setLeaving(false)
-    }
-  }
-  const discardAndLeave = (): void => {
-    if (!pendingView || guardBusy || leavingRef.current) return
-    settingsGuard.current?.discard()
-    setView(pendingView)
-    setPendingView(null)
-  }
-  const settingsQuery = useQuery<AppSettings>({
-    queryKey: ['settings'],
-    queryFn: () => window.copilotix.getSettings()
-  })
-  const documentsQuery = useQuery<DocumentListCache>({
-    queryKey: ['documents'],
-    queryFn: async () => ({ revision: 0, documents: await window.copilotix.listDocuments() })
-  })
-  const settings = settingsQuery.data
-  const documents = documentsQuery.data?.documents ?? []
+  const { view, requestViewChange, onNavigationGuardChange, guardDialog } = useGuardedViews<View>({ name: 'new' })
+  const { settingsQuery, documentsQuery, settings, documents, mergeImported, onSettingsSaved } = useAppData()
   // The home progress card: papers imported in this session plus any still processing, until dismissed.
   const [recentImportIds, setRecentImportIds] = React.useState<readonly string[]>([])
   const [dismissedProgressIds, setDismissedProgressIds] = React.useState<ReadonlySet<string>>(() => new Set())
@@ -86,29 +40,9 @@ export default function App(): React.JSX.Element {
   ), [documents, recentImportIds, dismissedProgressIds])
   const onImported = React.useCallback((created: DocumentSummary[]) => {
     const ids = new Set(created.map((document) => document.id))
-    queryClient.setQueryData<DocumentListCache>(['documents'], (current) => ({
-      revision: current?.revision ?? 0,
-      documents: [...created, ...(current?.documents ?? []).filter((item) => !ids.has(item.id))]
-    }))
+    mergeImported(created)
     setRecentImportIds((current) => [...ids, ...current.filter((id) => !ids.has(id))])
-    // New papers join the library, and the home backdrop's titles, as soon as they are listed.
-    void queryClient.invalidateQueries({ queryKey: ['documents'] })
-  }, [queryClient])
-  const codexStartupChecked = React.useRef(false)
-  React.useEffect(() => {
-    if (!settings || codexStartupChecked.current) return
-    codexStartupChecked.current = true
-    void refreshCodexStatus(settings.codex ?? DEFAULT_CODEX_SETTINGS).catch(() => undefined)
-  }, [settings])
-
-  React.useEffect(() => {
-    if (!settings?.outputRoot) return
-    const preload = (): void => { void loadStorageInfo(settings.outputRoot).catch(() => undefined) }
-    preload()
-    const timer = setInterval(preload, 60_000)
-    return () => clearInterval(timer)
-  }, [settings?.outputRoot, documentsQuery.dataUpdatedAt])
-
+  }, [mergeImported])
 
   React.useEffect(() => {
     if (!settingsQuery.isSuccess || !documentsQuery.isSuccess || documents.length > 0) return
@@ -118,46 +52,11 @@ export default function App(): React.JSX.Element {
     requestViewChange({ name: 'tutorial' })
   }, [settingsQuery.isSuccess, documentsQuery.isSuccess, documents.length, requestViewChange])
 
-  React.useEffect(() => {
-    const stop = window.copilotix.onDocumentsChanged((change) => {
-      const current = queryClient.getQueryData<DocumentListCache>(['documents'])
-      const previousSummaries = new Map(current?.documents.map((document) => [document.id, document] as const))
-      if (!current) {
-        void queryClient.invalidateQueries({ queryKey: ['documents'] })
-      } else {
-        queryClient.setQueryData(['documents'], applyDocumentChange(current, change))
-      }
-
-      for (const summary of change.upserted) {
-        const refreshPlan = getDocumentRefreshPlan(previousSummaries.get(summary.id), summary)
-        queryClient.setQueryData<DocumentDetails>(['document', summary.id], (detail) =>
-          patchDocumentDetails(detail, change)
-        )
-        if (refreshPlan.invalidateDocument) {
-          void queryClient.invalidateQueries({ queryKey: ['document', summary.id] })
-        }
-        for (const view of refreshPlan.annotationViews) {
-          void queryClient.invalidateQueries({ queryKey: ['annotations', summary.id, view] })
-        }
-      }
-      for (const documentId of change.removedIds) {
-        queryClient.removeQueries({ queryKey: ['document', documentId] })
-        queryClient.removeQueries({ queryKey: ['annotations', documentId] })
-      }
-    })
-    const stopOpen = window.copilotix.onOpenDocument((documentId) => requestViewChange({ name: 'reader', documentId }))
-    return () => {
-      stop()
-      stopOpen()
-    }
-  }, [queryClient, requestViewChange])
+  React.useEffect(() => window.copilotix.onOpenDocument((documentId) => requestViewChange({ name: 'reader', documentId })), [requestViewChange])
 
   // The reader returns to where it was opened from; the home page otherwise.
   const openFromLibrary = React.useCallback((documentId: string) => requestViewChange({ name: 'reader', documentId, returnTo: 'library' }), [requestViewChange])
   const openFromTutorial = React.useCallback((documentId: string) => requestViewChange({ name: 'reader', documentId, returnTo: 'tutorial' }), [requestViewChange])
-  const onSettingsSaved = React.useCallback((next: AppSettings) => {
-    queryClient.setQueryData(['settings'], next)
-  }, [queryClient])
   const ActiveReaderPage = view.name === 'reader' && view.returnTo === 'library' ? loadedReaderPage() ?? ReaderPage : ReaderPage
 
   return (
@@ -176,7 +75,7 @@ export default function App(): React.JSX.Element {
       </EdgeDock>
       <main className="main-surface">
         {view.name === 'new' && settings ? (
-          <NewParsePage
+          <DecoratedHomePage
             settings={settings}
             documents={documents}
             progressDocuments={progressDocuments}
@@ -192,7 +91,7 @@ export default function App(): React.JSX.Element {
           />
         ) : null}
         {view.name === 'library' ? (
-          <React.Suspense fallback={<div className="page-loading">正在加载文库…</div>}>
+          <React.Suspense fallback={<div className="page-loading"><AppleLoader label="正在打开文库" /></div>}>
             <LibraryPage insights={insights} loadCategories={loadLibraryCategories} documents={documents} onOpen={openFromLibrary} onCreate={() => requestViewChange({ name: 'new' })} />
           </React.Suspense>
         ) : null}
@@ -203,29 +102,22 @@ export default function App(): React.JSX.Element {
           onOpenReader={openFromTutorial}
           onImported={(document) => {
             queryClient.setQueryData<DocumentListCache>(['documents'], (current) => ({
+              sessionId: current?.sessionId,
               revision: current?.revision ?? 0,
               documents: [document, ...(current?.documents ?? []).filter((item) => item.id !== document.id)]
             }))
           }}
           onClose={() => requestViewChange({ name: 'new' })}
         /> : null}
-        {view.name === 'settings' && settings ? <SettingsPage settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange} /> : null}
+        {view.name === 'settings' && settings ? <React.Suspense fallback={<div className="page-loading"><AppleLoader label="正在打开设置" /></div>}><SettingsPage settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange} /></React.Suspense> : null}
         {view.name === 'reader' ? (
-          <React.Suspense fallback={<div className="reader-loading">正在加载阅读器…</div>}>
+          <React.Suspense fallback={<div className="reader-loading"><AppleLoader label="正在打开论文" /></div>}>
             <ActiveReaderPage documentId={view.documentId} enterFromLibrary={view.returnTo === 'library'} insights={insights} onBack={() => requestViewChange({ name: view.returnTo ?? 'new' })} onOpenSettings={() => requestViewChange({ name: 'settings' })} />
           </React.Suspense>
         ) : null}
-        {!settings && view.name !== 'reader' && view.name !== 'library' ? <div className="page-loading">正在加载…</div> : null}
+        {!settings && view.name !== 'reader' && view.name !== 'library' ? <div className="page-loading"><AppleLoader /></div> : null}
       </main>
-      <Modal title="有未保存的设置" open={pendingView !== null} closable={!leaving} maskClosable={!leaving}
-        onCancel={() => { if (!leaving) setPendingView(null) }}
-        footer={[
-          <Button key="stay" disabled={leaving} onClick={() => setPendingView(null)}>继续编辑</Button>,
-          <Button key="discard" disabled={leaving || guardBusy} onClick={discardAndLeave}>放弃并离开</Button>,
-          <Button key="save" type="primary" loading={leaving} disabled={guardBusy} onClick={() => void saveAndLeave()}>保存并离开</Button>
-        ]}>
-        <p>离开前保存修改，或放弃本次未保存的更改。</p>
-      </Modal>
+      {guardDialog}
     </div>
   )
 }

@@ -175,11 +175,10 @@ test('lays out service credentials as compact connection cards', async () => {
     const buttonCenter = buttonBounds!.y + buttonBounds!.height / 2
     expect(Math.abs(inputCenter - buttonCenter)).toBeLessThanOrEqual(1)
 
-    await expect(window.getByLabel('APIKey', { exact: true })).toHaveCount(3)
-    const qwenInput = window.locator('#credential-qwen')
-    await expect(qwenInput).toBeVisible()
-    await qwenInput.focus()
-    await expect(window.locator('#credential-qwen')).toHaveAttribute('type', 'password')
+    // Model keys moved to their own view; the services page keeps one summary row for them.
+    await expect(window.getByLabel('APIKey', { exact: true })).toHaveCount(1)
+    await expect(window.locator('#credential-qwen')).toHaveCount(0)
+    await expect(window.locator('[data-provider="model-keys"]')).toContainText('DeepSeek 0 个 · 千问 0 个')
     await expect(window.getByRole('region', { name: 'APIKey 用量分析' })).toBeVisible()
     await expect(window.locator('.settings-page')).toHaveCSS('overflow', 'hidden')
     expect(await window.locator('.settings-page').evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true)
@@ -196,6 +195,52 @@ test('lays out service credentials as compact connection cards', async () => {
   }
 })
 
+test('manages up to five keys per provider on one screen without saving unverified keys', async () => {
+  const workspace = await createE2EWorkspace()
+  const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+  try {
+    const window = await app.firstWindow()
+    await app.evaluate(({ BrowserWindow, nativeTheme }) => {
+      nativeTheme.themeSource = 'light'
+      BrowserWindow.getAllWindows()[0]?.setSize(1440, 900)
+    })
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.getByRole('button', { name: '设置' }).click()
+    await window.locator('[data-provider="model-keys"]').getByRole('button', { name: '管理密钥' }).click()
+    const view = window.getByRole('region', { name: 'API 密钥' })
+    await expect(view).toBeVisible()
+    await expect(view.getByText('尚未添加密钥', { exact: false })).toBeVisible()
+    // Drafts only: adding a key never contacts the provider until the page is saved.
+    for (const [index, label] of ['主账号', '实验室', '备用一', '备用二', '备用三'].entries()) {
+      await view.getByLabel('新密钥名称').fill(label)
+      await view.getByLabel('新 API Key').fill(`sk-e2e-draft-${index}`)
+      await view.getByRole('button', { name: /添加/u }).click()
+    }
+    await expect(view.locator('.api-key-item')).toHaveCount(5)
+    await expect(view.getByLabel('新 API Key')).toBeDisabled()
+    await expect(view.getByRole('tab', { name: /DeepSeek/u })).toContainText('5/5')
+    await expect(view.locator('.model-request-order strong')).toHaveText('主账号 → 实验室 → 备用一 → 备用二 → 备用三')
+    await view.getByRole('checkbox', { name: '启用实验室' }).click()
+    await view.getByRole('button', { name: '移动备用三' }).focus()
+    await window.keyboard.press('ArrowUp')
+    await expect(view.locator('.model-request-order strong')).toHaveText('主账号 → 备用一 → 备用三 → 备用二')
+    await expect(window.getByText('有未保存的更改')).toBeVisible()
+    for (const size of [[1440, 900], [1100, 700]] as const) {
+      await app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0]?.setSize(width, height), size)
+      await expect.poll(() => window.locator('.settings-content-body').evaluate((element) => {
+        const bottom = element.getBoundingClientRect().bottom + 1
+        return element.scrollHeight <= element.clientHeight && [...element.querySelectorAll('.api-key-item, .api-key-add')].every((row) => row.getBoundingClientRect().bottom <= bottom)
+      })).toBe(true)
+      await capture(window, `settings-api-keys-${size[0]}x${size[1]}.png`)
+    }
+    await window.getByRole('button', { name: '放弃更改' }).click()
+    await expect(view.locator('.api-key-item')).toHaveCount(0)
+  } finally {
+    await app.close()
+    await workspace.cleanup()
+  }
+})
+
 test('reorders and enables translation providers with explicit persistent saves', async () => {
   const workspace = await createE2EWorkspace()
   let app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
@@ -206,8 +251,9 @@ test('reorders and enables translation providers with explicit persistent saves'
     await window.getByRole('button', { name: /模型设置/u }).click()
 
     await expect(window.getByText('大语言模型优先级')).toBeVisible()
-    await expect(window.getByText('通过 DeepSeek API 提供大语言模型翻译')).toBeVisible()
-    await expect(window.getByText('通过阿里云百炼 API 提供专业翻译模型')).toBeVisible()
+    // Rows carry only the model name; no second line of explanation.
+    await expect(window.getByText('通过 DeepSeek API 提供大语言模型翻译')).toHaveCount(0)
+    await expect(window.getByText('通过阿里云百炼 API 提供专业翻译模型')).toHaveCount(0)
     await expect(window.getByRole('button', { name: '保存全部更改' })).toBeDisabled()
     await expect(window.getByText('拖动调整优先级，越靠上越优先使用')).toHaveCount(0)
     await expect(window.getByText('无需密钥')).toHaveCount(0)
@@ -224,7 +270,8 @@ test('reorders and enables translation providers with explicit persistent saves'
       const bounds = element.getBoundingClientRect()
       return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
     }))
-    expect(modelCardBounds).toHaveLength(5)
+    expect(modelCardBounds).toHaveLength(3)
+    await expect(window.locator('[data-provider="bing"], [data-provider="transmart"]')).toHaveCount(0)
     for (const [index, bounds] of modelCardBounds.entries()) {
       expect(bounds.x).toBeCloseTo(modelCardBounds[0]!.x, 0)
       expect(bounds.height).toBeGreaterThanOrEqual(52)
@@ -238,17 +285,19 @@ test('reorders and enables translation providers with explicit persistent saves'
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await capture(window, 'settings-models-reference.png')
 
-    await window.getByRole('button', { name: '移动千问 / Qwen' }).dragTo(window.locator('[data-provider="bing"]'))
-    await expect(window.getByText('DeepSeek → Bing → 千问 → Transmart')).toBeVisible()
+    const requestOrder = window.locator('.model-request-order strong')
+    await expect(requestOrder).toHaveText('千问 → DeepSeek')
+    await window.getByRole('button', { name: '移动千问 / Qwen' }).dragTo(window.locator('[data-provider="codex"]'))
+    await expect(requestOrder).toHaveText('DeepSeek → 千问')
     await window.getByRole('button', { name: '保存全部更改' }).click()
     await expect.poll(async () => (await window.evaluate(() => window.copilotix.getSettings())).translationProviderOrder)
-      .toEqual(['deepseek', 'bing', 'qwen', 'transmart', 'codex'])
+      .toEqual(['deepseek', 'codex', 'qwen'])
 
     await window.getByRole('checkbox', { name: '启用DeepSeek' }).click()
-    await expect(window.getByText('Bing → 千问 → Transmart')).toBeVisible()
+    await expect(requestOrder).toHaveText('千问')
     await window.getByRole('button', { name: '保存全部更改' }).click()
     await expect.poll(async () => (await window.evaluate(() => window.copilotix.getSettings())).enabledTranslationProviders)
-      .toEqual(['bing', 'qwen', 'transmart'])
+      .toEqual(['qwen'])
 
     await app.close()
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
@@ -256,7 +305,7 @@ test('reorders and enables translation providers with explicit persistent saves'
     await window.locator('[data-edge-dock="top"]').hover()
     await window.getByRole('button', { name: '设置' }).click()
     await window.getByRole('button', { name: /模型设置/u }).click()
-    await expect(window.getByText('Bing → 千问 → Transmart')).toBeVisible()
+    await expect(window.locator('.model-request-order strong')).toHaveText('千问')
     await expect(window.getByRole('checkbox', { name: '启用DeepSeek' })).not.toBeChecked()
   } finally {
     await app.close()
@@ -286,7 +335,8 @@ test('shows live file storage usage and location controls', async () => {
     await expect(window.getByRole('img', { name: /存储构成，总计/u })).toBeVisible()
     await expect(window.getByRole('region', { name: '近期存储增长' })).toBeVisible()
     await expect(window.getByRole('img', { name: '近 14 日存储增长曲线' })).toBeVisible()
-    await expect(window.getByText(/导入或迁移会保留旧库并在完成后重启/u)).toBeVisible()
+    // The restart notice lives in the import/migrate confirmation, not as a note under the page.
+    await expect(window.getByText(/导入或迁移会保留旧库并在完成后重启/u)).toHaveCount(0)
     const changeLocationBounds = await window.getByRole('button', { name: '迁移文库' }).boundingBox()
     const openLocationBounds = await window.getByRole('button', { name: '打开当前目录' }).boundingBox()
     expect(changeLocationBounds).not.toBeNull()

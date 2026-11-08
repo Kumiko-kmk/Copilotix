@@ -1,3 +1,5 @@
+import { documentModels } from '@features/document/utility'
+import { documentModelRequest } from '@features/document/contract/rpc'
 import { createLibraryOperations, assertLibraryIdle, manageLibrary, V2TaskRepositoryCompat } from '@features/library/utility'
 import { createInsightOperations } from '@features/insight/utility'
 import { createReaderOperations } from '@features/reader/utility'
@@ -107,6 +109,11 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     }
     return state.translationPlanManager
   }
+  documentModels.sourceFiles = (documentId, root) => {
+    const repository = requireRepository()
+    if (repository.getTask(documentId)?.outputDir !== root) return ['full.md', 'block_list.json', 'layout.json']
+    return ['parsed_markdown', 'block_mappings', 'layout'].map((kind, index) => repository.getLatestArtifactReference(documentId, kind as 'parsed_markdown' | 'block_mappings' | 'layout')?.relativePath ?? ['full.md', 'block_list.json', 'layout.json'][index]!) as [string, string, string]
+  }
   const reader = createReaderOperations(requireRepository)
   const editStore = reader.editStore
   const insight = createInsightOperations(requireRepository)
@@ -126,6 +133,12 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     ...library.handlers,
     ...chat.handlers,
     ...reader.handlers,
+    'compute:document-model': async request => {
+      const { documentId } = documentModelRequest.parse(request.payload)
+      const task = requireRepository().getTask(documentId)
+      if (!task) throw new Error('文档不存在')
+      return documentModels.descriptor(documentId, task.outputDir)
+    },
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {
       if (!state.databasePath) throw new Error('文档库尚未初始化')

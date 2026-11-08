@@ -1,3 +1,4 @@
+import type { ProviderKey } from '@platform/models/contract/models'
 import type { ModelGateway } from './modelGateway'
 import { createHash, randomUUID } from 'node:crypto'
 import { lstat, readFile } from 'node:fs/promises'
@@ -26,7 +27,8 @@ export interface PaperChatDependencies {
   deleteTurn(request: PaperChatDeleteTurnRequest): Promise<{ deleted: true }>
   clear(documentId: string): Promise<{ cleared: true }>
   settings(): Promise<AppSettings>
-  key(provider: PaperChatProvider): Promise<string | null>
+  /** Verified keys in request order; the shared runtime falls back across them. */
+  keys(provider: PaperChatProvider): Promise<readonly ProviderKey[]>
   buildContext(request: PaperContextRequest, signal: AbortSignal): Promise<PaperContext>
   stream: ModelGateway['stream']
   recordUsage(provider: PaperChatProvider, usage: ProviderTokenUsage): Promise<void>
@@ -81,8 +83,8 @@ export class PaperChatService {
     if (!provider) throw new ChatProviderError('CHAT_PROVIDER_REQUIRED', '请启用 Qwen、DeepSeek 或 Codex，并在问答中选择服务商')
     const model = request.model ?? resolvePaperChatModel(provider, provider === 'codex' ? settings.codex?.chatModel : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
     if (provider !== 'codex' && !PAPER_CHAT_MODELS[provider].includes(model)) throw new ChatProviderError('RAG_INVALID_STATE', '请选择当前服务商支持的问答模型')
-    const key = provider === 'codex' ? null : await this.deps.key(provider)
-    if (provider !== 'codex' && !key) throw new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '请先保存模型 API Key')
+    const keys = provider === 'codex' ? [] : await this.deps.keys(provider)
+    if (provider !== 'codex' && !keys.length) throw new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '请先保存模型 API Key')
     if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') throw new ChatProviderError('CHAT_CREDENTIAL_UNVERIFIED', '请先验证模型 API Key')
     const figures = await this.resolveFigures(request, provider, model)
     if (this.destroyed) throw new ChatProviderError('RAG_CANCELLED', '问答窗口已关闭')
@@ -119,7 +121,7 @@ export class PaperChatService {
     try { await this.deps.saveTurn(request.documentId, run.turn) }
     catch { run.finish(); throw new ChatProviderError('CHAT_STORAGE_FAILED', '对话无法保存到本地，请检查文献目录后重试') }
     // Defer until ask has returned its identity over IPC. Renderer also handles early accepted events.
-    setTimeout(() => { void this.execute(run, request, settings, provider, key) }, 0)
+    setTimeout(() => { void this.execute(run, request, settings, provider, keys) }, 0)
     return { requestId, createdAt: run.turn.createdAt }
   }
 
@@ -205,7 +207,7 @@ export class PaperChatService {
     return this.deps.clear(documentId)
   }
 
-  private async execute(run: Run, request: PaperChatAskRequest, settings: AppSettings, provider: PaperChatProvider, key: string | null): Promise<void> {
+  private async execute(run: Run, request: PaperChatAskRequest, settings: AppSettings, provider: PaperChatProvider, keys: readonly ProviderKey[]): Promise<void> {
     const signal = run.controller.signal
     const model = run.turn.model
     const start = Date.now()
@@ -259,7 +261,7 @@ export class PaperChatService {
       if (provider !== 'codex' && latest.credentials[provider].state !== 'valid') throw new ChatProviderError('CHAT_CREDENTIAL_UNVERIFIED', '模型凭据已变更，请重新验证')
       const figures = await this.loadFigureImages(run.figures, signal)
       const usage = await abortable(this.deps.stream({
-        lane: 'interactive', provider, baseUrl: provider === 'qwen' ? settings.qwenBaseUrl : settings.deepseekBaseUrl, model, key,
+        lane: 'interactive', provider, baseUrl: provider === 'qwen' ? settings.qwenBaseUrl : settings.deepseekBaseUrl, model, keys,
         messages: buildPaperChatMessages(request, context, figures), signal,
         // Vision requests take longer to start streaming.
         ...(figures.length ? { maxRequestBytes: FIGURE_REQUEST_BYTES, firstByteMs: 120_000 } : {}),

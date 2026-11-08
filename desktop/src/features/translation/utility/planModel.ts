@@ -9,7 +9,7 @@ import type { TranslationBatchCommit } from '../contract/translationBatch'
 import type { BlockMapping } from '@features/parsing/contract/blocks'
 import type { TranslationBlockRecord, TranslationProviderId } from '../contract/translationTypes'
 import { type AlignedMarkdownBlock } from '@features/parsing/core'
-import { MARKDOWN_MAPPING_ALGORITHM_VERSION, TABLE_TRANSLATION_CACHE_VERSION, TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, translationPlanMutationResultSchema, type TableTranslationResponse, type TranslationPlanMutationResult, type TranslationPlanRequest, type TranslationPlanUnitKind, type TranslationPlanWorkDescriptor } from '../contract/translationPlanProtocol'
+import { cacheProviderScope, MARKDOWN_MAPPING_ALGORITHM_VERSION, TABLE_TRANSLATION_CACHE_VERSION, TABLE_TRANSLATION_PROTOCOL, TRANSLATION_PIPELINE_VERSION, translationPlanMutationResultSchema, type TableTranslationResponse, type TranslationPlanMutationResult, type TranslationPlanRequest, type TranslationPlanUnitKind, type TranslationPlanWorkDescriptor } from '../contract/translationPlanProtocol'
 import { type TableTranslationPlan } from './tableTranslation'
 import type { TranslationJobBinding } from '@features/library/utility'
 
@@ -81,6 +81,8 @@ export interface UnitState {
 }
 
 export interface PlanState {
+  sourceVersion: string
+  editRevision: number
   binding: TranslationJobBinding
   taskId: string
   jobId: string
@@ -277,9 +279,10 @@ export function unitMarkdownMap(unit: UnitState, markdown: string): Map<string, 
 }
 
 export function legacyCacheKey(sourceHash: string, provider: string, model: string, kind: TranslationPlanUnitKind): string {
+  const scope = cacheProviderScope(provider)
   return sha256(kind === 'table'
-    ? `${TRANSLATION_PIPELINE_VERSION}|table|${TABLE_TRANSLATION_CACHE_VERSION}|${provider}|${model}|zh-CN|${sourceHash}`
-    : `${TRANSLATION_PIPELINE_VERSION}|${provider}|${model}|zh-CN|${sourceHash}`)
+    ? `${TRANSLATION_PIPELINE_VERSION}|table|${TABLE_TRANSLATION_CACHE_VERSION}|${scope}|${model}|zh-CN|${sourceHash}`
+    : `${TRANSLATION_PIPELINE_VERSION}|${scope}|${model}|zh-CN|${sourceHash}`)
 }
 
 export function assertPersistableTranslationBatch(input: TranslationBatchCommit): void {

@@ -34,7 +34,7 @@ export class TaskService extends EventEmitter {
   private readonly artifacts: ArtifactService
 
   constructor(
-    repository: TaskRepositoryCompat,
+    private readonly repository: TaskRepositoryCompat,
     settingsService: SettingsService,
     compute: TaskComputePort,
     pathPolicy: PathPolicyPort = new PathPolicy(),
@@ -44,7 +44,11 @@ export class TaskService extends EventEmitter {
     this.artifacts = new ArtifactService(repository, compute, pathPolicy)
     this.commands = new DocumentCommandService(repository, settingsService, compute, pathPolicy, options.logger ?? silentLogger, options)
 
-    options.scheduler?.on('job-changed', () => this.emit('changed'))
+    options.scheduler?.on('job-changed', (job: Job) => {
+      if (job.kind !== 'parse' && job.kind !== 'translate') return
+      const published = ['succeeded', 'partial'].includes(job.status)
+      this.emit('changed', { documentId: job.documentId, kind: published ? (job.kind === 'parse' ? 'body' : 'translation') : 'progress', version: job.id + ':' + job.attempt + ':' + job.progress })
+    })
     options.scheduler?.on('job-notification', (job: Job) => {
       // RAG jobs share the durable scheduler but have independent state and
       // user-facing surfaces. Only document workflow jobs notify the user.
@@ -59,20 +63,28 @@ export class TaskService extends EventEmitter {
 
   async importPaths(paths: readonly string[], options: ImportDocumentsRequest, fileOptions?: readonly ImportFileOptions[]): Promise<ImportPathsResult> {
     const result = await this.commands.importPaths(paths, options, fileOptions)
-    if (result.created.length > 0) this.emit('changed')
+    for (const task of result.created) this.emit('changed', { documentId: task.id, kind: 'metadata' })
     return result
   }
 
   async retry(taskId: string): Promise<void> {
     const refreshStaleTranslation = await this.artifacts.hasStaleTranslation(taskId).catch(() => false)
     await this.commands.retry(taskId, { refreshStaleTranslation })
-    this.emit('changed')
+    this.emit('changed', { documentId: taskId, kind: 'progress' })
   }
 
   async delete(taskId: string, deleteFiles: boolean): Promise<void> {
     await this.artifacts.freezeFigureWrites(taskId)
     try { await this.commands.delete(taskId, deleteFiles) } finally { this.artifacts.resumeFigureWrites(taskId) }
-    this.emit('changed')
+    this.emit('changed', { documentId: taskId, kind: 'delete' })
+  }
+
+  /** The user's own title; parsing keeps it (it only fills a title that is missing or still provisional). */
+  async rename(taskId: string, title: string): Promise<void> {
+    const displayTitle = title.trim().replace(/.pdf$/iu, '').trim()
+    if (!displayTitle) throw new Error('标题不能为空')
+    await this.repository.updateDocumentMetadata(taskId, { displayTitle })
+    this.emit('changed', { documentId: taskId, kind: 'metadata' })
   }
 
   resolvedEdits(taskId: string) {
@@ -81,7 +93,7 @@ export class TaskService extends EventEmitter {
 
   async retranslateEdited(taskId: string): Promise<void> {
     await this.commands.retranslateEdited(taskId)
-    this.emit('changed')
+    this.emit('changed', { documentId: taskId, kind: 'progress' })
   }
 
   async repairTextLayer(taskId: string): Promise<{ repaired: number; unresolved: number }> {
@@ -91,7 +103,7 @@ export class TaskService extends EventEmitter {
     try { result = await this.commands.repairTextLayer(taskId) } finally { this.artifacts.resumeFigureWrites(taskId) }
     if (result.repaired > 0) {
       await this.artifacts.refreshFigureMarkdown(taskId).catch(() => undefined)
-      this.emit('changed')
+      this.emit('changed', { documentId: taskId, kind: 'body' })
     }
     return result
   }

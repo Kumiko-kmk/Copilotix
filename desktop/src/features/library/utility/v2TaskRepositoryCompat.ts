@@ -21,6 +21,7 @@ import { normalizeEnabledProviders, normalizeProviderOrder } from '@features/tra
 import type { ArtifactReference } from './taskRepositoryCompat'
 import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { V2Database } from '@platform/database/utility/v2Database'
+import { modelConnectionsSchema } from '@platform/models/contract/models'
 import { projectDocumentSummary } from '../core/documentSummary'
 import { SqliteJobRepository } from '@platform/jobs/utility/sqliteJobRepository'
 import { RAG_DEFAULT_CHUNKER_FINGERPRINT, TERMINAL, WORKFLOW_JOB_QUERY_CHUNK, assertTranslationBatchWithinLimits, projectCompatTask, latestJobOfKind, checkpointForTask, toBatchBlock, parseObject, isTerminalJobStatus, metadataFingerprint, nextLexicalGeneration, toRelativePath, validateAnnotations, type CompatDocumentRow, type V2JobKind, type V2JobStatus, type ListCursor, type DocumentMetadataPatch, type CompatJobRow, type TranslationJobBinding, type ArtifactRevisionInput, type ArtifactBundleRow } from './compatRecords'
@@ -94,10 +95,12 @@ export class V2TaskRepositoryCompat {
     const enabledTranslationProviders = normalizeEnabledProviders(stored.enabledTranslationProviders, translationProviderOrder)
     return {
       ...DEFAULT_SETTINGS,
+      // A damaged connection list falls back to the defaults, so the default keys keep working.
+      modelConnections: modelConnectionsSchema.safeParse(stored.modelConnections).data ?? DEFAULT_SETTINGS.modelConnections,
       outputRoot: stored.outputRoot ?? outputRoot,
       formulaEnabled: true,
       tableEnabled: true,
-      translationProvider: enabledTranslationProviders[0]!,
+      translationProvider: enabledTranslationProviders[0] ?? null,
       translationProviderOrder,
       enabledTranslationProviders,
       codex: stored.codex ?? DEFAULT_SETTINGS.codex,
@@ -117,7 +120,7 @@ export class V2TaskRepositoryCompat {
   }
 
   saveSettings(settings: AppSettings): void {
-    const hidden = new Set(['credentials', 'chatConsentProvider', 'chatConsentVersion'])
+    const hidden = new Set(['credentials', 'keyStatuses', 'chatConsentProvider', 'chatConsentVersion'])
     this.database.transaction(() => {
       this.database.connection.exec("DELETE FROM settings WHERE key IN ('chatConsentProvider', 'chatConsentVersion')")
       const statement = this.database.connection.prepare(
@@ -187,6 +190,8 @@ export class V2TaskRepositoryCompat {
 
   private projectSummary(task: CopilotixTask, job: CompatJobRow | undefined): DocumentSummary {
     const summary = projectDocumentSummary(task)
+    const version = (kind: Parameters<V2TaskRepositoryCompat['getLatestArtifactReference']>[1]) => { const ref = this.getLatestArtifactReference(task.id, kind); return ref ? `${ref.revision}:${ref.contentHash}` : 'none' }
+    summary.contentVersions = { body: version('parsed_markdown') + ':' + version('block_mappings') + ':' + version('layout'), translation: version('translated_markdown') }
     // A failed translation keeps its counts, so the failure can be shown at the translation step.
     const failedTranslation = task.status === 'failed' && (job?.status === 'failed' || job?.status === 'cancelled')
     if (!job || (task.status !== 'translating' && task.status !== 'partial' && task.status !== 'completed' && !failedTranslation)) return summary

@@ -44,8 +44,7 @@ describe("credentialGate", () => {
       const settings = appSettings({ state })
       const runner = new TranslationJobRunner({
         repository: { getTask: async () => task } as never,
-        settingsService: { get: async () => settings } as never,
-        vault: emptyVault(),
+        settingsService: { get: async () => settings, providerKeys: async () => [] } as never,
         fetcher,
         compute: {} as never,
         pathPolicy: new PathPolicy()
@@ -99,23 +98,14 @@ describe("credentialGate", () => {
       }
     }
   }
-
-  function emptyVault() {
-    return {
-      get: async () => null,
-      set: async (_account: string, _value: string): Promise<void> => undefined,
-      delete: async (_account: string): Promise<void> => undefined,
-      has: async () => false
-    }
-  }
 })
 
 describe("providerPolicy", () => {
   describe('translation provider policy', () => {
     it('restores legacy preferred-provider order and rejects malformed stored policies', () => {
-      expect(normalizeProviderOrder(undefined, 'deepseek')).toEqual(['deepseek', 'qwen', 'bing', 'transmart', 'codex'])
-      expect(normalizeProviderOrder(['qwen', 'qwen'], 'qwen')).toEqual(['qwen', 'deepseek', 'bing', 'transmart', 'codex'])
-      expect(normalizeEnabledProviders([], ['qwen', 'deepseek', 'bing', 'transmart'])).toEqual(['qwen', 'deepseek', 'bing', 'transmart'])
+      expect(normalizeProviderOrder(undefined, 'deepseek')).toEqual(['deepseek', 'qwen', 'codex'])
+      expect(normalizeProviderOrder(['qwen', 'qwen'], 'qwen')).toEqual(['qwen', 'deepseek', 'codex'])
+      expect(normalizeEnabledProviders([], ['qwen', 'deepseek', 'bing', 'transmart'])).toEqual([])
     })
 
     it('keeps visual order separate from the executable chain and skips unverified APIs', () => {
@@ -123,7 +113,7 @@ describe("providerPolicy", () => {
       expect(executableProviderOrder(order, order, {
         deepseek: { state: 'valid' },
         qwen: { state: 'unknown' }
-      })).toEqual(['deepseek', 'transmart', 'bing'])
+      })).toEqual(['deepseek'])
       expect(executableProviderOrder(order, ['qwen'], {
         deepseek: { state: 'missing' },
         qwen: { state: 'invalid' }

@@ -2,8 +2,8 @@ import React from 'react'
 import { Button } from 'antd'
 import type { ReaderBlock } from '../../core/readerDocument'
 
-/** The reader's edit layer for one view. Editing starts from a second click on the current paragraph;
- * deletion, restoring, framing and retranslation are in the right-click menus. Nothing appears on hover. */
+/** The reader's edit layer for one view. Editing starts on double click;
+ * deletion, restoring and retranslation are in the right-click menus. Nothing appears on hover. */
 export interface ReaderBlockEditing {
   view: 'original' | 'translated'
   save(block: ReaderBlock, markdown: string): Promise<void>

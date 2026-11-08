@@ -62,7 +62,8 @@ test('failed papers show a readable error and WebGL fallback still opens the rea
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const page = await app.firstWindow(); await openPaperFromLibrary(page, documentId)
-    await expect(page.getByRole('alert')).toContainText('原文未生成，文档处理失败')
+    // The missing PDF also raises its own pane alert; this checks the document-state one.
+    await expect(page.getByRole('alert').filter({ hasText: '原文未生成，文档处理失败' })).toBeVisible()
     await expect(page.getByRole('button', { name: '重试文档处理', exact: true })).toBeVisible()
     await navigate(page, '新解析')
     await page.evaluate(() => { const original = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (...args: Parameters<typeof original>) { return /^webgl/u.test(String(args[0])) ? null : original.apply(this, args) } as typeof original })

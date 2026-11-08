@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -32,6 +32,7 @@ import {
   shouldRunPackagedSmoke,
   validatePackagedSmokeOutput
 } from '../src/app/contract/packagedSmoke.mjs'
+import { FULL_IDENTITY, LITE_IDENTITY } from '../src/app/contract/appIdentity.mjs'
 import {
   assertReleaseLayout,
   createReleaseLayout,
@@ -55,21 +56,36 @@ export {
   validatePackagedSmokeOutput
 }
 
+/** What electron-builder changes for a separately installed edition, on top of package.json. Scalars only: it merges arrays. */
+export function builderIdentityConfig(identity) {
+  if (identity === FULL_IDENTITY) return {}
+  return {
+    appId: identity.appId,
+    productName: identity.productName,
+    executableName: identity.executableName,
+    extraMetadata: { version: identity.version },
+    nsis: { shortcutName: identity.productName, uninstallDisplayName: `${identity.productName} \${version}` }
+  }
+}
+
 /** Build and publish one verified Windows x64 directory release. */
-export async function publishRelease({ fromBuilt = false } = {}) {
+export async function publishRelease({ fromBuilt = false, lite = false } = {}) {
   assertWindowsX64()
   assertDesktopDirectory(desktopDirectory, repositoryRoot)
   const workspacePackageJson = JSON.parse(await readFile(join(repositoryRoot, 'package.json'), 'utf8'))
   assertPnpmInvocation(process.env, workspacePackageJson.packageManager)
   const productionRelease = assertReleaseSigningConfiguration(process.env)
   await assertLocalDependencyGraph(repositoryRoot, desktopDirectory)
-  const packageJson = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
+  const identity = lite ? LITE_IDENTITY : FULL_IDENTITY
+  const builderConfig = builderIdentityConfig(identity)
+  const declaredPackage = JSON.parse(await readFile(join(desktopDirectory, 'package.json'), 'utf8'))
+  const packageJson = { ...declaredPackage, ...(lite ? { version: identity.version } : {}), build: { ...declaredPackage.build, ...builderConfig } }
   if (productionRelease) assertDesktopReleaseLicenseMetadata(packageJson)
   const packagedSmokeVersions = assertPackagedSmokeVersions(packageJson)
   const productName = packageJson.build?.productName ?? 'Copilotix'
   const executableName = `${packageJson.build?.executableName ?? productName}.exe`
-  const releaseName = `${productName}-${packageJson.version}-win-x64`
-  const layout = createReleaseLayout({ repositoryRoot, buildId: createBuildId(), releaseName })
+  const releaseName = `${productName.replaceAll(' ', '-')}-${packageJson.version}-win-x64`
+  const layout = createReleaseLayout({ repositoryRoot, buildId: createBuildId(), releaseName, releaseDirectory: identity.releaseDirectory })
   assertReleaseLayout(layout)
 
   if (await pathExists(layout.stagingRoot)) {
@@ -84,8 +100,9 @@ export async function publishRelease({ fromBuilt = false } = {}) {
   await mkdir(layout.stagedArtifactsDirectory)
   let swapped = false
   try {
-    if (fromBuilt) await assertBuiltBundles()
-    const runtimePackager = await runElectronBuilder(layout.builderOutput, { forceCodeSigning: productionRelease })
+    if (lite) await stageLiteBundles()
+    else if (fromBuilt) await assertBuiltBundles()
+    const runtimePackager = await runElectronBuilder(layout.builderOutput, { forceCodeSigning: productionRelease, builderConfig })
 
     const unpackedDirectory = join(layout.builderOutput, 'win-unpacked')
     const unpackedExecutable = join(unpackedDirectory, executableName)
@@ -112,7 +129,7 @@ export async function publishRelease({ fromBuilt = false } = {}) {
     process.stdout.write(`Runtime file dates: ${stampedFiles} files stamped with this build time\n`)
 
     const runtimeHashes = { executable: await sha256(executablePath), appAsar: await sha256(appAsarPath) }
-    await runSetupBuilder(layout, { forceCodeSigning: productionRelease, signerSubject })
+    await runSetupBuilder(layout, { forceCodeSigning: productionRelease, signerSubject, builderConfig })
     await requireFile(layout.setupPath)
     const setupSignerSubject = productionRelease ? await verifyWindowsAuthenticodeSignature(layout.setupPath) : null
     if (productionRelease && setupSignerSubject !== signerSubject) throw new Error('Setup signer does not match the runtime signer')
@@ -125,7 +142,10 @@ export async function publishRelease({ fromBuilt = false } = {}) {
       productionRelease,
       signerSubject,
       signFile: productionRelease ? (path) => runtimePackager.signIf(path) : null,
-      verifySignature: verifyWindowsAuthenticodeSignature
+      verifySignature: verifyWindowsAuthenticodeSignature,
+      installGuid: identity.installGuid,
+      productName: identity.productName,
+      executableName: identity.executableName
     })
     const hashes = {
       executable: runtimeHashes.executable,
@@ -134,7 +154,7 @@ export async function publishRelease({ fromBuilt = false } = {}) {
       launcher: await sha256(layout.launcherPath)
     }
     await writeReleaseMetadata(layout, packageJson, executableName, hashes, signerSubject, setupSignerSubject, launcher.signerSubject, { bundleOnly: true })
-    await writeFile(layout.instructionsPath, `\uFEFFCopilotix 安装说明\r\n\r\n1. 解压整个压缩包。双击 ${layout.setupName}，按向导选择安装位置。\r\n2. 安装完成后，从桌面打开 Copilotix；首次使用按应用内引导配置文库和翻译服务。\r\n3. 卸载时双击本目录的 uninstall.exe，也可使用 Windows 已安装应用中的卸载入口。\r\n\r\n安装位置存放程序；文库位置在“设置 → 文件存储”中选择。\r\n升级或卸载前，请在系统托盘选择“退出”，等待后台任务结束。\r\n默认卸载保留资料；可在卸载向导选择同步清除文库、设置与凭证，并确认清理位置。\r\n完整程序已压缩在 Setup 内，安装后即可运行。advanced 仅为校验资料，不需打开。\r\n卸载会移除已安装程序；下载并解压的本目录可在不用时自行删除。\r\n`, 'utf8')
+    await writeFile(layout.instructionsPath, installInstructions(layout.setupName, lite), 'utf8')
     await createReleaseZip(layout.stagingRoot, layout.zipPath, releaseName)
     await verifyReleaseZip(layout.zipPath, layout.verificationDirectory, releaseName,
       productionRelease ? verifyWindowsAuthenticodeSignature : null, hashes, signerSubject)
@@ -183,7 +203,18 @@ export async function publishRelease({ fromBuilt = false } = {}) {
       process.stderr.write(`Release not published; diagnostic staging retained at ${layout.stagingRoot}\n`)
     }
     throw error
+  } finally {
+    // Never leave Lite bundles where the full edition's tests or packaging would pick them up.
+    if (lite) await rm(join(desktopDirectory, 'out'), { recursive: true, force: true })
   }
+}
+
+export function installInstructions(setupName, lite = false) {
+  const name = lite ? LITE_IDENTITY.productName : FULL_IDENTITY.productName
+  const firstUse = lite ? '首次使用在“设置”中配置解析和翻译服务' : '首次使用按应用内引导配置文库和翻译服务'
+  const library = lite ? '论文数据' : '文库'
+  const independence = lite ? `${name} 与完整版 Copilotix 各自安装，资料和密钥互不共用；可用“设置 → 文件存储”导入完整版导出的数据。\r\n` : ''
+  return `﻿${name} 安装说明\r\n\r\n1. 解压整个压缩包。双击 ${setupName}，按向导选择安装位置。\r\n2. 安装完成后，从桌面打开 ${name}；${firstUse}。\r\n3. 卸载时双击本目录的 uninstall.exe，也可使用 Windows 已安装应用中的卸载入口。\r\n\r\n安装位置存放程序；${library}位置在“设置 → 文件存储”中选择。\r\n${independence}升级或卸载前，请在系统托盘选择“退出”，等待后台任务结束。\r\n默认卸载保留资料；可在卸载向导选择同步清除${library}、设置与凭证，并确认清理位置。\r\n完整程序已压缩在 Setup 内，安装后即可运行。advanced 仅为校验资料，不需打开。\r\n卸载会移除已安装程序；下载并解压的本目录可在不用时自行删除。\r\n`
 }
 
 export function assertWindowsX64(platform = process.platform, architecture = process.arch) {
@@ -255,7 +286,7 @@ export async function resolveInstalledElectronDist(environment = process.env) {
   return realpath(distribution)
 }
 
-export async function runElectronBuilder(outputDirectory, { forceCodeSigning = false } = {}) {
+export async function runElectronBuilder(outputDirectory, { forceCodeSigning = false, builderConfig = {} } = {}) {
   if (typeof outputDirectory !== 'string' || !outputDirectory) throw new TypeError('Electron-builder output directory is required')
   if (typeof forceCodeSigning !== 'boolean') throw new TypeError('forceCodeSigning must be a boolean')
   const resolvedOutput = resolve(outputDirectory)
@@ -276,10 +307,11 @@ export async function runElectronBuilder(outputDirectory, { forceCodeSigning = f
     projectDir: desktopDirectory,
     targets: createTargets([Platform.WINDOWS], 'dir', 'x64'),
     config: {
+      ...builderConfig,
       ...(electronDist ? { electronDist } : {}),
       directories: { output: resolvedOutput },
       afterPack: async (context) => {
-        await applyReleaseFusesAfterPack(context)
+        await applyReleaseFusesAfterPack(context, undefined, builderConfig.executableName)
         runtimePackager = context.packager
       },
       forceCodeSigning
@@ -289,7 +321,7 @@ export async function runElectronBuilder(outputDirectory, { forceCodeSigning = f
 }
 
 /** Package the already verified runtime, so Setup and ZIP contain identical bytes. */
-export async function runSetupBuilder(layout, { forceCodeSigning = false, signerSubject = null } = {}) {
+export async function runSetupBuilder(layout, { forceCodeSigning = false, signerSubject = null, builderConfig = {} } = {}) {
   assertReleaseLayout(layout)
   if (forceCodeSigning && !signerSubject) throw new Error('Signed runtime subject is required before building production Setup')
   await mkdir(layout.builderOutput)
@@ -310,7 +342,7 @@ export async function runSetupBuilder(layout, { forceCodeSigning = false, signer
     projectDir: desktopDirectory,
     prepackaged: layout.runtimeDirectory,
     targets: createTargets([Platform.WINDOWS], 'nsis', 'x64'),
-    config: { directories: { output: layout.builderOutput }, forceCodeSigning, nsis: { include } }
+    config: { ...builderConfig, directories: { output: layout.builderOutput }, forceCodeSigning, nsis: { ...builderConfig.nsis, include } }
   })
   if (forceCodeSigning) {
     const verified = JSON.parse(await readFile(gateResult, 'utf8'))
@@ -335,9 +367,30 @@ export async function assertBuiltBundles(outputDirectory = join(desktopDirectory
   if (resolvedOutput !== resolve(desktopDirectory, 'out')) {
     throw new Error('Refusing to package bundles outside desktop/out: ' + outputDirectory)
   }
+  if (await pathExists(join(resolvedOutput, LITE_STAGE_MARKER))) throw new Error('desktop/out holds Lite bundles left by an interrupted packaging run; rebuild before packaging')
+  await requireBundles(resolvedOutput)
+}
+
+async function requireBundles(directory) {
   for (const relativePath of ['main/index.js', 'preload/index.js', 'renderer/index.html', 'utility/index.js', 'utility/uninstall-cleanup.js']) {
-    await requireFile(join(resolvedOutput, relativePath))
+    await requireFile(join(directory, relativePath))
   }
+}
+
+const LITE_STAGE_MARKER = 'lite-edition-stage'
+
+/** The packaged layout is out/ for every edition, so Lite's bundles take its place for this one run. */
+async function stageLiteBundles() {
+  const liteOutput = join(desktopDirectory, 'out-lite')
+  await requireBundles(liteOutput)
+  const uninstallWorker = await readFile(join(liteOutput, 'utility/uninstall-cleanup.js'), 'utf8')
+  if (!uninstallWorker.includes(LITE_IDENTITY.userDataFolder) || uninstallWorker.includes(FULL_IDENTITY.userDataFolder)) {
+    throw new Error('desktop/out-lite is not a Lite build; run build:lite first')
+  }
+  const output = join(desktopDirectory, 'out')
+  await rm(output, { recursive: true, force: true })
+  await cp(liteOutput, output, { recursive: true })
+  await writeFile(join(output, LITE_STAGE_MARKER), '', 'utf8')
 }
 
 function listAsarEntries(archivePath) {
@@ -568,8 +621,9 @@ if (isMainModule()) {
   try {
     const args = process.argv.slice(2)
     const fromBuilt = args.includes('--from-built')
-    if (args.some((arg) => arg !== '--from-built')) throw new Error('Unknown package-directory option: ' + args.join(' '))
-    await publishRelease({ fromBuilt })
+    const lite = args.includes('--lite')
+    if (args.some((arg) => arg !== '--from-built' && arg !== '--lite')) throw new Error('Unknown package-directory option: ' + args.join(' '))
+    await publishRelease({ fromBuilt, lite })
   } catch (error) {
     // Builder shutdown hooks must not turn a failed publication into exit 0.
     process.stderr.write(`${readableError(error)}\n`, () => process.exit(1))

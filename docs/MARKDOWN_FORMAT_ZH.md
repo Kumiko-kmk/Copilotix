@@ -1,75 +1,40 @@
-# 论文 Markdown 格式与兼容边界
-
-解析器过去输出的是 Markdown 正文、原始 HTML 表格（含 rowspan/colspan）、HTML 上下标和多种 TeX 分隔符的混合文档。应用允许 HTML，因此内部显示成功不代表其他阅读器也会显示成功。用户提供的 Notion 桌面预览截图明确显示 HTML 表格标签作为正文。
+# Markdown、編輯層與導出契約
 
 ## 阅读器与导出分离
 
-内部资料和阅读器使用 `markdown-html-math-v1`：保留 HTML 表格的 rowspan/colspan、上下标、换行和已有 LaTeX。阅读器沿用 HTML 安全过滤、表格横向滚动与 KaTeX；不将合并表格展平成 GFM。轻量准备只处理控制字符、正文数学分隔符与可验证的错误缩放指令，解析发布时另外修正图片路径。代码示例不参与格式转换。
-
-标准化只发生在「另存 Markdown」与「导出结果 ZIP」的边界；不会写回文档库。原文、译文和 manifest 保留丰富结构，导出是由这些资料生成的单独投影。旧数据如已被 v5 转为 GFM，无法凭空恢复合并信息；本次不会自动重解析或重翻译。
+內部 rich 格式 markdown-html-math-v1 保留 HTML 合併表格、sub/sup、LaTeX，經消毒與 KaTeX；prepareReaderMarkdown 只做非結構準備／圖片路徑修正。normalizeMarkdown 僅生成導出投影，不回寫原文。KaTeX 及 rehype-katex 的 renderer／Vitest 解析與字體 CSS 必須去重一致，不能讓短公式斷成多行。
 
 ## 导出格式
 
-导出产物使用 UTF-8、LF、CommonMark 基础结构和 GFM 表格、删除线、任务列表；数学公式使用明确的 `$…$` 与独立行 `$$` 扩展。它不是每个 Markdown 客户端都支持的纯 CommonMark 数学语法：目标客户端需要数学渲染能力。
+UTF-8／LF、CommonMark＋GFM＋$／$$ 數學；HTML 表格展平為 GFM，合併格資訊可能不可逆（舊 v5 已丟失者無法恢復）。保護 code literal、轉義表格 pipe，數學竪線用 \vert／\Vert。僅在重新驗證成功時修壞的 left/right，不猜公式；非法控制字元顯示 U+FFFD。文檔級 reference definition 在分塊前展開。
 
-- 标题、段落、列表、引用、链接、图片、代码由同一 AST 管线解析与序列化。代码中的 HTML 和公式样例保持字面内容。
-- HTML 表格转换为矩形 GFM 表格；合并区域展开，短行分组标签向下延续，跨列覆盖位置留空，长表注与图片只保留在原始单元格，避免整段说明重复铺满表格。GFM 没有合并单元格，无法保留原 PDF 的全部版式。
-- 表内公式的竖线换成等价的 TeX `\Vert` / `\vert`，避免被解释为列分隔符；公式仍为公式。
-- 若 TeX 校验明确报自动括号缩放命令错误，仅尝试去掉 `\left`/`\right` 缩放及对应不可见点分隔符；只有再次校验成功才采用，保留括号、变量与运算符。不猜测其他损坏公式。
-- HTML 标题、强调、链接、图片、列表、引用转换为 Markdown；短数字/字母上下标用数学扩展表达，作者等长文字保留正文。控制字符用可见的 `�` 标记，不猜测丢失的原字符；必要时须核对 PDF。
-- 引用式图片/链接在拆块前展开，避免分块阅读与翻译丢失文档末尾的定义。
+另存時把實際引用圖片複製至唯一相鄰目錄，改相對連結，全部成功後才原子發布 Markdown；缺圖／越界／非法目標清暫存並保留舊導出，拒絕寫入任務資料目錄。傳遞須含圖片目錄。ZIP 同樣規範兩份 Markdown、攜帶圖片，排除 .translation／憑據／DB／日誌，臨時 ZIP 完成才替換目標。
 
-## 写入、旧数据与恢复
+## 阅读器内编辑与整段删除（使用者编辑层）
 
-### 解析乱码行的文字层修复
+- `edits/markdown-edits.v1.json` 是獨立使用者層；Utility 每文獻序列化、樂觀 revision、fsync／rename。損壞保留，閱讀可回退並報錯，導出須失敗避免默默丟編輯。
+- `content:N` 結合 mapping／base hash 定位：原位置的 mapping 或 hash 相同 → 唯一 mapping → 唯一 hash；都不能確認則保留 orphan、不套錯塊。supplementalDeleted 按 mapping ID；不改 annotationKey 或原偏移。
+- 閱讀、翻譯、問答與導出都套編輯／刪除／順序；解析、文字修復、翻譯不能覆蓋它。Brief 與圖片解讀仍讀解析原文。
+- 正文只在雙擊時原地編輯，單擊只保留選段／定位。合併段落即使對應多個 PDF 框也整塊處理；快速連刪等 mutation 同一序列。已移除整段邊框及上移／下移選單；拖曳與恢復原始順序保留。`boxMarks` 僅讀取歷史資料，編輯 IPC／RPC 不再接受 `box`／`unbox`；其他編輯不刪除歷史記錄。PDF 右鍵或無框時相鄰塊仍可恢復已刪除段落。
+- 只對請求重翻譯且變更的塊用 retranslateAt 加鹽快取，保留其他完成／失敗狀態；generatedAt 標 fulfilled。sourceChanged／fallbackProvider 僅展示或選單，不混入複製文字。
+- 可選 order 含塊數、完整排列與 updatedAt，包含已刪除塊；塊數不符忽略但保留，重置移除欄位。拖曳整段／整圖組、不拆圖說；順序變動不作廢翻譯快取，不能盲排未對齊譯文。讀取／導出／問答遵守順序。
+- 新可選欄位可能被舊 strict schema 拒絕，不能聲稱可直接降版；須備份並重置新欄位或用兼容版本。
+- parsed blocks／ID／預處理結果保持穩定，編輯為輕量樂觀更新＋排隊保存；失敗重載已保存狀態並報錯，不每次編輯重取全文或顯示整頁 spinner。
 
-MinerU 偶尔用只罩住字母上半截的框识别整行，结果只剩 `d h f ld` 这类带上伸笔画的字母（2026-10-21 文献 6d215e7c 共 23 行，含摘要与参考文献 [60]）。`features/parsing/core/textLayerRepair.ts` 只检查 `type: 'text'` 的 span：至少 6 个词、过半为单个字母且四成以上是小写单字母时才算候选；再按页码和 bbox 从 PDF 文字层（Utility 内 `pdfTextLayer.ts`，pdf.js 假 worker，仅在有候选时懒加载）取同一行文字，只有文字层可读（无 U+FFFD／私用区／控制符、多数为正常单词）且原 span 的字母按顺序 ≥85% 出现在其中、文字层长度 ≥1.5 倍时才替换。公式、表格、图片 span 不参与；无文字层（扫描件）或旋转页保持原样。MinerU 跨页合并段落时，下一页的行留在上一页的块中，此时按下一页 `lines_deleted` 块判定页码。
+## 解析乱码行的文字层修复
 
-- 新解析：`compute:normalize-parser` 在 `prepareReaderMarkdown` 之前同时修补 `layout.json` 与原始 Markdown，Markdown 中无法唯一定位的修复整条放弃，两者不会不一致。替换文字转义 Markdown 语法（`\ * _ $ <`、行首列表/标题记号、`](`），连字号行尾按解析器规则并词。读取失败不影响解析，只把候选记为未解决。
-- 旧论文：不重解析、不重翻译，也不加按钮（使用者要求页面简洁）。阅读器打开时 `useTextLayerRepair` 若在布局中发现候选，后台调用 IPC `documents:repair-text-layer` → Core RPC `compute:repair-text-layer`，修复成功只弹一次「已用 PDF 文字层修复 N 行解析乱码」提示；每个布局每次会话只尝试一次，有解析或翻译作业在途、或读取失败时静默放弃，下次打开再试。依次原子发布 `full.md`、`block_list.json`、`layout.json`（中断后重跑可补完，已替换的 Markdown 视为已应用），再由 `recordTextLayerRepair` 在同一事务中以最新 parse 作业写入三个新 revision（metadata `{ textLayerRepair: 1, repairs }`），并把原文视图标注集迁到新的 Markdown revision（标注按 quote／前后文重定位）。映射 ID 只由位置决定，不变。
-- Electron utility 进程对 pdf.js 既非 Node 也非浏览器，模块加载时需要 `DOMMatrix`；仅取文字不渲染，缺失时装单位矩阵占位。
-- 伪上下标与丢字（2026-10-22，文献 3eba78ee「Neural FEM vs Neural Operator」共 6106 个 sub/sup）：MinerU 把普通字母（多为 p q y g，也有整串词）标成 `<sub>`／`<sup>`，或丢掉下伸字母（`o erator`、`a roach`）。至少 8 个 span 各含 ≥2 个贴在单词上的纯小写字母脚本时，整篇所有 text span 都与文字层比较（`kind: 'compare'`）：上下标只按 PDF 几何重建（比主行小且偏离基线的 run），字母相同而脚本不同、或原文按顺序是文字层去掉少数字母的结果（文字层最多多 1/4）时替换；文字层在首尾多出的独立单词或脚本（例如框到相邻公式自身的上标）裁掉，句首标点保留。MinerU Markdown 中 `*`／`_` 已转义、行尾连字号已并词，定位时兼容这两种写法与连字号续行；前一 span 取当前内容（含公式）作消歧。同一份文字层最多再跑 3 轮，以放置依赖前一处修复的 span。
-- 影响与重译：Main `loadTranslatedBlocks` 用翻译计划同一对齐（`alignMarkdownBlocks`）比较 manifest 逐块 `sourceHash`，不一致的译文块带 `sourceChanged`（IPC `translatedMarkdownBlockSchema` 可选字段，旧 manifest 无 `sourceHash` 或块数不同则不标），阅读器在段落上方显示「原文已修复，译文待更新」。此时顶栏原有的重试图示也会出现；重试经 `JobManualRetryInput.refreshTranslation`（Core RPC `jobs:manual-retry` 可选字段）把已成功的 translate 作业重新排队，计划因原文雜湊变化重建，`sourceHash` 未变的块沿用、只重译变化的块。仅 translate 作业、仅 succeeded、仅 Main 判定有过期块时使用，其他状态机不变。整图裁切因 layout 变化重新生成，图片 AI 解读与档案卡显示「论文内容已更新」。阅读器在后台修复完成后以新 revision 重新挂载工作区（避免已挂载面板在图片版本变化时卡在准备阶段），每篇每次会话只尝试一次。`text-layer-repair.json` 记录每处原文与替换文字，仅供追溯。
-- 使用者编辑优先：阅读器段落编辑（`edits/markdown-edits.v1.json`，`reader-markdown-edit` 分支）是叠加层，修复改写 `full.md` 不会盖掉使用者文字；此外旧论文修复前 Utility `userEditedBlocks` 只读该文件，按与阅读器相同的顺序（记录位置且映射或 baseHash 相符 → 唯一同映射块 → 唯一同 baseHash 块）定位有 `original` 或 `deletedAt` 的块，块内 span 一律不修；文件存在但无法读取时整篇不修。定位不到的编辑（orphan）不保护任何块。
-- 验证：真实文库 22 篇唯读试算，3eba78ee sub/sup 6106→76、丢字全部补回；另一篇同病论文 6241bed9 47068→174；其余 19 篇无候选、零改动；全部替换中原有含数字／`*`／`†`／撇号的真上下标无一丢失。未受影响论文的译文 `sourceHash` 比对 0 误标。隔离副本（master 构建作修复前对照）打开 3eba78ee 一次修复 796 行、216 段译文标为待更新；另 3 篇含真上下标的论文（含 AlphaFold）文件逐字节不变。
+僅修 PDF 文字層可核對的文字區：詞框重疊 ≥85%、長度比限1.5；候選至少6詞且單個小寫字母比例 ≥40%。疑似下標碎片需 ≥8 spans 幾何比對，真正上下標保留；補字有界（額外≤1/4），不猜公式、表格、圖片、旋轉或掃描頁。
 
-### 阅读器内编辑与整段删除（使用者编辑层）
+跳過已編輯／刪除塊；編輯檔不可讀則整篇停止修復，orphan 不得保護錯塊。只對唯一 Markdown 匹配同步改 layout／Markdown 並正確轉義，必要時最多3輪。保留 mapping ID，標註按 quote 遷移。
 
-使用者可在「原文」「译文」视图直接改写某一段或删除整段（解析出的页眉页脚、期刊杂讯等）。编辑是独立的一层，解析、文字层修复、翻译产物一律不被改写，因此这些流程永远不会覆盖或丢失使用者的修改。
+每 layout session 舊文檔自動修復一次，只在無活躍作業時后台執行。full／block／layout 原子發布後才事務提交 artifact revision；中斷可恢復。來源 hash 改變只標記譯文 sourceChanged，不自動重發付費翻譯；來源更新後文庫重掛載讀回有效版本。
 
-- 存储：`<文献目录>/edits/markdown-edits.v1.json`（`features/reader/contract/markdownEdits.ts`），只由 Utility `MarkdownEditStore` 写入（Core RPC `markdown-edits:apply`，按论文串行；临时文件、fsync、原子 rename，Windows EPERM/EACCES/EBUSY 有界重试）。`revision` 做乐观并发：阅读器带上看到的 revision，不一致即拒绝并提示刷新。文件损坏或不属于该论文时报错并保留原文件，不覆盖；阅读照常（`markdownEdits: null`），保存提示检查 `edits` 文件夹。
-- 寻址：按阅读器的内容块位置（`alignMarkdownBlocks` + 排除页眉页脚等映射，即 `annotationKey` 的 `content:N`），同时记录该块的 mapping ID 与解析原文 sha256。重新定位顺序：原位置（mapping 或原文一致）→ 唯一相同 mapping 的块 → 唯一相同原文的块；都不唯一则成为孤儿，保留在文件中但不套用，绝不套到别的段落。文字层修复改写原文后仍按 mapping 找回，使用者文字优先。页眉、页脚、脚注等版面块按 mapping ID 记入 `supplementalDeleted`。
-- 阅读：Main `getDocument` 解析编辑层并随 `documents:get` 返回可选 `markdownEdits`（含已删除段落摘要与边框标记）；阅读器在原有对齐结果上替换文字、在编号之后剔除已删除块，`annotationKey`、mapping、PDF 对应、滚动同步、引用悬停与图片分组不变。高亮与笔记仍按 quote／前后文在改写后的文字中重定位。段落已是当前段（点击或滚动同步选中）时，再单击其正文即原地编辑；等待双击间隔（约 260ms），双击／三击／拖选不进入编辑，链接、按钮、图片、引用标记的点击照旧。段落下方不再有任何按钮，也不提供「还原」（编辑层 API 仍保留 revert 动作）。编辑框复制该段计算后的字体、字号、行高、缩进与段距；保存后同一视图就地更新，阅读位置保留。译文过期时只在该段左缘显示一条淡点线（`data-stale`），原因写在右键菜单首行「译文待更新：原文已修改」；回退翻译的服务名同样只在菜单中显示。
-- 翻译：翻译计划打开时读取编辑层：改写过的原文以使用者文字送译，已删除块成为空的已完成单元；编辑指纹（含重译请求）并入计划 `sourceHash`。PDF 右键「重新翻译此段」写入该段 `retranslateAt` 并新排一个翻译作业（IPC `documents:retranslate-edited`，checkpoint `reason: 'edited'`）：该作业沿用上一份 manifest（同任务、同管线版本）中原文未变的各段结果，失败段保持失败（普通重试仍可处理），只有被请求、被改写的段送模型；被请求段的缓存键加盐，避免命中旧译文，结果以加盐键重新缓存。manifest 新增 `generatedAt`，用于判断请求是否已被满足。编辑译文只写编辑层，记录写作时依据的原文 hash，原文之后再改也会标示。
-- 右键菜单（`BlockContextMenu`，自绘、在指针处打开；Esc、点击别处、滚动或缩放窗口即关闭；无悬停提示）。PDF 段落框、原文／译文段落与页眉页脚共用同一组动作（`ReaderPage` 的 `blockMenus`）：重新翻译此段、整段加入对话（整段可见文字按原文选区校验，沿用问答选区）、整段加边界框标记／取消边界框标记、删除此段／恢复此段；图组另有图片加入问答、切换 PDF 原图／解析子图、在 PDF 中查看、删除此图（图组各段与图说一起删除）。有文字选区时保留系统菜单（复制）。分页合并段落是一个阅读段、多个 PDF 框：任一框的动作作用于含该 mapping 的全部可见段，PDF 框只有在该段完全不显示时才标为已删除，因此任一框都能恢复；连续快速删除经同一串行队列按顺序落盘（2026-10-24 真实综述：合并段＋其后 3 段连删全部写入）。边框标记是整块标注，固定为虚线，按版面块 ID 存于编辑层 `boxMarks`，PDF 与对应 Markdown 段同时显示；不进 SQLite 标注表（其 kind 受 CHECK 约束，整块标注无字符偏移）。已删除的段落在 PDF 中以斜纹淡化，恢复只经 PDF 右键「恢复此段」（不再有「已删除 N 段」入口）；没有 PDF 框的段落删除后，在其相邻段的右键菜单「恢复相邻的已删除段落」恢复。
-- 性能（2026-10-24）：阅读模型分两层：解析／译文的块只在文字或映射改变时构建一次（对齐共用、逐块准备结果按文字缓存，`prepareReaderMarkdown` 无 `$`／TeX 括号对时不解析），编辑层是其上的轻量一层，未改动的块保持对象身份。编辑、删除、恢复、加框先在本地乐观更新，随后按顺序落盘；IPC `documents:edit-markdown` 结果新增可选 `edits`（Main 按缓存的对齐解析后的编辑层），阅读器以之替换乐观结果，不再重新取整篇文档；落盘失败则重新读取文档恢复为已保存状态并提示。就地更新不显示加载遮罩；从顶部打开时段落边挂载边显示。图组按未编辑的块计算一次再重映射序号；保存过的整图 PNG（figures.json 中位置一致者）直接显示，不再每次由 pdf.js 重绘，也不再逐图向 Main 核对。引用索引在画面更新后再重建。隔离副本 435 块综述实测：首屏内容 4.3–4.5 s → 1.3 s，全部就绪 → 2.3 s；删除可见 ~1.0 s → ~0.1 s，编辑保存可见 ~0.9 s → ~0.06 s；滚动无 >50 ms 长任务。
-- 段落与图片排序（2026-10-24）：原文／译文视图中按住段落或图片约 0.4 秒不动即拿起整块（按下后先移动则照常选字），拖动时不可选字、原块淡化、蓝线标示落点，靠近视图上下缘按距离自动滚动，Esc 取消，放下后的那次点击不选段也不进入编辑；右键菜单另有「上移／下移／恢复原始顺序」。图片以图组为单位移动（图体、子图、图说各段一起，`MarkdownPane` 的 `reorderUnitOf`），与正文段落分开；不拆分解析出的 Markdown 块（真实文库 631 个含图块中 59 个带长文字，几乎都是图说，拆块会改动编辑层、翻译 manifest 与问答 chunk 共用的内容编号）。顺序存编辑层可选字段 `order: { count, sequence, updatedAt }`：`sequence` 是当前解析全部内容块编号的排列（含已删除块），Utility `MarkdownEditStore` 以 `{ kind: 'order' }` 目标、`reorder`／`reset-order` 动作写入，校验为当前块数的排列，与解析顺序相同即删除该字段。Main 只在 `count` 等于当前块数时随 `markdownEdits.order` 返回；重新解析导致块数变化时排序被忽略但保留在文件中，「恢复原始顺序」清除。套用：阅读器 `withReaderEdits` 只在内容槽之间换位，页眉、页脚、页码分隔线留在原处，`annotationKey`、mapping、PDF 对应与图组不变（图组按 annotationKey 重映射）；译文仅在与原文逐块对齐时跟随；Markdown／ZIP 导出按此顺序拼接；问答 chunk 按所属块的排名重排（无 mapping 的 chunk 跟随前一个）。翻译单元逐块独立，排序不进入编辑指纹，调整顺序不会令已完成的译文失效。兼容：`order` 只在有自订顺序时写入，旧版读取含 `order` 的文件会视为编辑层不可读（严格 schema），恢复原始顺序后即可再被旧版读取；无 migration。
-- 问答与导出：问答上下文按 mapping 把已删除块的 chunk 去掉、改写块合为一个带使用者文字的 chunk，chunk 定位不变，引用照常跳转；索引不重建。Markdown 与 ZIP 导出套用编辑层（编辑层不可读时导出失败而不是静默丢掉修改）。档案卡、图片 AI 解读仍读解析原文（未覆盖）。
-- 兼容与恢复：编辑层文件 v1 新增可选 `boxMarks`（缺省为空）与条目 `retranslateAt`；更早的本地构建会把含这些字段的文件视为不可读（阅读回退解析原文、不覆盖文件）。只新增文件、可选 IPC 字段（`documents:get.markdownEdits`、`translatedBlocks[].sourceHash`）、IPC `documents:edit-markdown`／`documents:retranslate-edited` 与 Core RPC `markdown-edits:apply`；无数据库 migration、不改 artifact 表与解析产物。旧版本忽略编辑文件，显示解析原文。删除 `edits/` 即回到解析原文。文库备份／迁移随文献目录复制该文件，卸载清理沿用文献目录边界。
-- 验证：真实断裂力学综述的隔离副本：编辑框与段落同为 Noto Sans SC 16px／28.48px；保存后 mapping 不变、译文出现「原文已修改」；删除正文段与页眉后两个视图都不显示，经 PDF 右键恢复；重启应用后编辑与删除仍在。重新翻译未做真实模型调用（由计划单元测试覆盖）。
+## 翻譯計劃與整圖
 
-### 阅读器整图呈现
+新計劃 markdown-logical-block-v6-rich-reader-standard-export 不把 v4/v5 當同一計劃續跑；合法 v4/v5/v6 manifest 仍供顯示／導出恢復缺失投影。不強制重解析或重翻譯，舊平面表格不會自動復原。
 
-阅读器使用现有布局及映射，按图说与 PDF 坐标辨识同页完整 Figure，支持多行子图、影像／统计图混合及图内标签、图例、比例尺；不依赖解析顺序。同一高度的双栏图说接续参与整图锚定，但不进入裁图；单一资源可利用完整图说的横向范围保留框外标题，扩大后的区域仍检查正文、图说及未知图片。不确定归属、跨页映射或裁图失败时保留来源图片与文字。原文与中文共用裁图范围，图内文字保留 PDF 原貌，完整图说保留为可标注正文；图组右键「在 PDF 中查看」恢复 PDF 视图并定位来源，不提供额外放大或手动框选。
-
-阅读栏整图在阅读准备阶段提前渲染（包括离屏图，阅读栏预渲染并发最多 2 个），成功后才替换已确认的来源图片；失败或超过 30 秒保留来源，允许重试。单图最多 800 万像素、单边最多 8192 像素，画布缓存最多 64 MiB；离开文献取消旧裁图及排队任务。参考文献内容使用 13px 字号、1.4 行高与 2px 段落间距；按中英文标题范围识别，后续同级章节恢复正文样式。
-
-正文显示前先完成来源图片解码、字体及整图准备，再预先捕捉并绘制右侧完整缩略导航；两者一起揭示，避免正文已显示但缩略导航仍空白。普通滚动与栏宽变化仍沿用已捕捉的预览及位置映射；重试成功导致整图替换时重新捕捉。
-
-打开文献后另以串行后台任务将可靠的完整裁图保存到 `images/figures/`，包括视口之外的图；`figures.json` 保存来源版本、裁图边界、全部 mapping ID 与图片摘要。Main 重新校验整图归属、来源版本及 PNG 上限，再原子发布图片与清单。失败或缺图不会隐藏来源，下一次打开可重新生成；删除文献等待在途落盘，文库维护沿用 IPC 维护锁。新增可选的 `documents:cache-figure` IPC，不修改数据库、BlockMapping 或既有文献 payload。
-
-`full.figures.md` 与 `full.zh-CN.figures.md` 为供 AI 和展示使用的派生文件，已确认的子图引用改为一张整图；正文、完整图说和无关图片保留。Markdown／ZIP 导出优先使用当前有效裁图，没有有效裁图则沿用来源图片。原 `full.md`、中文投影、翻译 manifest、标注及原始子图均保留；旧文献无需重新解析或翻译。
-
-解析发布 `full.md` 前保留丰富结构，并按原 Markdown 所在目录重新定位 Markdown 与 HTML 图片，再计算产物摘要。翻译同时支持 HTML 表格与 GFM 表格，通过 JSON 单元格协议翻译文字，保护公式、代码、链接和合并单元格结构；最终 Markdown 与 manifest 块保持相同的丰富格式。
-
-翻译计划版本为 `markdown-logical-block-v6-rich-reader-standard-export`，v4/v5 计划不作为新版本同一计划恢复；仍保留原有原子写入、任务绑定和缓存摘要约束。阅读/导出允许读取合法的 v4、v5 和 v6 manifest，以恢复缺失或陈旧的中文投影。旧原文、布局与块映射不强制改写；阅读器先用原内容匹配来源，之后逐块做非结构性准备，保持 sourceIndex、annotationKey 与原有映射关系。
-
-另存 Markdown 不再直接复制产物。它先规范化并将实际引用的本地图片复制到唯一的相邻资源目录，重写为可传递的相对地址；图片复制全部结束后才原子发布 Markdown。缺图/越界/非法目标会失败并清理本次暂存，保留已有导出文件；拒绝向该任务的数据目录写入。传递时须一起传递 Markdown 和图片目录。完整结果 ZIP 同样规范化两份 Markdown，并保留图片；排除 `.translation` 内部请求，写入临时 ZIP 成功后才替换目标。
+整圖使用共用幾何、來源 revision／hash／邊界驗證；full.figures.md 只是導出投影，不改來源。裁圖成功才隱藏對應解析圖片／圖內文字，缺圖或歧義保留來源，不能用局部 PNG 掩蓋缺失。裁圖、圖片展示覆寫與來源段落共享的細節見 [reader README](../desktop/src/features/reader/README.md) 與 [圖片契約](FIGURE_INSIGHT_ZH.md)。
 
 ## 验证
 
-本机使用真实文库里的原文与中文 Markdown 做格式审计：检查无活动 HTML 节点、无非法控制字符、重复转换稳定，以及正文、代码与数学片段保留（允许等价竖线宏）。诊断结果放在仓库之外，不把论文全文提交到 Git。
-
-回归覆盖：阅读器和翻译发布保留合并表格、上下标，导出转换 GFM、公式竖线、HTML 与嵌套列表、代码保护、文档引用、图片复制、缺图回滚、路径限制、旧 manifest 恢复与结果 ZIP。Windows CI 保留 lint、类型检查、覆盖率、打包和 E2E 门禁；E2E 检查原生 HTML 上下标、表格单元格、KaTeX 无错误以及现有 PDF 联动和标注。
-
-浏览器/CI 通过不能代替 Notion 桌面实际验收；本机没有可用 Notion，因此 Notion 预览和导入的最终效果仍需在有 Notion 的电脑上验证。用户对比包仅含 DDPM.original.md 和 DDPM.fixed.md；正式导出的图片资源行为由导出测试验证。
+既有 reader／translation／export 回歸須涵蓋 rich 結構、公式／code 保護、使用者層、舊 manifest、圖片複製、路徑隔離、缺圖回滾與 ZIP；真實論文只在隔離副本核對，不提交全文。瀏覽器／CI 不替代 Notion Desktop 實際導入驗收；歷史樣本不證明當前構建已通過。

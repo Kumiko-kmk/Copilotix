@@ -1,3 +1,4 @@
+import type { ReaderFigureGeometry } from '@features/document/core'
 import { registerSavedFigureCrops } from './ReaderFigureSnapshot'
 import React from 'react'
 import type { ReaderNote } from '../../contract/readerNotes'
@@ -28,6 +29,7 @@ import { applyFigureDisplay, useFigureDisplayChoices } from '../readerFigureDisp
 import { createScrollSyncHub } from '../readerScrollSync'
 import { useFigureArtifacts } from '../useFigureArtifacts'
 import { canRetry } from '@features/library/renderer'
+import { freshReaderPositions, sessionReaderPositions } from '../readerPositions'
 
 /** AI chat lives in the same workbench as the readers; it is optional so the reader works without it. */
 export interface ReaderChatOptions {
@@ -63,6 +65,7 @@ export interface ReaderViewSpec {
 export type ReaderViewSpecs = Partial<Record<ReaderViewId, ReaderViewSpec>>
 
 export interface ReaderViewsInput {
+  figureGeometries?: ReaderFigureGeometry[]
   pdfUrl?: string
   mappings?: BlockMapping[]
   layoutJson?: string
@@ -98,6 +101,8 @@ export interface ReaderViewsInput {
   chat?: ReaderChatOptions
   /** Reading views currently on screen with scroll sync on; they lead and follow each other. */
   scrollSyncViews?: readonly ReaderViewId[]
+  /** Reopening this paper during the session continues where it was left instead of at the top. */
+  resumePosition?: boolean
 }
 
 /**
@@ -107,8 +112,9 @@ export interface ReaderViewsInput {
  */
 export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   const [highlightColor, setHighlightColor] = React.useState<HighlightColor>('yellow')
-  const scrollPositionsRef = React.useRef<Record<ReaderAnnotationView, number>>({ original: 0, translated: 0 })
-  const pdfStateRef = React.useRef<PdfViewState | null>(null)
+  const [positions] = React.useState(() => props.resumePosition ? sessionReaderPositions(props.taskId) : freshReaderPositions())
+  const scrollPositionsRef = React.useRef(positions.scroll)
+  const pdfStateRef = React.useRef(positions.pdf)
   const syncHub = React.useMemo(createScrollSyncHub, [])
   React.useEffect(() => () => syncHub.dispose(), [syncHub])
   const syncKey = (props.scrollSyncViews ?? []).join(',')
@@ -128,7 +134,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   const translatedNotes = React.useMemo(() => (props.notes ?? []).filter((note) => note.view === 'translated'), [props.notes])
   // Registered during render: figure snapshots start in effects that run before this component's.
   if (props.pdfUrl) registerSavedFigureCrops(props.pdfUrl, props.assetBaseUrl)
-  const figureGeometries = React.useMemo(() => buildReaderFigureGeometries(mappings, props.layoutJson), [mappings, props.layoutJson])
+  const figureGeometries = React.useMemo(() => props.figureGeometries ?? buildReaderFigureGeometries(mappings, props.layoutJson), [props.figureGeometries, mappings, props.layoutJson])
   useFigureArtifacts(props.taskId, props.pdfUrl, figureGeometries)
   const figureDisplay = useFigureDisplayChoices(props.taskId)
   // Figures are grouped on the unedited blocks, then re-indexed to the shown ones; a group keeps its
@@ -170,7 +176,8 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
   }, [])
   const rememberPdfState = React.useCallback((state: PdfViewState) => {
     pdfStateRef.current = state
-  }, [])
+    positions.pdf = state
+  }, [positions])
 
   return React.useMemo<ReaderViewSpecs>(() => {
     const originalReady = props.originalBlocks.some(block => block.role === 'content' && block.markdown.trim())

@@ -53,22 +53,26 @@ async function ancestors(path: string): Promise<void> {
   }
 }
 
-async function snapshot(path: string, records: string[]): Promise<void> {
+async function snapshot(path: string, records: string[], ignored: ReadonlySet<string>): Promise<void> {
+  if (ignored.has(path)) return
   await ancestors(path)
   const stat = await inspect(path)
   if (!stat) { records.push(JSON.stringify([path, 'missing'])); return }
   if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) throw failure()
   records.push(JSON.stringify([path, stat.isDirectory() ? 'directory' : 'file', stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs]))
   if (stat.isDirectory()) {
-    for (const name of (await readdir(path)).sort()) await snapshot(join(path, name), records)
+    for (const name of (await readdir(path)).sort()) await snapshot(join(path, name), records, ignored)
   }
 }
 
-/** Reads the existing SQLite file without migrations or starting the translation queue. */
-export async function prepareUninstallCleanup(options: UninstallCleanupOptions): Promise<UninstallCleanupPlan> {
+/**
+ * Reads the existing SQLite file without migrations or starting the translation queue.
+ * userDataFolder is fixed when this worker is built, never taken from the cleanup request.
+ */
+export async function prepareUninstallCleanup(options: UninstallCleanupOptions, userDataFolder: string): Promise<UninstallCleanupPlan> {
   const appData = absolute(options.appData)
   const installDirectory = absolute(options.installDirectory)
-  const userData = join(appData, 'Copilotix-Translation-v2')
+  const userData = join(appData, userDataFolder)
   if (overlaps(userData, installDirectory)) throw failure()
   const protectedDirectories = (options.protectedDirectories ?? []).map(absolute)
   const forbiddenDirectories = (options.forbiddenDirectories ?? []).map(absolute)
@@ -104,9 +108,18 @@ export async function prepareUninstallCleanup(options: UninstallCleanupOptions):
   })
   if (new Set(libraryPaths.map(normalized)).size !== libraryPaths.length) throw failure()
   const records: string[] = [JSON.stringify({ userData, libraryPaths, rows, outputRoot, installDirectory, protectedDirectories, forbiddenDirectories })]
-  for (const path of [...libraryPaths, userData]) await snapshot(path, records)
+  // Merely opening a write-ahead-log database read-only touches these two, so their dates cannot show a
+  // change. The -shm index holds no data; the log does, and is compared by content below.
+  const walPath = `${databasePath}-wal`
+  const sidecars = new Set([walPath, `${databasePath}-shm`])
+  for (const path of [...libraryPaths, userData]) await snapshot(path, records, sidecars)
   // Include database bytes so even same-size database updates invalidate confirmation.
-  if (databaseStat) records.push(createHash('sha256').update(await readFile(databasePath)).digest('hex'))
+  if (databaseStat) {
+    records.push(createHash('sha256').update(await readFile(databasePath)).digest('hex'))
+    const wal = await inspect(walPath)
+    if (wal && (!wal.isFile() || wal.isSymbolicLink())) throw failure()
+    records.push(createHash('sha256').update(wal ? await readFile(walPath) : '').digest('hex'))
+  }
   return { userData, libraryPaths, documentCount: rows.length, ...(outputRoot ? { outputRoot } : {}), token: createHash('sha256').update(records.join('\n')).digest('hex'), options: { appData, installDirectory, protectedDirectories, forbiddenDirectories } }
 }
 
@@ -134,7 +147,7 @@ async function removeTree(path: string): Promise<void> {
 
 /** Complete safety preflight happens before any removal; only database-recorded library folders are eligible. */
 export async function executeUninstallCleanup(plan: UninstallCleanupPlan, options: UninstallCleanupOptions = plan.options): Promise<void> {
-  const current = await prepareUninstallCleanup(options)
+  const current = await prepareUninstallCleanup(options, basename(plan.userData))
   if (current.token !== plan.token) throw failure()
   for (const path of current.libraryPaths) await removeTree(path)
   await removeTree(current.userData)

@@ -19,6 +19,12 @@ export interface CredentialStatus extends CredentialValidationResult {
   maskedValue?: string
 }
 
+/** One model key's stored state plus its live runtime health (cooldown until retryAt, or rejected). */
+export interface KeyStatus extends CredentialStatus {
+  health?: 'cooldown' | 'rejected'
+  retryAt?: number
+}
+
 export interface CredentialStatuses {
   parser: CredentialStatus
   qwen: CredentialStatus
@@ -31,11 +37,12 @@ export interface CredentialFieldError {
 }
 
 export interface AppSettings {
+  modelConnections?: import('@platform/models/contract/models').ModelConnection[]
   codex?: import('@platform/codex/contract/codex').CodexSettings
   outputRoot: string
   formulaEnabled: boolean
   tableEnabled: boolean
-  translationProvider: TranslationProviderId
+  translationProvider: TranslationProviderId | null
   translationProviderOrder: TranslationProviderId[]
   enabledTranslationProviders: TranslationProviderId[]
   qwenBaseUrl: string
@@ -49,15 +56,21 @@ export interface AppSettings {
   deepseekChatModel: string
   chatConsentProvider: 'qwen' | 'deepseek' | 'codex' | null
   chatConsentVersion: number | null
+  /** qwen/deepseek summarise their enabled keys: valid when any enabled key is valid. */
   credentials: CredentialStatuses
+  /** Per-key status by connection id; derived on read, never persisted. */
+  keyStatuses?: Record<string, KeyStatus>
 }
 
 export interface SettingsUpdate
-  extends Omit<AppSettings, 'credentials'> {
+  extends Omit<AppSettings, 'credentials' | 'keyStatuses'> {
+  /** parser, or qwen/deepseek as an alias of that provider's default key. */
   credentialMutations?: Partial<Record<CredentialName, CredentialMutation>>
+  keyMutations?: Record<string, CredentialMutation>
 }
 
 export interface SettingsSaveResult {
   settings: AppSettings
   fieldErrors: Partial<Record<CredentialName, CredentialFieldError>>
+  keyErrors?: Record<string, CredentialFieldError>
 }

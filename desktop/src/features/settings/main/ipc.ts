@@ -26,7 +26,7 @@ export function registerSettingsIpc(ipc: IpcRegistrar, deps: SettingsIpcDeps): v
     deps.afterSave(before, update, result)
     return result
   })
-  ipc.handle(settingsChannels.validateCredential, (_event, request) => settings.validateCredential(request.name, request.value))
+  ipc.handle(settingsChannels.validateCredential, (_event, request) => settings.validateCredential(request.name, request.value, { connectionId: request.connectionId }))
   ipc.handle(settingsChannels.chooseOutputDirectory, () => deps.chooseDirectory())
   ipc.handle(settingsChannels.storageInfo, async () => {
     const current = await settings.get()

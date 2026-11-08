@@ -177,6 +177,8 @@ export default function ReaderWorkbench(props: {
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || event.isComposing) return
+      // Kept mounted under a page that covers it, the workbench must not react to keys meant for that page.
+      if (rootRef.current?.closest('[inert]')) return
       const layout = layoutRef.current
       if (!(event.ctrlKey || event.metaKey)) {
         if (event.key === 'Escape' && maximizedRef.current && !isEditable(event.target)) {

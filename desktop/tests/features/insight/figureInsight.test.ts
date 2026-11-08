@@ -6,6 +6,7 @@ import { FIGURE_INSIGHT_PROMPT_VERSION, figureInsightContentSchema, figureInsigh
 import { buildFigureInsightMessages } from '@features/insight/core/figureInsightPrompt'
 import { FigureInsightService, type FigureInsightDependencies } from '../../../src/features/insight/main/figureInsightService'
 import { ChatProvider } from '../../../src/features/chat/main/chatProvider'
+import { providerKey } from '../../providerKeys'
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2l1sAAAAASUVORK5CYII=', 'base64')
 const digest = createHash('sha256').update(png).digest('hex')
@@ -24,7 +25,7 @@ function fixture() {
   const states: FigureInsightState[] = []
   let state: FigureInsightState = { status: 'missing' }
   const deps: FigureInsightDependencies = {
-    settings: vi.fn(async () => settings), key: vi.fn(async () => 'secret-key'),
+    settings: vi.fn(async () => settings), keys: vi.fn(async () => [providerKey('secret-key')]),
     descriptor: vi.fn(async () => descriptor), get: vi.fn(async () => state), readImage: vi.fn(async () => png),
     save: vi.fn(async (value: FigureInsightSave) => {
       state = { status: 'ready', stale: false, record: { version: 1, documentId: value.documentId, figure: descriptor.figure,
@@ -88,7 +89,7 @@ describe('figure insight pipeline', () => {
 
   it.each(['key', 'valid', 'enabled'] as const)('never reads or uploads an image without %s', async kind => {
     const f = fixture()
-    if (kind === 'key') f.deps.key = async () => null
+    if (kind === 'key') f.deps.keys = async () => []
     if (kind === 'valid') f.settings.credentials.qwen.state = 'unknown'
     if (kind === 'enabled') f.settings.enabledTranslationProviders = []
     await f.service.generate(f.request); await idle(f)

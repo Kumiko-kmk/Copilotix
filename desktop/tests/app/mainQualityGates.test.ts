@@ -265,7 +265,16 @@ describe('main quality boundaries', () => {
 
     const payload = await service.getDocument(task.id)
     expect(payload.markdown).toBe('# Source')
-    expect(payload.translatedBlocks).toEqual([{ sourceIndex: 0, markdown: '# 译文', mappingIds: ['mapping-1'] }])
+    // A legacy ordinal without a source version/hash cannot prove paragraph identity.
+    expect(payload.translatedBlocks).toEqual([{ sourceIndex: undefined, markdown: '# 译文', mappingIds: [], unmatched: true, sourceChanged: true }])
+    expect(payload.translatedMarkdown).toBe('# 译文\n')
+
+    const currentManifest = JSON.parse(await readFile(join(root, 'translation.manifest.json'), 'utf8'))
+    currentManifest.sourceVersion = payload.base!.sourceVersion
+    await writeFile(join(root, 'translation.manifest.json'), JSON.stringify(currentManifest), 'utf8')
+    expect((await service.getDocument(task.id)).translatedBlocks).toEqual([
+      { sourceIndex: 0, sourceVersion: payload.base!.sourceVersion, markdown: '# 译文', mappingIds: ['mapping-1'] }
+    ])
 
     await writeFile(join(root, 'translation.manifest.json'), JSON.stringify({
       version: 2,
@@ -277,7 +286,7 @@ describe('main quality boundaries', () => {
       blocks: [{ sourceIndex: 0, markdown: '# 译文', mappingIds: ['stale-mapping'] }]
     }), 'utf8')
     await expect(service.loadTranslatedBlocks(task)).resolves.toEqual([
-      { sourceIndex: 0, markdown: '# 译文', mappingIds: [] }
+      { sourceIndex: undefined, markdown: '# 译文', mappingIds: [], unmatched: true, sourceChanged: true }
     ])
 
     expect(await service.resolveAsset(task.id, '/images/figure.png')).toBe(join(await realpath(root), 'images', 'figure.png'))

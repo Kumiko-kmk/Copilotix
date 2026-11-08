@@ -1,20 +1,14 @@
+import { documentModels } from '@features/document/utility'
 import { createHash } from 'node:crypto'
-import { lstat, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { z } from 'zod'
-import { BLOCK_MAPPING_VERSION, alignMarkdownBlocks } from '@features/parsing/core'
-import { blockMappingSchema } from '@features/parsing/contract/blockSchemas'
-import { readerContentMappings } from '../core/readerDocument'
+import { lstat } from 'node:fs/promises'
+import { type AlignedMarkdownBlock } from '@features/parsing/core'
 import { isIdentity, isPermutation, markdownEditRequestSchema, resolveMarkdownEdits, validOrder, type MarkdownEditEntry, type MarkdownEditRequest, type MarkdownEditsFile } from '../contract/markdownEdits'
-import { PathPolicy } from '@platform/files/runtime/pathPolicy'
 import { readMarkdownEditsFile, writeMarkdownEditsFile } from '../runtime/markdownEditsFile'
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
-const mappingsSchema = z.object({ version: z.literal(BLOCK_MAPPING_VERSION), mappings: z.array(blockMappingSchema).max(100_000) }).passthrough()
 
 /** Single writer of a paper's edit layer, on the Utility data lane; writes are serialized per paper. */
 export class MarkdownEditStore {
-  private readonly policy = new PathPolicy()
   private readonly tails = new Map<string, Promise<unknown>>()
   constructor(private readonly directory: (documentId: string) => string | null) {}
 
@@ -39,8 +33,9 @@ export class MarkdownEditStore {
     const root = this.root(documentId)
     const file = await readMarkdownEditsFile(root, documentId)
     if (!file.order) return null
-    const blocks = await this.contentBlocks(root)
-    const order = validOrder(file.order, blocks.length)
+    const model = await documentModels.ensureBase(documentId, root)
+    const blocks = model.content
+    const order = validOrder(file.order, blocks.length, model.sourceVersion)
     if (!order) return null
     const rank = new Map<string, number>()
     order.forEach((index, position) => { for (const id of blocks[index]!.mappingIds) rank.set(id, position) })
@@ -48,15 +43,8 @@ export class MarkdownEditStore {
   }
 
   /** The reader's alignment of the current parse: positions and mapping identities as the user sees them. */
-  private async contentBlocks(root: string): Promise<ReturnType<typeof alignMarkdownBlocks>> {
-    const mappings = mappingsSchema.parse(JSON.parse(await this.text(root, 'block_list.json'))).mappings
-    return alignMarkdownBlocks(await this.text(root, 'full.md'), readerContentMappings(mappings))
-  }
-
-  private async text(root: string, name: string): Promise<string> {
-    const info = await lstat(join(root, name))
-    if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024 * 1024) throw new Error('论文解析结果无效')
-    return readFile(this.policy.resolveChild(root, name), 'utf8')
+  private async contentBlocks(root: string, documentId: string): Promise<AlignedMarkdownBlock[]> {
+    return (await documentModels.ensureBase(documentId, root)).content
   }
 
   private async applyNow(request: MarkdownEditRequest): Promise<{ revision: number }> {
@@ -71,28 +59,27 @@ export class MarkdownEditStore {
     if (target.kind === 'order') {
       delete next.order
       if (request.action === 'reorder') {
-        const count = (await this.contentBlocks(root)).length
+        const count = (await this.contentBlocks(root, request.documentId)).length
         if (!isPermutation(target.sequence, count)) throw new Error('段落位置已变化，请刷新后重试')
-        if (!isIdentity(target.sequence)) next.order = { count, sequence: [...target.sequence], updatedAt: now }
+        if (!isIdentity(target.sequence)) next.order = { sourceVersion: (await documentModels.ensureBase(request.documentId, root)).sourceVersion, count, sequence: [...target.sequence], updatedAt: now }
       }
-    } else if (target.kind === 'block') {
-      next.boxMarks = next.boxMarks.filter(item => item.mappingId !== target.mappingId)
-      if (request.action === 'box') next.boxMarks.push({ mappingId: target.mappingId, markedAt: now })
     } else if (target.kind === 'supplemental') {
       next.supplementalDeleted = next.supplementalDeleted.filter(item => item.mappingId !== target.mappingId)
       if (request.action === 'delete') next.supplementalDeleted.push({ mappingId: target.mappingId, deletedAt: now })
     } else {
       // Positions and mapping identities must match what the user clicked.
-      const blocks = await this.contentBlocks(root)
+      const model = await documentModels.ensureBase(request.documentId, root)
+      const blocks = model.content
       const block = blocks[target.index]
       const sameIds = block && block.mappingIds.length === target.mappingIds.length && [...block.mappingIds].sort().join('\0') === [...target.mappingIds].sort().join('\0')
       if (!block || !sameIds) throw new Error('段落位置已变化，请刷新后重试')
       // Rewrite positions to the current parse so later edits find their blocks directly.
-      const { byIndex, orphans } = resolveMarkdownEdits(blocks, file, sha256)
+      const { byIndex, orphans } = resolveMarkdownEdits(blocks, file, sha256, model.sourceVersion)
       const existing = byIndex.get(target.index)
       const entry: MarkdownEditEntry = existing
         ? (({ baseChanged: _changed, ...rest }) => rest)(existing)
         : { index: target.index, mappingIds: [...block.mappingIds], baseHash: sha256(block.markdown) }
+      entry.sourceVersion = model.sourceVersion
       const text = request.markdown?.replace(/\r\n?/gu, '\n').trim() ?? ''
       if (request.action === 'set-original') {
         if (text === block.markdown.trim()) delete entry.original

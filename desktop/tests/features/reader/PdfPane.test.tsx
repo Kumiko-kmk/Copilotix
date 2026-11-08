@@ -24,6 +24,7 @@ import PdfPane, {
   pdfRenderWindow,
   readPdfContentWidth
 } from '../../../src/features/reader/renderer/components/PdfPane'
+import { pdfViewportWindow } from '../../../src/features/reader/renderer/components/pdfLayout'
 
 let scrollIntoView: ReturnType<typeof vi.fn>
 let resizeCallbacks: Array<() => void>
@@ -138,8 +139,7 @@ describe('PdfPane mapping navigation', () => {
     view.rerender(
       <PdfPane url="copilotix-asset://document/original.pdf" mappings={mappings} selection={selection} onSelect={onSelect} />
     )
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
-    expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    await waitFor(() => expect(view.container.querySelector('.pdf-scroll')!.scrollTop).toBe(852))
     expect(continuation.classList.contains('active')).toBe(true)
 
     // Citations from the chat tab scroll the PDF exactly like Markdown clicks.
@@ -147,8 +147,38 @@ describe('PdfPane mapping navigation', () => {
     view.rerender(
       <PdfPane url="copilotix-asset://document/original.pdf" mappings={mappings} selection={{ mappingId: 'image-block', origin: 'citation' }} onSelect={onSelect} />
     )
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    await waitFor(() => expect(view.container.querySelector('.pdf-scroll')!.scrollTop).toBe(200))
     expect(image.classList.contains('active')).toBe(true)
+  })
+
+  it('navigates to an unmounted page, accepts an initial selection after loading, and keeps hidden bounds clickable', async () => {
+    const page = {
+      cleanup: vi.fn(),
+      getViewport: ({ scale }: { scale: number }) => ({ width: 612 * scale, height: 792 * scale }),
+      render: vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() }))
+    }
+    getDocumentMock.mockReturnValue({
+      promise: Promise.resolve({ numPages: 100, getPage: vi.fn(async () => page) }),
+      destroy: vi.fn(async () => undefined)
+    })
+    const onSelect = vi.fn()
+    const mappings: BlockMapping[] = [{ id: 'distant', type: 'text', order: 0, sourceText: 'Distant paragraph',
+      boxes: [{ pageIndex: 79, pageSize: [612, 792], bbox: [20, 100, 400, 200], blockPosition: '79-0' }] }]
+    const view = render(<PdfPane url="copilotix-asset://navigation/100.pdf" mappings={mappings}
+      selection={{ mappingId: 'distant', origin: 'markdown' }} onSelect={onSelect} />)
+    await waitFor(() => expect(view.getByText('80 / 100')).toBeTruthy())
+    expect(view.container.querySelector('.pdf-scroll')!.scrollTop).toBe(79 * 792 + 150)
+    expect(view.container.querySelectorAll('[data-pdf-page]').length).toBeLessThanOrEqual(3)
+    fireEvent.click(view.getByLabelText('显示区块边框'))
+    expect(view.container.querySelector('.pdf-pane')!.getAttribute('data-show-bounds')).toBe('false')
+    fireEvent.click(view.container.querySelector('[data-block-id="distant"]')!)
+    expect(onSelect).toHaveBeenCalledWith({ mappingId: 'distant', blockPosition: '79-0', origin: 'pdf' })
+    fireEvent.click(view.getByLabelText('跳转到页'))
+    fireEvent.change(view.getByLabelText('PDF 页码'), { target: { value: '100' } })
+    fireEvent.keyDown(view.getByLabelText('PDF 页码'), { key: 'Enter' })
+    await waitFor(() => expect(view.container.querySelector('[data-pdf-page="99"]')).toBeTruthy())
+    expect(view.container.querySelector('.pdf-scroll')!.scrollTop).toBe(99 * 792)
+    expect(view.getByLabelText('下一页').hasAttribute('disabled')).toBe(true)
   })
 
   it('reveals only the overflowing scrollbar nearest the pointer edge', () => {
@@ -314,6 +344,13 @@ describe('PDF fit-width zoom', () => {
 })
 
 describe('PDF long-document indexing', () => {
+  it('renders every visible short page with one page of overscan at either edge', () => {
+    const layout = buildPdfPageLayout(Array.from({ length: 1000 }, () => ({ width: 800, height: 200 })), 400, 0.6)
+    expect(pdfViewportWindow(layout, 6000, 600)).toEqual({ start: 99, end: 111 })
+    expect(pdfViewportWindow(layout, 0, 600)).toEqual({ start: 0, end: 11 })
+    expect(pdfViewportWindow(layout, 59940, 600)).toEqual({ start: 998, end: 1000 })
+    expect(pdfViewportWindow({ pages: [], totalHeight: 0 }, 0, 600)).toEqual({ start: 0, end: 0 })
+  })
   it('preserves a page-local point across mixed page geometry and viewport sizes', () => {
     const sizes = Array.from({ length: 15 }, (_, index) => ({ width: index % 2 ? 600 : 500, height: index % 3 ? 800 : 1000 }))
     const original = buildPdfPageLayout(sizes, 600, 1)

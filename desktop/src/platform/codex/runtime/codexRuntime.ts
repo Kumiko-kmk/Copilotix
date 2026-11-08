@@ -2,12 +2,11 @@ import { access, mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join, delimiter, isAbsolute } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { z } from 'zod'
 import type { MultimodalChatMessage } from '../contract/chatMessages'
 import { type CodexSettings, type CodexStatus, codexModelSchema, codexStatusSchema } from '../contract/codex'
 import { CodexConnection } from './codexConnection'
-import PQueue from 'p-queue'
+import { connectionFor, sharedModelRuntime } from '@platform/models/runtime/modelRuntime'
 
 const exec = promisify(execFile)
 const DISABLED_FEATURES = ['shell_tool', 'unified_exec', 'shell_snapshot', 'apps', 'plugins', 'remote_plugin', 'hooks', 'memories', 'multi_agent', 'multi_agent_v2', 'browser_use', 'computer_use', 'image_generation', 'code_mode', 'code_mode_host', 'skill_search', 'skill_mcp_dependency_install', 'tool_suggest']
@@ -48,43 +47,8 @@ export function codexFailure(error: unknown): Pick<CodexGenerationError, 'catego
   return { category: name, retryable: false, rateLimited: false }
 }
 export type CodexLog = (event: string, details: Record<string, unknown>) => void
-export const CODEX_RETRY = { attempts: 6, rateLimitMs: 5_000, transientMs: 1_000, maxMs: 60_000 }
-/**
- * Account-wide limiter for the background lane. A rate limit halves concurrency and starts a
- * jittered cooldown; failures of requests already in flight share that window instead of
- * narrowing it again. Sustained success restores one slot at a time.
- */
-export class CodexBackoff {
-  limit: number
-  epoch = 0
-  private until = 0
-  private strikes = 0
-  private streak = 0
-  constructor(private readonly max: number, private readonly retry = CODEX_RETRY, private readonly now = Date.now, private readonly random = Math.random) { this.limit = max }
-  failed(rateLimited: boolean, epoch: number): number {
-    this.streak = 0
-    if (epoch === this.epoch || this.until <= this.now()) {
-      this.epoch++
-      this.strikes++
-      if (rateLimited) this.limit = Math.max(1, Math.floor(this.limit / 2))
-      const delay = Math.min(this.retry.maxMs, (rateLimited ? this.retry.rateLimitMs : this.retry.transientMs) * 2 ** (this.strikes - 1))
-      this.until = Math.max(this.until, this.now() + delay * (0.75 + this.random() * 0.5))
-    }
-    return Math.max(0, this.until - this.now())
-  }
-  succeeded(): void {
-    // In-flight successes during a cooldown must not undo its reduced budget.
-    if (this.until > this.now()) return
-    if (++this.streak < this.limit * 2) return
-    this.streak = 0
-    this.strikes = Math.max(0, this.strikes - 1)
-    if (this.limit < this.max) { this.limit++; this.epoch++ }
-  }
-  async wait(signal: AbortSignal): Promise<void> {
-    for (let remaining = this.until - this.now(); remaining > 0; remaining = this.until - this.now()) await sleep(remaining, undefined, { signal })
-  }
-}
 export interface CodexGeneration {
+  purpose?: 'translation' | 'chat' | 'brief' | 'figure'
   model: string
   messages: MultimodalChatMessage[]
   signal: AbortSignal
@@ -113,7 +77,6 @@ export async function findCodexExecutable(explicit: string): Promise<string> {
 export const CODEX_BACKGROUND_CONCURRENCY = 8
 /** Independent process slots; each request starts a fresh ephemeral thread. */
 export class CodexRuntime {
-  private queues = { interactive: new PQueue({ concurrency: 1 }), background: new PQueue({ concurrency: CODEX_BACKGROUND_CONCURRENCY }) }
   private busy = { interactive: new Set<number>(), background: new Set<number>() }
   private pooled = new Map<string, { ready: Ready; executable: string; idle?: ReturnType<typeof setTimeout> }>()
   private connections = new Set<CodexConnection>()
@@ -122,10 +85,8 @@ export class CodexRuntime {
   private hydration?: Promise<void>
   private writes = Promise.resolve()
   private destroyed = false
-  private backoff: CodexBackoff
   constructor(private readonly cwd: string, private readonly settings: () => Promise<CodexSettings>,
-    private readonly log: CodexLog = () => undefined, private readonly retry = CODEX_RETRY) {
-    this.backoff = new CodexBackoff(CODEX_BACKGROUND_CONCURRENCY, retry)
+    private readonly log: CodexLog = () => undefined) {
   }
 
   private snapshotKey(settings: CodexSettings): string { return JSON.stringify([settings.executable, settings.effort]) }
@@ -161,6 +122,7 @@ export class CodexRuntime {
       ready = await this.open(settings)
       if (testModel && ready.status.state === 'ready') {
         await this.generateOn(ready, settings, { model: testModel, messages: [{ role: 'user', content: 'Reply exactly OK.' }], signal: AbortSignal.timeout(120_000), onDelta: () => undefined })
+        sharedModelRuntime.reset('codex:default')
         this.verified.add(`${ready.status.executable}:${settings.effort}:${testModel}`)
       }
       const status: CodexStatus = { ...ready.status, verifiedModels: ready.status.models.filter(model => this.verified.has(`${ready!.status.executable}:${settings.effort}:${model.id}`)).map(model => model.id) }
@@ -172,51 +134,32 @@ export class CodexRuntime {
     } finally { ready?.connection.close() }
   }
 
-  generate(input: CodexGeneration): Promise<Usage | null> {
+  async generate(input: CodexGeneration): Promise<Usage | null> {
+    const settings = await this.settings()
     const lane = input.lane ?? 'background'
-    const run = (async () => {
-      for (let attempt = 1; ; attempt++) {
-        const epoch = this.backoff.epoch, started = Date.now()
-        let delivered = false
-        try {
-          if (lane === 'background') await this.backoff.wait(input.signal)
-          const usage = await this.queues[lane].add(() => this.attempt(lane, { ...input, onDelta: text => { delivered = true; return input.onDelta(text) } }))
-          if (lane === 'background') { this.backoff.succeeded(); this.applyLimit() }
-          return usage ?? null
-        } catch (error) {
-          if (input.signal.aborted || this.destroyed) throw error
-          const failure = codexFailure(error)
-          // Retrying after partial output would duplicate deltas already delivered to the caller.
-          const willRetry = lane === 'background' && failure.retryable && !delivered && attempt < this.retry.attempts
-          const cooldownMs = lane === 'background' && failure.retryable ? Math.round(this.backoff.failed(failure.rateLimited, epoch)) : 0
-          if (lane === 'background') this.applyLimit()
-          this.log('codex.generation.failed', { lane, model: input.model, attempt, category: failure.category, retryable: failure.retryable,
-            partialOutput: delivered, willRetry, cooldownMs, concurrency: this.queues.background.concurrency, durationMs: Date.now() - started })
-          if (!willRetry) throw error
+    const connection = connectionFor('codex', 'stdio://codex', settings.executable)
+    let partial = false
+    const result = await sharedModelRuntime.execute({ purpose: input.purpose ?? 'chat', model: input.model, lane, candidates: [connection], signal: input.signal }, async () => {
+      try {
+        const usage = await this.attempt(lane, { ...input, onDelta: async text => { partial ||= Boolean(text); await input.onDelta(text) } })
+        return { value: usage, usage }
+      } catch (error) {
+        const failure = codexFailure(error)
+        this.log('codex.generation.failed', { lane, category: failure.category, partialOutput: partial, willRetry: false })
+        if (failure.retryable && !(error instanceof CodexGenerationError && error.code === 'CHAT_CREDENTIALS_REQUIRED')) {
+          throw Object.assign(new CodexGenerationError('Codex 连接暂不可用，请稍后重试', failure.rateLimited ? 'MODEL_RATE_LIMITED' : 'MODEL_CONNECTION_FAILED', failure.category), { partialOutput: partial })
         }
+        if (partial && error instanceof Error) Object.assign(error, { partialOutput: true })
+        throw error
       }
-    })()
-    // Queued cancellations return immediately and are skipped when their slot arrives.
-    return new Promise((resolve, reject) => {
-      const abort = (): void => reject(input.signal.reason)
-      input.signal.addEventListener('abort', abort, { once: true })
-      if (input.signal.aborted) abort()
-      void run.then(resolve, reject).finally(() => input.signal.removeEventListener('abort', abort))
     })
-  }
-
-  private applyLimit(): void {
-    const queue = this.queues.background
-    if (queue.concurrency === this.backoff.limit) return
-    queue.concurrency = this.backoff.limit
-    this.log('codex.concurrency', { lane: 'background', concurrency: queue.concurrency })
+    return result.value
   }
 
   private async attempt(lane: 'interactive' | 'background', input: CodexGeneration): Promise<Usage | null> {
     input.signal.throwIfAborted()
     if (this.destroyed) throw new Error('Codex 已关闭')
     // A cooldown may have started while this request waited for a slot.
-    if (lane === 'background') await this.backoff.wait(input.signal)
     let slot = 0
     while (this.busy[lane].has(slot)) slot++
     this.busy[lane].add(slot)
@@ -296,7 +239,7 @@ export class CodexRuntime {
 
   private async generateOn(ready: Ready, settings: CodexSettings, input: CodexGeneration): Promise<Usage | null> {
     input.signal.throwIfAborted()
-    if (ready.status.state !== 'ready') throw new Error(ready.status.message)
+    if (ready.status.state !== 'ready') throw new CodexGenerationError(ready.status.message, 'CHAT_CREDENTIALS_REQUIRED', 'authentication')
     const model = ready.status.models.find(m => m.id === input.model)
     if (!model) throw new Error('Codex 模型不可用，请在服务连接中刷新并重新选择模型')
     if (settings.effort && !model.efforts.includes(settings.effort)) throw new Error('该 Codex 模型不支持所选推理强度')

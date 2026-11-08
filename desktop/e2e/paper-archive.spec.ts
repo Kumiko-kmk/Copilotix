@@ -16,7 +16,8 @@ for (const disableWebGL of [false, true]) {
         await seedReaderTask(workspace, {
           taskId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
           createdAt: '2026-10-07T12:00:00Z',
-          englishTitle: index === 36 ? 'Archive Alpha' : `Archive Paper ${index}`
+          englishTitle: index === 36 ? 'Archive Alpha' : `Archive Paper ${index}`,
+          savedCoverFigure: true
         })
       }
       app = await launchElectron({
@@ -116,6 +117,8 @@ for (const disableWebGL of [false, true]) {
         await window.keyboard.down('Enter')
         await window.keyboard.down('Enter')
         await window.keyboard.up('Enter')
+        // A cold paper keeps the browse pose until its complete spread is composed and uploaded.
+        await expect(archive).not.toHaveAttribute('data-detail-phase', 'closed', { timeout: 30_000 })
         // While extracting, a further Enter is ignored. Reduced motion opens at once, where a second
         // Enter would rightly open the reader, so it is pressed only during the animation.
         if (animated) await window.keyboard.press('Enter')
@@ -206,6 +209,36 @@ for (const disableWebGL of [false, true]) {
     }
   })
 }
+
+test('paper archive keeps a paper whose figures were never cropped in the browse pose', async () => {
+  const workspace = await createE2EWorkspace()
+  let app: Awaited<ReturnType<typeof launchElectron>> | null = null
+  try {
+    // The fixture layout has only ambiguous/unsupported figure hints and no saved figures.json.
+    await seedReaderTask(workspace, { englishTitle: 'Uncropped Paper' })
+    app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
+    const window = await app.firstWindow()
+    await window.emulateMedia({ reducedMotion: 'reduce' })
+    await expect.poll(() => window.evaluate(() => typeof window.copilotix?.paperInsight?.get)).toBe('function')
+    await mockSavedArchiveCatalog(app, window, { tldr: 'Archive fixture' })
+    await window.locator('[data-edge-dock="top"]').hover()
+    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
+    const archive = window.getByRole('region', { name: '文库', exact: true })
+    const fallback = archive.getByRole('heading', { name: '当前环境无法显示三维文库' })
+    await expect(archive.locator('canvas.paper-archive-canvas[data-archive-state="ready"]').or(fallback)).toBeVisible({ timeout: 15_000 })
+    test.skip(await fallback.isVisible(), 'The 2D fallback has no extracted cover.')
+    await expect(archive.getByRole('button', { name: '查看档案' })).toBeEnabled({ timeout: 30_000 })
+    await archive.focus()
+    await window.keyboard.press('Enter')
+    // No single-page stand-in: the paper stays closed and says why, with no reader opened.
+    await expect(archive.getByRole('alert')).toHaveText('无法准备完整封面，请重试打开档案。', { timeout: 30_000 })
+    await expect(archive).toHaveAttribute('data-detail-phase', 'closed')
+    await expect(window.locator('.reader-header')).toHaveCount(0)
+  } finally {
+    await app?.close()
+    await workspace.cleanup()
+  }
+})
 
 const SOFTWARE_RENDERER = /Microsoft Basic Render|SwiftShader|llvmpipe|Software/iu
 

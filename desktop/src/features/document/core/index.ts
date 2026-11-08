@@ -1,0 +1,11 @@
+export * from './markdownBlocks'
+export * from './readerDocument'
+export * from './readerFigureGroups'
+export * from './readerFigureLayout'
+export * from './documentModel'
+export { resolveReaderEdits as resolveDocumentEdits } from './legacyEdits'
+export { getSnapshot } from './documentSnapshot'
+export { resolveLegacyTextAnchor } from './legacyAnchors'
+
+export { resolveTranslations } from './legacyTranslations'
+export { readLegacyTranslations } from './legacyManifest'

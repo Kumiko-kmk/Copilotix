@@ -17,11 +17,12 @@ export const ADVISORY_RELEASE_LIMITS = Object.freeze(['runtimeBytes'])
 const RELEASE_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
 
 /** Require the pushed desktop tag to describe the version being packaged. */
-export function assertReleaseTagMatchesVersion(tag, version) {
+export function assertReleaseTagMatchesVersion(tag, version, edition = 'full') {
+  if (!['full', 'lite'].includes(edition)) throw new Error('Unknown release edition')
   if (typeof version !== 'string' || !RELEASE_VERSION_PATTERN.test(version)) {
     throw new Error(`Invalid desktop release version: ${String(version)}`)
   }
-  const expectedTag = `desktop-v${version}`
+  const expectedTag = `${edition === 'lite' ? 'desktop-lite-v' : 'desktop-v'}${version}`
   if (tag !== expectedTag) {
     throw new Error(`Desktop release tag ${String(tag)} does not match package version ${version}; expected ${expectedTag}`)
   }

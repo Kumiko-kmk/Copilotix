@@ -1,7 +1,9 @@
+import type { ProviderKey } from '@platform/models/contract/models'
+import { ModelConnectionUnavailable } from '@platform/models/runtime/modelRuntime'
 import { z } from 'zod'
 import { lstat, open } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
-import { setTimeout as sleep } from 'node:timers/promises'
+
 import { buildFullBriefContext, PaperBriefInputError } from '../core/paperBrief/context'
 import { briefSourceSchema, briefContextResultSchema, type BriefSource } from '../core/paperBrief/contracts'
 import { paperBriefModelOutputSchema } from '../core/paperBrief/schema'
@@ -46,7 +48,7 @@ export async function loadFullBriefContext(documentId: string, signal: AbortSign
 
 export interface PaperInsightDependencies {
   settings(): Promise<AppSettings>
-  key(provider: PaperChatProvider): Promise<string | null>
+  keys(provider: PaperChatProvider): Promise<readonly ProviderKey[]>
   get(documentId: string): Promise<PaperInsightState>
   listSaved?(documentIds: readonly string[]): Promise<ArchiveInsightSnapshot[]>
   context(documentId: string, signal: AbortSignal): Promise<BriefContextResult>
@@ -89,11 +91,11 @@ export class PaperInsightService {
     const settings = await this.deps.settings()
     const provider = resolvePaperChatProvider(settings, selected)
     if (!provider) return { reason: '请在设置中将已启用的 Qwen、DeepSeek 或 Codex 设为首选服务商。' } as const
-    const key = provider === 'codex' ? null : await this.deps.key(provider)
-    if (provider !== 'codex' && !key) return { reason: '请先在服务连接中保存模型 API Key。' } as const
+    const keys = provider === 'codex' ? [] : await this.deps.keys(provider)
+    if (provider !== 'codex' && !keys.length) return { reason: '请先在服务连接中保存模型 API Key。' } as const
     if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') return { reason: '请先在服务连接中验证模型 API Key。' } as const
     const model = resolvePaperChatModel(provider, provider === 'codex' ? settings.codex?.chatModel : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
-    return { settings, provider, key, model } as const
+    return { settings, provider, keys, model } as const
   }
 
   /** Next enabled Qwen/DeepSeek in the translation order with a saved, valid key; used after Codex exhausts its retries. */
@@ -218,9 +220,9 @@ export class PaperInsightService {
         try { usage = await withBriefTransportRetry(() => {
           answer = ''
           return this.deps.stream({
-          provider: streamAuth.provider, model: streamAuth.model, key: streamAuth.key,
+          provider: streamAuth.provider, model: streamAuth.model, keys: streamAuth.keys,
           baseUrl: streamAuth.provider === 'qwen' ? streamAuth.settings.qwenBaseUrl : streamAuth.settings.deepseekBaseUrl,
-          signal, messages, lane: 'background', firstByteMs: 120_000, ...(streamAuth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
+          signal, messages, purpose: 'brief', lane: 'background', firstByteMs: 120_000, ...(streamAuth.provider === 'codex' ? { effort: 'medium' as const, outputSchema: z.toJSONSchema(paperBriefModelOutputSchema) } : {}), ...PAPER_BRIEF_REQUEST, maxRequestBytes: PAPER_BRIEF_MAX_REQUEST_BYTES,
           onDelta: (delta) => {
             signal.throwIfAborted()
             if (answer.length + delta.length > 32_768) throw new Error('output budget exceeded')
@@ -229,8 +231,8 @@ export class PaperInsightService {
           })
         }, auth.provider, signal) } catch (error) {
           // Codex already backed off and retried; an oversized paper would not fit a smaller model either.
-          const next = auth.provider === 'codex' && !signal.aborted && !(error instanceof CodexGenerationError && error.code === 'RAG_LIMIT_EXCEEDED') &&
-            (error instanceof CodexGenerationError || codexFailure(error).retryable) ? await this.fallbackProvider() : undefined
+          const next = auth.provider === 'codex' && !answer && !signal.aborted && !(error instanceof CodexGenerationError && error.code === 'RAG_LIMIT_EXCEEDED') &&
+            (error instanceof ModelConnectionUnavailable || error instanceof CodexGenerationError || codexFailure(error).retryable) ? await this.fallbackProvider() : undefined
           if (!next) throw error
           switchTo(next, failureCategory(error)); attempt = -1
           continue
@@ -330,18 +332,9 @@ export class PaperInsightService {
 }
 
 /** Network retries are bounded separately from the one structured-output repair. */
-async function withBriefTransportRetry<T>(operation: () => Promise<T>, provider: PaperChatProvider, signal: AbortSignal): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    signal.throwIfAborted()
-    try { return await operation() } catch (error) {
-      // Codex already owns its account-wide adaptive retry policy.
-      if (provider === 'codex' || signal.aborted || attempt >= 2 || !(error instanceof ChatProviderError)
-        || !['EMBEDDING_RATE_LIMITED', 'RAG_TIMEOUT', 'PROVIDER_UNAVAILABLE'].includes(error.code)) throw error
-      const delayMs = error.retryAfterMs ?? 1_000 * 2 ** attempt
-      if (delayMs > 60_000) throw error
-      await sleep(delayMs, undefined, { signal })
-    }
-  }
+async function withBriefTransportRetry<T>(operation: () => Promise<T>, _provider: PaperChatProvider, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted()
+  return operation()
 }
 
 /** Field paths and display lengths from parser hints (e.g. "analysis.abstract:178"); never generated text. */

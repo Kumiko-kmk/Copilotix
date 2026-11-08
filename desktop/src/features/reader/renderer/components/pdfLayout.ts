@@ -104,6 +104,14 @@ export function pdfRenderWindow(currentPageIndex: number, pageCount: number, rad
   }
 }
 
+/** Cover the entire viewport, including short landscape pages, plus bounded overscan. */
+export function pdfViewportWindow(layout: PdfPageLayout, scrollTop: number, viewportHeight: number, radius = 1): { start: number; end: number } {
+  if (!layout.pages.length) return { start: 0, end: 0 }
+  const first = pageIndexAtOffset(layout, Math.max(0, scrollTop))
+  const last = pageIndexAtOffset(layout, Math.max(0, scrollTop) + Math.max(0, viewportHeight - 1))
+  return { start: Math.max(0, first - radius), end: Math.min(layout.pages.length, last + radius + 1) }
+}
+
 export function remainingPdfLayoutHeight(layout: PdfPageLayout, firstHiddenPage: number): number {
   return Math.max(0, layout.totalHeight - (layout.pages[firstHiddenPage]?.top ?? layout.totalHeight))
 }

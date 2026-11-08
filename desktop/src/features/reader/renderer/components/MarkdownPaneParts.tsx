@@ -1,5 +1,6 @@
 import React from 'react'
-import { Alert, Button, Spin } from 'antd'
+import { Alert, Button } from 'antd'
+import AppleLoader from '@platform/ui/renderer/AppleLoader'
 import type { ReaderBlock } from '../../core/readerDocument'
 import type { ReaderFigureGroup } from '../../core/readerFigureGroups'
 import BlockContextMenu, { type BlockMenuItem } from './BlockContextMenu'
@@ -29,8 +30,7 @@ export function MarkdownRenderStatus(props: {
     <>
       {(renderState.status === 'loading' || renderState.status === 'preparing') && !props.progressive ? (
         <div className="markdown-render-status" role="status">
-          <Spin size="large" />
-          <span>正在渲染 Markdown…</span>
+          <AppleLoader label="正在排版正文" />
           {props.mounted ? <small>段落 {props.mounted.count} / {props.mounted.total}</small> : null}
           {renderState.status === 'loading' && renderState.totalImages > 0 ? (
             <small>图片 {renderState.completedImages} / {renderState.totalImages}</small>
@@ -52,27 +52,20 @@ export function MarkdownRenderStatus(props: {
   )
 }
 
-/** The block context menu of a Markdown view, with move up / move down / original order when blocks can be reordered. */
+/** The block context menu retains a way to reset an existing drag order. */
 export function MarkdownBlockMenuPopup(props: {
   at: { block: ReaderBlock; figures: ReaderFigureGroup[]; x: number; y: number }
   menu: MarkdownBlockMenu
   blockMove?: ReaderBlockMove
-  neighbours: { unit: number[]; up?: number; down?: number | null } | null
-  contentIndexOf(index: number): number | undefined
   onClose(): void
 }): React.JSX.Element {
-  const { at: blockMenuAt, neighbours, contentIndexOf } = props
-  const units = (neighbours?.unit ?? []).flatMap(index => { const content = contentIndexOf(index); return content === undefined ? [] : [content] })
+  const { at: blockMenuAt } = props
   const moves: BlockMenuItem[] = [
-    ...(neighbours?.up !== undefined ? [{ key: 'move-up', label: '上移' }] : []),
-    ...(neighbours?.down !== undefined ? [{ key: 'move-down', label: '下移' }] : []),
     ...(props.blockMove?.ordered ? [{ key: 'reset-order', label: '恢复原始顺序' }] : [])
   ]
   return <BlockContextMenu x={blockMenuAt.x} y={blockMenuAt.y} items={[...props.menu.items(blockMenuAt.block, blockMenuAt.figures), ...moves]}
     onSelect={(key) => {
-      if (key === 'move-up' && neighbours?.up !== undefined) props.blockMove?.move(units, neighbours.up)
-      else if (key === 'move-down' && neighbours?.down !== undefined) props.blockMove?.move(units, neighbours.down)
-      else if (key === 'reset-order') props.blockMove?.reset()
+      if (key === 'reset-order') props.blockMove?.reset()
       else props.menu.onSelect(key, blockMenuAt.block, blockMenuAt.figures)
     }} onClose={props.onClose} />
 }

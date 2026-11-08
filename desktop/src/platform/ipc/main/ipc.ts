@@ -33,7 +33,8 @@ export interface IpcMainLike {
 
 export interface IpcValidationOptions {
   gate?: { run<T>(channel: string, operation: () => T | Promise<T>): Promise<T> }
-  getMainWindow: () => WindowLike | null
+  /** The app's own windows: the main window and any reader windows opened from it. */
+  getWindows: () => readonly WindowLike[]
   rendererEntryPath: string
   rendererOrigin?: string
   fromWebContents?: (contents: WebContentsLike) => WindowLike | null
@@ -58,11 +59,11 @@ export function isTrustedRendererUrl(url: string, options: Pick<IpcValidationOpt
 }
 
 export function assertTrustedSender(event: IpcInvokeEventLike, options: IpcValidationOptions): void {
-  const owner = options.getMainWindow()
+  const windows = options.getWindows()
   const fromWebContents = options.fromWebContents ?? ((contents: WebContentsLike) =>
     BrowserWindow.fromWebContents(contents as unknown as WebContents))
   const sourceWindow = fromWebContents(event.sender)
-  if (!owner || owner.isDestroyed() || sourceWindow !== owner) {
+  if (!sourceWindow || sourceWindow.isDestroyed() || !windows.includes(sourceWindow)) {
     throw new Error('IPC 请求来源无效')
   }
 

@@ -9,11 +9,19 @@ export interface StoredArchiveCover {
   width: number
   height: number
   at: number
+  /** Threshold rule the cover was decided under; absent on covers written by 1.3.0. */
+  rule?: number
 }
 
 const DATABASE = 'copilotix-archive-spreads'
 const MAX_BYTES = 128 * 1024 * 1024
 const MAX_ITEMS = 160
+/**
+ * 1.3.0 hid ambiguous/unsupported figure hints from the threshold and saved single pages for papers
+ * whose figures were never ready. Single covers from an older rule are dropped on read and rebuilt;
+ * spreads always required ready figures and stay valid.
+ */
+export const ARCHIVE_COVER_RULE = 2
 let database: Promise<IDBDatabase | null> | null = null
 
 function openStore(): Promise<IDBDatabase | null> {
@@ -40,12 +48,14 @@ export async function readStoredArchiveCover(key: string): Promise<StoredArchive
       request.onsuccess = () => {
         const record = request.result as StoredArchiveCover | undefined
         if (!record || !record.blob || !['spread', 'single'].includes(record.kind)) { resolve(null); return }
-        resolve(record)
+        const stale = record.kind === 'single' && record.rule !== ARCHIVE_COVER_RULE
+        resolve(stale ? null : record)
         try {
           const touch = db.transaction('covers', 'readwrite')
           touch.onerror = () => undefined
           touch.onabort = () => undefined
-          touch.objectStore('covers').put({ ...record, at: Date.now() })
+          if (stale) touch.objectStore('covers').delete(key)
+          else touch.objectStore('covers').put({ ...record, at: Date.now() })
         } catch { /* LRU maintenance must not turn a readable hit into a hanging request. */ }
       }
       request.onerror = () => reject(request.error)
@@ -72,7 +82,7 @@ export async function writeStoredArchiveCover(record: StoredArchiveCover): Promi
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction('covers', 'readwrite')
       const store = transaction.objectStore('covers')
-      store.put(record)
+      store.put({ ...record, rule: ARCHIVE_COVER_RULE })
       const entries: Array<{ key: IDBValidKey; bytes: number }> = []
       let bytes = 0
       const cursor = store.index('at').openCursor()

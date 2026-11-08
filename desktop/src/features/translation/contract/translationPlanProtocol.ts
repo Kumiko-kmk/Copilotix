@@ -2,12 +2,8 @@ import { z } from 'zod'
 import type { TranslationProviderId } from './translationTypes'
 
 /** Versions are part of the on-disk plan identity. Do not change casually. */
-export const LEGACY_TRANSLATION_PIPELINE_VERSION = 'markdown-logical-block-v4-table-json-v2-references' as const
-export const STANDARD_TRANSLATION_PIPELINE_VERSION = 'markdown-logical-block-v5-standard-gfm-math' as const
-export const TRANSLATION_PIPELINE_VERSION = 'markdown-logical-block-v6-rich-reader-standard-export' as const
-export const TABLE_TRANSLATION_PROTOCOL = 'copilotix-table-translation-v2' as const
-export const TABLE_TRANSLATION_CACHE_VERSION = 2 as const
-export const MARKDOWN_MAPPING_ALGORITHM_VERSION = 1 as const
+export * from '@features/document/contract/artifactVersions'
+import { TRANSLATION_PIPELINE_VERSION, TABLE_TRANSLATION_PROTOCOL, TABLE_TRANSLATION_CACHE_VERSION } from '@features/document/contract/artifactVersions'
 
 export type TranslationPlanUnitKind = 'plain' | 'table'
 
@@ -264,6 +260,15 @@ export function validateTableTranslationResponse(value: unknown, request: TableT
   return { protocol: TABLE_TRANSLATION_PROTOCOL, translations: expectedIds.map((segmentId) => ({ id: segmentId, text: actual.get(segmentId)! })) }
 }
 
+/**
+ * Codex batches several paragraphs per request; before 2 nothing checked that each answer stayed on its
+ * own segment, and shifted answers were cached under the wrong source hash. Bumping it ignores them.
+ */
+export const CODEX_SEGMENT_ALIGNMENT_VERSION = 2
+export function cacheProviderScope(provider: string): string {
+  return provider === 'codex' ? `codex@aligned-${CODEX_SEGMENT_ALIGNMENT_VERSION}` : provider
+}
+
 export function translationCacheKey(sourceHash: string, provider: TranslationProviderId, model: string, kind: TranslationPlanUnitKind): string {
-  return `${TRANSLATION_PIPELINE_VERSION}:${TABLE_TRANSLATION_CACHE_VERSION}:${kind}:${sourceHash}:${provider}:${model}`
+  return `${TRANSLATION_PIPELINE_VERSION}:${TABLE_TRANSLATION_CACHE_VERSION}:${kind}:${sourceHash}:${cacheProviderScope(provider)}:${model}`
 }

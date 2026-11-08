@@ -7,9 +7,7 @@ import { TRANSLATION_PROVIDER_LABELS, executableProviderOrder } from '@features/
 import type { AppSettings } from '@features/settings/contract/settingsTypes'
 import type { TranslationProviderId } from '@features/translation/contract/translationTypes'
 import type { DocumentSummary } from '../contract/documentSchemas'
-import CopilotixWordmark from './home/CopilotixWordmark'
-import { HomeBackdrop, UploadGlyph } from './home/HomeScene'
-import { HomeGreeting } from './home/HomeWidgets'
+import { UploadGlyph } from './home/HomeScene'
 import ImportProgress from './home/ImportProgress'
 import type { PdfFileInspection } from './pdfInspection'
 import { ZoteroImportDialog } from '@features/zotero/renderer'
@@ -30,12 +28,13 @@ const TUTORIAL_ENTRY_USED_KEY = 'copilotix:tutorial:entry-used:v1'
 
 export default function NewParsePage(props: {
   settings: AppSettings
-  documents?: DocumentSummary[]
+  /** Passed in, so an edition without them does not bundle them. Absent: just the heading and the import entry, no effects. */
+  decoration?: { backdrop: React.ReactNode; wordmark: React.ReactNode; greeting: React.ReactNode }
   /** Papers shown in the progress card: just imported ones and any still being processed. */
   progressDocuments?: readonly DocumentSummary[]
   onCreated(created: DocumentSummary[]): void
   onOpenSettings(): void
-  onOpenTutorial(): void
+  onOpenTutorial?(): void
   onOpenReader?(documentId: string): void
   onShowInLibrary?(documentId: string): void
   onDismissProgress?(documentId: string): void
@@ -155,15 +154,18 @@ export default function NewParsePage(props: {
   const overlongFiles = files.filter((file) => file.inspection?.status === 'ready' && pagesAfterImport(file, file.inspection) > MAX_PDF_PAGES)
   const parserState = props.settings.credentials.parser.state
   const translation = translationPlan(props.settings)
+  const { decoration, onOpenTutorial } = props
+  const minimal = !decoration
+  const titleLabel = minimal ? '显示标题' : '文库标题'
 
   return (
-    <section ref={pageRef} className={`page new-parse-page${dragging ? ' is-dragging' : ''}`}>
+    <section ref={pageRef} className={`page new-parse-page${minimal ? ' is-minimal' : ''}${dragging ? ' is-dragging' : ''}`}>
       {contextHolder}
-      <HomeBackdrop documents={props.documents} />
+      {decoration?.backdrop}
       <div className="new-parse-hero">
-        <CopilotixWordmark />
+        {decoration?.wordmark}
         <div className="new-parse-heading">
-          <HomeGreeting />
+          {decoration?.greeting}
           <h1>今天想读些什么？</h1>
         </div>
         <div className="new-parse-content">
@@ -218,10 +220,10 @@ export default function NewParsePage(props: {
           />
         ) : null}
         </div>
-        {!tutorialEntryUsed ? <button type="button" className="tutorial-entry" onClick={() => {
+        {onOpenTutorial && !tutorialEntryUsed ? <button type="button" className="tutorial-entry" onClick={() => {
           window.localStorage.setItem(TUTORIAL_ENTRY_USED_KEY, '1')
           setTutorialEntryUsed(true)
-          props.onOpenTutorial()
+          onOpenTutorial()
         }}>第一次使用？从内置论文开始新手教程 <span aria-hidden="true">→</span></button> : null}
       </div>
 
@@ -267,7 +269,7 @@ export default function NewParsePage(props: {
         ) : null}
         <div className="selected-files">
           {files.map((file) => (
-            <SelectedPdf key={file.key} file={file} titleMode={titleMode}
+            <SelectedPdf key={file.key} file={file} titleMode={titleMode} titleLabel={titleLabel}
               onSkipFirstPage={(skipFirstPage) => setFiles((current) => current.map((item) => item.key === file.key ? { ...item, skipFirstPage } : item))} />
           ))}
         </div>
@@ -277,7 +279,7 @@ export default function NewParsePage(props: {
         <dl className="import-plan" aria-label="处理方式">
           <div>
             <dt>处理流程</dt>
-            <dd>上传 PDF 到 MinerU 解析 → 生成原文 → 按段翻译；完成前即可在首页和文库查看进度</dd>
+            <dd>上传 PDF 到 MinerU 解析 → 生成原文 → 按段翻译；{minimal ? '完成前即可在左侧列表查看进度' : '完成前即可在首页和文库查看进度'}</dd>
           </div>
           <div>
             <dt>翻译服务</dt>
@@ -292,7 +294,7 @@ export default function NewParsePage(props: {
             </dd>
           </div>
           <div>
-            <dt>文库标题</dt>
+            <dt>{titleLabel}</dt>
             <dd>
               <Radio.Group className="import-title-mode" value={titleMode} onChange={(event) => setTitleMode(event.target.value as TitleMode)}>
                 <Radio value="paper">
@@ -308,7 +310,7 @@ export default function NewParsePage(props: {
           </div>
           <div>
             <dt>重复文件</dt>
-            <dd><Checkbox checked={skipDuplicates} onChange={(event) => setSkipDuplicates(event.target.checked)}>跳过文库中已有的相同 PDF</Checkbox></dd>
+            <dd><Checkbox checked={skipDuplicates} onChange={(event) => setSkipDuplicates(event.target.checked)}>{minimal ? '跳过已导入的相同 PDF' : '跳过文库中已有的相同 PDF'}</Checkbox></dd>
           </div>
         </dl>
       </Modal>
@@ -323,7 +325,7 @@ export default function NewParsePage(props: {
   )
 }
 
-function SelectedPdf(props: { file: PendingPdf; titleMode: TitleMode; onSkipFirstPage(skip: boolean): void }): React.JSX.Element {
+function SelectedPdf(props: { file: PendingPdf; titleMode: TitleMode; titleLabel: string; onSkipFirstPage(skip: boolean): void }): React.JSX.Element {
   const { file } = props
   const inspection = file.inspection
   const ready = inspection?.status === 'ready' ? inspection : null
@@ -335,7 +337,7 @@ function SelectedPdf(props: { file: PendingPdf; titleMode: TitleMode; onSkipFirs
       <FilePdfOutlined aria-hidden="true" />
       <div className="selected-file-main">
         <span className="selected-name">{file.name}</span>
-        <span className="selected-file-title"><span>文库标题</span>{title}</span>
+        <span className="selected-file-title"><span>{props.titleLabel}</span>{title}</span>
       </div>
       <small className="selected-file-facts">
         {formatBytes(file.size)}

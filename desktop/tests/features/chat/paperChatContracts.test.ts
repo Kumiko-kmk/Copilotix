@@ -63,14 +63,14 @@ describe('paper chat wire contracts', () => {
   it('checks trusted IPC senders, payload bounds and unknown request IDs through the actual registrations', async () => {
     const handlers = new Map<string, (event: IpcInvokeEventLike, request: unknown) => Promise<unknown>>()
     const service = new PaperChatService({
-      saveTurn: vi.fn(), load: vi.fn(), session: vi.fn(), saveSession: vi.fn(), deleteTurn: vi.fn(), clear: vi.fn(), settings: vi.fn(async () => DEFAULT_SETTINGS), key: vi.fn(), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
+      saveTurn: vi.fn(), load: vi.fn(), session: vi.fn(), saveSession: vi.fn(), deleteTurn: vi.fn(), clear: vi.fn(), settings: vi.fn(async () => DEFAULT_SETTINGS), keys: vi.fn(async () => []), buildContext: vi.fn(), stream: vi.fn(), recordUsage: vi.fn(), log: vi.fn() })
     const owner = { isDestroyed: () => false }
     const entry = resolve('renderer/index.html')
     const url = pathToFileURL(entry).href
     const frame = { url }
     const event: IpcInvokeEventLike = { sender: { mainFrame: frame, getURL: () => url, isDestroyed: () => false, send: vi.fn() }, senderFrame: frame }
     const ensureIndex = vi.fn(async () => ({ state: 'queued' as const, progress: 0, contentRevisionId: null }))
-    registerPaperChatHandlers(service, ensureIndex, createIpcRegistrar({ getMainWindow: () => owner, fromWebContents: () => owner, rendererEntryPath: entry, ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } }))
+    registerPaperChatHandlers(service, ensureIndex, createIpcRegistrar({ getWindows: () => [owner], fromWebContents: () => owner, rendererEntryPath: entry, ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } }))
     expect([...handlers.keys()]).toEqual(['paper-chat:load', 'paper-chat:session', 'paper-chat:save-session', 'paper-chat:delete-turn', 'paper-chat:clear', 'paper-chat:ask', 'paper-chat:cancel', 'paper-chat:ensure-index'])
     const ask = handlers.get('paper-chat:ask')!
     await expect(ask({ ...event, senderFrame: { url } }, request)).resolves.toMatchObject({ ok: false, error: { code: 'UNTRUSTED_SENDER' } })
