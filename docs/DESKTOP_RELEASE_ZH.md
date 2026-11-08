@@ -24,6 +24,8 @@ runtime-file-times.mjs 只更新 staging runtime 時間戳，不改依賴、內�
 
 ### CI 调度与验收证据
 
+Windows CI 在单元测试与覆盖率之前串行准备 Electron，避免多个测试进程同时触发延迟下载。下载最多尝试 3 次；失败即停止，不重试测试、不放宽断言。安装包仍通过完整封装与安装验收。
+
 常規路徑：**PR 驗證 → 合併 → desktop-v* tag 全量驗收並發布**。工作流只接受 PR、tag push、手動；master 合併不再重跑 push CI，直接寫 master 須手動驗證。full_validation 留給大型重構／診斷／明確預演，普通版本不額外跑一輪。
 
 - PR／普通手動：checks 跑 lint、typecheck、deps、受影響單測＋必跑安全集；3 個 e2e runner 並行 build 並選受影響 spec，每個單 worker。全局改動仍全量。僅受影響模式容許空分片，tag 全量不容許。

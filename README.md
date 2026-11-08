@@ -1,4 +1,4 @@
-![Copilotix：阅读、理解与整理论文](docs/images/reading-hero.png)
+# Copilotix
 
 <div align="center">
 
@@ -21,8 +21,6 @@ Copilotix 把 PDF 解析、翻译、阅读与整理放在同一张桌面。展�
 ![完整版档案展开](docs/images/demos/3-archive-detail.gif)
 
 ## 阅读，让线索连起来
-
-![收集、阅读、提问与整理的工作流插图](docs/images/reading-workflow.png)
 
 | 对照阅读 | 带着上下文提问 | 留下自己的理解 |
 |---|---|---|
@@ -63,9 +61,23 @@ Copilotix 把 PDF 解析、翻译、阅读与整理放在同一张桌面。展�
 
 ## 项目结构
 
-![Copilotix 架构插图](docs/images/architecture-illustration-v2.png)
+### 进程与职责
 
-React 构建阅读界面，Electron Main 管理窗口与调度，Utility 处理文档模型、SQLite 和计算任务。统一文档模型连接阅读、编辑、翻译与导出，共享模型层管理供应商调用。
+![Renderer、Main、Utility 的职责与通信路径](docs/images/architecture-processes.png)
+
+React 负责交互，Main 管理窗口、权限与模型请求，Utility 拥有 SQLite 和文档计算。Core RPC 传递小型描述，大资源经受控协议读取。
+
+### 一份文档，多种视图
+
+![文档来源、基础模型、版本化快照与内容消费者](docs/images/architecture-document.png)
+
+原始内容、译文和用户编辑分别保留版本，组合为共享快照。阅读、翻译、问答、导出和档案沿用同一套块身份与映射；重新解析后只关联唯一匹配的内容。
+
+### 共享模型调用
+
+![模型请求预算、连接健康状态与冷却后的单请求试探](docs/images/architecture-models.png)
+
+各功能保留自己的提示词，共享连接检查、排队预算与用量记录。故障连接进入冷却，后续请求快速跳过；恢复由新请求触发单次试探。
 
 开发环境：**Node.js 24.19.0 · pnpm 11.19.0**。
 

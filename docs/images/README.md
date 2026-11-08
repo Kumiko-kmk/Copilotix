@@ -1,5 +1,15 @@
 # README 图像
 
+当前首页使用三张由内置 imagegen 生成、按实际代码核对的架构图：
+
+- `architecture-processes.png`：进程职责、IPC／Core RPC、受控资源与凭据库。
+- `architecture-document.png`：来源、基础模型、译文与编辑快照、锚点及重新解析后的匹配。
+- `architecture-models.png`：功能共用入口、额度预算与连接健康状态。
+
+[完整提示词与校对记录](architecture-prompts.md)。结构依据 `docs/ARCHITECTURE_ZH.md`、`features/document/README.md` 和 `platform/models/README.md`。真实演示仍使用下列 Claude 录屏。
+
+以下为保留的旧版插图及来源；装饰性主题图和流程图已从首页撤下。
+
 - `reading-hero.png`：内置 imagegen 生成的学术阅读主题插图。
 - `reading-workflow.png`：内置 imagegen 生成的收集、阅读、提问与整理流程插图。
 

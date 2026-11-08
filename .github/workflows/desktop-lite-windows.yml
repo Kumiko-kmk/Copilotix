@@ -49,13 +49,12 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - run: node desktop/scripts/verify-release-license.mjs
       - run: pnpm install --frozen-lockfile
+      - name: Install Electron before tests
+        run: ./desktop/scripts/install-electron-ci.ps1
       - run: pnpm desktop:typecheck
       - run: pnpm desktop:lint
       - run: pnpm desktop:deps
       - run: pnpm desktop:test:coverage
-      - name: Install Electron
-        working-directory: desktop
-        run: node -e "require('electron')"
       - run: pnpm desktop:build:lite
       - name: Lite Electron journeys
         run: pnpm --dir desktop exec playwright test lite.spec.ts lite-reader-actions.spec.ts
