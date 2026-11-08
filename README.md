@@ -6,7 +6,7 @@
 
 [下载完整版](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.3.0) · [下载 Lite 1.0](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-lite-v1.0.0) · [使用指南](https://github.com/Kumiko-kmk/Copilotix/wiki) · [反馈](https://github.com/Kumiko-kmk/Copilotix/issues)
 
-Windows x64 · 本地文库 · 中英对照 · AI 问答
+Windows x64 · 简体中文 · 本地文库 · 中英对照 · AI 问答
 
 </div>
 

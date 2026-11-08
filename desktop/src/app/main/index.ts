@@ -30,6 +30,8 @@ function startupErrorCode(error: unknown): 'CORE_TIMEOUT' | 'CORE_UNAVAILABLE' |
 }
 
 function startNormalApp(): void {
+  // The product ships only Simplified Chinese resources, regardless of OS locale.
+  app.commandLine.appendSwitch('lang', 'zh-CN')
   protocol.registerSchemesAsPrivileged([
     {
       scheme: 'copilotix-asset',

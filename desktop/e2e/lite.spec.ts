@@ -43,6 +43,7 @@ test.describe('lite edition', () => {
       await expect(page.getByRole('navigation', { name: '主导航' })).toHaveCount(0)
       await expect(page.locator('.window-controls')).toBeVisible()
       expect(await app.evaluate(({ app: electronApp }) => electronApp.getName())).toBe('Copilotix Lite')
+      expect(await app.evaluate(({ app: electronApp }) => electronApp.getLocale())).toBe('zh-CN')
       // A first run keeps its documents apart from the full edition's folder.
       expect((await page.evaluate(() => window.copilotix.getSettings())).outputRoot).toMatch(/[\\/]Copilotix Lite$/u)
 

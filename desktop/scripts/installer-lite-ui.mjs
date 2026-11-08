@@ -72,6 +72,7 @@ async function screenshot(name) {
 }
 const visible = selector => `document.querySelector(${JSON.stringify(selector)})?.checkVisibility()`
 try {
+  await waitFor(`navigator.language.toLowerCase() === 'zh-cn'`, 'Installed product did not select Simplified Chinese')
   await waitFor(`Array.from(document.querySelectorAll('h1')).some(element => element.checkVisibility() && element.textContent === '今天想读些什么？')`, 'Installed home did not render')
   await waitFor(visible('nav[aria-label="论文导航"]'), 'Installed sidebar did not render')
   await waitFor(visible('.window-controls'), 'Installed window controls did not render')
@@ -86,7 +87,7 @@ try {
   await evaluate(`document.querySelector('button[aria-label="关闭设置"]').click()`)
   await waitFor(`!document.querySelector('nav[aria-label="设置分类"]')`, 'Installed settings did not close')
   await writeFile(join(evidence, 'installed-ui.json'), JSON.stringify({
-    completed: true, home: true, sidebar: true, settings: ['服务', '存储', '外观']
+    completed: true, locale: 'zh-CN', home: true, sidebar: true, settings: ['服务', '存储', '外观']
   }, null, 2))
   console.log('Installed Lite renderer: home, sidebar and all settings pages passed')
 } catch (error) {

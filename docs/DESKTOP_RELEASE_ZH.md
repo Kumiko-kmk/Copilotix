@@ -74,7 +74,7 @@ Lite 與完整版是兩個互不相干的安裝。差異集中在 `src/app/contr
 
 安裝後的主窗口由 `installer-lite-ui.mjs` 經 Chromium CDP 確認首頁、側欄與三個設定頁實際顯示，並由 Chromium 截圖；不以 `PrintWindow` 的空白 GPU 畫面或存活進程作為界面驗收。僅測試啟動時開啟隨機 loopback CDP 端口，不啟用 Node inspector，不修改發布 fuses。連線失敗或界面未出現即阻止發布。
 
-Electron 僅打包 `zh-CN.pak` 和 `en-US.pak`，後者是非中文 Windows 的必要回退資源。移除它會令英文系統的 renderer 無法啟動；驗收不得透過強制 `--lang=zh-CN` 掩蓋缺失。
+產品僅支援簡體中文，Electron 僅打包 `zh-CN.pak`。正常啟動時由應用在 `ready` 前設定 `lang=zh-CN`，避免跟隨英文 Windows 去讀不存在的語言資源。安裝驗收不額外傳入語言參數，須確認 renderer 的 `navigator.language` 為 `zh-CN` 且界面正常。
 
 Lite 的版本由 `LITE_IDENTITY.version` 獨立管理（首版 1.0.0），electron-builder 的 extraMetadata 同步寫入安裝包與 app.asar；不改完整版 package.json 版本。標籤為 `desktop-lite-v<version>`，說明在 `docs/releases/lite/<version>.zh-CN.md`。
 
