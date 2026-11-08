@@ -66,6 +66,8 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - run: pnpm install --frozen-lockfile
+      - name: Install Electron before tests
+        run: ./desktop/scripts/install-electron-ci.ps1
       - run: pnpm desktop:lint
       - run: pnpm desktop:typecheck
       # Module boundaries (ADR-0001): warnings are the migration backlog, errors fail the build.
@@ -75,11 +77,6 @@ jobs:
         if: env.FULL_VALIDATION != 'true'
         run: pnpm desktop:test
       # Full coverage runs in e2e shard 1, beside packaging instead of before it.
-      # PR source bundles run in the E2E jobs; packaging/diagnostics also need a local binary.
-      - name: Install the Electron binary
-        if: env.FULL_VALIDATION == 'true' || inputs.archive_diagnostic
-        working-directory: desktop
-        run: node -e "require('electron')"
       - run: pnpm desktop:build:bundles
         if: env.FULL_VALIDATION == 'true' || inputs.archive_diagnostic
       - name: Diagnose archive interactions
@@ -176,14 +173,11 @@ jobs:
           node-version: 24.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install Electron before tests
+        run: ./desktop/scripts/install-electron-ci.ps1
       - name: Full regression and coverage
         if: matrix.shard == 1 && env.FULL_VALIDATION == 'true'
         run: pnpm desktop:test:coverage
-      # Electron downloads its binary on first require, not at install. Shards without unit tests
-      # must install it explicitly before the Utility bundle smoke.
-      - name: Install the Electron binary
-        working-directory: desktop
-        run: node -e "require('electron')"
       - run: pnpm desktop:build:bundles
       - name: Build Lite for its Electron journeys
         if: matrix.shard == 3

@@ -16,6 +16,7 @@ Unsigned releases require explicit authorization **for each version**, a workflo
 | desktop-v1.1.0 | 2026-10-07 | COPILOTIX_UNSIGNED_RELEASE_TAG=desktop-v1.1.0 |
 | desktop-v1.2.0 | 2026-10-18 | COPILOTIX_UNSIGNED_RELEASE_TAG=desktop-v1.2.0 |
 | desktop-v1.3.0 | 2026-10-27, this version only | COPILOTIX_UNSIGNED_RELEASE_TAG=desktop-v1.3.0 |
+| desktop-lite-v1.0.0 | 2026-11-08, maintainer explicitly authorized Lite 1.0 only | COPILOTIX_UNSIGNED_LITE_RELEASE_TAG=desktop-lite-v1.0.0 |
 
 Release notes must clearly disclose unsigned binaries. All regression, packaging, installation and remote integrity gates still apply. Failed gates leave the release unpublished; retry from the verified revision. Remove the exception variable after successful publication. All other releases require trusted signing. Configuration is documented in [signing setup](LICENSE_AND_SIGNING_ZH.md); artifact validation and publication in [release contract](DESKTOP_RELEASE_ZH.md).
 

@@ -189,16 +189,17 @@ try {
     Step 'installs beside the full edition: own path, registration, shortcuts, verified hashes, core starts'
 
     # The real product, started the way a user starts it.
-    $process = Start-Process -FilePath $application -PassThru
+    $process = Start-Process -FilePath $application -ArgumentList @('--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1') -PassThru
     Wait-Until { Test-Path -LiteralPath (Join-Path $liteData 'copilotix-desktop-v2.sqlite3') } 'Lite did not create its database in its own folder' 45
     Wait-Until { $process.Refresh(); $process.MainWindowHandle -ne [IntPtr]::Zero } 'Lite window did not appear' 30
     Start-Sleep -Seconds 6
     $process.Refresh()
     Assert-That (-not $process.HasExited) 'Lite exited after starting'
     Assert-That ($process.MainWindowTitle -notmatch 'failed') "Lite reported a failure: $($process.MainWindowTitle)"
-    [WizardNative]::Capture($process.MainWindowHandle, (Join-Path $evidence '02-installed-home.png'))
+    & node (Join-Path $PSScriptRoot 'installer-lite-ui.mjs') $liteData $evidence
+    Assert-That ($LASTEXITCODE -eq 0) 'Installed Lite renderer verification failed'
     Assert-FullEditionUntouched 'running Lite'
-    Step "runs with data only under $liteData"
+    Step "renders home and settings, runs with data only under $liteData"
 
     $second = Start-Process -FilePath $application -PassThru
     Assert-That ($second.WaitForExit(20000)) 'Second Lite instance did not hand over and exit'

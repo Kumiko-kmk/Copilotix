@@ -24,6 +24,8 @@ runtime-file-times.mjs 只更新 staging runtime 時間戳，不改依賴、內�
 
 ### CI 调度与验收证据
 
+Windows CI 在单元测试与覆盖率之前串行准备 Electron，避免多个测试进程同时触发延迟下载。下载最多尝试 3 次；失败即停止，不重试测试、不放宽断言。安装包仍通过完整封装与安装验收。
+
 常規路徑：**PR 驗證 → 合併 → desktop-v* tag 全量驗收並發布**。工作流只接受 PR、tag push、手動；master 合併不再重跑 push CI，直接寫 master 須手動驗證。full_validation 留給大型重構／診斷／明確預演，普通版本不額外跑一輪。
 
 - PR／普通手動：checks 跑 lint、typecheck、deps、受影響單測＋必跑安全集；3 個 e2e runner 並行 build 並選受影響 spec，每個單 worker。全局改動仍全量。僅受影響模式容許空分片，tag 全量不容許。
@@ -72,7 +74,13 @@ Lite 與完整版是兩個互不相干的安裝。差異集中在 `src/app/contr
 
 `pnpm desktop:test:installer:lite` 用真實 Setup 在 Temp 內的中文／空格路徑驗收：向導文案、拒絕全機安裝、安裝與啟動、單實例、運行中拒絕安裝／卸載且不強殺、覆蓋安裝保留資料、卸載保留資料、下載版 uninstall.exe 只跟隨 Lite 的登記、清資料（確認框須只列 Lite 路徑才點確認，否則取消）。開始前記錄完整版的登記值、程式雜湊、快捷方式、資料、文庫清單與憑據名稱，每階段比對，只讀不啟動；若 Lite 資料或憑據已存在則拒絕執行，證據在 desktop/test-artifacts/lite-installer。向導與對話框窗口會短暫出現，可真正點擊的只有測試自己建立的資料。
 
+安裝後的主窗口由 `installer-lite-ui.mjs` 經 Chromium CDP 確認首頁、側欄與三個設定頁實際顯示，並由 Chromium 截圖；不以 `PrintWindow` 的空白 GPU 畫面或存活進程作為界面驗收。僅測試啟動時開啟隨機 loopback CDP 端口，不啟用 Node inspector，不修改發布 fuses。連線失敗或界面未出現即阻止發布。
+
+產品僅支援簡體中文，Electron 僅打包 `zh-CN.pak`。正常啟動時由應用在 `ready` 前設定 `lang=zh-CN`，避免跟隨英文 Windows 去讀不存在的語言資源。安裝驗收不額外傳入語言參數，須確認 renderer 的 `navigator.language` 為 `zh-CN` 且界面正常。
+
 Lite 的版本由 `LITE_IDENTITY.version` 獨立管理（首版 1.0.0），electron-builder 的 extraMetadata 同步寫入安裝包與 app.asar；不改完整版 package.json 版本。標籤為 `desktop-lite-v<version>`，說明在 `docs/releases/lite/<version>.zh-CN.md`。
+
+維護者於 2026-11-08 明確授權 `desktop-lite-v1.0.0` 未簽章發布，僅在同名 tag 與 `COPILOTIX_UNSIGNED_LITE_RELEASE_TAG=desktop-lite-v1.0.0` 同時匹配時生效。例外允許 `NotSigned`，不接受損壞或無效簽章；安裝驗收與回下載 hash 檢查照常，發布後刪除例外變數。
 
 `desktop-lite-windows.yml` 對發布腳本／身份／Lite 發布說明的 PR 及手動調度產生驗收產物，完整單測覆蓋率、Lite Electron 流程、封裝與隔離安裝／升級／卸載全過後才上傳安裝包。Lite tag 在同樣門禁後發布；可信簽章仍依 CODE_SIGNING_POLICY，無本版本授權時不公開未簽章產物。發布只上傳 setup.exe，草稿回下載驗 hash／簽章後公開，保留完整版為 latest。完整工作流第 3 片也建構 Lite，避免其 E2E 因缺 bundle 被跳過。`test-installer-*` 其餘腳本只驗完整版的 GUID 與路徑。
 
