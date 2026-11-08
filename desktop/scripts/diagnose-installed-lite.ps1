@@ -13,7 +13,7 @@ $application = Join-Path $root 'runtime/CopilotixLite.exe'
 if ((Get-FileHash $application).Hash -ne $manifest.runtime.sha256) { throw 'Runtime hash mismatch' }
 Get-Acl (Join-Path $root 'runtime') | Format-List * | Out-File "$evidence/acl-before.txt"
 $results = @()
-foreach ($case in @('default','install-folder-read','gpu-only','no-sandbox-diagnostic')) {
+foreach ($case in @('default','zh-CN-language')) {
     $caseRoot = Join-Path $evidence $case
     New-Item -ItemType Directory -Path $caseRoot | Out-Null
     $profile = Join-Path $root "profile-$case"
@@ -24,6 +24,7 @@ foreach ($case in @('default','install-folder-read','gpu-only','no-sandbox-diagn
         if ($LASTEXITCODE -ne 0) { throw 'Diagnostic directory read grant failed' }
     }
     $arguments = @('--remote-debugging-port=0','--remote-debugging-address=127.0.0.1','--enable-logging=stderr','--v=1')
+    if ($case -eq 'zh-CN-language') { $arguments += '--lang=zh-CN' }
     if ($case -eq 'gpu-only') { $arguments += '--disable-gpu-sandbox' }
     if ($case -eq 'no-sandbox-diagnostic') { $arguments += '--no-sandbox' }
     $app = Start-Process -FilePath $application -ArgumentList $arguments -WindowStyle Hidden -PassThru -RedirectStandardError "$caseRoot/chromium.log" -RedirectStandardOutput "$caseRoot/stdout.log"
