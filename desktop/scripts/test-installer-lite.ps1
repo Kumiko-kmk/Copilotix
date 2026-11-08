@@ -6,6 +6,7 @@ param([string]$ReleaseDirectory, [string]$EvidenceDirectory)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $desktop = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'installer-shortcuts.ps1')
 if (-not $ReleaseDirectory) { $ReleaseDirectory = Join-Path $desktop '../release-lite' }
 if (-not $EvidenceDirectory) { $EvidenceDirectory = Join-Path $desktop 'test-artifacts/lite-installer' }
 # Reuse only the native-control helpers, never execute the full edition's install test.
@@ -104,10 +105,11 @@ function Assert-LiteInstalled {
     Assert-That ($registration.DisplayName -eq "$liteName $($manifest.version)") "Unexpected display name: $($registration.DisplayName)"
     $record = Get-ItemProperty -LiteralPath "HKCU:\Software\$liteGuid"
     Assert-That ($record.InstallLocation.TrimEnd('\') -eq $installDirectory) 'Registered install path differs'
-    $shell = New-Object -ComObject WScript.Shell
     foreach ($shortcut in $liteShortcuts) {
         Assert-That (Test-Path -LiteralPath $shortcut) "Shortcut is missing: $shortcut"
-        Assert-That ((Get-FileHash -LiteralPath $shell.CreateShortcut($shortcut).TargetPath -Algorithm SHA256).Hash -eq $manifest.runtime.sha256) 'Shortcut targets another program'
+        $target = [InstallerShortcut]::GetTarget($shortcut)
+        Assert-That ([InstallerFilePath]::Canonical($target) -eq [InstallerFilePath]::Canonical($application)) 'Shortcut targets another installation'
+        Assert-That ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -eq $manifest.runtime.sha256) 'Shortcut targets another program'
     }
 }
 function Assert-LiteRemoved {

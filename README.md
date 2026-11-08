@@ -88,7 +88,7 @@ PDF、解析正文、译文、图片和用户编辑保存在本地文献目录�
 
 ## 项目结构
 
-![Copilotix 概念架构](docs/images/architecture-illustration.png)
+![Copilotix 概念架构](docs/images/architecture-illustration-v2.png)
 
 *架构概念插图，由图像模型生成；界面展示使用上方真实录屏。*
 
