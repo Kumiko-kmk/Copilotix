@@ -17,8 +17,14 @@ while (Date.now() < deadline) {
   await new Promise(resolve => setTimeout(resolve, 200))
 }
 if (!port) throw new Error('Installed renderer did not expose its test CDP port')
-const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(5_000) })).json()
-const target = targets.find(item => item.type === 'page' && item.url.startsWith('file:'))
+let target
+const targetDeadline = Date.now() + 30_000
+while (Date.now() < targetDeadline) {
+  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(5_000) })).json()
+  target = targets.find(item => item.type === 'page' && item.url.startsWith('file:'))
+  if (target?.webSocketDebuggerUrl) break
+  await new Promise(resolve => setTimeout(resolve, 200))
+}
 if (!target?.webSocketDebuggerUrl) throw new Error('Installed renderer target is missing')
 // Electron does not implement all of Playwright's browser-level initialization.
 // Use only the page protocol, retaining the same DOM and rendering assertions.
