@@ -74,7 +74,11 @@ Lite 與完整版是兩個互不相干的安裝。差異集中在 `src/app/contr
 
 安裝後的主窗口由 `installer-lite-ui.mjs` 經 Chromium CDP 確認首頁、側欄與三個設定頁實際顯示，並由 Chromium 截圖；不以 `PrintWindow` 的空白 GPU 畫面或存活進程作為界面驗收。僅測試啟動時開啟隨機 loopback CDP 端口，不啟用 Node inspector，不修改發布 fuses。連線失敗或界面未出現即阻止發布。
 
+Electron 僅打包 `zh-CN.pak` 和 `en-US.pak`，後者是非中文 Windows 的必要回退資源。移除它會令英文系統的 renderer 無法啟動；驗收不得透過強制 `--lang=zh-CN` 掩蓋缺失。
+
 Lite 的版本由 `LITE_IDENTITY.version` 獨立管理（首版 1.0.0），electron-builder 的 extraMetadata 同步寫入安裝包與 app.asar；不改完整版 package.json 版本。標籤為 `desktop-lite-v<version>`，說明在 `docs/releases/lite/<version>.zh-CN.md`。
+
+維護者於 2026-11-08 明確授權 `desktop-lite-v1.0.0` 未簽章發布，僅在同名 tag 與 `COPILOTIX_UNSIGNED_LITE_RELEASE_TAG=desktop-lite-v1.0.0` 同時匹配時生效。例外允許 `NotSigned`，不接受損壞或無效簽章；安裝驗收與回下載 hash 檢查照常，發布後刪除例外變數。
 
 `desktop-lite-windows.yml` 對發布腳本／身份／Lite 發布說明的 PR 及手動調度產生驗收產物，完整單測覆蓋率、Lite Electron 流程、封裝與隔離安裝／升級／卸載全過後才上傳安裝包。Lite tag 在同樣門禁後發布；可信簽章仍依 CODE_SIGNING_POLICY，無本版本授權時不公開未簽章產物。發布只上傳 setup.exe，草稿回下載驗 hash／簽章後公開，保留完整版為 latest。完整工作流第 3 片也建構 Lite，避免其 E2E 因缺 bundle 被跳過。`test-installer-*` 其餘腳本只驗完整版的 GUID 與路徑。
 

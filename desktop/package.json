@@ -96,7 +96,8 @@
     "asar": true,
     "compression": "maximum",
     "electronLanguages": [
-      "zh-CN"
+      "zh-CN",
+      "en-US"
     ],
     "asarUnpack": [
       "out/utility/**",

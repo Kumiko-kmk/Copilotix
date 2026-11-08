@@ -100,9 +100,11 @@ describe("releasePolicy", () => {
       expect(() => assertReleaseMeasurements({ ...RELEASE_LIMITS, zipBytes: 245 * MEBIBYTE })).toThrow(/zipBytes/)
     })
 
-    it('only accepts the simplified Chinese Electron locale', () => {
-      expect(() => assertLocales(['zh-CN.pak'])).not.toThrow()
-      expect(() => assertLocales(['zh-CN.pak', 'en-US.pak'])).toThrow(/Unexpected Electron locales/)
+    it('requires Chinese and the English fallback without bundling every locale', () => {
+      expect(() => assertLocales(['zh-CN.pak', 'en-US.pak'])).not.toThrow()
+      expect(() => assertLocales(['zh-CN.pak'])).toThrow(/Unexpected Electron locales/)
+      expect(() => assertLocales(['en-US.pak'])).toThrow(/Unexpected Electron locales/)
+      expect(() => assertLocales(['zh-CN.pak', 'en-US.pak', 'fr.pak'])).toThrow(/Unexpected Electron locales/)
       expect(() => assertLocales([])).toThrow(/Unexpected Electron locales/)
     })
 
