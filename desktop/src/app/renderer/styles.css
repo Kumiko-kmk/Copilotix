@@ -5,7 +5,7 @@
 
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-body { color: var(--text); background: var(--app-bg); }
+body { color: var(--text); background: var(--app-bg); font-family: var(--copilotix-font); }
 button, input, select { font: inherit; }
 
 :root {
@@ -656,5 +656,3 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 
 /* Reader navigation never inherits smooth scrolling from a theme or host. */
 .reader-workbench, .reader-workbench *, .markdown-scroll, .pdf-scroll { scroll-behavior: auto; }
-
-body { font-family: Inter, "DFKai-SB", BiauKai, "Microsoft JhengHei", sans-serif; }

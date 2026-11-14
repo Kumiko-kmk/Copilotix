@@ -150,7 +150,7 @@ export function drawTextPage(title: string, abstract: string | null): DetailPage
   context.fillRect(0, 0, width, PAGE_PIXEL_HEIGHT)
   const margin = 110
   let y = 230
-  const font = '"DFKai-SB", BiauKai, "Microsoft JhengHei", Georgia, serif'
+  const font = getComputedStyle(document.body).fontFamily
   context.fillStyle = '#1f1b16'
   context.font = `700 52px ${font}`
   y = wrapText(context, title, margin, y, width - margin * 2, 70, 4)

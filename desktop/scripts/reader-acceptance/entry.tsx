@@ -1,5 +1,6 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import '../../src/app/renderer/taiwan-kai.css'
 import { ConfigProvider } from 'antd'
 import { FilePdfOutlined, FileTextOutlined } from '@ant-design/icons'
 import PdfPane from '../../src/features/reader/renderer/components/PdfPane'
