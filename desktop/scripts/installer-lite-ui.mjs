@@ -83,12 +83,13 @@ try {
   await waitFor(headingFonts, 'Installed renderer did not load Iansui')
   await send('DOM.enable')
   await send('CSS.enable')
-  const heading = await send('Runtime.evaluate', {
-    expression: `[...document.querySelectorAll('h1')].find(element => element.checkVisibility() && element.textContent === '今天想讀些什麼？')`
-  })
-  const { nodeId } = await send('DOM.requestNode', { objectId: heading.result.objectId })
+  const { root } = await send('DOM.getDocument')
+  const headingIndex = await evaluate(`[...document.querySelectorAll('h1')].findIndex(element => element.checkVisibility() && element.textContent === '今天想讀些什麼？')`)
+  const { nodeIds } = await send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: 'h1' })
+  const nodeId = nodeIds[headingIndex]
+  if (!nodeId) throw new Error('Installed heading was not found in the DOM')
   const { fonts } = await send('CSS.getPlatformFontsForNode', { nodeId })
-  if (!fonts.some(font => font.familyName === 'Iansui' && font.isCustomFont && font.glyphCount > 0)) {
+  if (!fonts.some(font => font.postScriptName === 'Iansui-Regular' && font.isCustomFont && font.glyphCount > 0)) {
     throw new Error('Installed home did not render its Chinese heading in the bundled Iansui font')
   }
   await screenshot('02-installed-home.png')
