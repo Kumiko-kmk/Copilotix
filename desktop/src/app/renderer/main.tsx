@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider, theme } from 'antd'
 import zhTW from 'antd/locale/zh_TW'
 import { currentTheme, mixHex, onThemeChange, restoreTheme, rgbChannels } from '@features/settings/renderer'
+import './taiwan-kai.css'
 import './styles.css'
 
 // Before the first render, so the stored theme is the first thing painted.
@@ -30,7 +31,7 @@ function Root(): React.JSX.Element {
           borderRadius: 2,
           borderRadiusLG: 3,
           borderRadiusSM: 2,
-          fontFamily: 'Inter, "DFKai-SB", BiauKai, "Microsoft JhengHei", sans-serif',
+          fontFamily: 'var(--copilotix-font)',
           colorBgBase: colors.surface,
           colorBgContainer: mixHex(colors.surface, colors.sheet, 0.5),
           colorBgLayout: colors.surface,

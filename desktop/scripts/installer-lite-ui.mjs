@@ -76,6 +76,22 @@ try {
   await waitFor(`Array.from(document.querySelectorAll('h1')).some(element => element.checkVisibility() && element.textContent === '今天想讀些什麼？')`, 'Installed home did not render')
   await waitFor(visible('nav[aria-label="論文導覽"]'), 'Installed sidebar did not render')
   await waitFor(visible('.window-controls'), 'Installed window controls did not render')
+  const headingFonts = `(async () => {
+    await document.fonts.ready
+    return [...document.fonts].some(font => font.family === 'Iansui' && font.status === 'loaded')
+  })()`
+  await waitFor(headingFonts, 'Installed renderer did not load Iansui')
+  await send('DOM.enable')
+  await send('CSS.enable')
+  const { root } = await send('DOM.getDocument')
+  const headingIndex = await evaluate(`[...document.querySelectorAll('h1')].findIndex(element => element.checkVisibility() && element.textContent === '今天想讀些什麼？')`)
+  const { nodeIds } = await send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: 'h1' })
+  const nodeId = nodeIds[headingIndex]
+  if (!nodeId) throw new Error('Installed heading was not found in the DOM')
+  const { fonts } = await send('CSS.getPlatformFontsForNode', { nodeId })
+  if (!fonts.some(font => font.postScriptName === 'Iansui-Regular' && font.isCustomFont && font.glyphCount > 0)) {
+    throw new Error('Installed home did not render its Chinese heading in the bundled Iansui font')
+  }
   await screenshot('02-installed-home.png')
   await evaluate(`document.querySelector('.paper-sidebar-settings').click()`)
   await waitFor(visible('nav[aria-label="設定分類"]'), 'Installed settings did not open')
@@ -87,7 +103,7 @@ try {
   await evaluate(`document.querySelector('button[aria-label="關閉設定"]').click()`)
   await waitFor(`!document.querySelector('nav[aria-label="設定分類"]')`, 'Installed settings did not close')
   await writeFile(join(evidence, 'installed-ui.json'), JSON.stringify({
-    completed: true, locale: 'zh-TW', home: true, sidebar: true, settings: ['服務', '儲存', '外觀']
+    completed: true, locale: 'zh-TW', font: 'Iansui', home: true, sidebar: true, settings: ['服務', '儲存', '外觀']
   }, null, 2))
   console.log('Installed Lite renderer: home, sidebar and all settings pages passed')
 } catch (error) {

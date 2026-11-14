@@ -78,6 +78,8 @@ Lite 與完整版是兩個互不相干的安裝。差異集中在 `src/app/contr
 
 產品僅支援臺灣正體中文，Electron 僅打包 `zh-TW.pak`。正常啟動時由應用在 `ready` 前設定 `lang=zh-TW`，避免跟隨英文 Windows 去讀不存在的語言資源。安裝驗收不額外傳入語言引數，須確認 renderer 的 `navigator.language` 為 `zh-TW` 且介面正常。
 
+完整版與 Lite 隨附芫荽楷體及其 SIL Open Font License。Lite 安裝驗收另查詢 Chromium 實際用於首頁標題的字型，確認乾淨的 Windows 環境能載入並使用隨附的芫荽。
+
 Lite 的版本由 `LITE_IDENTITY.version` 獨立管理（首版 1.0.0），electron-builder 的 extraMetadata 同步寫入安裝包與 app.asar；不改完整版 package.json 版本。標籤為 `desktop-lite-v<version>`，說明在 `docs/releases/lite/<version>.zh-TW.md`。
 
 維護者於 2026-11-08 明確授權 `desktop-lite-v1.0.0` 未簽章發布，僅在同名 tag 與 `COPILOTIX_UNSIGNED_LITE_RELEASE_TAG=desktop-lite-v1.0.0` 同時匹配時生效。例外允許 `NotSigned`，不接受損壞或無效簽章；安裝驗收與回下載 hash 檢查照常，發布後刪除例外變數。

@@ -4,7 +4,7 @@
 
 Copilotix 將 PDF 解析、中文翻譯、原文對照與論文 AI 問答放進同一個桌面閱讀工作台。文獻產物和對話儲存在本地；解析、翻譯和問答按實際配置呼叫線上服務。
 
-[下載 1.2.0](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.2.0) · [完整更新說明](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/releases/1.2.0.zh-TW.md) · [倉庫 README](https://github.com/Kumiko-kmk/Copilotix#readme)
+[1.2.0 版本說明](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/releases/1.2.0.zh-TW.md) · [倉庫 README](https://github.com/Kumiko-kmk/Copilotix#readme)
 
 ![正體中文文庫檔案](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/library.png)
 
@@ -12,7 +12,7 @@ Copilotix 將 PDF 解析、中文翻譯、原文對照與論文 AI 問答放進�
 
 ## 從這裡開始
 
-1. [下載安裝](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade)：下載、安裝與覆蓋升級。
+1. [安裝與升級](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade)
 2. [配置服務](https://github.com/Kumiko-kmk/Copilotix/wiki/Service-Setup)：MinerU Token、翻譯來源及問答憑據。
 3. [處理第一篇論文](https://github.com/Kumiko-kmk/Copilotix/wiki/First-Paper)：匯入、任務進度、閱讀、標註與匯出。
 
@@ -33,7 +33,7 @@ Copilotix 將 PDF 解析、中文翻譯、原文對照與論文 AI 問答放進�
 
 - 正式匯入格式為 **PDF**，Markdown 是解析、翻譯和匯出產物。
 - 程式不提供第三方 API Key。解析上傳 PDF 到 MinerU；翻譯向實際來源傳送文字；問答首次傳送前說明所選服務和資料範圍。
-- Release 只提供安裝包與原始碼，簽章狀態以對應版本說明為準，請從本倉庫下載。
+- 舊版安裝包暫停公開下載。
 - 結果 ZIP 包含已有聊天檔案；分享前檢查對話、草稿及選區。完整文庫備份不含系統 API 憑據。
 
 技術與維護說明見 [工程文件索引](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/README.md)。Wiki 的版本化原始檔見 [docs/wiki](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/wiki)。

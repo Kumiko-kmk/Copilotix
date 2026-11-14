@@ -4,7 +4,7 @@
 
 **讀論文，也讀懂論文。**
 
-[下載完整版](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.3.0) · [下載 Lite 1.0](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-lite-v1.0.0) · [使用指南](https://github.com/Kumiko-kmk/Copilotix/wiki) · [反饋](https://github.com/Kumiko-kmk/Copilotix/issues)
+[安裝指南](docs/WINDOWS_INSTALLATION_ZH.md) · [使用指南](https://github.com/Kumiko-kmk/Copilotix/wiki) · [意見回饋](https://github.com/Kumiko-kmk/Copilotix/issues)
 
 Windows x64 · 臺灣正體中文 · 本地文庫 · 中英對照 · AI 問答
 
@@ -47,11 +47,11 @@ Copilotix 把 PDF 解析、翻譯、閱讀與整理放在同一張桌面。展�
 | 設定 | 多金鑰與模型配置 | 服務、儲存、外觀 |
 | 安裝 | 獨立程式與資料 | 獨立程式與資料，可並存 |
 
-[完整版下載](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.3.0) · [Lite 1.0 下載](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-lite-v1.0.0) · [Lite 更新說明](docs/releases/lite/1.0.0.zh-TW.md)
+[完整版 1.3.0 版本說明](docs/releases/1.3.0.zh-TW.md) · [Lite 1.0 版本說明](docs/releases/lite/1.0.0.zh-TW.md)
 
 ## 開始使用
 
-1. 下載 `setup.exe`，按嚮導安裝。
+1. 舊版安裝包已暫停公開下載。手上已有安裝包時，請依[安裝指南](docs/WINDOWS_INSTALLATION_ZH.md)操作。
 2. 配置 MinerU Token，以及模型 API Key 或本機 Codex。
 3. 匯入 PDF，開始對照閱讀。
 

@@ -122,6 +122,10 @@
         "to": "licenses/THIRD_PARTY_NOTICES.md"
       },
       {
+        "from": "resources/licenses/Iansui-OFL.txt",
+        "to": "licenses/Iansui-OFL.txt"
+      },
+      {
         "from": "out/licenses/THIRD_PARTY_LICENSES.txt",
         "to": "licenses/THIRD_PARTY_LICENSES.txt"
       }
