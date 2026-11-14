@@ -4,7 +4,7 @@
 
 ![實際執行：PDF、中文和原文三檢視](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/workbench.png)
 
-*《Attention Is All You Need》實際執行截圖：左側 PDF，右側中文與原文上下分組。*
+*獨立測試文庫的操作畫面，左側是 PDF，右側是正體中文譯文。*
 
 ## 分組與頁籤
 

@@ -4,7 +4,7 @@
 
 ![當前文獻目錄、聊天記錄、結果 ZIP 與獨立資料庫](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/local-paper-files-1.1.0.png)
 
-*根據 1.1.0 程式碼結構更新的藍白目錄示意圖。可選產物取決於服務返回與處理情況，示意圖不是應用截圖。*
+*英文示意圖說明論文產物、聊天紀錄與應用程式資料的位置。*
 
 ## 一篇文獻的檔案
 

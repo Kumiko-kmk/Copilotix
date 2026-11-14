@@ -8,7 +8,7 @@ Copilotix 將 PDF 解析、中文翻譯、原文對照與論文 AI 問答放進�
 
 ![正體中文文庫檔案](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/library.png)
 
-*獨立示例文庫中的《Factorized Fourier Neural Operators》。這是實際執行截圖，檔案分析仍需結合原文核對。*
+*獨立測試文庫的正體中文畫面。*
 
 ## 從這裡開始
 

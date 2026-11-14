@@ -4,7 +4,7 @@
 
 ![正體中文問答介面](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/paper-chat.png)
 
-*獨立示例文庫沒有配置服務，問題為未傳送草稿。截圖展示真實入口與配置提示，沒有生成或模擬模型回答；付費服務效果需使用有效憑據另行驗證。*
+*獨立測試文庫的問答畫面，顯示尚未連線的服務設定提示。*
 
 ## 開始一次對話
 

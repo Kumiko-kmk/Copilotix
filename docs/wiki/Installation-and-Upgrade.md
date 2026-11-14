@@ -22,7 +22,7 @@
 
 ![Copilotix 正體中文文庫檔案](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/library.png)
 
-*獨立示例文庫中的檔案展示與文字標註。*
+*獨立測試文庫中的論文封面和摘要。*
 
 安裝目錄放程式，文獻儲存位置放論文和處理產物，兩者相互獨立。程式目錄提供 `uninstall.exe`。
 
