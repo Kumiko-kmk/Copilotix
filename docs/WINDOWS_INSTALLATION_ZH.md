@@ -20,7 +20,7 @@ Copilotix-<版本>-win-x64/
 
 安裝精靈允許選擇安裝位置。“建立桌面圖示”預設勾選，可取消；開始選單也提供 Copilotix 啟動入口。安裝後使用這些入口啟動。安裝目錄包含完整 Electron 執行檔案，不要單獨搬走 `Copilotix.exe`。
 
-首次啟動後在「設定 → 服務連線」配置 MinerU Token，測試連線並儲存。解析與翻譯服務的配置和使用教學見 [README](../README.md#api-keys)。
+首次啟動後，在「設定 → 服務連線」設定 MinerU Token，測試連線後儲存。解析與翻譯服務的詳細步驟見[服務設定](wiki/Service-Setup.md)。
 
 ## 位置與個人資料
 
