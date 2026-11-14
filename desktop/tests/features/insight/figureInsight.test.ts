@@ -10,7 +10,7 @@ import { providerKey } from '../../providerKeys'
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2l1sAAAAASUVORK5CYII=', 'base64')
 const digest = createHash('sha256').update(png).digest('hex')
-const content = { displayWeight: 87, overview: '完整方法圖展示輸入如何經過各模組得到輸出。', takeaway: '讀者應關注核心模組與輸入輸出的關係。' }
+const content = { displayWeight: 87, overview: '完整方法图展示输入如何经过各模块得到输出。', takeaway: '读者应关注核心模块与输入输出的关系。' }
 afterEach(() => vi.restoreAllMocks())
 
 function fixture() {

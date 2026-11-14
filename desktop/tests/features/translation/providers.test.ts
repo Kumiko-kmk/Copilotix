@@ -54,7 +54,7 @@ describe('table provider transports', () => {
     expect(JSON.parse(calls[0]!.body!)).toEqual({
       model: 'qwen-mt-plus',
       messages: [{ role: 'user', content: 'Hello' }],
-      translation_options: { source_lang: 'English', target_lang: 'Traditional Chinese' }
+      translation_options: { source_lang: 'English', target_lang: 'Chinese' }
     })
   })
 
@@ -76,7 +76,7 @@ describe('table provider transports', () => {
   it('maps Qwen/DeepSeek authentication responses to a non-retryable validation error', async () => {
     const fetcher = async (): Promise<Response> => new Response('', { status: 401 })
     const result = await probeOpenAiCompatibleCredential('deepseek', DEFAULT_SETTINGS, 'wrong-key', fetcher)
-    expect(result).toEqual({ ok: false, code: 'AUTH_INVALID', message: 'deepseek API Key 驗證失敗（HTTP 401）' })
+    expect(result).toEqual({ ok: false, code: 'AUTH_INVALID', message: 'deepseek API Key 验证失败（HTTP 401）' })
   })
 
   it('sends the complete v2 JSON request to OpenAI-compatible providers', async () => {
@@ -92,7 +92,7 @@ describe('table provider transports', () => {
       const request = JSON.parse(body.messages[1]!.content) as TableTranslationRequest
       const content = JSON.stringify({
         protocol: request.protocol,
-        translations: flattenSegments(request).map((segment) => ({ id: segment.id, text: `譯:${segment.text}` }))
+        translations: flattenSegments(request).map((segment) => ({ id: segment.id, text: `译:${segment.text}` }))
       })
       return new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
         status: 200,
@@ -120,13 +120,13 @@ describe('table provider transports', () => {
     const fetcher = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       body = JSON.parse(String(init?.body)) as OpenAiRequestBody
       return new Response(JSON.stringify({
-        choices: [{ message: { content: '譯文' } }],
+        choices: [{ message: { content: '译文' } }],
         usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 }
       }), { status: 200 })
     }
     const provider = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher, usage).get('deepseek')!
 
-    await expect(provider.translate('source')).resolves.toBe('譯文')
+    await expect(provider.translate('source')).resolves.toBe('译文')
     expect(body?.model).toBe('deepseek-flash')
     expect(body?.thinking).toEqual({ type: 'disabled' })
     expect(usage).toHaveBeenCalledWith('deepseek', { promptTokens: 12, completionTokens: 5, totalTokens: 17 })
@@ -142,23 +142,23 @@ describe('table provider transports', () => {
     const fetcher = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const body = JSON.parse(String(init?.body)) as OpenAiRequestBody
       requestBodies.push(body)
-      return new Response(JSON.stringify({ choices: [{ message: { content: `譯:${body.messages[0]!.content}` } }] }), {
+      return new Response(JSON.stringify({ choices: [{ message: { content: `译:${body.messages[0]!.content}` } }] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       })
     }
     const provider = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
 
-    await expect(provider.translate('hello')).resolves.toBe('譯:hello')
+    await expect(provider.translate('hello')).resolves.toBe('译:hello')
     const request = tableRequest()
     const response = await provider.translateTable(request)
 
     expect(requestBodies.every((body) => body.messages.length === 1)).toBe(true)
-    expect(requestBodies.every((body) => body.translation_options?.target_lang === 'Traditional Chinese')).toBe(true)
+    expect(requestBodies.every((body) => body.translation_options?.target_lang === 'Chinese')).toBe(true)
     expect(requestBodies).toHaveLength(1 + flattenSegments(request).length)
     expect(response.translations).toEqual(flattenSegments(request).map((segment) => ({
       id: segment.id,
-      text: `譯:${segment.text}`
+      text: `译:${segment.text}`
     })))
   })
 
@@ -173,7 +173,7 @@ describe('table provider transports', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     const provider = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
 
-    await expect(provider.translate('hello')).rejects.toThrow(/無法識別/)
+    await expect(provider.translate('hello')).rejects.toThrow(/无法识别/)
   })
 
   it('never exposes removed providers or contacts their endpoints, even for historical settings', () => {
@@ -197,7 +197,7 @@ describe('table provider transports', () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
       active -= 1
       const body = JSON.parse(String(init?.body)) as OpenAiRequestBody
-      return new Response(JSON.stringify({ choices: [{ message: { content: `譯:${body.messages[0]!.content}` } }] }), { status: 200 })
+      return new Response(JSON.stringify({ choices: [{ message: { content: `译:${body.messages[0]!.content}` } }] }), { status: 200 })
     }
     const first = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
     const second = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
@@ -218,7 +218,7 @@ describe('table provider transports', () => {
     const fetcher = async (): Promise<Response> => {
       calls += 1
       if (calls === 1) return new Response('', { status: 429, headers: { 'Retry-After': '0' } })
-      return new Response(JSON.stringify({ choices: [{ message: { content: '譯文' } }] }), { status: 200 })
+      return new Response(JSON.stringify({ choices: [{ message: { content: '译文' } }] }), { status: 200 })
     }
     const first = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!
     const second = createTranslationProviders(DEFAULT_SETTINGS, keysFromVault(keyVault), fetcher).get('qwen')!

@@ -94,27 +94,27 @@ export const WORKFLOW_JOB_QUERY_CHUNK = 500
 export function assertTranslationBatchWithinLimits(input: TranslationBatchCommit): void {
   if (!input || !Array.isArray(input.blocks) || !Array.isArray(input.cacheEntries) ||
     input.blocks.length > MAX_TRANSLATION_BATCH_ITEMS || input.cacheEntries.length > MAX_TRANSLATION_BATCH_ITEMS) {
-    throw new Error('翻譯批次引數無效：最多 32 條 block/cache')
+    throw new Error('翻译批次参数无效：最多 32 条 block/cache')
   }
   for (const block of input.blocks) {
-    assertTranslationField(block.sourceMarkdown, `翻譯塊 ${block.blockId} 的原文`)
-    if (block.translatedMarkdown !== null) assertTranslationField(block.translatedMarkdown, `翻譯塊 ${block.blockId} 的譯文`)
+    assertTranslationField(block.sourceMarkdown, `翻译块 ${block.blockId} 的原文`)
+    if (block.translatedMarkdown !== null) assertTranslationField(block.translatedMarkdown, `翻译块 ${block.blockId} 的译文`)
   }
-  for (const entry of input.cacheEntries) assertTranslationField(entry.translated, `翻譯快取 ${entry.cacheKey}`)
+  for (const entry of input.cacheEntries) assertTranslationField(entry.translated, `翻译缓存 ${entry.cacheKey}`)
   let serialized: string
   try {
     serialized = JSON.stringify(input)
   } catch {
-    throw new Error('翻譯批次引數不可序列化')
+    throw new Error('翻译批次参数不可序列化')
   }
   if (typeof serialized !== 'string' || Buffer.byteLength(serialized, 'utf8') > MAX_TRANSLATION_BATCH_BYTES) {
-    throw new Error('翻譯批次 UTF-8 大小超過 768KiB')
+    throw new Error('翻译批次 UTF-8 大小超过 768KiB')
   }
 }
 
 export function assertTranslationField(value: unknown, label: string): void {
   if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_TRANSLATION_FIELD_BYTES) {
-    throw new Error(`${label}超過 262KiB 持久化欄位限制，請保留正文件案並避免透過 RPC`)
+    throw new Error(`${label}超过 262KiB 持久化字段限制，请保留正文文件并避免通过 RPC`)
   }
 }
 
@@ -241,13 +241,13 @@ export function toRelativePath(storagePath: string, path: string): string {
   const resolvedPath = resolveLexicalWithinRoot(canonicalRoot, path, flavor)
   const normalized = relative(canonicalRoot, resolvedPath).replaceAll('\\', '/')
   if (!normalized || normalized === '.' || normalized === '..' || normalized.startsWith('../') || normalized.includes('\0')) {
-    throw new Error('產物路徑必須是文件根目錄下的相對路徑')
+    throw new Error('产物路径必须是文档根目录下的相对路径')
   }
   return normalized
 }
 
 export function validateAnnotations(request: ReplaceReaderAnnotationsRequest): void {
-  if (!Array.isArray(request.annotations) || request.annotations.length > 50_000) throw new Error('閱讀標註數量無效')
+  if (!Array.isArray(request.annotations) || request.annotations.length > 50_000) throw new Error('阅读标注数量无效')
   const ids = new Set<string>()
   for (const annotation of request.annotations) {
     const validColor = annotation.kind === 'highlight'
@@ -260,7 +260,7 @@ export function validateAnnotations(request: ReplaceReaderAnnotationsRequest): v
       annotation.startOffset < 0 || annotation.endOffset <= annotation.startOffset ||
       !annotation.quote || annotation.quote.length !== annotation.endOffset - annotation.startOffset ||
       annotation.prefix.length > 32 || annotation.suffix.length > 32
-    ) throw new Error('閱讀標註資料無效')
+    ) throw new Error('阅读标注数据无效')
     ids.add(annotation.id)
   }
 }

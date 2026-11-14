@@ -114,7 +114,7 @@ export class ZoteroImportService {
     for (const itemKey of new Set(request.itemKeys)) {
       const entry = byKey.get(itemKey)
       if (!entry) {
-        failed.push({ name: itemKey, message: 'Zotero 條目已不在當前列表中，請重新整理' })
+        failed.push({ name: itemKey, message: 'Zotero 条目已不在当前列表中，请刷新' })
         continue
       }
       try {
@@ -134,7 +134,7 @@ export class ZoteroImportService {
       const created = createdByHash.get(plan.sha256)
       const document = created ?? await this.deps.findByHash(plan.sha256)
       if (!document) {
-        failed.push({ name: plan.entry.title, message: failedNames.get(basename(plan.path)) ?? 'PDF 未能匯入' })
+        failed.push({ name: plan.entry.title, message: failedNames.get(basename(plan.path)) ?? 'PDF 未能导入' })
         continue
       }
       if (!created) linked += 1
@@ -169,12 +169,12 @@ export class ZoteroImportService {
   }
 
   private require(snapshotId: string): ActiveSnapshot {
-    if (!this.active || this.active.id !== snapshotId) throw new Error('Zotero 列表已過期，請重新開啟')
+    if (!this.active || this.active.id !== snapshotId) throw new Error('Zotero 列表已过期，请重新打开')
     return this.active
   }
 
   private async resolvePdf(active: ActiveSnapshot, entry: ZoteroEntry): Promise<{ attachmentKey: string; path: string }> {
-    let lastError = '沒有可用的 PDF 附件'
+    let lastError = '没有可用的 PDF 附件'
     for (const pdf of entry.pdfs) {
       let path = pdf.path
       if (!path && this.deps.fileUrl) {
@@ -182,11 +182,11 @@ export class ZoteroImportService {
         path = url?.startsWith('file:') ? fileURLToPath(url) : null
       }
       if (!path) {
-        lastError = '無法定位 PDF 附件檔案'
+        lastError = '无法定位 PDF 附件文件'
         continue
       }
       if (extname(path).toLowerCase() !== '.pdf') {
-        lastError = `附件不是 .pdf 檔案：${basename(path)}`
+        lastError = `附件不是 .pdf 文件：${basename(path)}`
         continue
       }
       try {
@@ -194,7 +194,7 @@ export class ZoteroImportService {
       } catch {
         // Try the next PDF attachment.
       }
-      lastError = `PDF 附件檔案不存在：${basename(path)}`
+      lastError = `PDF 附件文件不存在：${basename(path)}`
     }
     throw new Error(lastError)
   }

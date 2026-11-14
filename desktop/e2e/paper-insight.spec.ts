@@ -10,7 +10,7 @@ test('archive insight uses validated settings, provider HTTP and durable local s
   test.setTimeout(120_000)
   const workspace = await createE2EWorkspace()
   // The archive opens a paper with figure hints only once its cover figure is ready.
-  const documentId = await seedReaderTask(workspace, { savedCoverFigure: true, englishTitle: 'Insight test paper', sourceMarkdown: '# Original title\n\n# Abstract\n\nOriginal paper content.\n\n# Method\n\nStructured analysis.\n\n# Conclusion\n\nImproved reading.', translatedMarkdown: '# 論文標題\n\n# 摘要\n\n研究論文閱讀效率。\n\n# 方法\n\n結構化提取。\n\n# 結論\n\n改進閱讀。' })
+  const documentId = await seedReaderTask(workspace, { savedCoverFigure: true, englishTitle: 'Insight test paper', sourceMarkdown: '# Original title\n\n# Abstract\n\nOriginal paper content.\n\n# Method\n\nStructured analysis.\n\n# Conclusion\n\nImproved reading.', translatedMarkdown: '# 论文标题\n\n# 摘要\n\n研究论文阅读效率。\n\n# 方法\n\n结构化提取。\n\n# 结论\n\n改进阅读。' })
   let app: Awaited<ReturnType<typeof launchElectron>> | undefined
   try {
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
@@ -27,10 +27,10 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     })
     const openDetail = async () => {
       await window.locator('[data-edge-dock="top"]').hover()
-      await window.getByRole('navigation', { name: '主導覽' }).getByRole('button', { name: /文庫$/u }).click()
-      const archive = window.getByRole('region', { name: '文庫', exact: true })
+      await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
+      const archive = window.getByRole('region', { name: '文库', exact: true })
       await expect(archive.locator('canvas[data-archive-state="ready"]')).toBeVisible({ timeout: 20_000 })
-      await archive.getByRole('button', { name: '檢視檔案' }).click()
+      await archive.getByRole('button', { name: '查看档案' }).click()
       // aria-busy includes the extraction/decryption phase. Hosted software GL
       // may take several seconds per frame; assert content after that phase,
       // within the existing 30 s cold-cover and 120 s case budgets.
@@ -38,20 +38,20 @@ test('archive insight uses validated settings, provider HTTP and durable local s
       await expect(archive.locator('.paper-archive-detail')).toHaveAttribute('aria-busy', 'false')
       await expect(archive.locator('.paper-archive-detail h2')).toHaveText('Insight test paper')
       await expect(archive.getByRole('tab', { name: /摘要/u })).toHaveAttribute('aria-selected', 'true')
-      const legacyTab = archive.getByRole('tab', { name: /AI 解讀/u })
+      const legacyTab = archive.getByRole('tab', { name: /AI 解读/u })
       if (await legacyTab.count()) await legacyTab.click()
       return archive
     }
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('navigation', { name: '主導覽' }).getByRole('button', { name: /文庫$/u }).click()
-    let archive = window.getByRole('region', { name: '文庫', exact: true })
+    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
+    let archive = window.getByRole('region', { name: '文库', exact: true })
     await expect(archive.locator('canvas[data-archive-state="ready"]')).toBeVisible({ timeout: 20_000 })
     expect(await window.evaluate((id) => window.copilotix.paperInsight.get({ documentId: id }), documentId)).toEqual({
-      status: 'unavailable', reason: '請先在服務連線中儲存模型 API Key。'
+      status: 'unavailable', reason: '请先在服务连接中保存模型 API Key。'
     })
     await expect(archive.locator('.paper-archive-brief-status')).toHaveCount(0)
-    await expect(archive.getByRole('button', { name: '檢視檔案' })).toBeDisabled()
-    await expect(archive.getByRole('button', { name: '生成 AI 檔案卡' })).toHaveCount(0)
+    await expect(archive.getByRole('button', { name: '查看档案' })).toBeDisabled()
+    await expect(archive.getByRole('button', { name: '生成 AI 档案卡' })).toHaveCount(0)
     await app.evaluate(({ net }, brief) => {
       Reflect.set(globalThis, '__insightRequests', [])
       net.fetch = async (input, init) => {
@@ -72,17 +72,17 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     })
     expect(saved.fieldErrors).toEqual({}); expect(saved.settings.credentials.qwen.state).toBe('valid')
     await window.reload()
-    await expect(archive.getByRole('button', { name: /生成.*檔案卡/u })).toHaveCount(0)
+    await expect(archive.getByRole('button', { name: /生成.*档案卡/u })).toHaveCount(0)
     await openPaperFromLibrary(window, documentId)
     const reader = window.locator('.reader-header')
-    await expect(reader.getByRole('button', { name: '檔案卡', exact: true })).toHaveCount(0)
+    await expect(reader.getByRole('button', { name: '档案卡', exact: true })).toHaveCount(0)
     await window.getByRole('tab', { name: 'Chat', exact: true }).click()
-    const cardActions = window.locator('.reader-chat-toolbar').getByRole('button', { name: '檔案卡', exact: true })
+    const cardActions = window.locator('.reader-chat-toolbar').getByRole('button', { name: '档案卡', exact: true })
     await cardActions.click()
-    await window.getByRole('menuitem', { name: '生成 AI 檔案卡' }).click()
+    await window.getByRole('menuitem', { name: '生成 AI 档案卡' }).click()
     await expect.poll(() => window.evaluate(async (id) => (await window.copilotix.paperInsight.get({ documentId: id })).status, documentId)).toBe('ready')
     await cardActions.click()
-    await expect(window.getByRole('menuitem', { name: '重新生成檔案卡' })).toBeVisible()
+    await expect(window.getByRole('menuitem', { name: '重新生成档案卡' })).toBeVisible()
     await window.keyboard.press('Escape')
     await reader.getByRole('button', { name: '返回', exact: true }).click()
     archive = await openDetail()
@@ -102,10 +102,10 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     expect(JSON.stringify(requests)).not.toContain('copilotix-e2e-insight-fake-key')
     const durable = await readFile(join(workspace.root, 'documents-v2', documentId, 'insight', 'brief.v2.json'), 'utf8')
     expect(durable).toContain(briefGeneration.analysis.conclusions[0]!.title); expect(durable).not.toContain('fake-key')
-    await expect(archive.getByText('證據基礎', { exact: true })).toHaveCount(0)
-    await expect(archive.getByText('頁數', { exact: true })).toHaveCount(0)
-    await archive.getByRole('tab', { name: /結論/u }).press('Enter')
-    await expect(archive.getByText('證據需核對', { exact: true })).toHaveCount(0)
+    await expect(archive.getByText('证据基础', { exact: true })).toHaveCount(0)
+    await expect(archive.getByText('页数', { exact: true })).toHaveCount(0)
+    await archive.getByRole('tab', { name: /结论/u }).press('Enter')
+    await expect(archive.getByText('证据需核对', { exact: true })).toHaveCount(0)
     const firstFinding = archive.locator('.paper-archive-reading-points > li').first()
     await expect(firstFinding.locator('.paper-archive-anchor summary')).toContainText('E1')
     await firstFinding.locator('.paper-archive-anchor summary').press('Enter')
@@ -120,10 +120,10 @@ test('archive insight uses validated settings, provider HTTP and durable local s
     }
     expect(await app.evaluate(() => (Reflect.get(globalThis, '__insightRequests') as unknown[]).length)).toBe(1)
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('navigation', { name: '主導覽' }).getByRole('button', { name: '設定' }).click()
-    await window.getByRole('button', { name: '模型設定' }).click()
+    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '设置' }).click()
+    await window.getByRole('button', { name: '模型设置' }).click()
     // Automatic briefs are always on: no switch is offered.
-    await expect(window.getByRole('checkbox', { name: '翻譯完成後自動生成 AI 解讀' })).toHaveCount(0)
+    await expect(window.getByRole('checkbox', { name: '翻译完成后自动生成 AI 解读' })).toHaveCount(0)
     expect((await window.evaluate(() => window.copilotix.getSettings())).autoGeneratePaperInsight).toBe(true)
   } finally { await app?.close(); await workspace.cleanup() }
 })

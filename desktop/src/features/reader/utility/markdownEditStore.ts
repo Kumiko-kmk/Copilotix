@@ -14,7 +14,7 @@ export class MarkdownEditStore {
 
   private root(documentId: string): string {
     const root = this.directory(documentId)
-    if (!root) throw new Error('論文不存在')
+    if (!root) throw new Error('论文不存在')
     return root
   }
 
@@ -50,9 +50,9 @@ export class MarkdownEditStore {
   private async applyNow(request: MarkdownEditRequest): Promise<{ revision: number }> {
     const root = this.root(request.documentId)
     const info = await lstat(root)
-    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('文獻目錄無效')
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('文献目录无效')
     const file = await readMarkdownEditsFile(root, request.documentId)
-    if (file.revision !== request.expectedRevision) throw new Error('段落修改已在別處更新，請重新整理後重試')
+    if (file.revision !== request.expectedRevision) throw new Error('段落修改已在别处更新，请刷新后重试')
     const now = new Date().toISOString()
     const next: MarkdownEditsFile = { ...file, revision: file.revision + 1, updatedAt: now, blocks: [...file.blocks], supplementalDeleted: [...file.supplementalDeleted] }
     const target = request.target
@@ -60,7 +60,7 @@ export class MarkdownEditStore {
       delete next.order
       if (request.action === 'reorder') {
         const count = (await this.contentBlocks(root, request.documentId)).length
-        if (!isPermutation(target.sequence, count)) throw new Error('段落位置已變化，請重新整理後重試')
+        if (!isPermutation(target.sequence, count)) throw new Error('段落位置已变化，请刷新后重试')
         if (!isIdentity(target.sequence)) next.order = { sourceVersion: (await documentModels.ensureBase(request.documentId, root)).sourceVersion, count, sequence: [...target.sequence], updatedAt: now }
       }
     } else if (target.kind === 'supplemental') {
@@ -72,7 +72,7 @@ export class MarkdownEditStore {
       const blocks = model.content
       const block = blocks[target.index]
       const sameIds = block && block.mappingIds.length === target.mappingIds.length && [...block.mappingIds].sort().join('\0') === [...target.mappingIds].sort().join('\0')
-      if (!block || !sameIds) throw new Error('段落位置已變化，請重新整理後重試')
+      if (!block || !sameIds) throw new Error('段落位置已变化，请刷新后重试')
       // Rewrite positions to the current parse so later edits find their blocks directly.
       const { byIndex, orphans } = resolveMarkdownEdits(blocks, file, sha256, model.sourceVersion)
       const existing = byIndex.get(target.index)

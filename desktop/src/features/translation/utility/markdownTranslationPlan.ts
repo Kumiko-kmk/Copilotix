@@ -152,7 +152,7 @@ export class MarkdownTranslationPlanManager {
     const unit = this.requireUnit(state, unitId)
     if (unit.status !== 'pending') return mutationFor(state, unit)
     const selectedPath = responsePath ?? unit.descriptor.responsePath
-    if (selectedPath !== unit.descriptor.responsePath) throw new Error('翻譯響應路徑與計劃不匹配')
+    if (selectedPath !== unit.descriptor.responsePath) throw new Error('翻译响应路径与计划不匹配')
     const absolute = this.resolvePlanPath(state, selectedPath)
     const raw = await readFile(absolute, 'utf8')
     const value = parseJson(raw)
@@ -171,12 +171,12 @@ export class MarkdownTranslationPlanManager {
     taskId: string,
     jobId: string,
     unitId: string,
-    error = '翻譯失敗'
+    error = '翻译失败'
   ): Promise<TranslationPlanMutationResult> {
     const state = await this.ensurePlan(taskId, jobId)
     const unit = this.requireUnit(state, unitId)
     if (unit.status === 'failed') return mutationFor(state, unit)
-    const message = String(error).replace(/\p{Cc}/gu, ' ').trim().slice(0, 32_768) || '翻譯失敗'
+    const message = String(error).replace(/\p{Cc}/gu, ' ').trim().slice(0, 32_768) || '翻译失败'
     const output = new Map(unit.blockIds.map((blockId, index) => [blockId, unit.sourceMarkdowns[index] ?? '']))
     await this.writeUnitResults(state, unit, output)
     unit.status = 'failed'
@@ -190,7 +190,7 @@ export class MarkdownTranslationPlanManager {
 
   async finalize(taskId: string, jobId: string): Promise<TranslationPlanFinalizeResult> {
     const state = await this.ensurePlan(taskId, jobId)
-    if (state.units.some((unit) => unit.status === 'pending')) throw new Error('翻譯計劃尚未完成')
+    if (state.units.some((unit) => unit.status === 'pending')) throw new Error('翻译计划尚未完成')
 
     const orderedMarkdown = new Array<string>(state.sourceBlocks.length).fill('')
     const manifestBlocks: Array<Record<string, unknown>> = []
@@ -230,7 +230,7 @@ export class MarkdownTranslationPlanManager {
       blockMappingVersion: this.blockMappingVersion,
       taskId,
       jobId,
-      targetLanguage: 'zh-TW',
+      targetLanguage: 'zh-CN',
       preferredProvider: state.binding.translationProvider,
       translationPipelineVersion: TRANSLATION_PIPELINE_VERSION,
       tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
@@ -302,13 +302,13 @@ export class MarkdownTranslationPlanManager {
       const binding = this.repository.requireTranslationJobBinding(taskId, jobId)
       if (binding.outputDir === existing.binding.outputDir && binding.attempt === existing.binding.attempt) {
         const [base, edits] = await Promise.all([documentModels.ensureBase(taskId, binding.outputDir), readMarkdownEditsFile(binding.outputDir, taskId)])
-        if (base.sourceVersion !== existing.sourceVersion || edits.revision !== existing.editRevision) throw new Error('文件或編輯版本已變化，請重新執行翻譯；已完成結果保留')
+        if (base.sourceVersion !== existing.sourceVersion || edits.revision !== existing.editRevision) throw new Error('文档或编辑版本已变化，请重新执行翻译；已完成结果保留')
         return existing
       }
     }
     await this.open(taskId, jobId)
     const state = this.plans.get(planKey(taskId, jobId))
-    if (!state) throw new Error('翻譯計劃未開啟')
+    if (!state) throw new Error('翻译计划未打开')
     return state
   }
 
@@ -389,7 +389,7 @@ export class MarkdownTranslationPlanManager {
       if (carried?.status === 'failed' && status === 'pending') {
         unit.status = 'failed'
         unit.descriptor.status = 'failed'
-        unit.error = carried.error ?? '翻譯失敗'
+        unit.error = carried.error ?? '翻译失败'
       }
       units.push(unit)
     }
@@ -454,7 +454,7 @@ export class MarkdownTranslationPlanManager {
     const resultPath = `${prefix}/results/${unitId}.md`
     const request: PlainTranslationRequest = {
       protocol: 'copilotix-translation-plain-v1',
-      targetLanguage: 'zh-TW',
+      targetLanguage: 'zh-CN',
       unitId,
       sourceHash,
       segments
@@ -599,7 +599,7 @@ export class MarkdownTranslationPlanManager {
         unit.descriptor.status = 'failed'
         unit.provider = null
         unit.model = null
-        unit.error = members[0]!.record!.error ?? '翻譯失敗'
+        unit.error = members[0]!.record!.error ?? '翻译失败'
       } else if (unit.status === 'completed') {
         unit.status = 'pending'
         unit.descriptor.status = 'pending'
@@ -627,7 +627,7 @@ export class MarkdownTranslationPlanManager {
     provider: TranslationProviderId | null,
     model: string | null
   ): Promise<void> {
-    if (!unit.tablePlan) throw new Error('表格翻譯計劃缺失')
+    if (!unit.tablePlan) throw new Error('表格翻译计划缺失')
     applyTableTranslation(unit.tablePlan, response)
     unit.cacheResponse = response
     const output = new Map(unit.tablePlan.blocks.map((block, index) => [unit.blockIds[index]!, block.render()]))
@@ -639,17 +639,17 @@ export class MarkdownTranslationPlanManager {
     const tree = processor.parse(source) as any
     const bindings = collectPlainSegments(tree, unit.descriptor.unitId)
     const expected = unit.descriptor.kind === 'plain' && unit.request.protocol === 'copilotix-translation-plain-v1' ? unit.request.segments : []
-    if (bindings.length !== expected.length || response.translations.length !== expected.length) throw new Error('普通翻譯響應數量不匹配')
+    if (bindings.length !== expected.length || response.translations.length !== expected.length) throw new Error('普通翻译响应数量不匹配')
     const translations = new Map<string, string>()
     for (const segment of response.translations) {
       if (!expected.some((candidate) => candidate.id === segment.id) || translations.has(segment.id) || !segment.text.trim()) {
-        throw new Error('普通翻譯響應包含無效 segment')
+        throw new Error('普通翻译响应包含无效 segment')
       }
       translations.set(segment.id, segment.text)
     }
     for (const segment of expected) {
       const value = translations.get(segment.id)
-      if (value === undefined) throw new Error('普通翻譯響應缺少 segment')
+      if (value === undefined) throw new Error('普通翻译响应缺少 segment')
     }
     bindings.forEach((binding) => {
       binding.node.value = normalizeTranslatedText(binding.source, translations.get(binding.id)!)
@@ -661,13 +661,13 @@ export class MarkdownTranslationPlanManager {
     const envelope = translationPlanResponseEnvelopeSchema.safeParse(value)
     if (envelope.success) {
       if (envelope.data.unitId !== unit.descriptor.unitId || envelope.data.kind !== unit.descriptor.kind || envelope.data.sourceHash !== unit.descriptor.sourceHash) {
-        throw new Error('翻譯響應 envelope 與計劃不匹配')
+        throw new Error('翻译响应 envelope 与计划不匹配')
       }
       return envelope.data.response
     }
     if (unit.descriptor.kind === 'plain') {
       const response = plainTranslationResponseSchema.parse(value)
-      if (response.unitId !== unit.descriptor.unitId || response.sourceHash !== unit.descriptor.sourceHash) throw new Error('普通翻譯響應與計劃不匹配')
+      if (response.unitId !== unit.descriptor.unitId || response.sourceHash !== unit.descriptor.sourceHash) throw new Error('普通翻译响应与计划不匹配')
       return response
     }
     return tableTranslationResponseSchema.parse(value)
@@ -796,7 +796,7 @@ export class MarkdownTranslationPlanManager {
       }
 
       if (!progressed) {
-        throw new Error('翻譯批次 UTF-8 大小超過 768KiB，或單個持久化欄位超過 262KiB')
+        throw new Error('翻译批次 UTF-8 大小超过 768KiB，或单个持久化字段超过 262KiB')
       }
       this.repository.commitTranslationBatch(this.translationBatch({ ...input, blocks, cacheEntries }))
     }
@@ -902,13 +902,13 @@ export class MarkdownTranslationPlanManager {
   private async readOutputFile(root: string, relativePath: string): Promise<string> {
     const path = this.resolveOutputPath(root, relativePath)
     const info = await lstat(path)
-    if (!info.isFile()) throw new Error('翻譯輸入不是普通檔案')
+    if (!info.isFile()) throw new Error('翻译输入不是普通文件')
     return readFile(path, 'utf8')
   }
 
   private resolveOutputPath(root: string, relativePath: string): string {
     if (!relativePath || relativePath.includes('\0') || relativePath.includes('\\') || isAbsolutePath(relativePath) || relativePath.split('/').some((part) => part === '..' || part.length === 0)) {
-      throw new Error('翻譯路徑無效')
+      throw new Error('翻译路径无效')
     }
     return this.pathPolicy.resolveChild(root, relativePath)
   }
@@ -916,7 +916,7 @@ export class MarkdownTranslationPlanManager {
   private resolvePlanPath(state: PlanState, relativePath: string): string {
     const prefix = `.translation/${state.jobId}/`
     if (!relativePath.startsWith(prefix) || relativePath.includes('\\') || relativePath.split('/').some((part) => part === '..' || part.length === 0)) {
-      throw new Error('計劃路徑無效')
+      throw new Error('计划路径无效')
     }
     return this.pathPolicy.resolveChild(state.root, relativePath)
   }
@@ -959,7 +959,7 @@ export class MarkdownTranslationPlanManager {
 
   private requireUnit(state: PlanState, unitId: string): UnitState {
     const unit = state.unitById.get(unitId)
-    if (!unit) throw new Error('翻譯單元不存在')
+    if (!unit) throw new Error('翻译单元不存在')
     return unit
   }
 
@@ -970,6 +970,6 @@ export class MarkdownTranslationPlanManager {
     await mkdir(documentsRoot, { recursive: true })
     const expected = this.pathPolicy.resolveChild(documentsRoot, binding.taskId)
     const candidate = this.pathPolicy.resolveChild(this.outputRoot, binding.outputDir)
-    if (candidate !== expected) throw new Error('翻譯作業輸出目錄不在配置的文件根目錄內')
+    if (candidate !== expected) throw new Error('翻译作业输出目录不在配置的文档根目录内')
   }
 }

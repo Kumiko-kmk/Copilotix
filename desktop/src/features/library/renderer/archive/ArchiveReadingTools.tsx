@@ -124,13 +124,13 @@ export default function ArchiveReadingTools(props: {
       try { saved = await mutate(base, diff) } catch (failure) {
         if (!(failure instanceof IpcClientError) || failure.code !== 'ANNOTATION_CONFLICT') throw failure
         const latest = await window.copilotix.listReaderAnnotations({ documentId: props.documentId, view: 'original' })
-        if (latest.artifactId !== base.artifactId) throw new Error('論文原文已更新，請重新選擇文字')
+        if (latest.artifactId !== base.artifactId) throw new Error('论文原文已更新，请重新选择文本')
         const replay = replayAnnotationDiff(base.annotations, latest.annotations, diff)
         saved = replay.upserts.length || replay.deleteIds.length ? await mutate(latest, replay) : latest
       }
       queryClient.setQueryData(annotationKey, saved)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : '標註儲存失敗，請重新選擇文字後重試')
+      setError(failure instanceof Error ? failure.message : '标注保存失败，请重新选择文本后重试')
       void queryClient.invalidateQueries({ queryKey: annotationKey })
     } finally { savingRef.current = false; setSaving(false) }
   }
@@ -139,8 +139,8 @@ export default function ArchiveReadingTools(props: {
     className="paper-archive-tabpanel paper-archive-reveal" style={{ '--i': 8 } as React.CSSProperties} aria-busy={saving}>
     <div ref={contentRef} className="paper-archive-reading-body">{props.children}</div>
     {error || annotations.isError || notes.isError ? <p className="paper-archive-reading-error" role="alert" data-reader-annotation-ignore="true">
-      {error || '標註或筆記讀取失敗，暫時無法編輯。'}
-      {annotations.isError || notes.isError ? <button type="button" onClick={() => { void annotations.refetch(); void notes.refetch() }}>重新讀取</button> : null}
+      {error || '标注或笔记读取失败，暂时无法编辑。'}
+      {annotations.isError || notes.isError ? <button type="button" onClick={() => { void annotations.refetch(); void notes.refetch() }}>重新读取</button> : null}
     </p> : null}
     {ready && selection && !saving ? createPortal(<ReaderAnnotationToolbar selection={selection} color={color} paletteOpen={palette}
       onPaletteOpen={() => setPalette(true)} onPaletteClose={() => setPalette(false)} onPaletteHover={() => {}} onPaletteHoverEnd={() => {}}

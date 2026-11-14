@@ -162,7 +162,7 @@ export async function seedReaderTask(
           tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL
         }),
         taskId,
-        targetLanguage: 'zh-TW',
+        targetLanguage: 'zh-CN',
         preferredProvider: 'qwen',
         failedBlockIds: [],
         blocks: translatedBlocks.map((markdown, sourceIndex) => ({
@@ -465,23 +465,23 @@ function createTwoPagePdf(): Buffer {
 
 /**
  * Opens a paper the way a user finds it now that the home page has no shelf: the library search,
- * then 「開啟閱讀」 on its browse panel. Without WebGL the search result opens the Reader directly.
+ * then 「打开阅读」 on its browse panel. Without WebGL the search result opens the Reader directly.
  */
 export async function openPaperFromLibrary(window: Page, documentId: string): Promise<void> {
   // Reader acceptance does not measure archive animation; its dedicated suite does.
   await window.emulateMedia({ reducedMotion: 'reduce' })
-  const archive = window.getByRole('region', { name: '文庫', exact: true })
+  const archive = window.getByRole('region', { name: '文库', exact: true })
   if (!(await archive.isVisible())) {
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('navigation', { name: '主導覽' }).getByRole('button', { name: /文庫$/u }).click()
+    await window.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
   }
   const name = await window.evaluate(async (id) => {
     const api = (globalThis as unknown as { copilotix: { listDocuments(): Promise<Array<{ id: string; displayName: string }>> } }).copilotix
     return (await api.listDocuments()).find((document) => document.id === id)?.displayName ?? ''
   }, documentId)
-  await archive.getByRole('searchbox', { name: '搜尋文庫' }).fill(name.replace(/\.pdf\s*$/iu, ''))
+  await archive.getByRole('searchbox', { name: '搜索文库' }).fill(name.replace(/\.pdf\s*$/iu, ''))
   await archive.locator(`#paper-archive-results button[data-document-id="${documentId}"]`).click()
   const panel = archive.locator(`.paper-archive-panel[data-document-id="${documentId}"]`)
   await expect(panel.or(window.locator('.reader-header'))).toBeVisible({ timeout: 20_000 })
-  if (await panel.isVisible()) await panel.getByRole('button', { name: /開啟閱讀/u }).click()
+  if (await panel.isVisible()) await panel.getByRole('button', { name: /打开阅读/u }).click()
 }

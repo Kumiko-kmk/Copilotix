@@ -36,23 +36,23 @@ export function createZoteroConnector(port: number, fetchImpl: typeof fetch = fe
     try {
       return await fetchImpl(`${base}${path}`, { method: 'POST', headers: { ...headers, ...extra }, body, signal: AbortSignal.timeout(timeout) })
     } catch {
-      throw new ZoteroUnavailableError('無法連線 Zotero，請先開啟 Zotero 再匯出')
+      throw new ZoteroUnavailableError('无法连接 Zotero，请先打开 Zotero 再导出')
     }
   }
   const expect = async (response: Response, statuses: number[], action: string): Promise<void> => {
     if (statuses.includes(response.status)) return
     const detail = (await response.text().catch(() => '')).slice(0, 200)
-    throw new Error(`Zotero ${action}失敗（${response.status}${detail ? `：${detail}` : ''}）`)
+    throw new Error(`Zotero ${action}失败（${response.status}${detail ? `：${detail}` : ''}）`)
   }
   return {
     async ping() {
-      await expect(await post('/ping', '{}', { 'Content-Type': 'application/json' }), [200], '連線')
+      await expect(await post('/ping', '{}', { 'Content-Type': 'application/json' }), [200], '连接')
     },
     async saveItems(items) {
       const sessionID = randomUUID()
       const response = await post('/saveItems', JSON.stringify({ sessionID, uri: 'copilotix://export', items }), { 'Content-Type': 'application/json' })
-      if (response.status === 500 && (await response.clone().text()).includes('libraryEditable')) throw new Error('Zotero 當前選中的文庫不可編輯')
-      await expect(response, [201], '儲存條目')
+      if (response.status === 500 && (await response.clone().text()).includes('libraryEditable')) throw new Error('Zotero 当前选中的文库不可编辑')
+      await expect(response, [201], '保存条目')
       return sessionID
     },
     async saveAttachment(sessionID, parentItemID, title, pdf) {
@@ -61,8 +61,8 @@ export function createZoteroConnector(port: number, fetchImpl: typeof fetch = fe
         'X-Metadata': JSON.stringify({ sessionID, parentItemID, title, url: 'copilotix://export/original.pdf' })
       }, ATTACHMENT_TIMEOUT_MS)
       // 200 means the library does not accept files; the item itself was still created.
-      if (response.status === 200) throw new Error('Zotero 當前文庫不接受附件檔案')
-      await expect(response, [201], '上傳 PDF ')
+      if (response.status === 200) throw new Error('Zotero 当前文库不接受附件文件')
+      await expect(response, [201], '上传 PDF ')
     }
   }
 }

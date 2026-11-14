@@ -1,39 +1,39 @@
 # Copilotix 使用指南
 
-**適用版本：1.2.0 · Windows x64**
+**适用版本：1.2.0 · Windows x64**
 
-Copilotix 將 PDF 解析、中文翻譯、原文對照與論文 AI 問答放進同一個桌面閱讀工作台。文獻產物和對話儲存在本地；解析、翻譯和問答按實際配置呼叫線上服務。
+Copilotix 将 PDF 解析、中文翻译、原文对照与论文 AI 问答放进同一个桌面阅读工作台。文献产物和对话保存在本地；解析、翻译和问答按实际配置调用在线服务。
 
-[1.2.0 版本說明](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/releases/1.2.0.zh-TW.md) · [倉庫 README](https://github.com/Kumiko-kmk/Copilotix#readme)
+[下载 1.2.0](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.2.0) · [完整更新说明](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/releases/1.2.0.zh-CN.md) · [仓库 README](https://github.com/Kumiko-kmk/Copilotix#readme)
 
-![正體中文文庫檔案](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/library.png)
+![1.2.0 实际运行：文库档案与标注](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/screenshots/library-1.2.0.png)
 
-*獨立測試文庫的正體中文畫面。*
+*独立示例文库中的《Factorized Fourier Neural Operators》。这是实际运行截图，档案分析仍需结合原文核对。*
 
-## 從這裡開始
+## 从这里开始
 
-1. [安裝與升級](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade)
-2. [配置服務](https://github.com/Kumiko-kmk/Copilotix/wiki/Service-Setup)：MinerU Token、翻譯來源及問答憑據。
-3. [處理第一篇論文](https://github.com/Kumiko-kmk/Copilotix/wiki/First-Paper)：匯入、任務進度、閱讀、標註與匯出。
+1. [下载安装](https://github.com/Kumiko-kmk/Copilotix/wiki/Installation-and-Upgrade)：下载、安装与覆盖升级。
+2. [配置服务](https://github.com/Kumiko-kmk/Copilotix/wiki/Service-Setup)：MinerU Token、翻译来源及问答凭据。
+3. [处理第一篇论文](https://github.com/Kumiko-kmk/Copilotix/wiki/First-Paper)：导入、任务进度、阅读、标注与导出。
 
-## 1.2.0 的閱讀方式
+## 1.2.0 的阅读方式
 
-| 你想做什麼 | 指南 |
+| 你想做什么 | 指南 |
 | --- | --- |
-| 同時檢視 PDF、原文和中文；拖動、拆分與最大化檢視 | [閱讀工作台](https://github.com/Kumiko-kmk/Copilotix/wiki/Reader-Workbench) |
-| 向當前文獻提問，加入選區並檢視引用；重開後繼續對話 | [論文 AI 問答](https://github.com/Kumiko-kmk/Copilotix/wiki/Paper-AI-Chat) |
-| 查詢本地檔案、匯出 Markdown／ZIP、備份和遷移文庫 | [本地資料與匯出](https://github.com/Kumiko-kmk/Copilotix/wiki/Local-Data-and-Export) |
-| 排查憑據、任務、聊天恢復、版面配置或圖片問題 | [常見問題](https://github.com/Kumiko-kmk/Copilotix/wiki/FAQ) |
+| 同时查看 PDF、原文和中文；拖动、拆分与最大化视图 | [阅读工作台](https://github.com/Kumiko-kmk/Copilotix/wiki/Reader-Workbench) |
+| 向当前文献提问，加入选区并查看引用；重开后继续对话 | [论文 AI 问答](https://github.com/Kumiko-kmk/Copilotix/wiki/Paper-AI-Chat) |
+| 查找本地文件、导出 Markdown／ZIP、备份和迁移文库 | [本地资料与导出](https://github.com/Kumiko-kmk/Copilotix/wiki/Local-Data-and-Export) |
+| 排查凭据、任务、聊天恢复、布局或图片问题 | [常见问题](https://github.com/Kumiko-kmk/Copilotix/wiki/FAQ) |
 
-新版提供 PDF、原文、中文、AI 問答四個檢視。JSON 頁面已移除，版面檔案仍作為定位與匯出的底層資料保留。PDF 去掉額外外框、右側／底部和頁間留白，調整寬度或縮放時保留頁碼與頁內位置；正文排版也更緊湊。
+新版提供 PDF、原文、中文、AI 问答四个视图。JSON 页面已移除，版面文件仍作为定位与导出的底层资料保留。PDF 去掉额外外框、右侧／底部和页间留白，调整宽度或缩放时保留页码与页内位置；正文排版也更紧凑。
 
-問答支援 Qwen、DeepSeek 的預設模型及本機 Codex，使用「服務連線」中相應憑據，獨立於翻譯模型選擇。每篇文獻的回答、草稿、選區與模型儲存在對應 `chat/` 目錄，重新開啟恢復。
+问答支持 Qwen、DeepSeek 的预设模型及本机 Codex，使用「服务连接」中相应凭据，独立于翻译模型选择。每篇文献的回答、草稿、选区与模型保存在对应 `chat/` 目录，重新打开恢复。
 
-## 使用前瞭解
+## 使用前了解
 
-- 正式匯入格式為 **PDF**，Markdown 是解析、翻譯和匯出產物。
-- 程式不提供第三方 API Key。解析上傳 PDF 到 MinerU；翻譯向實際來源傳送文字；問答首次傳送前說明所選服務和資料範圍。
-- 舊版安裝包暫停公開下載。
-- 結果 ZIP 包含已有聊天檔案；分享前檢查對話、草稿及選區。完整文庫備份不含系統 API 憑據。
+- 正式导入格式为 **PDF**，Markdown 是解析、翻译和导出产物。
+- 程序不提供第三方 API Key。解析上传 PDF 到 MinerU；翻译向实际来源发送文本；问答首次发送前说明所选服务和数据范围。
+- Release 只提供安装包与源代码，签章状态以对应版本说明为准，请从本仓库下载。
+- 结果 ZIP 包含已有聊天文件；分享前检查对话、草稿及选区。完整文库备份不含系统 API 凭据。
 
-技術與維護說明見 [工程文件索引](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/README.md)。Wiki 的版本化原始檔見 [docs/wiki](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/wiki)。
+技术与维护说明见 [工程文档索引](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/README.md)。Wiki 的版本化源文件见 [docs/wiki](https://github.com/Kumiko-kmk/Copilotix/tree/master/docs/wiki)。

@@ -19,7 +19,7 @@ export default function DocumentLifecycleActions(props: {
   const retry = async (): Promise<void> => {
     try {
       await window.copilotix.retryDocument(summary.id)
-      messageApi.success('已重新排隊，將保留已完成的譯文')
+      messageApi.success('已重新排队，将保留已完成的译文')
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : String(error))
     }
@@ -30,7 +30,7 @@ export default function DocumentLifecycleActions(props: {
       // Main settles this paper's chat before deleting; the reader leaves afterwards.
       await window.copilotix.deleteDocument({ documentId: summary.id, deleteFiles })
       setConfirming(false)
-      messageApi.success('論文已刪除')
+      messageApi.success('论文已删除')
       onDeleted()
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : String(error))
@@ -39,12 +39,12 @@ export default function DocumentLifecycleActions(props: {
     }
   }
   return <>
-    {canRetry(summary.workflow.status) || staleTranslation ? <Button type="text" icon={<RedoOutlined />} onClick={() => void retry()} aria-label="重試" /> : null}
-    <Button type="text" danger icon={<DeleteOutlined />} onClick={() => { setDeleteFiles(true); setConfirming(true) }} aria-label="刪除論文" />
-    <Modal title="刪除論文" open={confirming} okText="刪除" okButtonProps={{ danger: true }} confirmLoading={deleting}
+    {canRetry(summary.workflow.status) || staleTranslation ? <Button type="text" icon={<RedoOutlined />} onClick={() => void retry()} aria-label="重试" /> : null}
+    <Button type="text" danger icon={<DeleteOutlined />} onClick={() => { setDeleteFiles(true); setConfirming(true) }} aria-label="删除论文" />
+    <Modal title="删除论文" open={confirming} okText="删除" okButtonProps={{ danger: true }} confirmLoading={deleting}
       onOk={() => void remove()} onCancel={() => { if (!deleting) setConfirming(false) }}>
-      <p>確定刪除“{summary.displayName}”嗎？</p>
-      <Checkbox checked={deleteFiles} onChange={(event) => setDeleteFiles(event.target.checked)}>同時刪除本地結果檔案（不可恢復）</Checkbox>
+      <p>确定删除“{summary.displayName}”吗？</p>
+      <Checkbox checked={deleteFiles} onChange={(event) => setDeleteFiles(event.target.checked)}>同时删除本地结果文件（不可恢复）</Checkbox>
     </Modal>
   </>
 }

@@ -8,5 +8,5 @@ module.exports = {
   files: ['main.cjs', 'renderer/**', 'paper/**', 'package.json', 'LICENSE.md', '!node_modules/**'],
   win: { target: ['portable'], icon: resolve(__dirname, '../../resources/icon.ico'), signAndEditExecutable: false },
   portable: { artifactName: 'CopilotixReader-Acceptance.exe' },
-  electronLanguages: ['zh-TW', 'en-US'], compression: 'normal'
+  electronLanguages: ['zh-CN', 'en-US'], compression: 'normal'
 }

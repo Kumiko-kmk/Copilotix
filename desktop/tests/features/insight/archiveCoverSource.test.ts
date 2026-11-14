@@ -36,7 +36,7 @@ async function fixture() {
   const manifestPath = join(root, 'figures.json')
   await writeFile(manifestPath, JSON.stringify({ version: 1, figures: [figure] }))
   const score = { version: 1, documentId, figure,
-    content: { displayWeight: 75, overview: '核心機制。', takeaway: '關注輸入與輸出。' },
+    content: { displayWeight: 75, overview: '核心机制。', takeaway: '关注输入与输出。' },
     provenance: { sourceRevision: hash('context'), promptVersion: FIGURE_INSIGHT_PROMPT_VERSION,
       model: { provider: 'codex', name: 'fixture-model' }, generatedAt: '2026-10-26T00:00:00.000Z' } }
   const scorePath = join(root, 'insight', 'figures', `${hash(figure.figureId)}.v1.json`)
@@ -62,7 +62,7 @@ describe('archive cover source', () => {
     f.refs.get('block_mappings')!.contentHash = hash('new mappings')
     const remapped = await f.store.coverSource(f.documentId)
     expect(remapped.fingerprint).not.toBe(initial.fingerprint)
-    f.score.content.overview = '更新後的核心機制。'
+    f.score.content.overview = '更新后的核心机制。'
     await writeFile(f.scorePath, JSON.stringify(f.score))
     const rescored = await f.store.coverSource(f.documentId)
     expect(rescored.fingerprint).not.toBe(remapped.fingerprint)
@@ -88,9 +88,9 @@ describe('archive cover source', () => {
     await rm(f.manifestPath)
     expect(await f.store.coverSource(f.documentId)).toMatchObject({ hasManifest: false, figures: [] })
     await writeFile(f.manifestPath, '{broken')
-    await expect(f.store.coverSource(f.documentId)).rejects.toThrow('無法讀取本地封面來源')
+    await expect(f.store.coverSource(f.documentId)).rejects.toThrow('无法读取本地封面来源')
     await writeFile(f.manifestPath, JSON.stringify({ version: 1, figures: [{ ...f.figure, imagePath: '../../outside.png' }] }))
-    await expect(f.store.coverSource(f.documentId)).rejects.toThrow('無法讀取本地封面來源')
+    await expect(f.store.coverSource(f.documentId)).rejects.toThrow('无法读取本地封面来源')
   })
 
   it('retains missing PNG candidates and changes the fingerprint when the image becomes available', async () => {
@@ -109,6 +109,6 @@ describe('archive cover source', () => {
     await writeFile(f.scorePath, Buffer.alloc(64 * 1024 + 1, 32))
     expect((await f.store.coverSource(f.documentId)).figures[0]).not.toHaveProperty('displayWeight')
     await writeFile(f.manifestPath, Buffer.alloc(2 * 1024 * 1024 + 1, 32))
-    await expect(f.store.coverSource(f.documentId)).rejects.toThrow('無法讀取本地封面來源')
+    await expect(f.store.coverSource(f.documentId)).rejects.toThrow('无法读取本地封面来源')
   })
 })

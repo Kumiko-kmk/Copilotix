@@ -23,8 +23,8 @@ export interface SidebarSection<Paper> {
   kind: 'pinned' | 'new' | 'category'
 }
 
-export const PINNED_SECTION = '置頂'
-export const NEW_SECTION = '未分組'
+export const PINNED_SECTION = '置顶'
+export const NEW_SECTION = '未分组'
 
 export function sidebarSections<Paper extends SidebarPaper>(
   documents: readonly Paper[],

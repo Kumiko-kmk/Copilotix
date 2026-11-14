@@ -13,9 +13,9 @@ test('renders every row of a compound figure and reveals its hidden PDF from a m
   const caption = 'Figure 1: All six panels. Complete caption.'
   const images = panels.map(p => '![](images/' + p.name + ')')
   const sourceImages = images.map((image, i) => i === 0 ? image + '  \nControl; Treatment' : image)
-  const translatedImages = images.map((image, i) => i === 0 ? image + '  \n對照組；治療組' : image)
+  const translatedImages = images.map((image, i) => i === 0 ? image + '  \n对照组；治疗组' : image)
   const source = ['# Compound figure', ...sourceImages.slice(0, 4), caption, ...sourceImages.slice(4)].join('\n\n')
-  const translated = ['# 多行整圖', ...translatedImages.slice(0, 4), '圖 1：全部六張子圖。\n\n保留完整第二段圖說。', ...translatedImages.slice(4)].join('\n\n')
+  const translated = ['# 多行整图', ...translatedImages.slice(0, 4), '图 1：全部六张子图。\n\n保留完整第二段图说。', ...translatedImages.slice(4)].join('\n\n')
   const layout = { pdf_info: [{ page_idx: 0, page_size: [612, 792], para_blocks: [
     { index: -1, type: 'title', bbox: [60, 20, 520, 45], text: 'Compound figure' },
     ...panels.map((p, i) => ({ index: i < 4 ? i : i + 1, type: i % 2 ? 'image' : 'chart',
@@ -57,8 +57,8 @@ test('renders every row of a compound figure and reveals its hidden PDF from a m
     pane = window.locator('.reader-tab-panel.active').filter({ has: window.locator('.markdown-pane') }).first()
     await expect(pane.locator('.reader-figure-snapshot[data-rendered="true"]')).toHaveCount(1)
     await expect(pane.locator('article img')).toHaveCount(0)
-    await expect(pane.locator('article')).toContainText('保留完整第二段圖說。')
-    await expect(pane.getByText('對照組；治療組', { exact: true })).toBeHidden()
+    await expect(pane.locator('article')).toContainText('保留完整第二段图说。')
+    await expect(pane.getByText('对照组；治疗组', { exact: true })).toBeHidden()
     expect(await pane.locator('.reader-figure-snapshot-canvas').evaluate(element => (element as HTMLCanvasElement).toDataURL())).toBe(originalCanvas)
     await window.keyboard.press('Control+1')
     await window.keyboard.press('Control+w')
@@ -66,7 +66,7 @@ test('renders every row of a compound figure and reveals its hidden PDF from a m
     await window.keyboard.press('Control+Shift+m')
     await expect(window.locator('.reader-workbench.has-maximized')).toBeVisible()
     await pane.locator('.reader-figure-snapshot').first().click({ button: 'right' })
-    await window.getByRole('menuitem', { name: '在 PDF 中檢視' }).click()
+    await window.getByRole('menuitem', { name: '在 PDF 中查看' }).click()
     await expect(window.locator('.reader-workbench.has-maximized')).toHaveCount(0)
     await expect(window.locator('.reader-pdf-panel:visible')).toBeVisible()
     await expect(window.locator('[data-pdf-page="0"] canvas')).toBeVisible()

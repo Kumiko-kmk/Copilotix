@@ -214,7 +214,7 @@ export default function PdfPane(props: {
         if (!cancelled) setLoadingState({ status: 'loading', progress: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null })
       },
       onPassword: () => {
-        if (!cancelled) setLoadingState({ status: 'error', message: '該 PDF 受密碼保護，當前閱讀器無法開啟。' })
+        if (!cancelled) setLoadingState({ status: 'error', message: '该 PDF 受密码保护，当前阅读器无法打开。' })
       }
     })
     setDocument(null)
@@ -374,7 +374,7 @@ export default function PdfPane(props: {
     <div className={embedded ? 'pdf-pane embedded' : 'pdf-pane'} data-show-bounds={showBounds}>
       {embedded
         ? props.toolbarHost ? createPortal(<div className="pdf-toolbar">{controls}</div>, props.toolbarHost) : null
-        : <div className="pdf-toolbar"><strong>原檔案</strong>{controls}</div>}
+        : <div className="pdf-toolbar"><strong>原文件</strong>{controls}</div>}
       <div className="pdf-viewport" ref={viewportRef} onPointerMove={revealScrollbarsNearEdge} onPointerLeave={scheduleScrollbarHide}>
         <div
           className={`pdf-scroll${scrollbars.vertical ? ' pdf-scrollbar-y-visible' : ''}${scrollbars.horizontal ? ' pdf-scrollbar-x-visible' : ''}`}
@@ -385,7 +385,7 @@ export default function PdfPane(props: {
         >
           {loadingState.status === 'loading' ? (
             <div className="pdf-loading">
-              <AppleLoader label="正在開啟 PDF" />
+              <AppleLoader label="正在打开 PDF" />
               {loadingState.progress === null ? null : <Progress percent={loadingState.progress} size="small" />}
             </div>
           ) : null}
@@ -394,9 +394,9 @@ export default function PdfPane(props: {
               className="pdf-error"
               type="error"
               showIcon
-              message="PDF 無法開啟"
+              message="PDF 无法打开"
               description={loadingState.message}
-              action={<Button icon={<ReloadOutlined />} onClick={retry}>重新載入</Button>}
+              action={<Button icon={<ReloadOutlined />} onClick={retry}>重新加载</Button>}
             />
           ) : null}
           {document && loadingState.status === 'ready'

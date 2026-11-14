@@ -29,7 +29,7 @@ export class FigureDisplayStore {
       const choices = await this.read(dir)
       if (request.choice) choices[request.figureId] = request.choice
       else delete choices[request.figureId]
-      if (Object.keys(choices).length > FIGURE_DISPLAY_MAX) throw new Error('圖片顯示選擇過多')
+      if (Object.keys(choices).length > FIGURE_DISPLAY_MAX) throw new Error('图片显示选择过多')
       await writeJsonAtomic(join(dir, 'reader', 'figure-display.v1.json'), figureDisplayFileSchema.parse({ version: 1, choices }))
       return figureDisplayChoicesSchema.parse({ choices })
     }
@@ -42,7 +42,7 @@ export class FigureDisplayStore {
 
   private async requireDir(documentId: string): Promise<string> {
     const dir = await this.outputDirOf(documentId)
-    if (!dir) throw new Error('文件不存在')
+    if (!dir) throw new Error('文档不存在')
     return dir
   }
 

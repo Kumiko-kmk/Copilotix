@@ -133,7 +133,7 @@ export function buildTableTranslationPlan(
       }
     }
     const attachment = [...captionPlans, ...footnotePlans].find((candidate) => candidate.sourceIndex === block.sourceIndex)
-    if (!attachment) throw new Error(`表格附件 ${block.sourceIndex} 未生成翻譯計劃`)
+    if (!attachment) throw new Error(`表格附件 ${block.sourceIndex} 未生成翻译计划`)
     return {
       ...block,
       render: attachment.render
@@ -143,7 +143,7 @@ export function buildTableTranslationPlan(
   return {
     request: {
       protocol: TABLE_TRANSLATION_PROTOCOL,
-      targetLanguage: 'zh-TW',
+      targetLanguage: 'zh-CN',
       tables: tablePayloads.map((table: TablePayload, index: number) => ({
         ...table,
         captions: index === 0 ? captionPlans.map(({ payload }) => payload) : [],
@@ -362,7 +362,7 @@ function normalizeTableText(source: string, translated: string): string {
   const leadingWhitespace = source.match(/^[\p{Zs}\t]+/u)?.[0] ?? ''
   const trailingWhitespace = source.match(/[\p{Zs}\t]+$/u)?.[0] ?? ''
   const value = translated.trim()
-  if (!value) throw new Error('表格翻譯源返回了空譯文')
+  if (!value) throw new Error('表格翻译源返回了空译文')
   const normalized = value.replace(/\r\n?/g, '\n')
   const content = !/[\r\n]/.test(source)
     ? normalized.replace(/[ \t]*\n+[ \t]*/g, ' ')

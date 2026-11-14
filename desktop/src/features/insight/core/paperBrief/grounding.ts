@@ -4,7 +4,7 @@
  *   schema errors into concrete repair hints for the single retry.
  * - groundBrief: drop anchors that point at excerpts which were never sent, de-duplicate lists,
  *   and check that every number quoted as evidence actually occurs in the cited excerpts.
- *   Findings that fail are kept but flagged, so the UI can mark them "需核對".
+ *   Findings that fail are kept but flagged, so the UI can mark them "需核对".
  */
 import { paperBriefContentSchema, paperBriefGenerationSchema, paperBriefSchema, PAPER_BRIEF_SCHEMA_VERSION, type FindingCheck, type PaperBrief, type PaperBriefContent } from './schema'
 import type { BriefContext } from './context'
@@ -19,12 +19,12 @@ export type ParsedBrief = { ok: true; content: PaperBriefContent } | { ok: false
 function generatedContent({ analysis, ...metadata }: ReturnType<typeof paperBriefGenerationSchema.parse>): PaperBriefContent {
   return { ...metadata, analysis,
     // Retain v2 consumers without asking the model for duplicate, hidden fields.
-    context: { background: '原文未說明', gap: '原文未說明', question: '原文未說明' },
-    approach: { summary: '原文未說明', keyIdeas: analysis.conclusions.map(item => item.title), basis: '原文未說明', evaluation: '原文未說明' },
+    context: { background: '原文未说明', gap: '原文未说明', question: '原文未说明' },
+    approach: { summary: '原文未说明', keyIdeas: analysis.conclusions.map(item => item.title), basis: '原文未说明', evaluation: '原文未说明' },
     findings: analysis.conclusions.map(item => ({ claim: item.title, evidence: item.text, strength: 'unclear', scope: '', anchors: item.anchors })),
     contributions: analysis.conclusions.map(item => ({ kind: 'other', text: item.title })),
     limitations: [], assumptions: [], openQuestions: [], terms: [],
-    reading: { audience: '原文未說明', prerequisites: [], focus: [] }
+    reading: { audience: '原文未说明', prerequisites: [], focus: [] }
   }
 }
 
@@ -50,12 +50,12 @@ function knownFieldsForRepair(value: unknown, issues: ZodIssue[]): unknown {
 export function parseBriefResponse(raw: string, options: { lengths?: boolean; requireAnalysis?: boolean } = {}): ParsedBrief {
   const start = raw.indexOf('{')
   const end = raw.lastIndexOf('}')
-  if (start < 0 || end <= start) return { ok: false, problems: ['輸出中沒有 JSON 物件'] }
+  if (start < 0 || end <= start) return { ok: false, problems: ['输出中没有 JSON 对象'] }
   let value: unknown
   try {
     value = JSON.parse(raw.slice(start, end + 1))
   } catch {
-    return { ok: false, problems: ['JSON 語法錯誤（檢查引號、逗號與括號）'] }
+    return { ok: false, problems: ['JSON 语法错误（检查引号、逗号与括号）'] }
   }
   const fresh = paperBriefGenerationSchema.safeParse(value)
   if (fresh.success) {
@@ -64,7 +64,7 @@ export function parseBriefResponse(raw: string, options: { lengths?: boolean; re
     return problems.length ? { ok: false, problems: problems.slice(0, 12) } : { ok: true, content }
   }
   if (options.requireAnalysis) {
-    const problems = fresh.error.issues.map(issue => `${issue.path.join('.') || '根物件'}：${issue.message}`)
+    const problems = fresh.error.issues.map(issue => `${issue.path.join('.') || '根对象'}：${issue.message}`)
     if (fresh.error.issues.some(issue => issue.code === 'unrecognized_keys')) {
       const known = paperBriefGenerationSchema.safeParse(knownFieldsForRepair(value, fresh.error.issues))
       if (known.success) problems.push(...checkBriefLengths(generatedContent(known.data)))
@@ -78,7 +78,7 @@ export function parseBriefResponse(raw: string, options: { lengths?: boolean; re
   }
   return {
     ok: false,
-    problems: result.error.issues.slice(0, 12).map((issue) => `${issue.path.join('.') || '根物件'}：${issue.message}`)
+    problems: result.error.issues.slice(0, 12).map((issue) => `${issue.path.join('.') || '根对象'}：${issue.message}`)
   }
 }
 
@@ -86,7 +86,7 @@ export function parseBriefResponse(raw: string, options: { lengths?: boolean; re
 export function extractNumbers(text: string): string[] {
   return [...new Set((text.match(/\d+(?:[.,]\d+)*/gu) ?? [])
     .map((number) => number.replace(/,(?=\d{3}\b)/gu, ''))
-    // Years and single digits ("3 個資料集", "第 2 節") are too common to be meaningful checks.
+    // Years and single digits ("3 个数据集", "第 2 节") are too common to be meaningful checks.
     .filter((number) => number.length >= 2 || number.includes('.')))]
 }
 

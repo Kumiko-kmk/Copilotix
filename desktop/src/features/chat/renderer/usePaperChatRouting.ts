@@ -28,7 +28,7 @@ export function usePaperChatRouting(selected: PaperChatSession['selectedModel'],
   const validModel = Boolean(provider && models.includes(model))
   const imageInput = provider ? paperChatImageInput(provider, model, codex?.models) : false
   /** Why figures cannot be asked about now; null when the selected model accepts images. */
-  const imageBlocked = !settings ? '正在讀取問答設定' : !provider ? '請先在 Chat 中選擇 Qwen、DeepSeek 或 Codex' : imageInput === true ? null : paperChatImageUnsupportedMessage(provider, model, imageInput)
+  const imageBlocked = !settings ? '正在读取问答设置' : !provider ? '请先在 Chat 中选择 Qwen、DeepSeek 或 Codex' : imageInput === true ? null : paperChatImageUnsupportedMessage(provider, model, imageInput)
   return { settings, provider, configured, model, models, validModel, imageInput, imageBlocked }
 }
 

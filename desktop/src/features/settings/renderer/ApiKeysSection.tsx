@@ -7,13 +7,13 @@ import type { CredentialMutation, KeyStatus, SettingsSaveResult } from '../contr
 
 const PROVIDERS: Array<{ id: KeyProvider; label: string }> = [
   { id: 'deepseek', label: 'DeepSeek' },
-  { id: 'qwen', label: '千問 / Qwen' }
+  { id: 'qwen', label: '千问 / Qwen' }
 ]
 
-const STATE_LABELS: Record<KeyStatus['state'], string> = { missing: '未配置', unknown: '待驗證', valid: '已驗證', invalid: '驗證失敗' }
+const STATE_LABELS: Record<KeyStatus['state'], string> = { missing: '未配置', unknown: '待验证', valid: '已验证', invalid: '验证失败' }
 
 export function keyLabel(connection: ModelConnection, index: number): string {
-  return connection.label || (connection.connectionId.endsWith(':default') ? '預設金鑰' : `金鑰 ${index + 1}`)
+  return connection.label || (connection.connectionId.endsWith(':default') ? '默认密钥' : `密钥 ${index + 1}`)
 }
 
 /** Unsaved key values, per-key errors and test state; values live only in memory until saved. */
@@ -36,16 +36,16 @@ export function useKeyDrafts(messageApi: MessageInstance) {
   const validate = React.useCallback(async (connection: ModelConnection) => {
     const id = connection.connectionId
     const value = values[id]?.trim()
-    if (values[id] !== undefined && !value) { setErrors(current => ({ ...current, [id]: '請輸入金鑰後再測試' })); return }
+    if (values[id] !== undefined && !value) { setErrors(current => ({ ...current, [id]: '请输入密钥后再测试' })); return }
     setTesting(id)
     try {
       const result = await window.copilotix.validateCredential(connection.provider as KeyProvider, value || undefined, id)
       if (!value) setLive(current => ({ ...current, [id]: { ...current[id], ...result } }))
       if (result.state === 'valid') {
         setErrors(current => ({ ...current, [id]: '' }))
-        messageApi.success(value ? '金鑰可用，儲存後生效' : '金鑰驗證成功')
+        messageApi.success(value ? '密钥可用，保存后生效' : '密钥验证成功')
       } else {
-        const text = result.message ?? '金鑰驗證失敗'
+        const text = result.message ?? '密钥验证失败'
         setErrors(current => ({ ...current, [id]: text }))
         messageApi.error(text)
       }
@@ -132,8 +132,8 @@ export function ApiKeysSection(props: {
   const order = keys.filter(connection => connection.enabled).map((connection, index) => keyLabel(connection, index))
 
   return (
-    <section className="settings-section api-keys" aria-label="API 金鑰">
-      <div className="api-key-tabs" role="tablist" aria-label="服務商">
+    <section className="settings-section api-keys" aria-label="API 密钥">
+      <div className="api-key-tabs" role="tablist" aria-label="服务商">
         {PROVIDERS.map(entry => {
           const count = props.connections.filter(connection => connection.provider === entry.id).length
           return (
@@ -145,11 +145,11 @@ export function ApiKeysSection(props: {
       </div>
       <div className="api-key-card">
         <div className="model-priority-heading">
-          <strong>{PROVIDERS.find(entry => entry.id === provider)!.label} 金鑰</strong>
-          <span className="model-request-order"><span>使用順序</span><strong>{order.join(' → ') || '未配置'}</strong></span>
+          <strong>{PROVIDERS.find(entry => entry.id === provider)!.label} 密钥</strong>
+          <span className="model-request-order"><span>使用顺序</span><strong>{order.join(' → ') || '未配置'}</strong></span>
         </div>
-        <div className="api-key-list" role="list" aria-label="金鑰列表">
-          {keys.length === 0 ? <Typography.Text className="api-key-empty" type="secondary">尚未新增金鑰</Typography.Text> : null}
+        <div className="api-key-list" role="list" aria-label="密钥列表">
+          {keys.length === 0 ? <Typography.Text className="api-key-empty" type="secondary">尚未添加密钥</Typography.Text> : null}
           {keys.map((connection, index) => {
             const id = connection.connectionId
             const status = { ...props.statuses[id], ...props.drafts.live[id] } as KeyStatus | Partial<KeyStatus>
@@ -168,7 +168,7 @@ export function ApiKeysSection(props: {
                 <button
                   type="button"
                   className="model-drag-handle"
-                  aria-label={`移動${keyLabel(connection, index)}`}
+                  aria-label={`移动${keyLabel(connection, index)}`}
                   draggable={!props.saving}
                   disabled={props.saving}
                   onDragStart={event => { event.dataTransfer.effectAllowed = 'move'; setDragging(id) }}
@@ -180,12 +180,12 @@ export function ApiKeysSection(props: {
                     if (target) move(id, target.connectionId)
                   }}
                 ><HolderOutlined /></button>
-                <Checkbox aria-label={`啟用${keyLabel(connection, index)}`} checked={connection.enabled} disabled={props.saving} onChange={() => update(id, { enabled: !connection.enabled })} />
+                <Checkbox aria-label={`启用${keyLabel(connection, index)}`} checked={connection.enabled} disabled={props.saving} onChange={() => update(id, { enabled: !connection.enabled })} />
                 <span className="model-priority-number">{index + 1}</span>
                 <span className="api-key-identity">
                   <Input
                     className="api-key-label"
-                    aria-label="金鑰名稱"
+                    aria-label="密钥名称"
                     variant="borderless"
                     maxLength={24}
                     placeholder={keyLabel(connection, index)}
@@ -194,32 +194,32 @@ export function ApiKeysSection(props: {
                   />
                   {draft !== undefined ? (
                     <Input.Password
-                      aria-label="新金鑰"
+                      aria-label="新密钥"
                       autoComplete="new-password"
                       visibilityToggle={false}
-                      placeholder="貼上新的 API Key"
+                      placeholder="粘贴新的 API Key"
                       value={draft}
                       onChange={event => props.drafts.setValue(id, event.target.value)}
                     />
-                  ) : <small className="api-key-masked">{status.maskedValue ?? '未儲存金鑰'}</small>}
+                  ) : <small className="api-key-masked">{status.maskedValue ?? '未保存密钥'}</small>}
                   {props.drafts.errors[id] ? <Typography.Text className="api-key-error" type="danger">{props.drafts.errors[id]}</Typography.Text> : null}
                 </span>
                 <span className={`credential-status status-${state.state}`}>{state.label}</span>
                 <span className="api-key-actions">
-                  <Button loading={props.drafts.testing === id} disabled={props.saving || (draft !== undefined && !draft.trim()) || (!stored && draft === undefined)} onClick={() => void props.drafts.validate(connection)}>測試</Button>
+                  <Button loading={props.drafts.testing === id} disabled={props.saving || (draft !== undefined && !draft.trim()) || (!stored && draft === undefined)} onClick={() => void props.drafts.validate(connection)}>测试</Button>
                   {stored ? (
-                    <Button disabled={props.saving} onClick={() => props.drafts.setValue(id, draft === undefined ? '' : undefined)}>{draft === undefined ? '更換' : '取消'}</Button>
+                    <Button disabled={props.saving} onClick={() => props.drafts.setValue(id, draft === undefined ? '' : undefined)}>{draft === undefined ? '更换' : '取消'}</Button>
                   ) : null}
-                  <Button danger icon={<DeleteOutlined />} aria-label={`刪除${keyLabel(connection, index)}`} disabled={props.saving} onClick={() => remove(id)} />
+                  <Button danger icon={<DeleteOutlined />} aria-label={`删除${keyLabel(connection, index)}`} disabled={props.saving} onClick={() => remove(id)} />
                 </span>
               </div>
             )
           })}
         </div>
         <form className="api-key-add" onSubmit={event => { event.preventDefault(); add() }}>
-          <Input aria-label="新金鑰名稱" maxLength={24} placeholder="名稱（可選）" value={label} onChange={event => setLabel(event.target.value)} disabled={keys.length >= MAX_KEYS_PER_PROVIDER} />
-          <Input.Password aria-label="新 API Key" autoComplete="new-password" visibilityToggle={false} placeholder={keys.length >= MAX_KEYS_PER_PROVIDER ? `最多 ${MAX_KEYS_PER_PROVIDER} 個金鑰` : '貼上 API Key'} value={value} onChange={event => setValue(event.target.value)} disabled={keys.length >= MAX_KEYS_PER_PROVIDER} />
-          <Button htmlType="submit" icon={<PlusOutlined />} disabled={!value.trim() || keys.length >= MAX_KEYS_PER_PROVIDER || props.saving}>新增</Button>
+          <Input aria-label="新密钥名称" maxLength={24} placeholder="名称（可选）" value={label} onChange={event => setLabel(event.target.value)} disabled={keys.length >= MAX_KEYS_PER_PROVIDER} />
+          <Input.Password aria-label="新 API Key" autoComplete="new-password" visibilityToggle={false} placeholder={keys.length >= MAX_KEYS_PER_PROVIDER ? `最多 ${MAX_KEYS_PER_PROVIDER} 个密钥` : '粘贴 API Key'} value={value} onChange={event => setValue(event.target.value)} disabled={keys.length >= MAX_KEYS_PER_PROVIDER} />
+          <Button htmlType="submit" icon={<PlusOutlined />} disabled={!value.trim() || keys.length >= MAX_KEYS_PER_PROVIDER || props.saving}>添加</Button>
         </form>
       </div>
     </section>
@@ -227,11 +227,11 @@ export function ApiKeysSection(props: {
 }
 
 function keyState(status: Partial<KeyStatus>, stored: boolean, editing: boolean, now: number): { state: KeyStatus['state']; label: string } {
-  if (!stored || editing) return { state: 'unknown', label: '待儲存' }
-  if (status.health === 'rejected') return { state: 'invalid', label: '已被拒絕' }
+  if (!stored || editing) return { state: 'unknown', label: '待保存' }
+  if (status.health === 'rejected') return { state: 'invalid', label: '已被拒绝' }
   if (status.health === 'cooldown' && status.retryAt && status.retryAt > now) {
     const seconds = Math.ceil((status.retryAt - now) / 1000)
-    return { state: 'unknown', label: `冷卻中 ${seconds >= 60 ? `${Math.ceil(seconds / 60)} 分鐘` : `${seconds} 秒`}` }
+    return { state: 'unknown', label: `冷却中 ${seconds >= 60 ? `${Math.ceil(seconds / 60)} 分钟` : `${seconds} 秒`}` }
   }
   const state = status.state ?? 'missing'
   return { state, label: STATE_LABELS[state] }

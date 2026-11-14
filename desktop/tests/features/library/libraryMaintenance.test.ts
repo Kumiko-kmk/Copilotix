@@ -63,7 +63,7 @@ describe('document library maintenance', () => {
     const f = await fixture()
     const backup = await manageLibrary(f.db, f.databasePath, { action: 'backup', path: f.backups })
     await writeFile(join(backup.path!, 'documents', f.doc, 'full.md'), 'corrupted')
-    await expect(manageLibrary(f.db, f.databasePath, { action: 'restore', path: backup.path! })).rejects.toThrow('校驗失敗')
+    await expect(manageLibrary(f.db, f.databasePath, { action: 'restore', path: backup.path! })).rejects.toThrow('校验失败')
     expect(f.db.connection.prepare('SELECT storage_path FROM documents').get()).toMatchObject({ storage_path: f.documentPath })
   })
 
@@ -92,16 +92,16 @@ describe('document library maintenance', () => {
 
   it('refuses nonempty migration targets and active jobs without changing source paths', async () => {
     const f = await fixture()
-    await expect(manageLibrary(f.db, f.databasePath, { action: 'migrate', path: f.output })).rejects.toThrow('空目錄')
+    await expect(manageLibrary(f.db, f.databasePath, { action: 'migrate', path: f.output })).rejects.toThrow('空目录')
     f.db.connection.prepare("INSERT INTO jobs(id,document_id,kind,status,available_at,created_at,updated_at) VALUES('job',?,'parse','queued',?,?,?)").run(f.doc, f.now, f.now, f.now)
-    await expect(manageLibrary(f.db, f.databasePath, { action: 'backup', path: f.backups })).rejects.toThrow('任務')
+    await expect(manageLibrary(f.db, f.databasePath, { action: 'backup', path: f.backups })).rejects.toThrow('任务')
     expect(f.db.connection.prepare('SELECT storage_path FROM documents').get()).toMatchObject({ storage_path: f.documentPath })
     expect(await readdir(f.backups)).toEqual([])
   })
 
   it('rejects a backup nested inside a document and respects cancellation', async () => {
     const f = await fixture()
-    await expect(manageLibrary(f.db, f.databasePath, { action: 'backup', path: f.documentPath })).rejects.toThrow('內部')
+    await expect(manageLibrary(f.db, f.databasePath, { action: 'backup', path: f.documentPath })).rejects.toThrow('内部')
     const controller = new AbortController()
     controller.abort()
     await expect(manageLibrary(f.db, f.databasePath, { action: 'backup', path: f.backups }, controller.signal)).rejects.toThrow()

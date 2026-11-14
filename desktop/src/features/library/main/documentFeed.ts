@@ -27,7 +27,7 @@ export class DocumentFeed {
           const ids = new Set(all.map(row => row.id))
           rows = [...all.map(row => [row.id, row] as [string, DocumentSummary]), ...[...this.summaries.keys()].filter(id => !ids.has(id)).map(id => [id, null] as [string, null])]
         } else {
-          if (!this.repository.getDocumentSummary) throw new Error('增量摘要介面不可用')
+          if (!this.repository.getDocumentSummary) throw new Error('增量摘要接口不可用')
           rows = []
           for (const id of pending.keys()) rows.push([id, await this.repository.getDocumentSummary(id)])
         }

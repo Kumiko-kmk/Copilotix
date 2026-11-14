@@ -73,7 +73,7 @@ describe('PDF import preview', () => {
     expect(trustedPdfMetadataTitle('Machine learning for computational fracture and damage mechanics— Status and perspectives', 'x.pdf'))
       .toBe('Machine learning for computational fracture and damage mechanics— Status and perspectives')
     expect(trustedPdfMetadataTitle('Mask R-CNN')).toBe('Mask R-CNN')
-    expect(trustedPdfMetadataTitle('深度殘差網路在影象識別中的應用')).toBe('深度殘差網路在影象識別中的應用')
+    expect(trustedPdfMetadataTitle('深度残差网络在图像识别中的应用')).toBe('深度残差网络在图像识别中的应用')
     for (const rejected of [
       'Microsoft Word - manuscript_v3.docx', 'paper_final_v2.pdf', 'Untitled', 'Accepted Manuscript', 'main',
       'JMPS-D-24-01234', 'doi:10.1016/j.jmps.2024.105555', 'Paper Title (use style: paper title)', 'Layout 1', '', null

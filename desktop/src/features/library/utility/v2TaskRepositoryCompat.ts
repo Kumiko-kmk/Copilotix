@@ -161,9 +161,9 @@ export class V2TaskRepositoryCompat {
    */
   requireTranslationJobBinding(taskId: string, jobId: string): TranslationJobBinding {
     const document = this.readDocument(taskId)
-    if (!document) throw new CompatDomainError('TRANSLATION_TASK_NOT_FOUND', '翻譯任務不存在')
+    if (!document) throw new CompatDomainError('TRANSLATION_TASK_NOT_FOUND', '翻译任务不存在')
     const job = this.translationJobById.get(jobId, taskId) as CompatJobRow | undefined
-    if (!job) throw new CompatDomainError('TRANSLATION_JOB_NOT_FOUND', '翻譯作業不存在')
+    if (!job) throw new CompatDomainError('TRANSLATION_JOB_NOT_FOUND', '翻译作业不存在')
     return {
       taskId,
       jobId,
@@ -242,7 +242,7 @@ export class V2TaskRepositoryCompat {
       }
       const artifactKind: ArtifactKind = request.view === 'translated' ? 'translated_markdown' : 'parsed_markdown'
       const artifact = this.getLatestArtifactReference(request.documentId, artifactKind)
-      if (!artifact) throw new CompatDomainError('ANNOTATION_ARTIFACT_NOT_FOUND', '當前文件尚無可標註的產物')
+      if (!artifact) throw new CompatDomainError('ANNOTATION_ARTIFACT_NOT_FOUND', '当前文档尚无可标注的产物')
       return this.readDocumentAnnotationSnapshotUnsafe(normalized.documentId, artifact, normalized.view)
     })
   }
@@ -251,11 +251,11 @@ export class V2TaskRepositoryCompat {
     const normalized = mutateReaderAnnotationsRequestSchema.parse(request)
     return this.database.transaction(() => {
       const document = this.readDocument(normalized.documentId)
-      if (!document) throw new CompatDomainError('DOCUMENT_NOT_FOUND', '文件不存在')
+      if (!document) throw new CompatDomainError('DOCUMENT_NOT_FOUND', '文档不存在')
       const artifactKind: ArtifactKind = normalized.view === 'translated' ? 'translated_markdown' : 'parsed_markdown'
       const artifact = this.getLatestArtifactReference(normalized.documentId, artifactKind)
       if (!artifact || artifact.id !== normalized.artifactId) {
-        throw new CompatDomainError('ANNOTATION_CONFLICT', '標註對應的文件產物已更新，請重新載入')
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注对应的文档产物已更新，请重新加载')
       }
 
       const currentSet = this.database.connection.prepare(`
@@ -267,7 +267,7 @@ export class V2TaskRepositoryCompat {
       } | undefined
       const currentRevision = currentSet?.revision ?? 0
       if (currentRevision !== normalized.expectedRevision) {
-        throw new CompatDomainError('ANNOTATION_CONFLICT', '標註版本已變化，請重新載入')
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注版本已变化，请重新加载')
       }
 
       this.assertAnnotationRowsAvailable(normalized)
@@ -283,7 +283,7 @@ export class V2TaskRepositoryCompat {
           SET revision=revision+1,updated_at=?
           WHERE id=? AND document_id=? AND artifact_id=? AND view=? AND revision=?
         `).run(now, currentSet.id, normalized.documentId, normalized.artifactId, normalized.view, normalized.expectedRevision)
-        if (update.changes !== 1) throw new CompatDomainError('ANNOTATION_CONFLICT', '標註版本已變化，請重新載入')
+        if (update.changes !== 1) throw new CompatDomainError('ANNOTATION_CONFLICT', '标注版本已变化，请重新加载')
       } else {
         this.database.connection.prepare(`
           INSERT INTO annotation_sets(id,document_id,artifact_id,view,revision,created_at,updated_at)
@@ -357,9 +357,9 @@ export class V2TaskRepositoryCompat {
 
   updateDocumentMetadata(id: string, patch: DocumentMetadataPatch): void {
     const current = this.readDocument(id)
-    if (!current) throw new Error('文件不存在')
+    if (!current) throw new Error('文档不存在')
     const title = patch.displayTitle === undefined ? current.display_title : patch.displayTitle
-    if (title !== null && typeof title !== 'string') throw new Error('文件後設資料無效')
+    if (title !== null && typeof title !== 'string') throw new Error('文档元数据无效')
     this.database.connection.prepare('UPDATE documents SET display_title=?, updated_at=? WHERE id=?')
       .run(title, new Date().toISOString(), id)
   }
@@ -436,7 +436,7 @@ export class V2TaskRepositoryCompat {
       const job = block.jobId
         ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=? AND document_id=? AND kind=\'translate\'').get(block.jobId, block.taskId) as CompatJobRow | undefined
         : this.latestJob(block.taskId, 'translate')
-      if (!job) throw new Error('翻譯作業尚未建立')
+      if (!job) throw new Error('翻译作业尚未创建')
       this.upsertTranslationBlockUnsafe(job.id, block)
     })
   }
@@ -444,11 +444,11 @@ export class V2TaskRepositoryCompat {
   commitTranslationBatch(input: TranslationBatchCommit): void {
     assertTranslationBatchWithinLimits(input)
     if (!input.taskId || !input.jobId) {
-      throw new Error('翻譯批次引數無效')
+      throw new Error('翻译批次参数无效')
     }
     this.database.transaction(() => {
       const job = this.translationJobById.get(input.jobId, input.taskId) as CompatJobRow | undefined
-      if (!job) throw new Error('翻譯作業尚未建立')
+      if (!job) throw new Error('翻译作业尚未创建')
       for (const block of input.blocks) this.upsertTranslationBlockUnsafe(job.id, block)
       const committedAt = new Date().toISOString()
       for (const entry of input.cacheEntries) {
@@ -554,7 +554,7 @@ export class V2TaskRepositoryCompat {
         'SELECT annotation_set_id FROM reader_annotations WHERE id=?'
       ).get(annotation.id) as { annotation_set_id: string } | undefined
       if (existing && existing.annotation_set_id !== set?.id) {
-        throw new CompatDomainError('ANNOTATION_CONFLICT', '標註 ID 已屬於其他標註集')
+        throw new CompatDomainError('ANNOTATION_CONFLICT', '标注 ID 已属于其他标注集')
       }
     }
   }
@@ -562,10 +562,10 @@ export class V2TaskRepositoryCompat {
   replaceReaderAnnotations(request: ReplaceReaderAnnotationsRequest): ReaderAnnotation[] {
     return this.database.transaction(() => {
       const document = this.readDocument(request.taskId)
-      if (!document) throw new Error('任務不存在')
+      if (!document) throw new Error('任务不存在')
       const artifactKind: ArtifactKind = request.view === 'translated' ? 'translated_markdown' : 'parsed_markdown'
       const artifact = this.latestArtifact(request.taskId, artifactKind)
-      if (!artifact) throw new Error('當前文件尚無可標註的產物')
+      if (!artifact) throw new Error('当前文档尚无可标注的产物')
       validateAnnotations(request)
       const now = new Date().toISOString()
       const set = this.database.connection.prepare(`
@@ -620,12 +620,12 @@ export class V2TaskRepositoryCompat {
 
   private recordArtifactRevisionUnsafe(input: ArtifactRevisionInput): void {
     const document = this.readDocument(input.taskId)
-    if (!document) throw new Error('任務不存在')
+    if (!document) throw new Error('任务不存在')
     const jobKind: V2JobKind = input.kind === 'translated_markdown' || input.kind === 'manifest' ? 'translate' : 'parse'
     const job = input.jobId
       ? this.database.connection.prepare('SELECT * FROM jobs WHERE id=?').get(input.jobId) as CompatJobRow | undefined
       : this.latestJob(input.taskId, jobKind)
-    if (!job || job.document_id !== input.taskId || job.kind !== jobKind) throw new Error('產物對應的作業不存在')
+    if (!job || job.document_id !== input.taskId || job.kind !== jobKind) throw new Error('产物对应的作业不存在')
     const relativePath = this.toRelativeArtifactPath(document.storage_path, input.path)
     const existing = this.database.connection.prepare(`
       SELECT id,relative_path,content_hash,metadata_json FROM artifacts
@@ -658,9 +658,9 @@ export class V2TaskRepositoryCompat {
   recordTextLayerRepair(taskId: string, revisions: ReadonlyArray<{ kind: 'parsed_markdown' | 'layout' | 'block_mappings'; path: string; checksum: string }>, metadata: Record<string, unknown>): void {
     this.database.transaction(() => {
       const document = this.readDocument(taskId)
-      if (!document) throw new Error('任務不存在')
+      if (!document) throw new Error('任务不存在')
       const job = this.latestJob(taskId, 'parse')
-      if (!job) throw new Error('產物對應的作業不存在')
+      if (!job) throw new Error('产物对应的作业不存在')
       const previousMarkdown = this.latestArtifact(taskId, 'parsed_markdown')
       const now = new Date().toISOString()
       for (const revision of revisions) {
@@ -692,7 +692,7 @@ export class V2TaskRepositoryCompat {
    * obsolete active job and inserting the new durable job.
    */
   ensureContentIndex(documentId: string): void {
-    if (!this.getTask(documentId)) throw new CompatDomainError('QUERY_SCOPE_INVALID', '文件不存在')
+    if (!this.getTask(documentId)) throw new CompatDomainError('QUERY_SCOPE_INVALID', '文档不存在')
     this.database.transaction(() => this.maybeQueueParsedContentIndexUnsafe(documentId))
   }
 

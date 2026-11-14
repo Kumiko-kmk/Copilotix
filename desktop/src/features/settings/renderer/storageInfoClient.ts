@@ -8,7 +8,7 @@ export function loadStorageInfo(root: string, force = false): Promise<StorageInf
   if (!force && entry.value && Date.now() - entry.updated < 60_000) return Promise.resolve(entry.value)
   const current = entry
   current.pending = Promise.resolve().then(() => window.copilotix.getStorageInfo()).then(value => {
-    if (!value || value.rootPath !== root) throw new Error('文庫路徑已變更，請重新重新整理儲存統計')
+    if (!value || value.rootPath !== root) throw new Error('文库路径已变更，请重新刷新存储统计')
     current.value = value; current.updated = Date.now()
     return value
   }).finally(() => { current.pending = undefined })

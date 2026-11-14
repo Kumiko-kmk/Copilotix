@@ -12,8 +12,8 @@ import {
 } from '../contract/tutorialSample'
 
 const taskStatus: Record<DocumentSummary['workflow']['status'], string> = {
-  queued: '排隊中', uploading: '上傳中', parsing: '解析中', translating: '翻譯中',
-  partial: '部分完成', completed: '已完成', failed: '失敗'
+  queued: '排队中', uploading: '上传中', parsing: '解析中', translating: '翻译中',
+  partial: '部分完成', completed: '已完成', failed: '失败'
 }
 
 const TUTORIAL_API_VERIFIED_KEY = 'copilotix:tutorial:api-verified:v1'
@@ -30,7 +30,7 @@ function stageProgress(sample: DocumentSummary | null): { parse: number; transla
 function ProgressRow(props: { label: string; progress: number; status: string }): React.JSX.Element {
   return <div className="tutorial-progress-row">
     <div className="tutorial-progress-label"><strong>{props.label}</strong><span>{props.status} · {props.progress}%</span></div>
-    <div className="tutorial-progress-track" role="progressbar" aria-label={`${props.label}進度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={props.progress}>
+    <div className="tutorial-progress-track" role="progressbar" aria-label={`${props.label}进度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={props.progress}>
       <span style={{ width: `${props.progress}%` }} />
     </div>
   </div>
@@ -69,13 +69,13 @@ export default function TutorialPage(props: {
 
   const saveApi = React.useCallback(async () => {
     const value = apiToken.trim()
-    if (!value) { setApiError('請先輸入從 MinerU API 管理頁面生成的 Token'); return }
+    if (!value) { setApiError('请先输入从 MinerU API 管理页面生成的 Token'); return }
     setApiSaving(true)
     setApiError('')
     try {
       const validation = await window.copilotix.validateCredential('parser', value)
       if (validation.state !== 'valid') {
-        setApiError(validation.message ?? 'MinerU API 驗證失敗，請檢查 Token')
+        setApiError(validation.message ?? 'MinerU API 验证失败，请检查 Token')
         return
       }
       const { credentials: _credentials, keyStatuses: _keyStatuses, ...publicSettings } = props.settings
@@ -83,14 +83,14 @@ export default function TutorialPage(props: {
       const saved = await window.copilotix.saveSettings(update)
       const fieldError = saved.fieldErrors.parser
       if (fieldError || saved.settings.credentials.parser.state !== 'valid') {
-        setApiError(fieldError?.message ?? 'MinerU API 未能儲存，請重試')
+        setApiError(fieldError?.message ?? 'MinerU API 未能保存，请重试')
         return
       }
       props.onSettingsSaved(saved.settings)
       window.localStorage.setItem(TUTORIAL_API_VERIFIED_KEY, '1')
       setApiToken('')
       setApiOpen(false)
-      messageApi.success('MinerU API 已自動驗證並儲存')
+      messageApi.success('MinerU API 已自动验证并保存')
     } catch (error) {
       setApiError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -110,7 +110,7 @@ export default function TutorialPage(props: {
       setReplaying(false)
       setLastImported(document)
       props.onImported(document)
-      messageApi.success('示例論文已加入任務佇列，解析將自動開始')
+      messageApi.success('示例论文已加入任务队列，解析将自动开始')
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : String(error))
     } finally {
@@ -140,12 +140,12 @@ export default function TutorialPage(props: {
   }
 
   return (
-    <section className="page tutorial-page" aria-label="新手教學">
+    <section className="page tutorial-page" aria-label="新手教程">
       {contextHolder}
       <header className="page-header page-brand tutorial-page-header">
-        <div className="page-brand-copy"><span className="eyebrow tutorial-eyebrow">COPILOTIX / TUTORIAL · 入門體驗</span><h1>用一篇經典論文，走完第一次解析</h1></div>
+        <div className="page-brand-copy"><span className="eyebrow tutorial-eyebrow">COPILOTIX / TUTORIAL · 入门体验</span><h1>用一篇经典论文，走完第一次解析</h1></div>
         <div className="tutorial-header-actions">
-          <Button onClick={restartTutorial}>重新體驗教學</Button>
+          <Button onClick={restartTutorial}>重新体验教程</Button>
           <Button onClick={props.onClose}>返回新解析</Button>
         </div>
       </header>
@@ -153,61 +153,61 @@ export default function TutorialPage(props: {
       <div className="tutorial-intro">
         <div className="tutorial-intro-copy">
           <h2>{TUTORIAL_PAPER_TITLE}!</h2>
-          <p>Vaswani 等人於 2017 年提出的經典論文，以注意力機制構建 Transformer，展示了無需迴圈網路也能完成高質量機器翻譯的路徑。跟著這篇 {TUTORIAL_PAPER_PAGES} 頁的論文，親手完成 API 配置、解析、翻譯與閱讀。</p>
-          <a href={TUTORIAL_PAPER_SOURCE_URL} target="_blank" rel="noreferrer">檢視論文來源 · arXiv:1706.03762 <ArrowRightOutlined /></a>
+          <p>Vaswani 等人于 2017 年提出的经典论文，以注意力机制构建 Transformer，展示了无需循环网络也能完成高质量机器翻译的路径。跟着这篇 {TUTORIAL_PAPER_PAGES} 页的论文，亲手完成 API 配置、解析、翻译与阅读。</p>
+          <a href={TUTORIAL_PAPER_SOURCE_URL} target="_blank" rel="noreferrer">查看论文来源 · arXiv:1706.03762 <ArrowRightOutlined /></a>
         </div>
         <div className="tutorial-paper-art" aria-hidden="true"><FilePdfOutlined /><span>Attention<br />Is All You Need</span><small>Vaswani et al. · 2017</small></div>
       </div>
 
-      <div className="tutorial-steps" role="list" aria-label="入門步驟">
+      <div className="tutorial-steps" role="list" aria-label="入门步骤">
         <article className={`tutorial-step${apiStepComplete ? ' is-complete' : ''}`} role="listitem">
           {apiStepComplete ? <span className="tutorial-step-completion" aria-label="第 1 步已完成"><CheckOutlined /></span> : null}
-          <div className="tutorial-step-top"><span className="tutorial-step-number">步驟 01 / 04</span><Tag color={apiStepComplete ? 'success' : 'processing'}>{apiStepComplete ? '已完成' : '待配置'}</Tag></div>
-          <div className="tutorial-step-title"><LinkOutlined /><h3>註冊並生成 MinerU API</h3></div>
-          <p>先在 MinerU 註冊並進入 API 管理頁申領 Token。複製申領到的 API，貼上到下方視窗；教學會自動驗證並儲存。</p>
+          <div className="tutorial-step-top"><span className="tutorial-step-number">步骤 01 / 04</span><Tag color={apiStepComplete ? 'success' : 'processing'}>{apiStepComplete ? '已完成' : '待配置'}</Tag></div>
+          <div className="tutorial-step-title"><LinkOutlined /><h3>注册并生成 MinerU API</h3></div>
+          <p>先在 MinerU 注册并进入 API 管理页申领 Token。复制申领到的 API，粘贴到下方窗口；教程会自动验证并保存。</p>
           <div className="tutorial-step-actions">
-            <a className="tutorial-api-link" href={MINERU_API_TOKEN_URL} target="_blank" rel="noreferrer">前往 MinerU API 申領頁 <ArrowRightOutlined /></a>
-            <Button onClick={() => { setApiError(''); setApiOpen(true) }}>輸入申領到的 API</Button>
+            <a className="tutorial-api-link" href={MINERU_API_TOKEN_URL} target="_blank" rel="noreferrer">前往 MinerU API 申领页 <ArrowRightOutlined /></a>
+            <Button onClick={() => { setApiError(''); setApiOpen(true) }}>输入申领到的 API</Button>
           </div>
         </article>
 
         <article className={`tutorial-step${sample ? ' is-complete' : ''}`} role="listitem">
           {sample ? <span className="tutorial-step-completion" aria-label="第 2 步已完成"><CheckOutlined /></span> : null}
-          <div className="tutorial-step-top"><span className="tutorial-step-number">步驟 02 / 04</span><Tag color={sample ? 'success' : 'default'}>{sample ? '已完成' : '等待選擇'}</Tag></div>
-          <div className="tutorial-step-title"><CloudUploadOutlined /><h3>選擇內建論文</h3></div>
-          <p>點選“選擇文件”，系統視窗會預選以內建論文標題命名的 PDF。確認開啟後，論文才會加入文庫並開始解析。</p>
+          <div className="tutorial-step-top"><span className="tutorial-step-number">步骤 02 / 04</span><Tag color={sample ? 'success' : 'default'}>{sample ? '已完成' : '等待选择'}</Tag></div>
+          <div className="tutorial-step-title"><CloudUploadOutlined /><h3>选择内置论文</h3></div>
+          <p>点击“选择文档”，系统窗口会预选以内置论文标题命名的 PDF。确认打开后，论文才会加入文库并开始解析。</p>
           <div className="tutorial-step-actions">
-            <Button type="primary" loading={importing} disabled={!apiStepComplete || Boolean(sample)} onClick={() => void importPaper()}>{sample ? '論文已加入任務' : '選擇文件'}</Button>
-            {!apiStepComplete ? <small>請先輸入並驗證 MinerU API</small> : null}
+            <Button type="primary" loading={importing} disabled={!apiStepComplete || Boolean(sample)} onClick={() => void importPaper()}>{sample ? '论文已加入任务' : '选择文档'}</Button>
+            {!apiStepComplete ? <small>请先输入并验证 MinerU API</small> : null}
           </div>
         </article>
 
         <article className={`tutorial-step${taskComplete ? ' is-complete' : ''}`} role="listitem">
           {taskComplete ? <span className="tutorial-step-completion" aria-label="第 3 步已完成"><CheckOutlined /></span> : null}
-          <div className="tutorial-step-top"><span className="tutorial-step-number">步驟 03 / 04</span><Tag color={taskComplete ? 'success' : sample ? 'processing' : 'default'}>{taskComplete ? '已完成' : sample ? taskStatus[sample.workflow.status] : '等待任務'}</Tag></div>
-          <div className="tutorial-step-title"><CheckOutlined /><h3>跟蹤解析與翻譯</h3></div>
-          <p>任務開始後，解析與翻譯會依次進行。下方分別顯示兩個階段的進度；若尚未配置翻譯服務，可稍後在設定中完成。</p>
+          <div className="tutorial-step-top"><span className="tutorial-step-number">步骤 03 / 04</span><Tag color={taskComplete ? 'success' : sample ? 'processing' : 'default'}>{taskComplete ? '已完成' : sample ? taskStatus[sample.workflow.status] : '等待任务'}</Tag></div>
+          <div className="tutorial-step-title"><CheckOutlined /><h3>跟踪解析与翻译</h3></div>
+          <p>任务开始后，解析与翻译会依次进行。下方分别显示两个阶段的进度；若尚未配置翻译服务，可稍后在设置中完成。</p>
           <div className="tutorial-progress-list">
-            <ProgressRow label="解析" progress={progress.parse} status={!sample ? '等待上傳' : progress.parse === 100 ? '已完成' : taskStatus[sample.workflow.status]} />
-            <ProgressRow label="翻譯" progress={progress.translation} status={!sample || progress.parse < 100 ? '等待解析' : progress.translation === 100 && taskComplete ? '已完成' : taskStatus[sample.workflow.status]} />
+            <ProgressRow label="解析" progress={progress.parse} status={!sample ? '等待上传' : progress.parse === 100 ? '已完成' : taskStatus[sample.workflow.status]} />
+            <ProgressRow label="翻译" progress={progress.translation} status={!sample || progress.parse < 100 ? '等待解析' : progress.translation === 100 && taskComplete ? '已完成' : taskStatus[sample.workflow.status]} />
           </div>
         </article>
 
         <article className={`tutorial-step${readerOpened ? ' is-complete' : ''}`} role="listitem">
           {readerOpened ? <span className="tutorial-step-completion" aria-label="第 4 步已完成"><CheckOutlined /></span> : null}
-          <div className="tutorial-step-top"><span className="tutorial-step-number">步驟 04 / 04</span><Tag color={readerOpened ? 'success' : 'default'}>{readerOpened ? '已完成' : '等待閱讀'}</Tag></div>
-          <div className="tutorial-step-title"><ReadOutlined /><h3>跳轉論文閱讀器</h3></div>
-          <p>解析完成後，跳轉到論文閱讀器檢視原文、結構化內容與譯文。切換閱讀檢視，還能使用縮略導覽快速定位章節。</p>
-          <div className="tutorial-step-actions"><Button disabled={!canRead} onClick={openReader}>跳轉論文閱讀器</Button></div>
+          <div className="tutorial-step-top"><span className="tutorial-step-number">步骤 04 / 04</span><Tag color={readerOpened ? 'success' : 'default'}>{readerOpened ? '已完成' : '等待阅读'}</Tag></div>
+          <div className="tutorial-step-title"><ReadOutlined /><h3>跳转论文阅读器</h3></div>
+          <p>解析完成后，跳转到论文阅读器查看原文、结构化内容与译文。切换阅读视图，还能使用缩略导航快速定位章节。</p>
+          <div className="tutorial-step-actions"><Button disabled={!canRead} onClick={openReader}>跳转论文阅读器</Button></div>
         </article>
       </div>
 
-      <Modal className="tutorial-token-modal" title="連線 MinerU API" open={apiOpen} footer={null} onCancel={() => { if (!apiSaving) { setApiOpen(false); setApiToken('') } }} closable={!apiSaving} maskClosable={!apiSaving}>
-        <p>在 MinerU API 申領頁取得 Token 後貼上到這裡。驗證成功會自動儲存到系統憑據儲存。</p>
+      <Modal className="tutorial-token-modal" title="连接 MinerU API" open={apiOpen} footer={null} onCancel={() => { if (!apiSaving) { setApiOpen(false); setApiToken('') } }} closable={!apiSaving} maskClosable={!apiSaving}>
+        <p>在 MinerU API 申领页取得 Token 后粘贴到这里。验证成功会自动保存到系统凭据存储。</p>
         <label htmlFor="tutorial-mineru-token">MinerU Token</label>
-        <Input.Password id="tutorial-mineru-token" value={apiToken} onChange={(event) => { setApiToken(event.target.value); setApiError('') }} onPressEnter={() => void saveApi()} placeholder="貼上 MinerU Token" autoComplete="off" />
+        <Input.Password id="tutorial-mineru-token" value={apiToken} onChange={(event) => { setApiToken(event.target.value); setApiError('') }} onPressEnter={() => void saveApi()} placeholder="粘贴 MinerU Token" autoComplete="off" />
         {apiError ? <p className="tutorial-token-error" role="alert">{apiError}</p> : null}
-        <div className="tutorial-token-actions"><Button onClick={() => { setApiOpen(false); setApiToken('') }} disabled={apiSaving}>取消</Button><Button type="primary" loading={apiSaving} onClick={() => void saveApi()}>驗證並儲存</Button></div>
+        <div className="tutorial-token-actions"><Button onClick={() => { setApiOpen(false); setApiToken('') }} disabled={apiSaving}>取消</Button><Button type="primary" loading={apiSaving} onClick={() => void saveApi()}>验证并保存</Button></div>
       </Modal>
     </section>
   )

@@ -83,7 +83,7 @@ describe("credentialGate", () => {
         updateProgress: async () => job
       })
       expect(results[0]?.error).toMatchObject({ code: 'PARSER_SUBMIT_FAILED', retryable: false })
-      expect(invalidateCredential).toHaveBeenCalledWith('parser', 'PARSER_TOKEN_INVALID', 'Parser API Token 無效，請重新驗證')
+      expect(invalidateCredential).toHaveBeenCalledWith('parser', 'PARSER_TOKEN_INVALID', 'Parser API Token 无效，请重新验证')
     })
   })
 

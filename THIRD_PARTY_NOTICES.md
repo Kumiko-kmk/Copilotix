@@ -22,18 +22,12 @@ master working tree on 2026-09-28. Historical commits retain their original
 licenses and attribution; the current MIT declaration does not relicense them.
 The application logo was supplied by the project maintainer.
 
-The Iansui typeface (芫荽) is Copyright 2025 The Iansui Project Authors and
-distributed under the SIL Open Font License 1.1. Copilotix bundles the original
-font from [Iansui v1.020](https://github.com/ButTaiwan/iansui/releases/tag/v1.020).
-The license is in [Iansui-OFL.txt](desktop/resources/licenses/Iansui-OFL.txt)
-and in the installed program's `resources/licenses` folder.
-
 The distribution also includes resources/licenses/THIRD_PARTY_LICENSES.txt, generated
 from installed dependency roots at packaging time. It includes development tools as
 well as runtime packages and explicitly lists packages without root license text.
 This inventory supplements, and does not replace, embedded package notices.
 
-The paper archive (文庫) page adapts motion curves, camera framing, materials,
+The paper archive (文库) page adapts motion curves, camera framing, materials,
 lighting and the cassette shell geometry from RhineLabUI
 (https://github.com/LBEILC/RhineLabUI), MIT License, Copyright (c) 2026 LBEILC.
 desktop/src/features/library/renderer/archive/assets/archive-shell.glb contains only the shell

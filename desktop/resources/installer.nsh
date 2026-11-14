@@ -22,13 +22,17 @@
   Var copilotixDesktopShortcutCheckbox
 !endif
 
+LangString copilotixRunning 2052 "${PRODUCT_NAME} 仍在运行（可能在系统托盘中）。请从托盘菜单选择“退出”，等待后台任务安全停止后，再点击“重试”。安装器不会强制关闭程序。"
 LangString copilotixRunning 1028 "${PRODUCT_NAME} 仍在執行（可能在系統匣中）。請從系統匣選單選擇「退出」，等待背景任務安全停止後，再按「重試」。安裝程式不會強制關閉程式。"
 LangString copilotixRunning 1033 "${PRODUCT_NAME} is still running, possibly in the system tray. Choose Exit from its tray menu and wait for background tasks to stop safely, then click Retry. Setup will not force-close the app."
+LangString copilotixProcessError 2052 "无法确认 ${PRODUCT_NAME} 是否已经退出。为保护后台任务，本次操作已停止。请退出 ${PRODUCT_NAME} 后重试。"
 LangString copilotixProcessError 1028 "無法確認 ${PRODUCT_NAME} 是否已經退出。為保護背景任務，本次操作已停止。請退出 ${PRODUCT_NAME} 後重試。"
 LangString copilotixProcessError 1033 "Setup could not confirm that ${PRODUCT_NAME} has exited. This operation has stopped to protect background tasks. Exit ${PRODUCT_NAME} and try again."
-LangString copilotixWelcome 1028 "此精靈將為目前 Windows 使用者安裝 ${PRODUCT_NAME}。$\r$\n$\r$\n您可以選擇程式安裝位置。文件庫的位置在應用程式的檔案儲存設定中管理，與安裝位置獨立。$\r$\n$\r$\n升級或解除安裝前，請從系統匣選單退出 ${PRODUCT_NAME}，等待背景任務停止。解除安裝預設保留資料；可在精靈中選擇同時移除文件庫、設定和憑證。"
+LangString copilotixWelcome 2052 "此向导将为当前 Windows 用户安装 ${PRODUCT_NAME}。$\r$\n$\r$\n您可以选择程序安装位置。文档库的位置在应用的文件存储设置中管理，与安装位置独立。$\r$\n$\r$\n升级或卸载前，请从系统托盘菜单退出 ${PRODUCT_NAME}，等待后台任务停止。卸载默认保留资料；可在卸载向导中选择同时移除文档库、设置和凭证。"
+LangString copilotixWelcome 1028 "此精靈將為目前 Windows 使用者安裝 ${PRODUCT_NAME}。$\r$\n$\r$\n您可以選擇程式安裝位置。文檔庫的位置在應用程式的文件儲存設定中管理，與安裝位置獨立。$\r$\n$\r$\n升級或解除安裝前，請從系統匣選單退出 ${PRODUCT_NAME}，等待背景任務停止。解除安裝預設保留資料；可在精靈中選擇同時移除文檔庫、設定和憑證。"
 LangString copilotixWelcome 1033 "This wizard installs ${PRODUCT_NAME} for your current Windows account.$\r$\n$\r$\nYou can choose where the program is installed. Manage the separate document library location in the app's file storage settings.$\r$\n$\r$\nBefore upgrading or uninstalling, choose Exit in the system tray and wait for background tasks to stop. Uninstall keeps your data by default; its wizard offers optional library, settings and credential removal."
 
+LangString copilotixProjectLink 2052 "访问 ${PRODUCT_NAME} 项目主页"
 LangString copilotixProjectLink 1028 "造訪 ${PRODUCT_NAME} 專案首頁"
 LangString copilotixProjectLink 1033 "Visit the ${PRODUCT_NAME} project page"
 
@@ -79,11 +83,14 @@ LangString copilotixProjectLink 1033 "Visit the ${PRODUCT_NAME} project page"
   SetShellVarContext current
 !macroend
 
+LangString copilotixInstallOptionsTitle 2052 "安装选项"
 LangString copilotixInstallOptionsTitle 1028 "安裝選項"
 LangString copilotixInstallOptionsTitle 1033 "Installation options"
+LangString copilotixInstallOptionsSubtitle 2052 "选择常用启动入口。"
 LangString copilotixInstallOptionsSubtitle 1028 "選擇常用啟動入口。"
 LangString copilotixInstallOptionsSubtitle 1033 "Choose how to open ${PRODUCT_NAME}."
-LangString copilotixDesktopShortcutLabel 1028 "建立桌面圖示"
+LangString copilotixDesktopShortcutLabel 2052 "创建桌面图标"
+LangString copilotixDesktopShortcutLabel 1028 "建立桌面圖標"
 LangString copilotixDesktopShortcutLabel 1033 "Create a desktop shortcut"
 
 !macro customPageAfterChangeDir
@@ -122,14 +129,19 @@ LangString copilotixDesktopShortcutLabel 1033 "Create a desktop shortcut"
   !endif
 !macroend
 
-LangString copilotixUninstallTitle 1028 "文件庫與資料"
+LangString copilotixUninstallTitle 2052 "文档库与资料"
+LangString copilotixUninstallTitle 1028 "文檔庫與資料"
 LangString copilotixUninstallTitle 1033 "Library and data"
+LangString copilotixUninstallSubtitle 2052 "选择是否同时移除您的 ${PRODUCT_NAME} 资料。"
 LangString copilotixUninstallSubtitle 1028 "選擇是否同時移除您的 ${PRODUCT_NAME} 資料。"
 LangString copilotixUninstallSubtitle 1033 "Choose whether to also remove your ${PRODUCT_NAME} data."
-LangString copilotixUninstallDescription 1028 "預設僅移除程式，保留文件庫、設定和已儲存憑證，方便之後重新安裝。$\r$\n$\r$\n若勾選下方選項，程式會再次顯示實際文件庫和資料路徑，請您確認。僅刪除 ${PRODUCT_NAME} 管理的文件與資料，不刪除匯入前的來源檔案。此操作無法復原。"
+LangString copilotixUninstallDescription 2052 "默认仅移除程序，保留文档库、设置和已保存凭证，方便之后重新安装。$\r$\n$\r$\n若勾选下方选项，程序会再次显示实际文档库和资料路径，请您确认。仅删除 ${PRODUCT_NAME} 管理的文档与资料，不删除导入前的源文件。此操作无法撤销。"
+LangString copilotixUninstallDescription 1028 "預設僅移除程式，保留文檔庫、設定和已儲存憑證，方便之後重新安裝。$\r$\n$\r$\n若勾選下方選項，程式會再次顯示實際文檔庫和資料路徑，請您確認。僅刪除 ${PRODUCT_NAME} 管理的文檔與資料，不刪除匯入前的來源檔案。此操作無法復原。"
 LangString copilotixUninstallDescription 1033 "By default, only the program is removed. Your library, settings and saved credentials are kept for a later reinstall.$\r$\n$\r$\nIf selected below, ${PRODUCT_NAME} will show the actual library and data paths for a second confirmation. Only ${PRODUCT_NAME}-managed documents and data are removed; original imported files are kept. This cannot be undone."
-LangString copilotixUninstallCheckbox 1028 "同時移除文件庫、設定和已儲存憑證"
+LangString copilotixUninstallCheckbox 2052 "同时移除文档库、设置和已保存凭证"
+LangString copilotixUninstallCheckbox 1028 "同時移除文檔庫、設定和已儲存憑證"
 LangString copilotixUninstallCheckbox 1033 "Also remove the library, settings and saved credentials"
+LangString copilotixCleanupError 2052 "无法完成资料清理，卸载已停止。程序文件仍保留；请确认资料路径可以访问后重试。"
 LangString copilotixCleanupError 1028 "無法完成資料清理，解除安裝已停止。程式檔案仍保留；請確認資料路徑可以存取後重試。"
 LangString copilotixCleanupError 1033 "Data cleanup could not complete, so uninstall has stopped. Program files are kept. Check access to your data paths and try again."
 

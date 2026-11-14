@@ -207,13 +207,13 @@ export function useReaderCitationLayer(options: {
   }, [active, close, ready])
 
   if (!card) return null
-  const otherLabel = options.view === 'original' ? '譯文' : '原文'
+  const otherLabel = options.view === 'original' ? '译文' : '原文'
   return createPortal(
     <div
       className={`reader-citation-card${card.above ? ' above' : ''}`}
       style={{ left: card.left, top: card.top, width: CARD_WIDTH, maxHeight: card.maxHeight }}
       role="dialog"
-      aria-label="參考文獻"
+      aria-label="参考文献"
       data-reader-annotation-ignore="true"
       onMouseEnter={() => { cardHoveredRef.current = true; clearTimers() }}
       onMouseLeave={() => { cardHoveredRef.current = false; hover(null) }}
@@ -222,11 +222,11 @@ export function useReaderCitationLayer(options: {
       {card.hit.entries.map((entry) => {
         const other = counterpartEntry(entry, index, counterpart)
         return (
-          <button key={entry.id} type="button" className="reader-citation-entry" aria-label={`複製參考文獻${entry.number === undefined ? '' : ` ${entry.number}`}`} onClick={() => {
+          <button key={entry.id} type="button" className="reader-citation-entry" aria-label={`复制参考文献${entry.number === undefined ? '' : ` ${entry.number}`}`} onClick={() => {
             const current = cardRef.current
             void Promise.resolve().then(() => navigator.clipboard.writeText(entry.text)).then(() => {
-              if (cardRef.current === current) setCopyStatus('已複製')
-            }).catch(() => { if (cardRef.current === current) setCopyStatus('複製失敗，請重試') })
+              if (cardRef.current === current) setCopyStatus('已复制')
+            }).catch(() => { if (cardRef.current === current) setCopyStatus('复制失败，请重试') })
           }}>
             {entry.number !== undefined ? <span className="reader-citation-number">[{entry.number}]</span> : null}
             <span className="reader-citation-text">{entry.text}</span>
@@ -236,7 +236,7 @@ export function useReaderCitationLayer(options: {
       })}
       {copyStatus ? <span role="status" className="reader-citation-copy-status">{copyStatus}</span> : null}
       {card.hit.missing.length ? (
-        <p className="reader-citation-missing">[{card.hit.missing.join(', ')}] 未能從本文參考文獻列表中解析</p>
+        <p className="reader-citation-missing">[{card.hit.missing.join(', ')}] 未能从本文参考文献列表中解析</p>
       ) : null}
     </div>,
     document.body

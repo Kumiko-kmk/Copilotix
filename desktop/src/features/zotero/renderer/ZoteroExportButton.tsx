@@ -28,14 +28,14 @@ export default function ZoteroExportButton(props: {
   }
   const report = (result: ZoteroExportResult): void => {
     if (result.failed[0]) messageApi.error(result.failed[0].message)
-    else if (result.notes > 0) messageApi.success('已在 Zotero 新建筆記，並連結到原條目')
-    else if (result.items > 0) messageApi.success('已在 Zotero 新建條目，附 PDF 與筆記')
+    else if (result.notes > 0) messageApi.success('已在 Zotero 新建笔记，并链接到原条目')
+    else if (result.items > 0) messageApi.success('已在 Zotero 新建条目，附 PDF 与笔记')
   }
   return <>
-    <Button type="text" icon={<ExportOutlined />} loading={busy} onClick={() => void run(false)} aria-label="匯出到 Zotero" />
-    <Modal title="再次匯出到 Zotero" open={confirmRepeat} okText="再次匯出" confirmLoading={busy}
+    <Button type="text" icon={<ExportOutlined />} loading={busy} onClick={() => void run(false)} aria-label="导出到 Zotero" />
+    <Modal title="再次导出到 Zotero" open={confirmRepeat} okText="再次导出" confirmLoading={busy}
       onOk={() => { setConfirmRepeat(false); void run(true) }} onCancel={() => setConfirmRepeat(false)}>
-      <p>這篇論文已經匯出過。再次匯出會在 Zotero 中再新建一份，舊的不會被替換。</p>
+      <p>这篇论文已经导出过。再次导出会在 Zotero 中再新建一份，旧的不会被替换。</p>
     </Modal>
   </>
 }

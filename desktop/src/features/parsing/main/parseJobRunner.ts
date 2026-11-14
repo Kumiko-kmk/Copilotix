@@ -82,9 +82,9 @@ export class ParseJobRunner implements BatchJobRunner {
       }
     })
     const result = results[0]
-    if (!result) throw new RunnerError('解析作業沒有結果', 'PARSER_EMPTY_RESULT', false)
+    if (!result) throw new RunnerError('解析作业没有结果', 'PARSER_EMPTY_RESULT', false)
     if (result.error !== undefined) throw result.error
-    if (!result.result) throw new RunnerError('解析作業沒有完成狀態', 'PARSER_EMPTY_RESULT', false)
+    if (!result.result) throw new RunnerError('解析作业没有完成状态', 'PARSER_EMPTY_RESULT', false)
     return result.result
   }
 
@@ -96,7 +96,7 @@ export class ParseJobRunner implements BatchJobRunner {
     if (input.jobs.length === 0) return []
     const loaded = await Promise.all(input.jobs.map(async (job): Promise<LoadedJob | JobBatchResult> => {
       const task = await this.options.repository.getTask(job.documentId)
-      return task ? { job, task } : failure(job, new RunnerError('文件不存在', 'DOCUMENT_NOT_FOUND', false))
+      return task ? { job, task } : failure(job, new RunnerError('文档不存在', 'DOCUMENT_NOT_FOUND', false))
     }))
     const valid = loaded.filter((item): item is LoadedJob => 'task' in item)
     const results: JobBatchResult[] = loaded.filter((item): item is JobBatchResult => !('task' in item))
@@ -148,7 +148,7 @@ export class ParseJobRunner implements BatchJobRunner {
     for (const { job, task } of loaded) {
       const upload = uploadTargets.get(task.id)
       if (!upload) {
-        uploadErrors.set(task.id, new RunnerError('Copilotix 返回的上傳連結缺少文件', 'PARSER_PROTOCOL_ERROR', false))
+        uploadErrors.set(task.id, new RunnerError('Copilotix 返回的上传链接缺少文档', 'PARSER_PROTOCOL_ERROR', false))
         continue
       }
       await reporters.get(job.id)!.report(1, checkpointFor(job, 'uploading', {
@@ -193,7 +193,7 @@ export class ParseJobRunner implements BatchJobRunner {
     }, { signal: input.signal })))
 
     if (input.signal.aborted) return loaded.map(({ job, task }) => failure(job, uploadErrors.get(task.id) ?? new Error('Job runner aborted')))
-    if (uploaded.size === 0) return loaded.map(({ job, task }) => failure(job, uploadErrors.get(task.id) ?? new RunnerError('沒有成功上傳的 PDF', 'PARSER_UPLOAD_FAILED', false)))
+    if (uploaded.size === 0) return loaded.map(({ job, task }) => failure(job, uploadErrors.get(task.id) ?? new RunnerError('没有成功上传的 PDF', 'PARSER_UPLOAD_FAILED', false)))
 
     const progressByTask = new Map(loaded.map(({ task }) => [task.id, { job: byTaskId.get(task.id)!.job, reporter: reporters.get(byTaskId.get(task.id)!.job.id)! }]))
     let finalResult: BatchResult
@@ -215,11 +215,11 @@ export class ParseJobRunner implements BatchJobRunner {
     const entries = new Map(finalResult.entries.filter((entry) => entry.dataId).map((entry) => [entry.dataId!, entry]))
     return Promise.all(loaded.map(async ({ job, task }) => {
       if (uploadErrors.has(task.id)) return failure(job, uploadErrors.get(task.id)!)
-      if (!uploaded.has(task.id)) return failure(job, new RunnerError('PDF 上傳失敗', 'PARSER_UPLOAD_FAILED', false))
+      if (!uploaded.has(task.id)) return failure(job, new RunnerError('PDF 上传失败', 'PARSER_UPLOAD_FAILED', false))
       const entry = entries.get(task.id)
-      if (!entry) return failure(job, new RunnerError('Copilotix 批次結果缺少對應 data_id', 'PARSER_PROTOCOL_ERROR', false))
-      if (entry.state === 'failed') return failure(job, new RunnerError(redactSecrets(entry.error || 'Copilotix 解析失敗', [token]), 'PARSER_REMOTE_FAILED', false))
-      if (entry.state !== 'done' || !entry.fullZipUrl) return failure(job, new RunnerError(`Copilotix 返回未完成狀態：${entry.state}`, 'PARSER_PROTOCOL_ERROR', false))
+      if (!entry) return failure(job, new RunnerError('Copilotix 批次结果缺少对应 data_id', 'PARSER_PROTOCOL_ERROR', false))
+      if (entry.state === 'failed') return failure(job, new RunnerError(redactSecrets(entry.error || 'Copilotix 解析失败', [token]), 'PARSER_REMOTE_FAILED', false))
+      if (entry.state !== 'done' || !entry.fullZipUrl) return failure(job, new RunnerError(`Copilotix 返回未完成状态：${entry.state}`, 'PARSER_PROTOCOL_ERROR', false))
       try {
         const result = await this.processParsedArtifact(job, task, entry.fullZipUrl, settings, input, submission.batchId, entry.dataId ?? undefined)
         return { jobId: job.id, result }
@@ -238,7 +238,7 @@ export class ParseJobRunner implements BatchJobRunner {
     const { job, task } = loaded
     const remoteBatchId = stringValue(job.checkpoint.remoteBatchId)
     const remoteDataId = stringValue(job.checkpoint.remoteDataId)
-    if (!remoteBatchId || !remoteDataId) return failure(job, new RunnerError('遠端 checkpoint 無效', 'PARSER_CHECKPOINT_INVALID', false))
+    if (!remoteBatchId || !remoteDataId) return failure(job, new RunnerError('远程 checkpoint 无效', 'PARSER_CHECKPOINT_INVALID', false))
     try {
       const initial = await this.options.parserClient.getBatchResult(remoteBatchId, token, input.signal)
       const entry = initial.entries.find((item) => item.dataId === remoteDataId)
@@ -246,7 +246,7 @@ export class ParseJobRunner implements BatchJobRunner {
         const cleared = checkpointFor(job, 'uploading', { remoteBatchId: null, remoteDataId: null, remoteResultUrl: null })
         await input.updateProgress(job.id, 0, cleared)
         const fresh = await this.processFresh([loaded], settings, token, input)
-        return fresh[0] ?? failure(job, new RunnerError('重新上傳失敗', 'PARSER_UPLOAD_FAILED', false))
+        return fresh[0] ?? failure(job, new RunnerError('重新上传失败', 'PARSER_UPLOAD_FAILED', false))
       }
       if (entry?.state === 'done' && entry.fullZipUrl) {
         return { jobId: job.id, result: await this.processParsedArtifact(job, task, entry.fullZipUrl, settings, input, remoteBatchId, remoteDataId) }
@@ -264,7 +264,7 @@ export class ParseJobRunner implements BatchJobRunner {
       await Promise.all(tails.values())
       const finalEntry = finalResult.entries.find((item) => item.dataId === remoteDataId)
       if (!finalEntry || finalEntry.state !== 'done' || !finalEntry.fullZipUrl) {
-        return failure(job, new RunnerError(redactSecrets(finalEntry?.error || 'Copilotix 解析結果無效', [token]), 'PARSER_REMOTE_FAILED', false))
+        return failure(job, new RunnerError(redactSecrets(finalEntry?.error || 'Copilotix 解析结果无效', [token]), 'PARSER_REMOTE_FAILED', false))
       }
       return { jobId: job.id, result: await this.processParsedArtifact(job, task, finalEntry.fullZipUrl, settings, input, remoteBatchId, remoteDataId) }
     } catch (error) {
@@ -280,7 +280,7 @@ export class ParseJobRunner implements BatchJobRunner {
     await this.options.settingsService.invalidateCredential(
       'parser',
       code === 'A0211' ? 'PARSER_TOKEN_EXPIRED' : 'PARSER_TOKEN_INVALID',
-      code === 'A0211' ? 'Parser API Token 已過期，請重新驗證' : 'Parser API Token 無效，請重新驗證'
+      code === 'A0211' ? 'Parser API Token 已过期，请重新验证' : 'Parser API Token 无效，请重新验证'
     ).catch(() => undefined)
   }
 
@@ -412,8 +412,8 @@ function toRunnerError(error: unknown, fallbackCode: string, secrets: readonly s
     : undefined
   const retryable = /^HTTP_(?:408|429|5\d{2})$/u.test(apiCode) || status === 408 || status === 429 || (status !== undefined && status >= 500) || /(?:timeout|timed out|timedout|network|fetch failed|failed to fetch|econn|socket|temporar|HTTP\s*(?:408|429|5\d{2}))/iu.test(error instanceof Error ? error.message : '')
   const message = error instanceof ParserApiError
-    ? `Parser API 請求失敗（code=${apiCode || 'unknown'}${error.traceId ? `，trace_id=${error.traceId}` : ''}）`
-    : redactSecrets(error instanceof Error ? error.message : '解析作業失敗', secrets)
+    ? `Parser API 请求失败（code=${apiCode || 'unknown'}${error.traceId ? `，trace_id=${error.traceId}` : ''}）`
+    : redactSecrets(error instanceof Error ? error.message : '解析作业失败', secrets)
   return new RunnerError(message, fallbackCode, retryable)
 }
 

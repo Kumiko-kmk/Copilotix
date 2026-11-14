@@ -8,7 +8,7 @@ export default function WindowControls(): React.JSX.Element {
     let active = true
     void window.copilotix.getWindowState()
       .then((state) => { if (active) setMaximized(state.maximized) })
-      .catch((error: unknown) => console.error('無法讀取視窗狀態', error))
+      .catch((error: unknown) => console.error('无法读取窗口状态', error))
     const stop = window.copilotix.onWindowStateChanged((state) => setMaximized(state.maximized))
     return () => {
       active = false
@@ -39,22 +39,22 @@ export default function WindowControls(): React.JSX.Element {
   const perform = React.useCallback((action: WindowAction) => {
     void window.copilotix.performWindowAction(action)
       .then((state) => setMaximized(state.maximized))
-      .catch((error: unknown) => console.error('視窗操作失敗', error))
+      .catch((error: unknown) => console.error('窗口操作失败', error))
   }, [])
 
   return (
-    <div className="window-controls" role="group" aria-label="視窗控制">
-      <button type="button" className="window-control close" data-window-control="close" aria-label="關閉視窗" onClick={() => perform('close')}>
+    <div className="window-controls" role="group" aria-label="窗口控制">
+      <button type="button" className="window-control close" data-window-control="close" aria-label="关闭窗口" onClick={() => perform('close')}>
         <span aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3L3 9" /></svg></span>
       </button>
-      <button type="button" className="window-control minimize" data-window-control="minimize" aria-label="最小化視窗" onClick={() => perform('minimize')}>
+      <button type="button" className="window-control minimize" data-window-control="minimize" aria-label="最小化窗口" onClick={() => perform('minimize')}>
         <span aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M2.8 6h6.4" /></svg></span>
       </button>
       <button
         type="button"
         className="window-control maximize"
         data-window-control="toggle-maximize"
-        aria-label={maximized ? '還原視窗' : '最大化視窗'}
+        aria-label={maximized ? '还原窗口' : '最大化窗口'}
         aria-pressed={maximized}
         onClick={() => perform('toggle-maximize')}
       >

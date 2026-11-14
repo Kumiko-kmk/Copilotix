@@ -28,7 +28,7 @@ export function useTextLayerRepair(documentId: string, layoutJson: string | unde
     attempted.add(key)
     void window.copilotix.repairDocumentTextLayer(documentId).then(async (result) => {
       if (result.repaired === 0) return
-      messageApi.success(`已用 PDF 文字層修復 ${result.repaired} 行解析亂碼`)
+      messageApi.success(`已用 PDF 文字层修复 ${result.repaired} 行解析乱码`)
       await queryClient.invalidateQueries({ queryKey: ['document', documentId] })
       await queryClient.invalidateQueries({ queryKey: ['annotations', documentId] })
       setRevision((value) => value + 1)

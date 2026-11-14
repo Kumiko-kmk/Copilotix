@@ -3,7 +3,7 @@
 param(
     [string]$ReleaseDirectory,
     [string]$EvidenceDirectory,
-    [ValidateSet('English','TraditionalChinese')][string]$Language='English',
+    [ValidateSet('English','SimplifiedChinese','TraditionalChinese')][string]$Language='English',
     [switch]$Install
 )
 $ErrorActionPreference = 'Stop'
@@ -131,15 +131,15 @@ try {
     $combo=($languagePage.Controls | Where-Object Class -eq 'ComboBox').Handle
     $items=[WizardNative]::ComboItems($combo)
     $items | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'languages.json') -Encoding UTF8
-    Assert-That ($items.Count -eq 2) 'Expected English and Traditional Chinese'
-    $languagePattern=switch($Language) { 'English' {'English'} 'TraditionalChinese' {'繁體|Traditional'} }
+    Assert-That ($items.Count -eq 3) 'Expected English, simplified Chinese and traditional Chinese'
+    $languagePattern=switch($Language) { 'English' {'English'} 'SimplifiedChinese' {'简体|Simplified'} 'TraditionalChinese' {'繁體|Traditional'} }
     $selected=-1
     for($i=0;$i -lt $items.Count;$i++){ if($items[$i] -match $languagePattern){$selected=$i} }
     Assert-That ($selected -ge 0) "Requested language missing: $Language ($($items -join ', '))"
     [WizardNative]::SendMessage($combo,0x014E,[IntPtr]$selected,[IntPtr]::Zero) | Out-Null
     Click-Control $languagePage 1
-    $welcomePattern=switch($Language) { 'English' {'This wizard installs Copilotix'} 'TraditionalChinese' {'此精靈將為目前 Windows 使用者安裝 Copilotix'} }
-    $preservePattern=switch($Language) { 'English' {'Uninstall keeps your data by default'} 'TraditionalChinese' {'解除安裝預設保留資料'} }
+    $welcomePattern=switch($Language) { 'English' {'This wizard installs Copilotix'} 'SimplifiedChinese' {'此向导将为当前 Windows 用户安装 Copilotix'} 'TraditionalChinese' {'此精靈將為目前 Windows 使用者安裝 Copilotix'} }
+    $preservePattern=switch($Language) { 'English' {'Uninstall keeps your data by default'} 'SimplifiedChinese' {'卸载默认保留资料'} 'TraditionalChinese' {'解除安裝預設保留資料'} }
     $welcome=Wait-Page { param($c) (($c | ForEach-Object Text) -join ' ') -like "*$welcomePattern*" } 'custom welcome copy'
     Save-Page $welcome '02-welcome'
     Assert-That (($welcome.Controls.Text -join ' ') -like "*$preservePattern*") 'Data preservation copy missing'
@@ -153,9 +153,9 @@ try {
     Assert-That ([WizardNative]::Text($edit) -eq $destination) 'Unicode custom directory was not accepted by directory picker'
     $directory.Controls=@(Get-Controls $directory.Window)
     Save-Page $directory '03-directory'
-    Assert-That (@($directory.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text.Replace('&','') -match 'Browse|瀏覽|瀏覽' }).Count -eq 1) 'Browse control missing'
+    Assert-That (@($directory.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text.Replace('&','') -match 'Browse|浏览|瀏覽' }).Count -eq 1) 'Browse control missing'
     Click-Control $directory 1
-    $shortcutPattern=switch($Language) { 'English' {'Create a desktop shortcut'} 'TraditionalChinese' {'建立桌面圖示'} }
+    $shortcutPattern=switch($Language) { 'English' {'Create a desktop shortcut'} 'SimplifiedChinese' {'创建桌面图标'} 'TraditionalChinese' {'建立桌面圖標'} }
     $options=Wait-Page { param($c) @($c | Where-Object { $_.Class -eq 'Button' -and $_.Text -eq $shortcutPattern }).Count -eq 1 } 'desktop shortcut option'
     Save-Page $options '04-desktop-shortcut'
     $shortcut=($options.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text -eq $shortcutPattern }).Handle

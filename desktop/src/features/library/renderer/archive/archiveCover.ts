@@ -18,9 +18,9 @@ export async function readArchiveCoverSource(paper: ArchivePaper, signal: AbortS
   }
   const details = data ?? await loadArchiveDocument(paper.id, archivePaperRevision(paper))
   const response = await fetch(`${details.assetBaseUrl}figures.json`, { signal })
-  if (!response.ok) throw new Error('無法讀取封面整圖清單')
+  if (!response.ok) throw new Error('无法读取封面整图清单')
   const json: unknown = await response.json()
-  if (!Array.isArray((json as { figures?: unknown } | null)?.figures)) throw new Error('封面整圖清單無效')
+  if (!Array.isArray((json as { figures?: unknown } | null)?.figures)) throw new Error('封面整图清单无效')
   const figures = parseFigureManifest(json)
   const states = insight ? await Promise.all(figures.map(figure => insight.get({ documentId: paper.id, figureId: figure.figureId }))) : []
   signal.throwIfAborted()
@@ -73,10 +73,10 @@ export async function renderArchiveCover(paper: ArchivePaper, data: DocumentDeta
       const { ensureFigureArtifacts } = await loadFigureArtifacts()
       const crops = await ensureFigureArtifacts(paper.id, data.pdfUrl, geometries, signal)
       signal.throwIfAborted()
-      if (crops.failed) throw new Error('封面整圖尚未準備完整')
+      if (crops.failed) throw new Error('封面整图尚未准备完整')
       // Materialising figures can change the descriptor: store the actual final fingerprint.
       source = await readArchiveCoverSource(paper, signal, data)
-      if (geometries.length && (!source.hasManifest || !source.figures.length)) throw new Error('封面整圖清單尚未準備完整')
+      if (geometries.length && (!source.hasManifest || !source.figures.length)) throw new Error('封面整图清单尚未准备完整')
       ranked = rank(source)
       if (!ranked.length) {
         final = page.canvas
@@ -85,12 +85,12 @@ export async function renderArchiveCover(paper: ArchivePaper, data: DocumentDeta
       figures = await loadSpreadImages(ranked, data.assetBaseUrl, page.canvas)
     }
     if (signal.aborted) { figures.forEach(figure => figure.image.close()); signal.throwIfAborted() }
-    if (!figures.length) throw new Error('無法讀取封面整圖')
+    if (!figures.length) throw new Error('无法读取封面整图')
     try { sheet = drawFigureSheet(page.canvas.width, page.canvas.height, figures) }
     catch (error) { figures.forEach(figure => figure.image.close()); throw error }
-    if (!sheet.getContext('2d')) { figures.forEach(figure => figure.image.close()); throw new Error('無法繪製封面整圖頁') }
+    if (!sheet.getContext('2d')) { figures.forEach(figure => figure.image.close()); throw new Error('无法绘制封面整图页') }
     final = composeSpread(page.canvas, sheet)
-    if (final === page.canvas || final.width !== page.canvas.width * 2) { final = undefined; throw new Error('無法合成完整跨頁封面') }
+    if (final === page.canvas || final.width !== page.canvas.width * 2) { final = undefined; throw new Error('无法合成完整跨页封面') }
     signal.throwIfAborted()
     return { canvas: final, kind: 'spread', fingerprint: source.fingerprint }
   } catch (error) {

@@ -1,6 +1,5 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import '../../src/app/renderer/taiwan-kai.css'
 import { ConfigProvider } from 'antd'
 import { FilePdfOutlined, FileTextOutlined } from '@ant-design/icons'
 import PdfPane from '../../src/features/reader/renderer/components/PdfPane'
@@ -22,27 +21,27 @@ Object.assign(window, { readerAcceptance: { metrics, snapshot: readerPerformance
 const base = 'reader-asset://app/paper/'
 async function boot() {
   const [markdown, mappingFile, layoutJson, translatedMarkdown, manifest] = await Promise.all([
-    fetch(base + 'full.md').then(r => { if (!r.ok) throw new Error('原文讀取失敗'); return r.text() }),
-    fetch(base + 'block_list.json').then(r => { if (!r.ok) throw new Error('對映讀取失敗'); return r.json() }),
-    fetch(base + 'layout.json').then(r => { if (!r.ok) throw new Error('版面讀取失敗'); return r.text() }),
-    fetch(base + 'full.zh-CN.md').then(r => { if (!r.ok) throw new Error('譯文讀取失敗'); return r.text() }),
-    fetch(base + 'translation.manifest.json').then(r => { if (!r.ok) throw new Error('譯文對映讀取失敗'); return r.json() })
+    fetch(base + 'full.md').then(r => { if (!r.ok) throw new Error('原文读取失败'); return r.text() }),
+    fetch(base + 'block_list.json').then(r => { if (!r.ok) throw new Error('映射读取失败'); return r.json() }),
+    fetch(base + 'layout.json').then(r => { if (!r.ok) throw new Error('版面读取失败'); return r.text() }),
+    fetch(base + 'full.zh-CN.md').then(r => { if (!r.ok) throw new Error('译文读取失败'); return r.text() }),
+    fetch(base + 'translation.manifest.json').then(r => { if (!r.ok) throw new Error('译文映射读取失败'); return r.json() })
   ])
   metrics.resourcesMs = performance.now()
   const mappings: BlockMapping[] = mappingFile.mappings
   const readerBase = buildReaderBase(markdown, mappings)
   const blocks = readerBase.original
   const translations: TranslatedMarkdownBlock[] = manifest.blocks
-  if (!Array.isArray(translations) || translations.length !== readerBase.content.length || !manifest.sourceVersion) throw new Error('譯文來源資訊不完整')
+  if (!Array.isArray(translations) || translations.length !== readerBase.content.length || !manifest.sourceVersion) throw new Error('译文来源信息不完整')
   await Promise.all(translations.map(async block => {
     const source = readerBase.content[block.sourceIndex ?? -1]
-    if (!source) throw new Error('譯文來源段落不存在')
+    if (!source) throw new Error('译文来源段落不存在')
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source.markdown))
     const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-    if (hash !== block.sourceHash) throw new Error('譯文與當前原文不匹配')
+    if (hash !== block.sourceHash) throw new Error('译文与当前原文不匹配')
   }))
   const translated = buildTranslatedBase(readerBase, translatedMarkdown, translations, mappings)
-  if (!translated.indexed) throw new Error('譯文來源對映不完整')
+  if (!translated.indexed) throw new Error('译文来源映射不完整')
   const translatedBlocks = translated.blocks
   const translatedFigures = projectReaderFigureGroups(buildReaderFigureGeometries(mappings, layoutJson), translatedBlocks)
   const figures = projectReaderFigureGroups(buildReaderFigureGeometries(mappings, layoutJson), blocks)
@@ -82,7 +81,7 @@ async function boot() {
           view="original" annotations={annotations} highlightColor={color} onHighlightColorChange={setColor}
           onReplaceAnnotations={async next => setAnnotations(next)} selection={selection} onSelect={setSelection}
           scrollSync={sync.channel('original')} onRenderReady={() => { metrics.markdownReadyMs ||= performance.now() }} /> },
-        translated: { label: '譯文', icon: <FileTextOutlined />, render: context => <MarkdownPane active={context.active}
+        translated: { label: '译文', icon: <FileTextOutlined />, render: context => <MarkdownPane active={context.active}
           blocks={translatedBlocks} assetBaseUrl={base} pdfUrl={base + 'original.pdf'} figureGroups={translatedFigures} taskId="reader-acceptance"
           initialScrollTop={positions.current.translated} onScrollTopChange={top => { positions.current.translated = top }}
           view="translated" annotations={translatedAnnotations} highlightColor={color} onHighlightColorChange={setColor}
@@ -94,4 +93,4 @@ async function boot() {
   }
   createRoot(document.getElementById('root')!).render(<Reader />)
 }
-void boot().catch(error => { document.getElementById('root')!.textContent = `閱讀器載入失敗：${String(error)}` })
+void boot().catch(error => { document.getElementById('root')!.textContent = `阅读器加载失败：${String(error)}` })

@@ -13,7 +13,7 @@ export default function LiteSplitHandle(props: { ratio: number; onRatio(ratio: n
   const drag = React.useRef<{ left: number; width: number } | null>(null)
   const clamp = (value: number): number => Math.min(MAX, Math.max(MIN, value))
   return (
-    <div className="reader-split-handle" role="separator" aria-orientation="vertical" aria-label="調整分屏寬度" tabIndex={0}
+    <div className="reader-split-handle" role="separator" aria-orientation="vertical" aria-label="调整分屏宽度" tabIndex={0}
       aria-valuemin={MIN * 100} aria-valuemax={MAX * 100} aria-valuenow={Math.round(props.ratio * 100)}
       onPointerDown={(event) => {
         const row = event.currentTarget.parentElement

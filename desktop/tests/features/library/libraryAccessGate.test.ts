@@ -7,12 +7,12 @@ describe('library operation isolation', () => {
     const gate = new LibraryAccessGate()
     let finish!: () => void
     const pending = gate.run('documents:import', () => new Promise<void>((resolve) => { finish = resolve }))
-    await expect(gate.run('library:manage', () => undefined)).rejects.toThrow('尚未結束')
+    await expect(gate.run('library:manage', () => undefined)).rejects.toThrow('尚未结束')
     finish()
     await pending
     const maintenance = gate.run('library:manage', () => new Promise<void>((resolve) => { finish = resolve }))
-    await expect(gate.run('settings:save', () => undefined)).rejects.toThrow('維護')
-    await expect(gate.run('library:manage', () => undefined)).rejects.toThrow('維護')
+    await expect(gate.run('settings:save', () => undefined)).rejects.toThrow('维护')
+    await expect(gate.run('library:manage', () => undefined)).rejects.toThrow('维护')
     await expect(gate.run('window:action', () => 'ok')).resolves.toBe('ok')
     finish()
     await maintenance
@@ -23,7 +23,7 @@ describe('library operation isolation', () => {
     await expect(gate.run('library:manage', () => { throw new Error('failure') })).rejects.toThrow('failure')
     expect(gate.busy).toBe(false)
     gate.requireRestart()
-    await expect(gate.run('documents:import', () => undefined)).rejects.toThrow('維護')
+    await expect(gate.run('documents:import', () => undefined)).rejects.toThrow('维护')
   })
 })
 

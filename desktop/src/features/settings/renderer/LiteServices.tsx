@@ -9,13 +9,13 @@ import type { KeyDrafts } from './ApiKeysSection'
 import { loadCachedCodexStatus, refreshCodexStatus, useCodexStatus } from './codexStatusClient'
 import { DeleteIcon } from './settingsIcons'
 
-const STATE_LABELS: Record<CredentialValidation, string> = { missing: '未配置', unknown: '待驗證', valid: '已驗證', invalid: '驗證失敗' }
-const NAMES: Record<ActiveTranslationProviderId, string> = { deepseek: 'DeepSeek', qwen: '千問', codex: 'Codex' }
+const STATE_LABELS: Record<CredentialValidation, string> = { missing: '未配置', unknown: '待验证', valid: '已验证', invalid: '验证失败' }
+const NAMES: Record<ActiveTranslationProviderId, string> = { deepseek: 'DeepSeek', qwen: '千问', codex: 'Codex' }
 
 type RowState = { state: CredentialValidation; label: string }
 
 /**
- * Lite's single 服務 page: one row per service with its key, a test, and whether translation uses it.
+ * Lite's single 服务 page: one row per service with its key, a test, and whether translation uses it.
  * No sub-pages, no explanations: one key per provider, Codex detected on its own.
  */
 export function LiteServices(props: {
@@ -30,14 +30,14 @@ export function LiteServices(props: {
   const parserState: RowState = parser.error ? { state: 'invalid', label: STATE_LABELS.invalid } : rowState(parser.status.state, parser.draft.editing && Boolean(parser.draft.value.trim()))
   const providers = draft.translationProviderOrder.filter((provider): provider is ActiveTranslationProviderId => provider in NAMES)
   return (
-    <section className="settings-section lite-services" aria-label="服務">
-      <ServiceRow name="MinerU" state={parser.draft.clear ? { state: 'missing', label: '將刪除' } : parserState}>
+    <section className="settings-section lite-services" aria-label="服务">
+      <ServiceRow name="MinerU" state={parser.draft.clear ? { state: 'missing', label: '将删除' } : parserState}>
         <Input.Password aria-label="MinerU Token" autoComplete="new-password" visibilityToggle={false}
-          placeholder={parser.status.state !== 'missing' && !parser.draft.clear ? parser.status.maskedValue ?? '已儲存' : '貼上 Token'}
+          placeholder={parser.status.state !== 'missing' && !parser.draft.clear ? parser.status.maskedValue ?? '已保存' : '粘贴 Token'}
           value={parser.draft.editing ? parser.draft.value : ''}
           onChange={(event) => parser.onDraft({ editing: true, value: event.target.value, clear: false })} />
-        <Button loading={parser.testing} disabled={parser.draft.clear || (parser.status.state === 'missing' && !parser.draft.value.trim())} onClick={parser.onValidate}>測試</Button>
-        <Button type="text" aria-label="刪除 MinerU Token" icon={<DeleteIcon />} disabled={parser.status.state === 'missing' && !parser.draft.value}
+        <Button loading={parser.testing} disabled={parser.draft.clear || (parser.status.state === 'missing' && !parser.draft.value.trim())} onClick={parser.onValidate}>测试</Button>
+        <Button type="text" aria-label="删除 MinerU Token" icon={<DeleteIcon />} disabled={parser.status.state === 'missing' && !parser.draft.value}
           onClick={() => parser.onDraft({ editing: true, value: '', clear: true })} />
       </ServiceRow>
       {providers.map((provider) => provider === 'codex'
@@ -62,11 +62,11 @@ function ServiceRow(props: { name: string; state: RowState; toggle?: React.React
 }
 
 function TranslationSwitch(props: { name: string; enabled: boolean; disabled: boolean; onToggle(): void }): React.JSX.Element {
-  return <Switch size="small" aria-label={`用${props.name}翻譯`} checked={props.enabled} disabled={props.disabled} onChange={props.onToggle} />
+  return <Switch size="small" aria-label={`用${props.name}翻译`} checked={props.enabled} disabled={props.disabled} onChange={props.onToggle} />
 }
 
 function rowState(state: CredentialValidation, pending: boolean): RowState {
-  return pending ? { state: 'unknown', label: '待儲存' } : { state, label: STATE_LABELS[state] }
+  return pending ? { state: 'unknown', label: '待保存' } : { state, label: STATE_LABELS[state] }
 }
 
 /** The provider's first key; editing a provider without one creates its default connection. */
@@ -98,10 +98,10 @@ function KeyRow(props: {
     <ServiceRow name={NAMES[provider]} state={state}
       toggle={<TranslationSwitch name={NAMES[provider]} enabled={props.enabled} disabled={props.saving} onToggle={props.onToggle} />}>
       <Input.Password aria-label={`${NAMES[provider]} API Key`} autoComplete="new-password" visibilityToggle={false}
-        placeholder={hasStored ? stored.maskedValue ?? '已儲存' : '貼上 API Key'} value={value ?? ''}
+        placeholder={hasStored ? stored.maskedValue ?? '已保存' : '粘贴 API Key'} value={value ?? ''}
         onChange={(event) => { ensure(); keys.setValue(id, event.target.value || undefined) }} />
-      <Button loading={keys.testing === id} disabled={props.saving || (!hasStored && !value?.trim())} onClick={() => void keys.validate(ensure())}>測試</Button>
-      <Button type="text" aria-label={`刪除 ${NAMES[provider]} API Key`} icon={<DeleteIcon />} disabled={props.saving || (!hasStored && !value)}
+      <Button loading={keys.testing === id} disabled={props.saving || (!hasStored && !value?.trim())} onClick={() => void keys.validate(ensure())}>测试</Button>
+      <Button type="text" aria-label={`删除 ${NAMES[provider]} API Key`} icon={<DeleteIcon />} disabled={props.saving || (!hasStored && !value)}
         onClick={() => { keys.setValue(id, undefined); props.onConnectionsChange(connections.filter((candidate) => candidate.connectionId !== id)) }} />
     </ServiceRow>
   )
@@ -133,17 +133,17 @@ function CodexRow(props: { value?: CodexSettings; enabled: boolean; disabled: bo
     if (executable && mounted.current) onChange({ ...value, executable })
   }
   const ready = status?.state === 'ready'
-  const state: RowState = failed ? { state: 'invalid', label: '檢測失敗' }
-    : ready ? { state: 'valid', label: '已登入' }
-      : status?.state === 'signed-out' ? { state: 'invalid', label: '未登入' }
-        : status ? { state: 'missing', label: '未找到' } : { state: 'unknown', label: '未檢測' }
+  const state: RowState = failed ? { state: 'invalid', label: '检测失败' }
+    : ready ? { state: 'valid', label: '已登录' }
+      : status?.state === 'signed-out' ? { state: 'invalid', label: '未登录' }
+        : status ? { state: 'missing', label: '未找到' } : { state: 'unknown', label: '未检测' }
   const model = status?.models.find((candidate) => candidate.id === value.translationModel)?.name
   return (
     <ServiceRow name="Codex" state={state}
       toggle={<TranslationSwitch name="Codex" enabled={props.enabled} disabled={props.disabled} onToggle={props.onToggle} />}>
-      <Input aria-label="Codex" readOnly value={ready ? [model, status.version].filter(Boolean).join(' · ') : ''} placeholder="本機 Codex" />
-      <Button loading={busy} onClick={() => void detect()}>檢測</Button>
-      {status && status.state === 'missing' ? <Button onClick={() => void choose()}>選擇程式</Button> : null}
+      <Input aria-label="Codex" readOnly value={ready ? [model, status.version].filter(Boolean).join(' · ') : ''} placeholder="本机 Codex" />
+      <Button loading={busy} onClick={() => void detect()}>检测</Button>
+      {status && status.state === 'missing' ? <Button onClick={() => void choose()}>选择程序</Button> : null}
     </ServiceRow>
   )
 }

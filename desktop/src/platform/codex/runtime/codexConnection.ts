@@ -15,17 +15,17 @@ export class CodexConnection extends EventEmitter {
     this.child = spawn(executable, args, { cwd, windowsHide: true, shell: false, stdio: 'pipe' })
     this.child.stdout.setEncoding('utf8')
     this.child.stdout.on('data', (chunk: string) => this.receive(chunk))
-    this.child.stdin.on('error', () => this.close(new Error('Codex 輸入管道已關閉')))
+    this.child.stdin.on('error', () => this.close(new Error('Codex 输入管道已关闭')))
     this.child.stderr.on('data', () => { /* Drain stderr without persisting private configuration. */ })
-    this.child.on('error', () => this.close(new Error('無法啟動 Codex，請檢查可執行檔案路徑')))
-    this.child.on('exit', () => this.close(new Error('Codex 程序已退出，請重試')))
+    this.child.on('error', () => this.close(new Error('无法启动 Codex，请检查可执行文件路径')))
+    this.child.on('exit', () => this.close(new Error('Codex 进程已退出，请重试')))
   }
 
   request<T = unknown>(method: string, params: unknown, timeout = 15_000): Promise<T> {
-    if (this.closed) return Promise.reject(new Error('Codex 連線已關閉'))
+    if (this.closed) return Promise.reject(new Error('Codex 连接已关闭'))
     const id = ++this.nextId
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Codex ${method} 超時`)) }, timeout)
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Codex ${method} 超时`)) }, timeout)
       this.pending.set(id, { resolve: value => resolve(value as T), reject, timer })
       this.write({ id, method, params })
     })
@@ -33,19 +33,19 @@ export class CodexConnection extends EventEmitter {
 
   notify(method: string): void { this.write({ method }) }
   private write(packet: unknown): void {
-    if (!this.closed) this.child.stdin.write(`${JSON.stringify(packet)}\n`, error => { if (error) this.close(new Error('Codex 通訊中斷')) })
+    if (!this.closed) this.child.stdin.write(`${JSON.stringify(packet)}\n`, error => { if (error) this.close(new Error('Codex 通信中断')) })
   }
   private receive(chunk: string): void {
     this.buffer += chunk
-    if (Buffer.byteLength(this.buffer) > 24 * 1024 * 1024) { this.close(new Error('Codex 訊息超過大小限制')); return }
+    if (Buffer.byteLength(this.buffer) > 24 * 1024 * 1024) { this.close(new Error('Codex 消息超过大小限制')); return }
     let newline: number
     while ((newline = this.buffer.indexOf('\n')) >= 0) {
       if (this.closed) return
       const line = this.buffer.slice(0, newline); this.buffer = this.buffer.slice(newline + 1)
       if (!line.trim()) continue
       let packet: Packet
-      try { packet = JSON.parse(line) as Packet } catch { this.close(new Error('Codex 返回無效協議訊息')); return }
-      if (!packet || typeof packet !== 'object' || Array.isArray(packet)) { this.close(new Error('Codex 返回無效協議訊息')); return }
+      try { packet = JSON.parse(line) as Packet } catch { this.close(new Error('Codex 返回无效协议消息')); return }
+      if (!packet || typeof packet !== 'object' || Array.isArray(packet)) { this.close(new Error('Codex 返回无效协议消息')); return }
       if (packet.method && packet.id !== undefined) {
         // This integration never grants tool/permission requests or handles login tokens.
         this.write({ id: packet.id, error: { code: -32601, message: 'Tools and approval requests are disabled in Copilotix' } })
@@ -54,12 +54,12 @@ export class CodexConnection extends EventEmitter {
         const call = this.pending.get(packet.id)
         if (!call) continue
         this.pending.delete(packet.id); clearTimeout(call.timer)
-        if (packet.error) call.reject(new Error('Codex 請求失敗，請檢查登入、模型許可權或版本相容性'))
+        if (packet.error) call.reject(new Error('Codex 请求失败，请检查登录、模型权限或版本兼容性'))
         else call.resolve(packet.result)
       } else if (packet.method) this.emit('notification', packet.method, packet.params ?? {})
     }
   }
-  close(error = new Error('Codex 連線已關閉')): void {
+  close(error = new Error('Codex 连接已关闭')): void {
     if (this.closed) return
     this.closed = true
     for (const call of this.pending.values()) { clearTimeout(call.timer); call.reject(error) }

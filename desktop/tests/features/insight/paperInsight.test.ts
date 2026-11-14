@@ -18,7 +18,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   return { ...fs, rename: vi.fn(fs.rename) }
 })
 
-const content = { summary: '僅依據摘錄的概述', researchQuestion: '如何改進論文閱讀？', method: '結構化分析方法', contributions: ['提出方法'], findings: ['效率改善'], limitations: [], keywords: ['論文'] }
+const content = { summary: '仅依据摘录的概述', researchQuestion: '如何改进论文阅读？', method: '结构化分析方法', contributions: ['提出方法'], findings: ['效率改善'], limitations: [], keywords: ['论文'] }
 const insight = (sourceRevision = 'revision-1'): PaperInsight => ({ ...content, model: { provider: 'qwen', name: 'qwen-plus' }, generatedAt: new Date().toISOString(), sourceRevision })
 const roots: string[] = []
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
@@ -117,10 +117,10 @@ describe('structured paper insight', () => {
     const f = fixture()
     vi.mocked(f.deps.stream).mockRejectedValue(turnError({ responseStreamDisconnected: { httpStatusCode: null } }))
     await f.service.generate(f.id); await idle(f)
-    expect(f.states.at(-1)).toEqual({ status: 'failed', error: 'Codex 連線中斷或服務暫時不可用，請稍後重試' })
+    expect(f.states.at(-1)).toEqual({ status: 'failed', error: 'Codex 连接中断或服务暂时不可用，请稍后重试' })
     expect(f.deps.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', stage: 'generate', category: 'codex:responseStreamDisconnected' }))
     vi.mocked(f.deps.stream).mockRejectedValue(turnError({ responseTooManyFailedAttempts: { httpStatusCode: 429 } }))
-    await f.service.generate(f.id); await vi.waitFor(() => expect(f.states.at(-1)).toEqual({ status: 'failed', error: '服務商限流，請稍後重試。' }))
+    await f.service.generate(f.id); await vi.waitFor(() => expect(f.states.at(-1)).toEqual({ status: 'failed', error: '服务商限流，请稍后重试。' }))
     await f.service.dispose()
   })
   it('single-flights running and queued papers, limits eight pipelines and starts the ninth after cancellation', async () => {
@@ -162,7 +162,7 @@ describe('structured paper insight', () => {
       await f.service.pause()
       expect(active).toBe(0)
       expect(f.deps.save).not.toHaveBeenCalled()
-      await expect(f.service.generate(f.id)).rejects.toThrow('維護')
+      await expect(f.service.generate(f.id)).rejects.toThrow('维护')
       f.service.resume()
       await f.service.generate(f.id)
       await vi.waitFor(() => expect(active).toBe(1))
@@ -223,7 +223,7 @@ async function diskFixture() {
   let translatedRevision: number | undefined
   const ref = (kind: string) => ({ id: kind, documentId: id, kind, revision: kind === 'translated_markdown' ? translatedRevision ?? revision : revision, relativePath: kind === 'parsed_markdown' ? 'original.md' : 'translated.md', contentHash: 'a'.repeat(64), metadata: {} })
   await writeFile(join(root, 'original.md'), '# English title\n\n## Abstract\n\nOriginal paper content sufficient for a structured summary.')
-  await writeFile(join(root, 'translated.md'), '# 中文標題\n# 摘要\n翻譯內容是這篇論文的完整摘要，用於校驗讀取。\n# 結論\n結論內容說明研究發現。')
+  await writeFile(join(root, 'translated.md'), '# 中文标题\n# 摘要\n翻译内容是这篇论文的完整摘要，用于校验读取。\n# 结论\n结论内容说明研究发现。')
   const repository = { getTask: () => ({ outputDir: root }), getLatestArtifactReference: (_id: string, kind: string) => ref(kind) } as unknown as ConstructorParameters<typeof PaperInsightStore>[0]
   const store = new PaperInsightStore(repository)
   return { root, id, store, repository, revise: () => { revision++ }, reviseTranslation: () => { translatedRevision = (translatedRevision ?? revision) + 1 } }
@@ -250,7 +250,7 @@ describe('paper insight atomic storage', () => {
   })
   it('loads a complete paper larger than Core RPC through a small descriptor and rejects changed content', async () => {
     const f = await diskFixture()
-    const markdown = '# Full paper\n\n' + '全文保留公式 $x_i$ 與表格。\n\n'.repeat(50000) + 'References: LAST_ENTRY'
+    const markdown = '# Full paper\n\n' + '全文保留公式 $x_i$ 与表格。\n\n'.repeat(50000) + 'References: LAST_ENTRY'
     const path = join(f.root, 'original.md')
     await writeFile(path, markdown)
     const descriptor = { documentId: f.id, sourceRevision: 'revision', sources: [{ path, hash: createHash('sha256').update(markdown).digest('hex'), language: 'original' as const }] }
@@ -292,7 +292,7 @@ describe('paper insight atomic storage', () => {
     await writeFile(join(f.root, 'original.md'), '')
     const context = await f.store.briefContext(f.id, new AbortController().signal)
     expect(context.context.language).toBe('translated')
-    expect(JSON.stringify(context)).toContain('翻譯內容')
+    expect(JSON.stringify(context)).toContain('翻译内容')
   })
   it('reads old missing and v1 files with revision staleness', async () => {
     const f = await diskFixture()
@@ -319,7 +319,7 @@ describe('paper insight atomic storage', () => {
     const { brief, anchors } = await briefFor(f)
     await mkdir(outside)
     await symlink(outside, join(f.root, 'insight'), process.platform === 'win32' ? 'junction' : 'dir')
-    await expect(f.store.saveBrief(f.id, brief, anchors)).rejects.toThrow('目錄')
+    await expect(f.store.saveBrief(f.id, brief, anchors)).rejects.toThrow('目录')
     expect(await readdir(outside)).toEqual([])
     const controller = new AbortController(); controller.abort()
     await expect(f.store.briefContext(f.id, controller.signal)).rejects.toThrow()

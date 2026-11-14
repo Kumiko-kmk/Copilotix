@@ -51,8 +51,8 @@ export class PaperBriefInputError extends Error {}
 export function buildFullBriefContext(original: string, translated: string): BriefContext {
   const useOriginal = Boolean(original.trim())
   const markdown = useOriginal ? original : translated
-  if (!markdown.trim()) throw new PaperBriefInputError('論文正文為空')
-  if (byteLength(markdown) > 16 * 1024 * 1024) throw new PaperBriefInputError('論文全文超過 16 MiB，請分篇處理；未傳送或截斷內容')
+  if (!markdown.trim()) throw new PaperBriefInputError('论文正文为空')
+  if (byteLength(markdown) > 16 * 1024 * 1024) throw new PaperBriefInputError('论文全文超过 16 MiB，请分篇处理；未发送或截断内容')
   const outline = [...markdown.matchAll(/^#{1,6}\s+(.+)$/gmu)].map(match => match[1]!.trim())
   const title = outline[0] ?? null
   const excerpts: BriefExcerpt[] = []
@@ -75,7 +75,7 @@ export function buildFullBriefContext(original: string, translated: string): Bri
     section = endSection
     offset = end
   }
-  if (excerpts.length > 9999) throw new PaperBriefInputError('論文全文段落超過定位上限；未截斷內容')
+  if (excerpts.length > 9999) throw new PaperBriefInputError('论文全文段落超过定位上限；未截断内容')
   return { title, language: useOriginal ? 'original' : 'translated', outline: outline.slice(1), excerpts,
     coverage: { roles: [...new Set(excerpts.map(excerpt => excerpt.role))], missingRoles: [],
       sourceBytes: byteLength(markdown), sentBytes: byteLength(JSON.stringify(excerpts)), truncated: false } }
@@ -85,30 +85,30 @@ const encoder = new TextEncoder()
 export const byteLength = (text: string): number => encoder.encode(text).length
 
 const ROLE_LEXICON: Array<[SectionRole, RegExp]> = [
-  ['abstract', /^(?:abstract|summary|摘\s*要|內容提要)$/iu],
-  ['limitations', /limitation|threats? to validity|侷限|不足之處|研究限制/iu],
-  ['conclusion', /conclu|concluding|summary and|closing remarks|結論|總結|結語|小結/iu],
-  ['discussion', /discussion|implication|討論|啟示|意義/iu],
-  ['results', /result|experiment|evaluation|empirical|analysis|findings|performance|ablation|case stud|實驗|結果|評估|評測|分析|實證|案例/iu],
-  ['method', /method|approach|model|framework|architecture|design|algorithm|materials|procedure|proposed|formulation|theory|proof|資料與方法|方法|模型|框架|架構|設計|演算法|材料|理論|證明|研究設計/iu],
-  ['background', /related work|background|literature|preliminar|prior work|相關工作|背景|文獻綜述|預備知識|研究現狀/iu],
-  ['introduction', /introduction|motivation|overview|引言|導論|緒論|簡介|前言|研究背景與意義/iu]
+  ['abstract', /^(?:abstract|summary|摘\s*要|内容提要)$/iu],
+  ['limitations', /limitation|threats? to validity|局限|不足之处|研究限制/iu],
+  ['conclusion', /conclu|concluding|summary and|closing remarks|结论|总结|结语|小结/iu],
+  ['discussion', /discussion|implication|讨论|启示|意义/iu],
+  ['results', /result|experiment|evaluation|empirical|analysis|findings|performance|ablation|case stud|实验|结果|评估|评测|分析|实证|案例/iu],
+  ['method', /method|approach|model|framework|architecture|design|algorithm|materials|procedure|proposed|formulation|theory|proof|数据与方法|方法|模型|框架|架构|设计|算法|材料|理论|证明|研究设计/iu],
+  ['background', /related work|background|literature|preliminar|prior work|相关工作|背景|文献综述|预备知识|研究现状/iu],
+  ['introduction', /introduction|motivation|overview|引言|导论|绪论|简介|前言|研究背景与意义/iu]
 ]
-const DROP_SECTION = /^(?:references?|bibliography|works cited|acknowledg(?:e)?ments?|appendi(?:x|ces)|supplementary|author contributions?|funding|conflicts? of interest|competing interests|data availability|ethics statement|\u53c2考文\u732e|參考文獻|致\u8c22|致謝|附\u5f55|附錄|\u8865充材料|作者\u8d21\u732e|基金|利益\u51b2突|\u6570\u636e可用性)(?![A-Za-z])/iu
-const CAPTION = /^(?:fig(?:ure)?\.?|table|tab\.|\u56fe|表)\s*[\dIVX]+\s*[.:：|]?/iu
+const DROP_SECTION = /^(?:references?|bibliography|works cited|acknowledg(?:e)?ments?|appendi(?:x|ces)|supplementary|author contributions?|funding|conflicts? of interest|competing interests|data availability|ethics statement|参考文献|參考文獻|致谢|致謝|附录|附錄|补充材料|作者贡献|基金|利益冲突|数据可用性)(?![A-Za-z])/iu
+const CAPTION = /^(?:fig(?:ure)?\.?|table|tab\.|图|表)\s*[\dIVX]+\s*[.:：|]?/iu
 const SECTION_NUMBER = /^((?:\d+|[IVXLC]+))(?:\.(\d+))*[.\s]/u
 // Real tags only: a bare `<` in maths ("a < b … c > d") must not swallow the text between them.
 const HTML_TAG = /<\/?[A-Za-z][^<>\n]{0,300}>/gu
 
 const CUES: Array<[RegExp, number]> = [
   // Contribution statements, usually at the end of the introduction.
-  [/\b(?:we (?:propose|present|introduce|develop|show|demonstrate|argue|find|prove)|our (?:contributions?|main|key|results?)|in this (?:paper|work|study|article))\b|本文(?:提出|研究|探討|發現|證明|構建)|我們(?:提出|發現|證明|構建|設計)|主要貢獻|本研究/iu, 3],
+  [/\b(?:we (?:propose|present|introduce|develop|show|demonstrate|argue|find|prove)|our (?:contributions?|main|key|results?)|in this (?:paper|work|study|article))\b|本文(?:提出|研究|探讨|发现|证明|构建)|我们(?:提出|发现|证明|构建|设计)|主要贡献|本研究/iu, 3],
   // Results and comparisons.
-  [/\b(?:outperform|improv|achiev|significant|reduc|increas|accuracy|state[- ]of[- ]the[- ]art|compared (?:to|with)|baseline|p\s*[<=]|confidence interval|effect size)\w*|顯著|提升|提高|降低|優於|超過|準確率|結果表明|實驗表明|相比|基線/iu, 2],
+  [/\b(?:outperform|improv|achiev|significant|reduc|increas|accuracy|state[- ]of[- ]the[- ]art|compared (?:to|with)|baseline|p\s*[<=]|confidence interval|effect size)\w*|显著|提升|提高|降低|优于|超过|准确率|结果表明|实验表明|相比|基线/iu, 2],
   // Limitations and caveats.
-  [/\b(?:limitation|however|fail(?:s|ed)? to|cannot|does not|future work|remain(?:s)? (?:open|unclear))\b|侷限|不足|然而|未能|無法|有待|未來工作/iu, 2],
+  [/\b(?:limitation|however|fail(?:s|ed)? to|cannot|does not|future work|remain(?:s)? (?:open|unclear))\b|局限|不足|然而|未能|无法|有待|未来工作/iu, 2],
   // Definitions of key terms.
-  [/\b(?:we define|is defined as|refers to|we call)\b|定義為|稱為|是指/iu, 1]
+  [/\b(?:we define|is defined as|refers to|we call)\b|定义为|称为|是指/iu, 1]
 ]
 const ROLE_WEIGHT: Record<SectionRole, number> = {
   abstract: 10, conclusion: 6, limitations: 6, discussion: 4, results: 4, introduction: 3,

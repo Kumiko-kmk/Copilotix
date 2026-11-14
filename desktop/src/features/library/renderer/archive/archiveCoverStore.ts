@@ -116,17 +116,17 @@ export async function decodeArchiveCover(record: StoredArchiveCover, signal: Abo
   const validSize = (width: number, height: number): boolean => Number.isInteger(width) && Number.isInteger(height) &&
     width > 0 && width <= 8192 && height > 0 && height <= 1600 && width * height <= 16 * 1024 * 1024 &&
     (record.kind !== 'spread' || width % 2 === 0)
-  if (!validSize(record.width, record.height)) throw new Error('已儲存的封面尺寸無效')
+  if (!validSize(record.width, record.height)) throw new Error('已保存的封面尺寸无效')
   const bitmap = await createImageBitmap(record.blob)
   let canvas: HTMLCanvasElement | null = null
   try {
     signal.throwIfAborted()
-    if (!validSize(bitmap.width, bitmap.height) || bitmap.width !== record.width || bitmap.height !== record.height) throw new Error('已儲存的封面尺寸不匹配')
+    if (!validSize(bitmap.width, bitmap.height) || bitmap.width !== record.width || bitmap.height !== record.height) throw new Error('已保存的封面尺寸不匹配')
     canvas = document.createElement('canvas')
     canvas.width = bitmap.width
     canvas.height = bitmap.height
     const context = canvas.getContext('2d', { alpha: false })
-    if (!context || !canvas.width || !canvas.height) throw new Error('無法讀取已儲存的完整封面')
+    if (!context || !canvas.width || !canvas.height) throw new Error('无法读取已保存的完整封面')
     context.drawImage(bitmap, 0, 0)
     canvas.dataset.archiveCover = record.kind
     canvas.dataset.archiveCoverKey = record.key

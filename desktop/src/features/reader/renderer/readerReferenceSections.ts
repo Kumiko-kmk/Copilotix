@@ -4,7 +4,7 @@ import type { ReaderBlock } from '../core/readerDocument'
 
 type HeadingNode = { type: string; depth?: number; value?: string; children?: HeadingNode[] }
 const parser = unified().use(remarkParse)
-const REFERENCE_TITLE = /^(?:references?|bibliography|literature\s+cited|works\s+cited|\u53c2考文\u732e|參考文獻|\u53c2考\u8d44料|參考資料)$/iu
+const REFERENCE_TITLE = /^(?:references?|bibliography|literature\s+cited|works\s+cited|参考文献|參考文獻|参考资料|參考資料)$/iu
 
 /** Follow heading scope, so an appendix after References uses normal typography. */
 export function readerReferenceSections(blocks: readonly ReaderBlock[]): Set<number> {
@@ -29,7 +29,7 @@ function blockHeadings(markdown: string): Array<{ depth: number | undefined; ref
   const text = (node: HeadingNode): string => node.value ?? (node.children ?? []).map(text).join('')
   const tree = parser.parse(markdown) as HeadingNode
   headings = (tree.children ?? []).filter(node => node.type === 'heading').map(node => {
-    const title = text(node).trim().replace(/^(?:(?:\d+(?:\.\d+)*|[IVX]+)[.、:]?\s+|第[^\s]+[章節章節]\s*)/u, '').replace(/[：:]$/u, '').trim()
+    const title = text(node).trim().replace(/^(?:(?:\d+(?:\.\d+)*|[IVX]+)[.、:]?\s+|第[^\s]+[章节章節]\s*)/u, '').replace(/[：:]$/u, '').trim()
     return { depth: node.depth, reference: REFERENCE_TITLE.test(title) }
   })
   if (headingCache.size >= 8_000) headingCache.delete(headingCache.keys().next().value!)

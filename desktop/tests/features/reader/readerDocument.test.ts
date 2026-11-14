@@ -11,9 +11,9 @@ import type { TranslatedMarkdownBlock } from '@features/translation/contract/tra
 describe('reader document model', () => {
   it('preserves rich original and translated tables without changing annotation identities or source indexes', () => {
     const markdown = '# Title\n\n<table><tr><td rowspan="2">Model</td></tr><tr><td>Baseline</td></tr></table>'
-    const result = buildReaderDocumentBlocks(markdown, '# 標題\n\n譯文', [
-      { sourceIndex: 0, markdown: '# 標題', mappingIds: [] },
-      { sourceIndex: 1, markdown: '<table><tr><td rowspan="2">模型</td></tr><tr><td>基線</td></tr></table>', mappingIds: [] }
+    const result = buildReaderDocumentBlocks(markdown, '# 标题\n\n译文', [
+      { sourceIndex: 0, markdown: '# 标题', mappingIds: [] },
+      { sourceIndex: 1, markdown: '<table><tr><td rowspan="2">模型</td></tr><tr><td>基线</td></tr></table>', mappingIds: [] }
     ], [])
     expect(result.original.map((block) => block.annotationKey)).toEqual(['content:0', 'content:1'])
     expect(result.translated.map((block) => block.annotationKey)).toEqual(['content:0', 'content:1'])
@@ -32,13 +32,13 @@ describe('reader document model', () => {
       mapping('footer-2', 6, 'Author footer', 'page_footer', 1, true)
     ]
     const translatedBlocks: TranslatedMarkdownBlock[] = [
-      { sourceIndex: 0, markdown: '# 文件標題', mappingIds: ['polluted-title'] },
+      { sourceIndex: 0, markdown: '# 文档标题', mappingIds: ['polluted-title'] },
       { sourceIndex: 1, markdown: '正文段落', mappingIds: ['polluted-body'] }
     ]
 
     const result = buildReaderDocumentBlocks(
       '# Document title\n\nBody paragraph',
-      '# 文件標題\n\n正文段落',
+      '# 文档标题\n\n正文段落',
       translatedBlocks,
       mappings
     )
@@ -47,27 +47,27 @@ describe('reader document model', () => {
       ['page-header', 'Journal header'],
       ['content', '# Document title'],
       ['footnote', 'Conference copyright notice'],
-      ['page-divider', '第 1 頁'],
+      ['page-divider', '第 1 页'],
       ['page-header', 'Document running title'],
       ['content', 'Body paragraph'],
       ['page-footer', 'Author footer'],
-      ['page-divider', '第 2 頁']
+      ['page-divider', '第 2 页']
     ])
     expect(result.translated.map((block) => [block.role, block.text ?? block.markdown])).toEqual([
       ['page-header', 'Journal header'],
-      ['content', '# 文件標題'],
+      ['content', '# 文档标题'],
       ['footnote', 'Conference copyright notice'],
-      ['page-divider', '第 1 頁'],
+      ['page-divider', '第 1 页'],
       ['page-header', 'Document running title'],
       ['content', '正文段落'],
       ['page-footer', 'Author footer'],
-      ['page-divider', '第 2 頁']
+      ['page-divider', '第 2 页']
     ])
     expect([...result.original, ...result.translated].some((block) => block.role === 'page-number')).toBe(false)
     expect(result.original.filter((block) => block.role === 'page-divider').map((block) => block.text))
-      .toEqual(['第 1 頁', '第 2 頁'])
+      .toEqual(['第 1 页', '第 2 页'])
     expect(result.translated.filter((block) => block.role === 'page-divider').map((block) => block.text))
-      .toEqual(['第 1 頁', '第 2 頁'])
+      .toEqual(['第 1 页', '第 2 页'])
     expect(result.original.filter((block) => block.role !== 'content').every((block) => block.mappingIds.length === 0))
       .toBe(true)
     expect(result.translated.filter((block) => block.role === 'content').map((block) => block.mappingIds))
@@ -87,7 +87,7 @@ describe('reader document model', () => {
     expect(buildOriginalReaderBlocks('# Document title\n\nBody paragraph', mappings)).toEqual(result.original)
     expect(buildTranslatedReaderBlocks(
       '# Document title\n\nBody paragraph',
-      '# 文件標題\n\n正文段落',
+      '# 文档标题\n\n正文段落',
       translatedBlocks,
       mappings
     )).toEqual(result.translated)
@@ -100,9 +100,9 @@ describe('reader document model', () => {
     ]
     const result = buildReaderDocumentBlocks(
       '# Document title\n\nBody paragraph',
-      '# 文件標題\n\n正文段落',
+      '# 文档标题\n\n正文段落',
       [
-        { sourceIndex: 0, markdown: '# 文件標題', mappingIds: ['title'] },
+        { sourceIndex: 0, markdown: '# 文档标题', mappingIds: ['title'] },
         { sourceIndex: 0, markdown: '正文段落', mappingIds: ['body'], fallbackProvider: 'deepseek' }
       ],
       mappings
@@ -150,11 +150,11 @@ describe('reader document model', () => {
 
     expect(result.map((block) => block.text ?? block.markdown)).toEqual([
       'First page body',
-      '第 1 頁',
+      '第 1 页',
       '![figure](images/figure.png)\n\nFigure 1 caption',
-      '第 2 頁',
+      '第 2 页',
       'Third page body',
-      '第 3 頁'
+      '第 3 页'
     ])
   })
 

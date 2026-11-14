@@ -45,17 +45,17 @@ export function registerLibraryIpc(ipc: IpcRegistrar, deps: LibraryIpcDeps): voi
   const { tasks, repository } = deps
   ipc.handle(libraryChannels.categories, (_event, request) => deps.utility.categories(request))
   ipc.handle(libraryChannels.manage, async (_event, request) => {
-    const title = request.action === 'backup' ? '選擇備份儲存目錄' : request.action === 'restore' ? '選擇包含 manifest.json 的備份目錄' : '選擇空目錄遷移文件庫'
+    const title = request.action === 'backup' ? '选择备份保存目录' : request.action === 'restore' ? '选择包含 manifest.json 的备份目录' : '选择空目录迁移文档库'
     const selected = await dialog.showOpenDialog(deps.mainWindow(), { title, properties: ['openDirectory', 'createDirectory'] })
     if (selected.canceled || !selected.filePaths[0]) return { status: 'cancelled' as const, restartRequired: false }
     if (request.action !== 'backup') {
       const confirmation = await dialog.showMessageBox(deps.mainWindow(), {
         type: 'warning', title,
-        message: request.action === 'restore' ? '用所選備份替換當前文件庫？' : '將全部文件遷移到所選目錄？',
+        message: request.action === 'restore' ? '用所选备份替换当前文档库？' : '将全部文档迁移到所选目录？',
         detail: request.action === 'restore'
-          ? '恢復前會完整備份當前文件庫。現有檔案會保留，API 金鑰不變；完成後自動重啟。僅支援相同資料庫版本的備份。'
-          : '全部文件複製並校驗成功後才切換位置，原檔案保留。完成後自動重啟。',
-        buttons: ['取消', '繼續'], defaultId: 0, cancelId: 0, noLink: true
+          ? '恢复前会完整备份当前文档库。现有文件会保留，API 密钥不变；完成后自动重启。仅支持相同数据库版本的备份。'
+          : '全部文档复制并校验成功后才切换位置，原文件保留。完成后自动重启。',
+        buttons: ['取消', '继续'], defaultId: 0, cancelId: 0, noLink: true
       })
       if (confirmation.response !== 1) return { status: 'cancelled' as const, restartRequired: false }
     }
@@ -103,14 +103,14 @@ export function registerLibraryIpc(ipc: IpcRegistrar, deps: LibraryIpcDeps): voi
     })
     if (selection.canceled || !selection.filePaths[0]) return null
     const selectedPath = selection.filePaths[0]
-    if ((await stat(selectedPath)).size !== TUTORIAL_PAPER_BYTES) throw new Error('新手教學請選擇視窗中預選的內建論文 Attention Is All You Need')
+    if ((await stat(selectedPath)).size !== TUTORIAL_PAPER_BYTES) throw new Error('新手教程请选择窗口中预选的内置论文 Attention Is All You Need')
     const selectedHash = createHash('sha256').update(await readFile(selectedPath)).digest('hex')
-    if (selectedHash !== TUTORIAL_PAPER_SHA256) throw new Error('新手教學請選擇視窗中預選的內建論文 Attention Is All You Need')
+    if (selectedHash !== TUTORIAL_PAPER_SHA256) throw new Error('新手教程请选择窗口中预选的内置论文 Attention Is All You Need')
     const { created, failed } = await tasks.importPaths([selectedPath], { createDuplicates: request.createDuplicate, useOriginalFilename: false })
     if (failed[0]) throw new Error(failed[0].message)
     if (created[0]) return projectDocumentSummary(created[0])
     const existing = await repository.findByHash(TUTORIAL_PAPER_SHA256)
-    if (!existing) throw new Error('內建教學論文匯入失敗')
+    if (!existing) throw new Error('内置教程论文导入失败')
     return projectDocumentSummary(existing)
   })
   ipc.handle(libraryChannels.snapshot, () => deps.feed.snapshot())
@@ -127,13 +127,13 @@ export function registerLibraryIpc(ipc: IpcRegistrar, deps: LibraryIpcDeps): voi
   })
   ipc.handle(libraryChannels.openOutput, async (_event, documentId) => {
     const task = await repository.getTask(documentId)
-    if (!task) throw new Error('文件不存在')
+    if (!task) throw new Error('文档不存在')
     const result = await shell.openPath(task.outputDir)
     if (result) throw new Error(result)
   })
   ipc.handle(libraryChannels.saveAs, async (_event, request) => {
     const task = await repository.getTask(request.documentId)
-    if (!task) throw new Error('文件不存在')
+    if (!task) throw new Error('文档不存在')
     const extension = request.kind === 'result-zip' ? 'zip' : 'md'
     const exportStem = sanitizeTitleStem(task.title?.trim() || task.name.replace(/\.pdf$/i, '')) ?? `paper-${task.id.slice(0, 8)}`
     const result = await dialog.showSaveDialog(deps.mainWindow(), {
