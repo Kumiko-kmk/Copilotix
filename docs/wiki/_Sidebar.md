@@ -9,4 +9,4 @@
 - [本地資料與匯出](https://github.com/Kumiko-kmk/Copilotix/wiki/Local-Data-and-Export)
 - [常見問題](https://github.com/Kumiko-kmk/Copilotix/wiki/FAQ)
 
-[下載 1.2.0](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.2.0) · [倉庫 README](https://github.com/Kumiko-kmk/Copilotix#readme)
+[1.2.0 版本說明](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/releases/1.2.0.zh-TW.md) · [倉庫 README](https://github.com/Kumiko-kmk/Copilotix#readme)

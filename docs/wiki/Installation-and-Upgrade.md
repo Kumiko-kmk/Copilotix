@@ -4,18 +4,18 @@
 
 ## 下載與安裝檔案
 
-從 [1.2.0 Release](https://github.com/Kumiko-kmk/Copilotix/releases/tag/desktop-v1.2.0) 下載所需檔案：
+舊版安裝包已暫停公開下載。以下是歷史版本的檔案格式。
 
 | 檔案 | 用途 |
 | --- | --- |
 | `setup.exe` | 獨立安裝程式，已內嵌完整程式，可直接安裝 |
 | Source code | GitHub 按版本 tag 提供的原始碼 ZIP／tar.gz，供開發使用 |
 
-從 1.2.0 起，Release 只提供安裝包與原始碼，校驗資訊保留在構建流程內部。安裝包的簽章狀態以對應 Release 說明為準，請從本倉庫下載。
+1.2.0 的變更仍可查閱。 [1.2.0 版本說明](https://github.com/Kumiko-kmk/Copilotix/blob/master/docs/releases/1.2.0.zh-TW.md)
 
 ## 首次安裝
 
-1. 下載並執行 `setup.exe`，無需另外下載程式目錄或原始碼。
+1. 若手上已有 `setup.exe`，請直接執行。
 2. 選擇當前使用者可寫的安裝位置，按需建立桌面捷徑。
 3. 完成安裝後啟動 Copilotix；桌面應用不需要 Python、CUDA 或本地解析模型。
 4. 按[服務配置](https://github.com/Kumiko-kmk/Copilotix/wiki/Service-Setup)驗證並儲存憑據，再選擇文獻儲存位置。

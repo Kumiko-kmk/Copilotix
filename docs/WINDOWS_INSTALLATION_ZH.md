@@ -2,7 +2,7 @@
 
 ## 首次安裝
 
-在 [GitHub Releases](https://github.com/Kumiko-kmk/Copilotix/releases) 下載 `setup.exe`，直接執行引導式安裝精靈。安裝範圍為當前 Windows 使用者，預設放入使用者的程式目錄，也可選擇其他可寫目錄。需要管理員許可權的系統目錄不適合此安裝範圍。
+舊版安裝包已暫停公開下載。若手上已有 `setup.exe`，可直接執行安裝精靈。程式會安裝到目前的 Windows 使用者帳戶，預設使用個人程式目錄，也可選擇其他可寫入的目錄。
 
 從 1.2.0 起，公開 Release 僅提供安裝包和 GitHub 自動生成的原始碼下載；無需下載 ZIP、SHA 或清單檔案。完整程式已內嵌在 Setup 中，可離線安裝。
 
