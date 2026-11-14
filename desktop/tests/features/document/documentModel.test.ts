@@ -37,11 +37,11 @@ describe('canonical document model', () => {
   it('projects the same edits, deletions and order into reading, export and chat without rebuilding', async () => {
     const { root, documentId } = await fixture()
     const store = new DocumentModelStore(), base = await store.ensureBase(documentId, root)
-    const file = { ...emptyMarkdownEdits(documentId), revision: 1, blocks: [{ index: 1, mappingIds: [], baseHash: hash(base.content[1]!.markdown), sourceVersion: base.sourceVersion, original: { markdown: '用户修订 $x^3$', editedAt: new Date().toISOString() } }, { index: 2, mappingIds: [], baseHash: hash(base.content[2]!.markdown), sourceVersion: base.sourceVersion, deletedAt: new Date().toISOString() }], order: { count: 3, sequence: [1, 0, 2], updatedAt: new Date().toISOString(), sourceVersion: base.sourceVersion } }
+    const file = { ...emptyMarkdownEdits(documentId), revision: 1, blocks: [{ index: 1, mappingIds: [], baseHash: hash(base.content[1]!.markdown), sourceVersion: base.sourceVersion, original: { markdown: '使用者修訂 $x^3$', editedAt: new Date().toISOString() } }, { index: 2, mappingIds: [], baseHash: hash(base.content[2]!.markdown), sourceVersion: base.sourceVersion, deletedAt: new Date().toISOString() }], order: { count: 3, sequence: [1, 0, 2], updatedAt: new Date().toISOString(), sourceVersion: base.sourceVersion } }
     const snapshot = getSnapshot(base, '', null, file, hash)
     const shown = snapshot.original.filter(b => b.role === 'content').map(b => b.source)
-    expect(shown).toEqual(['用户修订 $x^3$', '# 中 English'])
-    expect(snapshot.originalText).toBe("用户修订 $x^3$\n\n# 中 English\n")
+    expect(shown).toEqual(['使用者修訂 $x^3$', '# 中 English'])
+    expect(snapshot.originalText).toBe("使用者修訂 $x^3$\n\n# 中 English\n")
     expect(documentContextChunks(snapshot, 'revision', []).map(c => c.sourceText)).toEqual(shown)
     expect(store.builds).toBe(1)
   })
@@ -69,12 +69,12 @@ describe('canonical document model', () => {
 it('remaps retranslated content only by a unique hash across source versions', async () => {
   const { root, documentId } = await fixture('Alpha.\n\nBeta.\n')
   const store = new DocumentModelStore(), first = await store.ensureBase(documentId, root)
-  const translated = first.content.map((block, sourceIndex) => ({ markdown: '译 ' + block.markdown, sourceIndex, sourceVersion: first.sourceVersion, sourceHash: hash(block.markdown), mappingIds: [] }))
+  const translated = first.content.map((block, sourceIndex) => ({ markdown: '譯 ' + block.markdown, sourceIndex, sourceVersion: first.sourceVersion, sourceHash: hash(block.markdown), mappingIds: [] }))
   await writeFile(join(root, 'full.md'), 'Beta.\n\nAlpha.\n')
   const second = await store.ensureBase(documentId, root)
   expect(resolveTranslations(second, translated, hash)?.map(b => b.sourceIndex)).toEqual([1, 0])
   await writeFile(join(root, 'full.md'), 'Alpha.\n\nAlpha.\n')
   const ambiguous = await store.ensureBase(documentId, root)
   expect(resolveTranslations(ambiguous, translated, hash)?.every(b => b.unmatched && b.sourceIndex === undefined)).toBe(true)
-  expect(translated.map(b => b.markdown)).toEqual(['译 Alpha.', '译 Beta.'])
+  expect(translated.map(b => b.markdown)).toEqual(['譯 Alpha.', '譯 Beta.'])
 })

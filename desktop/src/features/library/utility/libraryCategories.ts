@@ -35,16 +35,16 @@ const STOP_LATIN = new Set(('the and for with that this from are was were have h
   'based between also more than such these those each other over then there when where while both only one two three new all any may via per ' +
   'data model models method methods results paper show shows figure table section learning neural network networks fig eq et al ' +
   'com http https www doi org arxiv preprint vol pp').split(' '))
-const STOP_CJK = new Set(('我们 一个 一种 可以 以及 通过 使用 进行 由于 因此 其中 这些 这个 我们的 的是 是一 在一 了一 中的 上的 为了 对于 ' +
-  '如图 如表 所示 表示 图中 方法 模型 结果 本文 论文 提出 不同 相同 以下 以上 之间 他们 它们 没有 已经 能够 需要 非常 每个 所有 包括 例如 ' +
-  '其他 时间 情况 部分 问题 研究 工作 数据 学习 训练 网络 实验 性能').split(' '))
+const STOP_CJK = new Set(('我\u4eec 一\u4e2a 一\u79cd 可以 以及 通\u8fc7 使用 \u8fdb行 由\u4e8e 因此 其中 \u8fd9些 \u8fd9\u4e2a 我\u4eec的 的是 是一 在一 了一 中的 上的 \u4e3a了 \u5bf9\u4e8e ' +
+  '如圖 如表 所示 表示 圖中 方法 模型 結果 本文 論文 提出 不同 相同 以下 以上 之間 他們 它們 沒有 已經 能夠 需要 非常 每個 所有 包括 例如 ' +
+  '其他 \u65f6\u95f4 情\u51b5 部分 \u95ee\u9898 研究 工作 \u6570\u636e \u5b66\u4e60 \u8bad\u7ec3 \u7f51\u7edc \u5b9e\u9a8c 性能').split(' '))
 const segmenter = new Intl.Segmenter('zh', { granularity: 'word' })
 const HAN = /^[\p{Script=Han}]+$/u
 const TOP_TERMS = 200
 const NEIGHBOURS = 5
 
 /** Term counts for a text: Latin words of 3+ letters and Chinese words; runs of single characters the
- * segmenter could not join (傅|里|叶) are kept whole when short, as bigrams otherwise. */
+ * segmenter could not join (傅|裡|葉) are kept whole when short, as bigrams otherwise. */
 export function categoryTerms(text: string): Map<string, number> {
   const counts = new Map<string, number>()
   const add = (term: string): void => { counts.set(term, (counts.get(term) ?? 0) + 1) }
@@ -246,7 +246,7 @@ export function classifyLibrary(sources: readonly CategorySource[]): ClassifiedC
       }
       name = picked.join(' · ')
     }
-    name = clipName(name || '未命名分类')
+    name = clipName(name || '未命名分類')
     let unique = name
     for (let suffix = 2; used.has(unique); suffix++) unique = clipName(`${name} ${suffix}`)
     used.add(unique)
@@ -255,6 +255,6 @@ export function classifyLibrary(sources: readonly CategorySource[]): ClassifiedC
   })
   named.sort((a, b) => b.paperIds.length - a.paperIds.length || a.name.localeCompare(b.name, 'zh'))
   result.push(...named)
-  if (pending.length) result.push({ id: 'pending', name: '待分类', named: 'pending', paperIds: pending.slice().sort(newestFirst).map((source) => source.id) })
+  if (pending.length) result.push({ id: 'pending', name: '待分類', named: 'pending', paperIds: pending.slice().sort(newestFirst).map((source) => source.id) })
   return result
 }

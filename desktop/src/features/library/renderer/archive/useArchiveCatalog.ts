@@ -34,7 +34,7 @@ async function readPage(source: PaperInsightSource, papers: CatalogPaper[]): Pro
     for (;;) {
       const index = cursor++, paper = papers[index]
       if (!paper) return
-      const state = await source.get(paper.id).catch((): PaperInsightState => ({ status: 'failed', error: '无法读取本地档案' }))
+      const state = await source.get(paper.id).catch((): PaperInsightState => ({ status: 'failed', error: '無法讀取本地檔案' }))
       rows[index] = fromState(paper, state)
     }
   }))

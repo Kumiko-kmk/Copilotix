@@ -39,7 +39,7 @@ export function resolveLexicalWithinRoot(root: string, candidate: string, flavor
   validateCandidate(root, candidate, flavor)
   const rootResolved = api.resolve(root)
   const candidateResolved = api.resolve(rootResolved, candidate)
-  assertInside(api, rootResolved, candidateResolved, '路径必须位于根目录内')
+  assertInside(api, rootResolved, candidateResolved, '路徑必須位於根目錄內')
   return candidateResolved
 }
 
@@ -61,7 +61,7 @@ export class PathPolicy implements PathPolicyPort {
     const candidateResolved = api.resolve(root, candidate)
     const rootReal = this.realpath(api.resolve(root))
     const candidateReal = resolveExistingOrFuture(candidateResolved, api, this.exists, this.realpath)
-    assertInside(api, rootReal, candidateReal, '拒绝 symlink/junction 越界路径')
+    assertInside(api, rootReal, candidateReal, '拒絕 symlink/junction 越界路徑')
     return candidateReal
   }
 }
@@ -77,7 +77,7 @@ function resolveExistingOrFuture(candidate: string, api: PathApi, exists: (path:
   let current = candidate
   while (!exists(current)) {
     const parent = api.dirname(current)
-    if (parent === current) throw new Error('无法解析路径祖先')
+    if (parent === current) throw new Error('無法解析路徑祖先')
     suffix.unshift(api.basename(current))
     current = parent
   }
@@ -92,12 +92,12 @@ function assertInside(api: PathApi, root: string, candidate: string, message: st
 }
 
 function assertNoNul(value: string): void {
-  if (value.includes('\0')) throw new Error('路径不能包含 NUL 字符')
+  if (value.includes('\0')) throw new Error('路徑不能包含 NUL 字元')
 }
 
 function assertNoParentSegment(value: string): void {
   if (value.split(/[\\/]+/u).some((segment) => segment === '..')) {
-    throw new Error('路径不能包含 ..')
+    throw new Error('路徑不能包含 ..')
   }
 }
 
@@ -106,6 +106,6 @@ function validateCandidate(root: string, candidate: string, flavor: PathFlavor):
   assertNoNul(candidate)
   assertNoParentSegment(candidate)
   if (flavor === 'posix' && (/^[A-Za-z]:[\\/]/u.test(candidate) || /^\\\\[^\\/]+[\\/][^\\/]+/u.test(candidate))) {
-    throw new Error('拒绝跨平台绝对路径')
+    throw new Error('拒絕跨平臺絕對路徑')
   }
 }

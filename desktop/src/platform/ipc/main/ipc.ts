@@ -64,16 +64,16 @@ export function assertTrustedSender(event: IpcInvokeEventLike, options: IpcValid
     BrowserWindow.fromWebContents(contents as unknown as WebContents))
   const sourceWindow = fromWebContents(event.sender)
   if (!sourceWindow || sourceWindow.isDestroyed() || !windows.includes(sourceWindow)) {
-    throw new Error('IPC 请求来源无效')
+    throw new Error('IPC 請求來源無效')
   }
 
   if (!event.senderFrame || event.senderFrame !== event.sender.mainFrame) {
-    throw new Error('IPC 请求必须来自主 frame')
+    throw new Error('IPC 請求必須來自主 frame')
   }
 
   const senderUrl = event.senderFrame?.url || event.sender.getURL()
   if (!isTrustedRendererUrl(senderUrl, options)) {
-    throw new Error('IPC 请求页面来源无效')
+    throw new Error('IPC 請求頁面來源無效')
   }
 }
 
@@ -89,10 +89,10 @@ export function toIpcError(
   const resolvedCode = domainCode && code === 'HANDLER_ERROR' ? domainCode : code
   const retryable = resolvedCode === 'INTERNAL_ERROR' || resolvedCode === 'HANDLER_ERROR'
   if (error instanceof z.ZodError) {
-    return { code, message: 'IPC 请求格式无效', retryable: false, traceId }
+    return { code, message: 'IPC 請求格式無效', retryable: false, traceId }
   }
   const message = error instanceof Error ? error.message : String(error)
-  return { code: resolvedCode, message: message || 'IPC 请求失败', retryable, traceId }
+  return { code: resolvedCode, message: message || 'IPC 請求失敗', retryable, traceId }
 }
 
 export function registerValidatedHandler<Request, Response>(

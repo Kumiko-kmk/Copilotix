@@ -135,10 +135,10 @@ export default function NewParsePage(props: {
       )
       if (failed.length > 0) {
         const examples = failed.slice(0, 3).map((item) => `${item.name}（${item.message}）`).join('；')
-        messageApi.warning(`${failed.length} 个 PDF 未导入：${examples}${failed.length > 3 ? ' 等' : ''}`)
+        messageApi.warning(`${failed.length} 個 PDF 未匯入：${examples}${failed.length > 3 ? ' 等' : ''}`)
       }
       if (created.length === 0) {
-        if (failed.length === 0) messageApi.warning('没有创建任务；所选 PDF 已存在于论文库')
+        if (failed.length === 0) messageApi.warning('沒有建立任務；所選 PDF 已存在於論文庫')
         return
       }
       setFiles([])
@@ -156,7 +156,7 @@ export default function NewParsePage(props: {
   const translation = translationPlan(props.settings)
   const { decoration, onOpenTutorial } = props
   const minimal = !decoration
-  const titleLabel = minimal ? '显示标题' : '文库标题'
+  const titleLabel = minimal ? '顯示標題' : '文庫標題'
 
   return (
     <section ref={pageRef} className={`page new-parse-page${minimal ? ' is-minimal' : ''}${dragging ? ' is-dragging' : ''}`}>
@@ -166,7 +166,7 @@ export default function NewParsePage(props: {
         {decoration?.wordmark}
         <div className="new-parse-heading">
           {decoration?.greeting}
-          <h1>今天想读些什么？</h1>
+          <h1>今天想讀些什麼？</h1>
         </div>
         <div className="new-parse-content">
         <div
@@ -181,19 +181,19 @@ export default function NewParsePage(props: {
           }}
           data-testid="pdf-upload-entry"
           role="region"
-          aria-label="文档导入区，当前支持 PDF"
+          aria-label="文件匯入區，當前支援 PDF"
         >
           <span className="upload-halo" aria-hidden="true" />
-          <span className="visually-hidden">可将一个或多个 PDF 文件拖放到此窗口</span>
+          <span className="visually-hidden">可將一個或多個 PDF 檔案拖放到此視窗</span>
           <div className="upload-entry-copy">
             <UploadGlyph />
             <div className="upload-entry-text">
-              <span className="upload-prompt">拖入文档</span>
-              <small>当前支持 PDF，单篇最多 {MAX_PDF_PAGES} 页</small>
+              <span className="upload-prompt">拖入文件</span>
+              <small>當前支援 PDF，單篇最多 {MAX_PDF_PAGES} 頁</small>
             </div>
           </div>
           <Button type="primary" size="large" loading={submitting} onClick={chooseFiles}>
-            <span>选择文档</span><ArrowRightOutlined aria-hidden="true" />
+            <span>選擇文件</span><ArrowRightOutlined aria-hidden="true" />
           </Button>
           <input
             ref={inputRef}
@@ -210,7 +210,7 @@ export default function NewParsePage(props: {
             }}
           />
         </div>
-        <button type="button" className="zotero-entry" onClick={() => setZoteroOpen(true)}>从 Zotero 导入</button>
+        <button type="button" className="zotero-entry" onClick={() => setZoteroOpen(true)}>從 Zotero 匯入</button>
         {props.progressDocuments?.length ? (
           <ImportProgress
             documents={props.progressDocuments}
@@ -224,7 +224,7 @@ export default function NewParsePage(props: {
           window.localStorage.setItem(TUTORIAL_ENTRY_USED_KEY, '1')
           setTutorialEntryUsed(true)
           onOpenTutorial()
-        }}>第一次使用？从内置论文开始新手教程 <span aria-hidden="true">→</span></button> : null}
+        }}>第一次使用？從內建論文開始新手教學 <span aria-hidden="true">→</span></button> : null}
       </div>
 
       <div className="drop-veil" aria-hidden="true">
@@ -233,16 +233,16 @@ export default function NewParsePage(props: {
         </svg>
         <div className="drop-veil-message">
           <UploadGlyph />
-          <strong>松手，开始导入</strong>
-          <small>仅接收 PDF 文件</small>
+          <strong>鬆手，開始匯入</strong>
+          <small>僅接收 PDF 檔案</small>
         </div>
       </div>
 
       <Modal
-        title={files.length > 1 ? `确认导入 ${files.length} 篇 PDF` : '确认导入'}
+        title={files.length > 1 ? `確認匯入 ${files.length} 篇 PDF` : '確認匯入'}
         open={files.length > 0}
         width={760}
-        okText="开始解析"
+        okText="開始解析"
         confirmLoading={submitting}
         okButtonProps={{ disabled: parserState === 'missing' || parserState === 'invalid' || oversizedFiles.length > 0 || overlongFiles.length > 0 }}
         footer={(_, { OkBtn }) => <OkBtn />}
@@ -255,7 +255,7 @@ export default function NewParsePage(props: {
             type="warning"
             showIcon
             message="需要先配置解析 API Token"
-            description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置</Button>}
+            description={<Button type="link" onClick={props.onOpenSettings}>前往系統設定</Button>}
           />
         ) : null}
         {parserState === 'invalid' ? (
@@ -263,8 +263,8 @@ export default function NewParsePage(props: {
             className="token-required"
             type="error"
             showIcon
-            message="Parser API Token 验证失败"
-            description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置重新验证</Button>}
+            message="Parser API Token 驗證失敗"
+            description={<Button type="link" onClick={props.onOpenSettings}>前往系統設定重新驗證</Button>}
           />
         ) : null}
         <div className="selected-files">
@@ -273,23 +273,23 @@ export default function NewParsePage(props: {
               onSkipFirstPage={(skipFirstPage) => setFiles((current) => current.map((item) => item.key === file.key ? { ...item, skipFirstPage } : item))} />
           ))}
         </div>
-        {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="解析 API 不接受超过 200MB 的单个文件" /> : null}
-        {overlongFiles.length > 0 ? <Alert type="error" showIcon message={`解析 API 不接受超过 ${MAX_PDF_PAGES} 页的单个文件`} /> : null}
+        {oversizedFiles.length > 0 ? <Alert type="error" showIcon message="解析 API 不接受超過 200MB 的單個檔案" /> : null}
+        {overlongFiles.length > 0 ? <Alert type="error" showIcon message={`解析 API 不接受超過 ${MAX_PDF_PAGES} 頁的單個檔案`} /> : null}
 
-        <dl className="import-plan" aria-label="处理方式">
+        <dl className="import-plan" aria-label="處理方式">
           <div>
-            <dt>处理流程</dt>
-            <dd>上传 PDF 到 MinerU 解析 → 生成原文 → 按段翻译；{minimal ? '完成前即可在左侧列表查看进度' : '完成前即可在首页和文库查看进度'}</dd>
+            <dt>處理流程</dt>
+            <dd>上傳 PDF 到 MinerU 解析 → 生成原文 → 按段翻譯；{minimal ? '完成前即可在左側列表檢視進度' : '完成前即可在首頁和文庫檢視進度'}</dd>
           </div>
           <div>
-            <dt>翻译服务</dt>
+            <dt>翻譯服務</dt>
             <dd>
               {translation.primary ? <>
                 <strong>{translation.primary}</strong>
-                {translation.fallbacks.length ? <span className="import-plan-note">失败的段落依次改用 {translation.fallbacks.join('、')}</span> : null}
+                {translation.fallbacks.length ? <span className="import-plan-note">失敗的段落依次改用 {translation.fallbacks.join('、')}</span> : null}
               </> : <>
-                <span>没有可用的翻译服务，解析后只能阅读原文</span>
-                <Button type="link" size="small" onClick={props.onOpenSettings}>前往服务配置</Button>
+                <span>沒有可用的翻譯服務，解析後只能閱讀原文</span>
+                <Button type="link" size="small" onClick={props.onOpenSettings}>前往服務配置</Button>
               </>}
             </dd>
           </div>
@@ -298,19 +298,19 @@ export default function NewParsePage(props: {
             <dd>
               <Radio.Group className="import-title-mode" value={titleMode} onChange={(event) => setTitleMode(event.target.value as TitleMode)}>
                 <Radio value="paper">
-                  <span>论文标题</span>
-                  <small>先用 PDF 内嵌的标题，解析完成后改为识别出的论文标题</small>
+                  <span>論文標題</span>
+                  <small>先用 PDF 內嵌的標題，解析完成後改為識別出的論文標題</small>
                 </Radio>
                 <Radio value="filename">
-                  <span>原文件名</span>
-                  <small>始终显示文件名，例如“{files[0] ? fileStem(files[0].name) : '论文文件名'}”，解析后也不改</small>
+                  <span>原檔名</span>
+                  <small>始終顯示檔名，例如“{files[0] ? fileStem(files[0].name) : '論文件名'}”，解析後也不改</small>
                 </Radio>
               </Radio.Group>
             </dd>
           </div>
           <div>
-            <dt>重复文件</dt>
-            <dd><Checkbox checked={skipDuplicates} onChange={(event) => setSkipDuplicates(event.target.checked)}>{minimal ? '跳过已导入的相同 PDF' : '跳过文库中已有的相同 PDF'}</Checkbox></dd>
+            <dt>重複檔案</dt>
+            <dd><Checkbox checked={skipDuplicates} onChange={(event) => setSkipDuplicates(event.target.checked)}>{minimal ? '跳過已匯入的相同 PDF' : '跳過文庫中已有的相同 PDF'}</Checkbox></dd>
           </div>
         </dl>
       </Modal>
@@ -331,7 +331,7 @@ function SelectedPdf(props: { file: PendingPdf; titleMode: TitleMode; titleLabel
   const ready = inspection?.status === 'ready' ? inspection : null
   const title = props.titleMode === 'filename'
     ? fileStem(file.name)
-    : ready?.metadataTitle ?? (inspection ? '解析后识别，期间显示文件名' : '正在读取…')
+    : ready?.metadataTitle ?? (inspection ? '解析後識別，期間顯示檔名' : '正在讀取…')
   return (
     <div className="selected-file" data-file-name={file.name}>
       <FilePdfOutlined aria-hidden="true" />
@@ -342,17 +342,17 @@ function SelectedPdf(props: { file: PendingPdf; titleMode: TitleMode; titleLabel
       <small className="selected-file-facts">
         {formatBytes(file.size)}
         {' · '}
-        {ready ? `${ready.pageCount} 页` : !inspection ? <><LoadingOutlined aria-hidden="true" /> 读取页数</> : inspectionProblem(inspection)}
+        {ready ? `${ready.pageCount} 頁` : !inspection ? <><LoadingOutlined aria-hidden="true" /> 讀取頁數</> : inspectionProblem(inspection)}
       </small>
-      {file.size > MAX_PDF_BYTES ? <Tag color="error">超过 200MB</Tag> : ready && pagesAfterImport(file, ready) > MAX_PDF_PAGES ? <Tag color="error">超过 {MAX_PDF_PAGES} 页</Tag> : null}
+      {file.size > MAX_PDF_BYTES ? <Tag color="error">超過 200MB</Tag> : ready && pagesAfterImport(file, ready) > MAX_PDF_PAGES ? <Tag color="error">超過 {MAX_PDF_PAGES} 頁</Tag> : null}
       {ready && ready.pageCount >= 2 ? (
         <div className={`selected-file-cover${ready.cover ? ' detected' : ''}`}>
-          {ready.cover ? <span>第 1 页像是{ready.cover.source ? ` ${ready.cover.source} 的` : '机构库添加的'}版权与引用说明页，会干扰标题识别和解析，建议跳过。</span> : null}
+          {ready.cover ? <span>第 1 頁像是{ready.cover.source ? ` ${ready.cover.source} 的` : '機構庫新增的'}版權與引用說明頁，會干擾標題識別和解析，建議跳過。</span> : null}
           {canSkipFirstPage(file, ready)
             ? <Checkbox checked={file.skipFirstPage} onChange={(event) => props.onSkipFirstPage(event.target.checked)}>
-                跳过第 1 页{file.skipFirstPage ? `（导入 ${ready.pageCount - 1} 页，原文件不变）` : ''}
+                跳過第 1 頁{file.skipFirstPage ? `（匯入 ${ready.pageCount - 1} 頁，原檔案不變）` : ''}
               </Checkbox>
-            : <span>文件超过 {MAX_PDF_CROP_BYTES / 1024 / 1024}MB，无法在本地跳过第 1 页</span>}
+            : <span>檔案超過 {MAX_PDF_CROP_BYTES / 1024 / 1024}MB，無法在本地跳過第 1 頁</span>}
         </div>
       ) : null}
     </div>
@@ -368,9 +368,9 @@ function pagesAfterImport(file: PendingPdf, inspection: Extract<PdfFileInspectio
 }
 
 function inspectionProblem(inspection: PdfFileInspection): string {
-  if (inspection.status === 'encrypted') return '已加密，无法预览'
-  if (inspection.status === 'too-large') return '文件较大，未预览'
-  return '无法读取页数'
+  if (inspection.status === 'encrypted') return '已加密，無法預覽'
+  if (inspection.status === 'too-large') return '檔案較大，未預覽'
+  return '無法讀取頁數'
 }
 
 /** The service and model translation starts with, then the ones failed blocks fall back to. */
@@ -379,7 +379,7 @@ function translationPlan(settings: AppSettings): { primary: string | null; fallb
   const describe = (provider: TranslationProviderId): string => {
     const model = provider === 'qwen' ? settings.qwenModel
       : provider === 'deepseek' ? settings.deepseekModel
-        : provider === 'codex' ? settings.codex?.translationModel || '默认模型' : ''
+        : provider === 'codex' ? settings.codex?.translationModel || '預設模型' : ''
     return model ? `${TRANSLATION_PROVIDER_LABELS[provider]}（${model}）` : TRANSLATION_PROVIDER_LABELS[provider]
   }
   return { primary: order[0] ? describe(order[0]) : null, fallbacks: order.slice(1).map(describe) }

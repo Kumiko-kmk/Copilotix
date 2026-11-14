@@ -3,14 +3,14 @@ export class CompletionHttpError extends Error {
   constructor(message: string, readonly status: number, readonly retryAfterMs?: number) { super(message) }
 }
 export async function postCompletion(fetcher: (input: string, init?: RequestInit) => Promise<Response>, provider: Exclude<ModelProvider, 'codex'>, endpoint: string, key: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
-  if (endpoint !== MODEL_ENDPOINTS[provider]) throw new CompletionHttpError('模型服务地址不受支持', 400)
+  if (endpoint !== MODEL_ENDPOINTS[provider]) throw new CompletionHttpError('模型服務地址不受支援', 400)
   const timeout = AbortSignal.timeout(90_000)
   const response = await fetcher(endpoint + '/chat/completions', { method: 'POST', redirect: 'error', headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
   if (!response.ok) {
     const header = response.headers.get('retry-after')
     const seconds = header && /^\d+(?:\.\d+)?$/u.test(header) ? Number(header) * 1000 : header ? Date.parse(header) - Date.now() : undefined
     await response.body?.cancel().catch(() => undefined)
-    throw new CompletionHttpError(provider + ' 请求失败（HTTP ' + response.status + '）', response.status, seconds !== undefined && Number.isFinite(seconds) ? Math.max(0, seconds) : undefined)
+    throw new CompletionHttpError(provider + ' 請求失敗（HTTP ' + response.status + '）', response.status, seconds !== undefined && Number.isFinite(seconds) ? Math.max(0, seconds) : undefined)
   }
   return response.json()
 }

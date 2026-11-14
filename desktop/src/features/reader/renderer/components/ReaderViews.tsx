@@ -216,7 +216,7 @@ export function useReaderViews(props: ReaderViewsInput): ReaderViewSpecs {
         </>
       },
       translated: {
-        label: '译文',
+        label: '譯文',
         icon: <TranslationOutlined />,
         panelClassName: 'reader-tab-panel',
         render: ({ active, actionsHost }) => <>
@@ -349,28 +349,28 @@ function ReaderDocumentState(props: {
   const [retrying, setRetrying] = React.useState(false)
   const failed = props.status === 'failed' || props.status === 'partial'
   const pending = ['queued', 'uploading', 'parsing', 'translating'].includes(props.status)
-  const content = props.view === 'original' ? '原文' : '译文'
-  const title = failed ? `${content}未生成，文档处理失败` : pending ? `${content}正在准备中` : `暂无${content}`
+  const content = props.view === 'original' ? '原文' : '譯文'
+  const title = failed ? `${content}未生成，文件處理失敗` : pending ? `${content}正在準備中` : `暫無${content}`
   const retry = async (): Promise<void> => {
     if (retrying || !props.onRetry) return
     setRetrying(true)
     try { await props.onRetry() } finally { setRetrying(false) }
   }
   const error = props.error && /fetch failed|failed to fetch|network|net::|econn|timeout/iu.test(props.error)
-    ? '网络请求失败，请检查网络或代理设置后重试。'
+    ? '網路請求失敗，請檢查網路或代理設定後重試。'
     : props.error
   return <div className="reader-document-state" role={failed ? 'alert' : 'status'}>
     <strong>{title}</strong>
-    <p>{error || (pending ? `${pendingStep(props.status)}，完成后内容会自动显示，你可以先查看 PDF。` : '你可以先查看 PDF，或重试文档处理。')}</p>
-    {canRetry(props.status) && props.onRetry ? <Button loading={retrying} onClick={() => void retry()}>重试文档处理</Button> : null}
+    <p>{error || (pending ? `${pendingStep(props.status)}，完成後內容會自動顯示，你可以先檢視 PDF。` : '你可以先檢視 PDF，或重試文件處理。')}</p>
+    {canRetry(props.status) && props.onRetry ? <Button loading={retrying} onClick={() => void retry()}>重試文件處理</Button> : null}
   </div>
 }
 
 function pendingStep(status: DocumentWorkflowStatus): string {
-  if (status === 'uploading') return '正在上传 PDF'
+  if (status === 'uploading') return '正在上傳 PDF'
   if (status === 'parsing') return '正在解析'
-  if (status === 'queued') return '解析已完成，正在载入'
-  return '正在翻译'
+  if (status === 'queued') return '解析已完成，正在載入'
+  return '正在翻譯'
 }
 
 function ChatTabLabel(props: { controller: PaperChatController }): React.JSX.Element {
@@ -385,14 +385,14 @@ function ChatTabLabel(props: { controller: PaperChatController }): React.JSX.Ele
 }
 
 function translationLabel(status: DocumentWorkflowStatus, originalReady: boolean, count: string | null): string {
-  if (status === 'completed') return '翻译完成'
-  if (status === 'partial') return '部分翻译完成，可重试失败区块'
-  if (status === 'failed') return '任务失败'
-  if (status === 'translating') return count ? `正在翻译 ${count}` : '正在翻译'
+  if (status === 'completed') return '翻譯完成'
+  if (status === 'partial') return '部分翻譯完成，可重試失敗區塊'
+  if (status === 'failed') return '任務失敗'
+  if (status === 'translating') return count ? `正在翻譯 ${count}` : '正在翻譯'
   // Parsing has finished, but the original appears only once the reader has loaded it.
-  if (status === 'queued') return originalReady ? '等待翻译，当前可阅读原文' : '解析完成，正在载入原文'
-  if (status === 'uploading') return '正在上传 PDF，解析后可阅读原文'
-  return '正在解析，完成后可阅读原文'
+  if (status === 'queued') return originalReady ? '等待翻譯，當前可閱讀原文' : '解析完成，正在載入原文'
+  if (status === 'uploading') return '正在上傳 PDF，解析後可閱讀原文'
+  return '正在解析，完成後可閱讀原文'
 }
 
 function translationColor(status: DocumentWorkflowStatus): string {

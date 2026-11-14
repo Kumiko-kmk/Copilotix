@@ -127,7 +127,7 @@ jobs:
           $installer = 'release-lite/setup.exe'
           if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $manifest.installer.sha256) { throw 'Installer hash mismatch.' }
           Assert-ReleaseSignature $installer
-          $notes = "docs/releases/lite/$version.zh-CN.md"
+          $notes = "docs/releases/lite/$version.zh-TW.md"
           $title = (Get-Content $notes -Encoding utf8 -TotalCount 1) -replace '^#\s*', ''
           $existing = & gh release view $tag --repo $repo --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {

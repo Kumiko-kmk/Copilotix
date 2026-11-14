@@ -1,12 +1,12 @@
 # 許可與 Windows 簽章配置
 
-自有代碼為根 LICENSE.md 的 MIT；不覆蓋歷史上游／第三方許可。打包保留 resources/licenses 與 Electron 原聲明。正式簽章政策及逐版本例外只記於 [CODE_SIGNING_POLICY](CODE_SIGNING_POLICY.md)，發布門禁與資產布局只記於 [發布契約](DESKTOP_RELEASE_ZH.md)。
+自有程式碼為根 LICENSE.md 的 MIT；不覆蓋歷史上游／第三方許可。打包保留 resources/licenses 與 Electron 原宣告。正式簽章政策及逐版本例外只記於 [CODE_SIGNING_POLICY](CODE_SIGNING_POLICY.md)，發布門禁與資產版面配置只記於 [發布契約](DESKTOP_RELEASE_ZH.md)。
 
 ## 現有接入
 
-文件式 PFX／P12 使用 Actions secrets WIN_CSC_LINK（路徑或 Base64）、WIN_CSC_KEY_PASSWORD。CER 無私鑰，不能當 PFX。購買的 Token／Windows 憑證存儲、HSM、雲簽尚須適配預檢與簽章步驟，不是填入 secret 就已接通。
+檔案式 PFX／P12 使用 Actions secrets WIN_CSC_LINK（路徑或 Base64）、WIN_CSC_KEY_PASSWORD。CER 無私鑰，不能當 PFX。購買的 Token／Windows 憑證儲存、HSM、雲簽尚須適配預檢與簽章步驟，不是填入 secret 就已接通。
 
-順序：build → fuses寫入讀回 → runtime簽章／時間戳／驗證 → 同一runtime封裝Setup與卸載器簽章 → 全部驗簽 → 最終hash → 草稿回讀核驗 → 公開。簽後改圖標／fuses／資源必須重簽重算；Setup 不能替代 ASAR／原生依賴／smoke 檢查。
+順序：build → fuses寫入讀回 → runtime簽章／時間戳／驗證 → 同一runtime封裝Setup與解除安裝程式簽章 → 全部驗簽 → 最終hash → 草稿回讀核驗 → 公開。簽後改圖示／fuses／資源必須重簽重算；Setup 不能替代 ASAR／原生依賴／smoke 檢查。
 
 ## 申請與測試界線
 

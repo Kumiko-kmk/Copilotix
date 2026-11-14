@@ -30,9 +30,9 @@ interface Block {
 
 const ABSTRACT_HEADING = /^(?:abstract|summary|摘要|摘\s*要)[.:：]?$/iu
 const ABSTRACT_INLINE = /^(?:\*\*|__)?(?:abstract|摘要)(?:\*\*|__)?\s*(?:[.:：|—–-]|\s{1,2})\s*/iu
-const KEYWORDS_INLINE = /^(?:\*\*|__)?(?:key\s?words|index\s+terms|关键词|关键字|關鍵詞)(?:\*\*|__)?\s*[:：—–-]\s*/iu
-const REFERENCES_HEADING = /^(?:references|bibliography|参考文献|參考文獻)$/iu
-const BACK_MATTER_HEADING = /^(?:acknowledg(?:e)?ments?|致谢|致謝|appendix|附录|附錄)/iu
+const KEYWORDS_INLINE = /^(?:\*\*|__)?(?:key\s?words|index\s+terms|關鍵詞|關鍵字|關鍵詞)(?:\*\*|__)?\s*[:：—–-]\s*/iu
+const REFERENCES_HEADING = /^(?:references|bibliography|\u53c2考文\u732e|參考文獻)$/iu
+const BACK_MATTER_HEADING = /^(?:acknowledg(?:e)?ments?|致謝|致謝|appendix|附錄|附錄)/iu
 const SECTION_NUMBER = /^(?:\d+|[IVXLC]+)(?:\.\d+)+[.\s]/u
 const MAX_ABSTRACT = 1600
 const MAX_SECTIONS = 12
@@ -163,7 +163,7 @@ function isFrontMatterMetadata(text: string): boolean {
 
 function isAffiliation(text: string): boolean {
   return /^(?:\d+[.)]?\s*)?(?:department|division|school|faculty|institute|university|laboratory|laboratoire|nvidia\b|deepmind\b|data61\b)/iu.test(text) ||
-    /^(?:\d+\s*)?[\p{Script=Han}]{2,30}(?:大学|大學|学院|學院|研究所|研究院)/u.test(text)
+    /^(?:\d+\s*)?[\p{Script=Han}]{2,30}(?:大\u5b66|大學|\u5b66院|學院|研究所|研究院)/u.test(text)
 }
 
 function looksLikeByline(text: string): boolean {
@@ -173,7 +173,7 @@ function looksLikeByline(text: string): boolean {
   const words = text.match(/\p{L}[\p{L}\p{M}.'’-]*/gu) ?? []
   if (names.length >= 2 && names.length / words.length >= 0.4) return true
   const chinese = text.split(/[\s,，、;；&]+/u).filter(Boolean)
-  return chinese.length > 0 && chinese.every(name => /^[\p{Script=Han}·]{2,8}$/u.test(name)) && !/研究|方法|论文|論文|摘要|本文|结果|結果/u.test(text)
+  return chinese.length > 0 && chinese.every(name => /^[\p{Script=Han}·]{2,8}$/u.test(name)) && !/研究|方法|\u8bba文|論文|摘要|本文|\u7ed3果|結果/u.test(text)
 }
 
 function authorLines(blocks: Block[]): string | null {

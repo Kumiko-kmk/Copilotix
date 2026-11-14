@@ -29,7 +29,7 @@ export const REFERENCE_HEADINGS = new Set([
   'bibliography',
   'works cited',
   'literature cited',
-  '参考文献',
+  '參考文獻',
   '參考文獻',
   '引用'
 ])
@@ -190,7 +190,7 @@ export function normalizeTranslatedText(source: string, translated: string): str
   const leadingWhitespace = source.match(/^[\p{Zs}\t]+/u)?.[0] ?? ''
   const trailingWhitespace = source.match(/[\p{Zs}\t]+$/u)?.[0] ?? ''
   const value = translated.trim()
-  if (!value) throw new Error('翻译源返回了空译文')
+  if (!value) throw new Error('翻譯源返回了空譯文')
   const normalized = value.replace(/\r\n?/g, '\n')
   const content = !/[\r\n]/.test(source)
     ? normalized.replace(/[ \t]*\n+[ \t]*/g, ' ')
@@ -206,7 +206,7 @@ export function buildReferenceActions(sourceBlocks: Array<{ markdown: string; ma
     const node = parseSingleBlockNode(block.markdown)
     const headingLevel = referenceHeadingLevel(node)
     if (headingLevel !== null) {
-      actions.set(sourceIndex, `${'#'.repeat(headingLevel)} 参考文献`)
+      actions.set(sourceIndex, `${'#'.repeat(headingLevel)} 參考文獻`)
       preserveUnmappedEntries = true
       return
     }
@@ -281,21 +281,21 @@ export function unitMarkdownMap(unit: UnitState, markdown: string): Map<string, 
 export function legacyCacheKey(sourceHash: string, provider: string, model: string, kind: TranslationPlanUnitKind): string {
   const scope = cacheProviderScope(provider)
   return sha256(kind === 'table'
-    ? `${TRANSLATION_PIPELINE_VERSION}|table|${TABLE_TRANSLATION_CACHE_VERSION}|${scope}|${model}|zh-CN|${sourceHash}`
-    : `${TRANSLATION_PIPELINE_VERSION}|${scope}|${model}|zh-CN|${sourceHash}`)
+    ? `${TRANSLATION_PIPELINE_VERSION}|table|${TABLE_TRANSLATION_CACHE_VERSION}|${scope}|${model}|zh-TW|${sourceHash}`
+    : `${TRANSLATION_PIPELINE_VERSION}|${scope}|${model}|zh-TW|${sourceHash}`)
 }
 
 export function assertPersistableTranslationBatch(input: TranslationBatchCommit): void {
   for (const block of input.blocks) {
-    assertTranslationField(block.sourceMarkdown, `翻译块 ${block.blockId} 的原文`)
-    if (block.translatedMarkdown !== null) assertTranslationField(block.translatedMarkdown, `翻译块 ${block.blockId} 的译文`)
+    assertTranslationField(block.sourceMarkdown, `翻譯塊 ${block.blockId} 的原文`)
+    if (block.translatedMarkdown !== null) assertTranslationField(block.translatedMarkdown, `翻譯塊 ${block.blockId} 的譯文`)
   }
-  for (const entry of input.cacheEntries) assertTranslationField(entry.translated, `翻译缓存 ${entry.cacheKey}`)
+  for (const entry of input.cacheEntries) assertTranslationField(entry.translated, `翻譯快取 ${entry.cacheKey}`)
 }
 
 export function assertTranslationField(value: string, label: string): void {
   if (Buffer.byteLength(value, 'utf8') > MAX_TRANSLATION_FIELD_BYTES) {
-    throw new Error(`${label}超过 262KiB 持久化字段限制，请保留正文文件并避免通过 RPC`)
+    throw new Error(`${label}超過 262KiB 持久化欄位限制，請保留正文件案並避免透過 RPC`)
   }
 }
 
@@ -306,7 +306,7 @@ export function translationBatchFits(input: TranslationBatchCommit): boolean {
 }
 
 export function assertTranslationBatchSize(input: TranslationBatchCommit): void {
-  if (!translationBatchFits(input)) throw new Error('翻译批次 UTF-8 大小超过 768KiB')
+  if (!translationBatchFits(input)) throw new Error('翻譯批次 UTF-8 大小超過 768KiB')
 }
 
 export function planKey(taskId: string, jobId: string): string {
@@ -314,17 +314,17 @@ export function planKey(taskId: string, jobId: string): string {
 }
 
 export function normalizeCursor(value: number): number {
-  if (!Number.isInteger(value) || value < 0) throw new Error('翻译计划 cursor 无效')
+  if (!Number.isInteger(value) || value < 0) throw new Error('翻譯計劃 cursor 無效')
   return value
 }
 
 export function normalizeLimit(value: number): number {
-  if (!Number.isInteger(value) || value < 1 || value > 32) throw new Error('翻译计划 limit 必须在 1 到 32 之间')
+  if (!Number.isInteger(value) || value < 1 || value > 32) throw new Error('翻譯計劃 limit 必須在 1 到 32 之間')
   return value
 }
 
 export function parseJson(value: string): unknown {
-  try { return JSON.parse(value) as unknown } catch { throw new Error('翻译计划 JSON 无效') }
+  try { return JSON.parse(value) as unknown } catch { throw new Error('翻譯計劃 JSON 無效') }
 }
 
 export function isRecord(value: unknown): value is Record<string, any> {

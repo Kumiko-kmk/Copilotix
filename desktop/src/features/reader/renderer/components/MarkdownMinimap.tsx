@@ -297,7 +297,7 @@ export default function MarkdownMinimap(props: {
       ref={railRef}
       className="markdown-minimap"
       role="scrollbar"
-      aria-label="Markdown 文档缩略导航"
+      aria-label="Markdown 文件縮略導覽"
       aria-controls={props.controlledId}
       aria-orientation="vertical"
       aria-valuemin={0}
@@ -322,7 +322,7 @@ export default function MarkdownMinimap(props: {
           type="button"
           className={`markdown-minimap-heading heading-${heading.headingLevel}`}
           data-minimap-heading={heading.headingLevel}
-          aria-label={`跳转到${heading.title}`}
+          aria-label={`跳轉到${heading.title}`}
           style={{ top: heading.top, left: heading.left, width: heading.width, height: heading.height }}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => jumpToHeading(heading)}

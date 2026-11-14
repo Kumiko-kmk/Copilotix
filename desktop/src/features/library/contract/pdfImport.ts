@@ -14,7 +14,7 @@ export interface ImportFileOptions {
   metadataTitle?: string
 }
 
-const AUTHORING_TOOL = /^(?:microsoft\s+)?(?:word|powerpoint|excel)\s*[-–:]|^(?:untitled|无标题|未命名)|\b(?:use style|template|instructions? for authors?)\b/iu
+const AUTHORING_TOOL = /^(?:microsoft\s+)?(?:word|powerpoint|excel)\s*[-–:]|^(?:untitled|無標題|未命名)|\b(?:use style|template|instructions? for authors?)\b/iu
 const FILE_NAME = /\.(?:docx?|dotx?|rtf|odt|pdf|tex|dvi|ps|eps|indd|pptx?|xlsx?|txt)\s*$/iu
 const PLACEHOLDER = /^(?:title|document|manuscript|paper|article|untitled document|slide \d+|pdf|main|draft|preprint|accepted manuscript|author'?s? manuscript|revised manuscript|final version|camera[- ]ready|cover page|full text|untitled\d*)$/iu
 const IDENTIFIER = /^(?:doi\b|https?:|www\.|arxiv:|pii\b|s\d{4}-?\d{3,}|[a-z]{1,6}[-_ ]?\d{3,}(?:[-_.]\w+)*$)/iu

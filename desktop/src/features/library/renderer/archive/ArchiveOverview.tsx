@@ -4,7 +4,7 @@ import type { ArchivePaper, ArchiveShelf } from './archiveShelves'
 import './ArchiveOverview.css'
 
 /**
- * Whole-library overview drawn as a layered network: 文库 → categories → papers. Real
+ * Whole-library overview drawn as a layered network: 文庫 → categories → papers. Real
  * membership is the accent; the faint all-to-all mesh between adjacent layers is decoration.
  */
 
@@ -113,12 +113,12 @@ export default function ArchiveOverview(props: Props): React.JSX.Element {
   }
 
   return (
-    <div className={`archive-overview${props.closing ? ' closing' : ''}`} role="dialog" aria-label="全部论文"
+    <div className={`archive-overview${props.closing ? ' closing' : ''}`} role="dialog" aria-label="全部論文"
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); props.onClose() } }}>
       <div className="archive-overview-head">
         <span className="paper-archive-eyebrow">LIBRARY NETWORK</span>
-        <strong>全部论文</strong>
-        <span>{paperCount} 篇 · {categories.length} 个分类</span>
+        <strong>全部論文</strong>
+        <span>{paperCount} 篇 · {categories.length} 個分類</span>
       </div>
       {/* Measured on its own: the heading above takes part of the overlay. */}
       <div ref={hostRef} className="archive-overview-scroll">
@@ -151,7 +151,7 @@ export default function ArchiveOverview(props: Props): React.JSX.Element {
             </svg>
 
             <div className="archive-overview-label root" style={{ left: layout.root.x, top: layout.root.y }}>
-              <strong>文库</strong><small>{paperCount} 篇</small>
+              <strong>文庫</strong><small>{paperCount} 篇</small>
             </div>
             {layout.cats.nodes.map((cat) => (
               <button key={cat.key} type="button" style={{ left: layout.cats.x, top: cat.y }}

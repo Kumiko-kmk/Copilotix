@@ -34,7 +34,7 @@ app.whenReady().then(async () => {
     } catch { return new Response(null, { status: 404 }) }
   })
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !/^(reader-asset:|blob:|data:|devtools:)/.test(details.url) }))
-  const window = new BrowserWindow({ width: 1440, height: 960, minWidth: 860, minHeight: 600, title: 'Copilotix · 阅读器验收',
+  const window = new BrowserWindow({ width: 1440, height: 960, minWidth: 860, minHeight: 600, title: 'Copilotix · 閱讀器驗收',
     autoHideMenuBar: true, backgroundColor: '#f7f3e9', webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('reader-asset://app/')) event.preventDefault() })

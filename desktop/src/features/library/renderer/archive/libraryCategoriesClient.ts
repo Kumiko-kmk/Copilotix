@@ -23,5 +23,5 @@ export async function loadLibraryCategories(read: (request: { after?: number }) 
       }))
     }
   }
-  throw new Error('文库分类在读取过程中持续变化')
+  throw new Error('文庫分類在讀取過程中持續變化')
 }

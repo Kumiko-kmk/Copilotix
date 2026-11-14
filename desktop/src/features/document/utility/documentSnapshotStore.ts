@@ -10,7 +10,7 @@ async function optional(root: string, name: string): Promise<string> {
   const path = policy.resolveChild(root, name)
   try {
     const info = await lstat(path)
-    if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024 * 1024) throw new Error('文档投影来源无效')
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024 * 1024) throw new Error('文件投影來源無效')
     return await readFile(path, 'utf8')
   } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''; throw error }
 }
@@ -21,7 +21,7 @@ export async function getDocumentSnapshot(documentId: string, root: string, file
   try { blocks = manifest ? readLegacyTranslations(JSON.parse(manifest), base, hash) : null } catch { /* Historical malformed convenience manifest falls back to durable Markdown. */ }
   const translated = blocks?.length ? blocks.map(block => block.markdown.trimEnd()).join("\n\n") + "\n" : stored
   const snapshot = getSnapshot(base, translated, blocks, edits, hash)
-  if ((await documentModels.ensureBase(documentId, root, files)).sourceVersion !== base.sourceVersion || (await readMarkdownEditsFile(root, documentId)).revision !== edits.revision) throw new Error('文档版本已变化，请重新读取')
+  if ((await documentModels.ensureBase(documentId, root, files)).sourceVersion !== base.sourceVersion || (await readMarkdownEditsFile(root, documentId)).revision !== edits.revision) throw new Error('文件版本已變化，請重新讀取')
   return snapshot
 }
 /** Immutable, content-addressed projection: Main reads large context through a small descriptor. */

@@ -139,7 +139,7 @@ class OpenAiCompatibleProvider extends QueuedProvider {
           {
             role: 'system',
             content:
-              '你是严谨的学术表格翻译器。翻译用户提供的完整表格 JSON 中所有 segment 的 text 为简体中文。必须保持 segment ID 完整、唯一，不得增删或修改表格结构、行列关系、HTML 属性和公式。只输出 JSON，格式为 {"protocol":"copilotix-table-translation-v2","translations":[{"id":"segment-id","text":"译文"}]}。'
+              '你是嚴謹的學術表格翻譯器。翻譯使用者提供的完整表格 JSON 中所有 segment 的 text 為臺灣正體中文。必須保持 segment ID 完整、唯一，不得增刪或修改表格結構、行列關係、HTML 屬性和公式。只輸出 JSON，格式為 {"protocol":"copilotix-table-translation-v2","translations":[{"id":"segment-id","text":"譯文"}]}。'
           },
           { role: 'user', content: JSON.stringify(request) }
         ]
@@ -167,7 +167,7 @@ function openAiContent(value: unknown): string {
       if (text) return text
     }
   }
-  throw new Error('OpenAI 兼容接口返回了无法识别的内容')
+  throw new Error('OpenAI 相容介面返回了無法識別的內容')
 }
 
 function openAiResponseContent(payload: unknown, providerId: string): string {
@@ -178,7 +178,7 @@ function openAiResponseContent(payload: unknown, providerId: string): string {
   try {
     return openAiContent(message?.content)
   } catch {
-    throw new Error(`${providerId} 返回了无法识别的译文`)
+    throw new Error(`${providerId} 返回了無法識別的譯文`)
   }
 }
 
@@ -236,21 +236,21 @@ export async function probeOpenAiCompatibleCredential(
           ? 'PROVIDER_CONFIGURATION_INVALID'
       : `HTTP_${response.status}`
     const message = code === 'AUTH_INVALID'
-      ? `${providerId} API Key 验证失败（HTTP ${response.status}）`
+      ? `${providerId} API Key 驗證失敗（HTTP ${response.status}）`
       : code === 'PROXY_AUTH_REQUIRED'
-        ? '网络代理要求身份验证，请检查或关闭代理后重试'
+        ? '網路代理要求身份驗證，請檢查或關閉代理後重試'
         : code === 'PROVIDER_CONFIGURATION_INVALID'
-          ? `${providerId} 服务地址或模型配置不可用（HTTP ${response.status}）`
-          : `${providerId} 服务暂时不可用（HTTP ${response.status}）`
+          ? `${providerId} 服務地址或模型配置不可用（HTTP ${response.status}）`
+          : `${providerId} 服務暫時不可用（HTTP ${response.status}）`
     return { ok: false, code, message }
   }
-  if (providerId === 'deepseek') return { ok: true, message: 'deepseek API Key 验证成功' }
+  if (providerId === 'deepseek') return { ok: true, message: 'deepseek API Key 驗證成功' }
   try {
     const payload: unknown = await response.json()
     openAiResponseContent(payload, providerId)
-    return { ok: true, message: `${providerId} API Key 验证成功` }
+    return { ok: true, message: `${providerId} API Key 驗證成功` }
   } catch {
-    return { ok: false, code: 'INVALID_RESPONSE', message: `${providerId} 接口返回了无法识别的响应` }
+    return { ok: false, code: 'INVALID_RESPONSE', message: `${providerId} 介面返回了無法識別的響應` }
   }
 }
 
@@ -259,7 +259,7 @@ function credentialProbeBody(providerId: 'qwen' | 'deepseek', model: string): Re
     return {
       model,
       messages: [{ role: 'user', content: 'Hello' }],
-      translation_options: { source_lang: 'English', target_lang: 'Chinese' }
+      translation_options: { source_lang: 'English', target_lang: 'Traditional Chinese' }
     }
   }
   return {
@@ -268,7 +268,7 @@ function credentialProbeBody(providerId: 'qwen' | 'deepseek', model: string): Re
     temperature: 0,
     max_tokens: 16,
     messages: [
-      { role: 'system', content: '只输出 OK。' },
+      { role: 'system', content: '只輸出 OK。' },
       { role: 'user', content: 'OK' }
     ]
   }
@@ -279,7 +279,7 @@ function translationRequestBody(providerId: 'qwen' | 'deepseek', model: string, 
     return {
       model,
       messages: [{ role: 'user', content: text }],
-      translation_options: { source_lang: 'auto', target_lang: 'Chinese' }
+      translation_options: { source_lang: 'auto', target_lang: 'Traditional Chinese' }
     }
   }
   return {
@@ -290,7 +290,7 @@ function translationRequestBody(providerId: 'qwen' | 'deepseek', model: string, 
       {
         role: 'system',
         content:
-          '你是严谨的学术翻译器。把用户提供的文本翻译为简体中文，不增删信息；保留人名、缩写、公式、代码和无法可靠翻译的术语。只输出译文。'
+          '你是嚴謹的學術翻譯器。把使用者提供的文字翻譯為臺灣正體中文，不增刪資訊；保留人名、縮寫、公式、程式碼和無法可靠翻譯的術語。只輸出譯文。'
       },
       { role: 'user', content: text }
     ]

@@ -5,8 +5,8 @@ import { createE2EWorkspace, launchElectron, seedReaderTask, mockSavedArchiveCat
 import { briefContent } from '../tests/fixtures/paperBrief'
 
 const originalTitle = 'Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators for scientific machine learning'
-const translatedTitle = '基于算子通用逼近定理通过深度算子网络学习非线性算子'
-const translatedAbstract = '本文研究非线性算子的学习方法，使用深度算子网络比较不同方程与训练条件。'
+const translatedTitle = '基於運算元通用逼近定理透過深度運算元網路學習非線性運算元'
+const translatedAbstract = '本文研究非線性運算元的學習方法，使用深度運算元網路比較不同方程與訓練條件。'
 
 test('archive keeps titles separate, category controls fixed, and translated abstract first', async ({}, testInfo) => {
   // Thirteen papers, three viewport captures and a full row wrap on software GL.
@@ -21,7 +21,7 @@ test('archive keeps titles separate, category controls fixed, and translated abs
         taskId: `00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`,
         createdAt: '2026-10-07T12:00:00Z', englishTitle: `${originalTitle} ${index}`, savedCoverFigure: true,
         sourceMarkdown: `# ${originalTitle}\n\n## Abstract\n\nOriginal abstract.\n\n## Method\n\nOperators.`,
-        translatedMarkdown: `# ${translatedTitle}\n\n## 摘要\n\n${translatedAbstract}\n\n## 方法\n\n算子学习。`
+        translatedMarkdown: `# ${translatedTitle}\n\n## 摘要\n\n${translatedAbstract}\n\n## 方法\n\n運算元學習。`
       }))
     }
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
@@ -35,7 +35,7 @@ test('archive keeps titles separate, category controls fixed, and translated abs
       ipcMain.removeHandler('library:categories')
       ipcMain.handle('library:categories', () => ({ ok: true, value: {
         revision: '0123456789abcdef', next: null,
-        categories: [{ id: 'operators', name: '非线性算子学习与科学计算模型方法', named: 'terms', size: 12 }, { id: 'short', name: '图网络', named: 'terms', size: 1 }],
+        categories: [{ id: 'operators', name: '非線性運算元學習與科學計算模型方法', named: 'terms', size: 12 }, { id: 'short', name: '圖網路', named: 'terms', size: 1 }],
         items: documentIds.map((documentId, rank) => ({ documentId, category: rank < 12 ? 0 : 1, rank: rank < 12 ? rank : 0 }))
       } }))
     }, ids)
@@ -49,8 +49,8 @@ test('archive keeps titles separate, category controls fixed, and translated abs
     }, briefContent)
     await mockSavedArchiveCatalog(app, page, { keywords: briefContent.keywords, tldr: briefContent.tldr, translatedTitle })
     await page.locator('[data-edge-dock="top"]').hover()
-    await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
-    const archive = page.getByRole('region', { name: '文库', exact: true })
+    await page.getByRole('navigation', { name: '主導覽' }).getByRole('button', { name: /文庫$/u }).click()
+    const archive = page.getByRole('region', { name: '文庫', exact: true })
     await expect(archive.locator('canvas[data-archive-state="ready"]')).toBeVisible({ timeout: 20_000 })
     await expect(archive.locator('.paper-archive-translated-title')).toHaveText(translatedTitle)
     const geometry: unknown[] = []
@@ -72,7 +72,7 @@ test('archive keeps titles separate, category controls fixed, and translated abs
     await expect(archive.getByText('COLUMN 01 / 02', { exact: true })).toBeVisible()
     await expect(archive.locator('.paper-archive-keywords')).toContainText(briefContent.keywords.join(' '))
     await expect(archive.locator('.paper-archive-meta')).not.toContainText('已完成')
-    await expect(archive.locator('.paper-archive-meta').locator('dt')).toHaveText(['关键词', '总结'])
+    await expect(archive.locator('.paper-archive-meta').locator('dt')).toHaveText(['關鍵詞', '總結'])
     await expect(archive.locator('.paper-archive-summary')).toContainText(briefContent.tldr)
     const positions = () => archive.locator('.paper-archive-shelves').evaluate((element) => {
       const buttons = [...element.querySelectorAll('button')].map((button) => button.getBoundingClientRect().left)
@@ -92,14 +92,14 @@ test('archive keeps titles separate, category controls fixed, and translated abs
       await expect(archive.locator('.paper-archive-title')).toHaveCount(1)
       await expect(archive.locator('.paper-archive-translated-title')).toHaveCount(1)
     }
-    await expect(archive.locator('.paper-archive-keywords')).toContainText('论文阅读')
-    await archive.getByRole('button', { name: '查看档案' }).click()
+    await expect(archive.locator('.paper-archive-keywords')).toContainText('論文閱讀')
+    await archive.getByRole('button', { name: '檢視檔案' }).click()
     await expect(archive).toHaveAttribute('data-detail-phase', 'open', { timeout: 20_000 })
-    await expect(archive.getByRole('tab')).toHaveText([/01摘要/u, /02背景/u, /03结论/u, /04讨论/u])
+    await expect(archive.getByRole('tab')).toHaveText([/01摘要/u, /02背景/u, /03結論/u, /04討論/u])
     await expect(archive.getByRole('tab', { name: /摘要/u })).toHaveAttribute('aria-selected', 'true')
     await expect(archive.getByRole('tabpanel')).toContainText(translatedAbstract)
-    await expect(archive.locator('.paper-archive-fields')).not.toContainText('关键词')
-    await expect(archive.getByRole('tab', { name: /阅读路线|术语/u })).toHaveCount(0)
+    await expect(archive.locator('.paper-archive-fields')).not.toContainText('關鍵詞')
+    await expect(archive.getByRole('tab', { name: /閱讀路線|術語/u })).toHaveCount(0)
     await archive.getByRole('tab', { name: /摘要/u }).focus()
     await page.keyboard.press('ArrowRight')
     await expect(archive.getByRole('tab', { name: /背景/u })).toHaveAttribute('aria-selected', 'true')

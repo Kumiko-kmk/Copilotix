@@ -170,7 +170,7 @@ describe("readerReferenceSections", () => {
       expect([...readerReferenceSections(blocks)]).toEqual([2, 3, 5, 6])
     })
     it('recognizes Chinese headings without shrinking ordinary mentions of references', () => {
-      expect([...readerReferenceSections([block('References are discussed here.'), block('## 參考文獻'), block('文献条目。')])]).toEqual([1, 2])
+      expect([...readerReferenceSections([block('References are discussed here.'), block('## 參考文獻'), block('文獻條目。')])]).toEqual([1, 2])
     })
   })
 })
@@ -219,12 +219,12 @@ describe('readerCitations', () => {
       .toEqual([['Ba et al., 2016', ['a0'], []], ['Li et al., 2021a', ['a1'], []], ['Bender and Koschier (2015)', ['a3'], []]])
     // Ambiguous years, wrong co-authors and unknown names are left alone; particles stay in the marker.
     expect(ids('(Li et al., 2021) Bender and Smith (2015) Smith (2015) De Lorenzis et al. (2020)', blocks)).toEqual([['De Lorenzis et al. (2020)', ['a4'], []]])
-    expect(ids('图网络（Ba等，2016；Li等人，2021b）以及 Bender 和 Koschier（2015）', blocks)).toEqual([['Ba等，2016', ['a0'], []], ['Li等人，2021b', ['a2'], []], ['Bender 和 Koschier（2015）', ['a3'], []]])
+    expect(ids('圖網路（Ba等，2016；Li等人，2021b）以及 Bender 和 Koschier（2015）', blocks)).toEqual([['Ba等，2016', ['a0'], []], ['Li等人，2021b', ['a2'], []], ['Bender 和 Koschier（2015）', ['a3'], []]])
   })
 
   it('pairs an entry with the other view only when its text differs', () => {
     const original = buildCitationIndex([block('## References'), block('[1] Liu WK. Eighty years. 2022.'), block('[2] Peng GC. Multiscale. 2021.'), block('[3] Bishara D. Review. 2023.')])
-    const translated = buildCitationIndex([block('## 参考文献'), block('[1] Liu WK. Eighty years. 2022.'), block('[2] Peng GC。多尺度建模。2021。'), block('[3] Bishara D. Review. 2023.')])
+    const translated = buildCitationIndex([block('## 參考文獻'), block('[1] Liu WK. Eighty years. 2022.'), block('[2] Peng GC。多尺度建模。2021。'), block('[3] Bishara D. Review. 2023.')])
     expect(original.entries.map(entry => counterpartEntry(entry, original, translated)?.text ?? null)).toEqual([null, 'Peng GC。多尺度建模。2021。', null])
   })
 })

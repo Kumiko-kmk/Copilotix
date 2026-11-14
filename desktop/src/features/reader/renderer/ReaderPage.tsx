@@ -57,9 +57,9 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   const retryDocument = React.useCallback(async () => {
     try {
       await window.copilotix.retryDocument(props.documentId)
-      messageApi.success('已重新排队，将保留已完成的内容')
+      messageApi.success('已重新排隊，將保留已完成的內容')
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message : '重试失败，请稍后再试')
+      messageApi.error(error instanceof Error ? error.message : '重試失敗，請稍後再試')
     }
   }, [messageApi, props.documentId])
 
@@ -117,7 +117,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   const addToChat = React.useCallback((selection: ReaderChatSelection) => {
     void addSelection(selection).then((failure) => {
       if (failure) messageApi.warning({ content: failure, key: 'paper-chat-pin' })
-      else messageApi.success({ content: '已加入 Chat 选区', key: 'paper-chat-pin', duration: 1.5 })
+      else messageApi.success({ content: '已加入 Chat 選區', key: 'paper-chat-pin', duration: 1.5 })
     })
   }, [addSelection, messageApi])
   // Figures follow the same rule; a text-only model blocks them with a visible reason.
@@ -131,7 +131,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       const preview = group.assetSources.map(asset => 'images/' + (asset.replace(/\\/gu, '/').split('/').pop() ?? '')).find(path => paperChatFigureImagePathSchema.safeParse(path).success)
       void addFigure({ figureId: group.id, label, pageIndex: group.pageIndex, ...(preview ? { preview } : {}) }).then((failure) => {
         if (failure) messageApi.warning({ content: failure, key: 'paper-chat-pin' })
-        else messageApi.success({ content: label ? `已将 ${label} 加入 Chat` : '已将图片加入 Chat', key: 'paper-chat-pin', duration: 1.5 })
+        else messageApi.success({ content: label ? `已將 ${label} 加入 Chat` : '已將圖片加入 Chat', key: 'paper-chat-pin', duration: 1.5 })
       })
     }
   }), [addFigure, messageApi, routing.imageBlocked])
@@ -146,7 +146,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
     queryClient.setQueryData<DocumentDetails>(['document', props.documentId], (current) => current ? { ...current, markdownEdits: update(current.markdownEdits ?? null) } : current)
   }, [props.documentId, queryClient])
   const applyEdit = React.useCallback((target: MarkdownEditRequest['target'], action: MarkdownEditRequest['action'], text?: string, shownText?: string): Promise<void> => {
-    if (editsUnreadable) return Promise.reject(new Error('段落修改文件无法读取，请检查文献目录中的 edits 文件夹'))
+    if (editsUnreadable) return Promise.reject(new Error('段落修改檔案無法讀取，請檢查文獻目錄中的 edits 資料夾'))
     const request = { target, action, ...(text !== undefined ? { markdown: text } : {}) }
     setEdits((current) => optimisticEdits(current, request, shownText ?? text ?? ''))
     pendingEditsRef.current++
@@ -168,7 +168,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       ? { kind: 'content', index: block.contentIndex, mappingIds: block.mappingIds }
       : { kind: 'supplemental', mappingId: (block.annotationKey ?? '').replace(/^supplemental:/u, '') }
     const report = async (action: () => Promise<void>): Promise<void> => {
-      try { await action() } catch (error) { messageApi.error({ content: error instanceof Error ? error.message : '段落修改失败', key: 'reader-edit' }) }
+      try { await action() } catch (error) { messageApi.error({ content: error instanceof Error ? error.message : '段落修改失敗', key: 'reader-edit' }) }
     }
     const make = (view: 'original' | 'translated'): ReaderBlockEditing => ({
       view,
@@ -181,7 +181,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   const blockMove = React.useMemo<ReaderBlockMove>(() => {
     const count = readerBase.content.length
     const save = (sequence: number[], action: 'reorder' | 'reset-order'): void => {
-      void applyEdit({ kind: 'order', sequence }, action).catch(error => messageApi.error({ key: 'reader-edit', content: error instanceof Error ? error.message : '顺序保存失败' }))
+      void applyEdit({ kind: 'order', sequence }, action).catch(error => messageApi.error({ key: 'reader-edit', content: error instanceof Error ? error.message : '順序儲存失敗' }))
     }
     return {
       ordered: Boolean(markdownEdits?.order),
@@ -222,23 +222,23 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
         stale: staleIndex(block.contentIndex), ...(block.fallbackProvider ? { fallback: TRANSLATION_PROVIDER_LABELS[block.fallbackProvider] } : {}) }
     }
     const report = async (action: () => Promise<void>): Promise<void> => {
-      try { await action() } catch (error) { messageApi.error({ content: error instanceof Error ? error.message : '段落操作失败', key: 'reader-edit' }) }
+      try { await action() } catch (error) { messageApi.error({ content: error instanceof Error ? error.message : '段落操作失敗', key: 'reader-edit' }) }
     }
     const contentTarget = (block: ReaderBlock): MarkdownEditRequest['target'] => ({ kind: 'content', index: block.contentIndex!, mappingIds: block.mappingIds })
     const items = (subject: Subject): BlockMenuItem[] => {
       const result: BlockMenuItem[] = []
-      if (subject.stale) result.push({ key: 'note-stale', label: '译文待更新：原文已修改', note: true })
-      if (subject.fallback) result.push({ key: 'note-fallback', label: `此段由 ${subject.fallback} 回退翻译`, note: true })
+      if (subject.stale) result.push({ key: 'note-stale', label: '譯文待更新：原文已修改', note: true })
+      if (subject.fallback) result.push({ key: 'note-fallback', label: `此段由 ${subject.fallback} 回退翻譯`, note: true })
       const figure = subject.figures[0]
       if (figure) {
-        result.push({ key: 'figure-chat', label: figureChat.blocked ? `加入问答（${figureChat.blocked}）` : '图片加入问答', disabled: Boolean(figureChat.blocked) })
-        if (figure.display && (figure.assetSources.length || figure.display.choice)) result.push({ key: 'figure-display', label: figure.status === 'complete' ? '以解析子图显示' : '以 PDF 原图显示' })
-        result.push({ key: 'figure-pdf', label: '在 PDF 中查看' })
+        result.push({ key: 'figure-chat', label: figureChat.blocked ? `加入問答（${figureChat.blocked}）` : '圖片加入問答', disabled: Boolean(figureChat.blocked) })
+        if (figure.display && (figure.assetSources.length || figure.display.choice)) result.push({ key: 'figure-display', label: figure.status === 'complete' ? '以解析子圖顯示' : '以 PDF 原圖顯示' })
+        result.push({ key: 'figure-pdf', label: '在 PDF 中檢視' })
       }
-      if (subject.contents.length && translationAvailable) result.push({ key: 'retranslate', label: '重新翻译此段' })
-      if (subject.contents.length && !figure) result.push({ key: 'chat', label: '整段加入对话' })
-      if (subject.deleted.length || (subject.furnitureId && furnitureDeleted(subject.furnitureId))) result.push({ key: 'restore', label: subject.contents.length ? '恢复相邻的已删除段落' : '恢复此段' })
-      if (subject.contents.length || (subject.furnitureId && !furnitureDeleted(subject.furnitureId))) result.push({ key: 'delete', label: figure ? '删除此图' : '删除此段', danger: true })
+      if (subject.contents.length && translationAvailable) result.push({ key: 'retranslate', label: '重新翻譯此段' })
+      if (subject.contents.length && !figure) result.push({ key: 'chat', label: '整段加入對話' })
+      if (subject.deleted.length || (subject.furnitureId && furnitureDeleted(subject.furnitureId))) result.push({ key: 'restore', label: subject.contents.length ? '恢復相鄰的已刪除段落' : '恢復此段' })
+      if (subject.contents.length || (subject.furnitureId && !furnitureDeleted(subject.furnitureId))) result.push({ key: 'delete', label: figure ? '刪除此圖' : '刪除此段', danger: true })
       return result
     }
     const select = (key: string, subject: Subject): void => {
@@ -246,13 +246,13 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       if (key === 'retranslate' && first) void report(async () => {
         for (const block of subject.contents) await applyEdit(contentTarget(block), 'retranslate')
         await window.copilotix.retranslateEditedDocument(props.documentId)
-        messageApi.success({ key: 'reader-edit', content: '已开始重新翻译此段，其他段落沿用已有译文' })
+        messageApi.success({ key: 'reader-edit', content: '已開始重新翻譯此段，其他段落沿用已有譯文' })
         await queryClient.invalidateQueries({ queryKey: ['document', props.documentId] })
       })
       else if (key === 'chat' && first) {
         // The whole paragraph as an original-text selection, validated like a dragged one.
         const text = paperSelectionText(first.source ?? first.markdown).trim().slice(0, 16_000)
-        if (!text) { messageApi.warning({ key: 'paper-chat-pin', content: '此段没有可加入对话的文字' }); return }
+        if (!text) { messageApi.warning({ key: 'paper-chat-pin', content: '此段沒有可加入對話的文字' }); return }
         const quote = text.slice(0, 4_096).replace(/[\uD800-\uDBFF]$/u, '')
         addToChat({ taskId: props.documentId, view: 'original', text, fragments: [{ blockKey: first.annotationKey!, startOffset: 0, endOffset: quote.length, quote, mappingIds: [...new Set(first.mappingIds)], ...(first.pageIndex !== undefined ? { pageIndex: first.pageIndex } : {}) }] })
       } else if (key === 'figure-chat' && subject.figures[0]) figureChat.onAdd(subject.figures[0])
@@ -260,7 +260,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
         const group = subject.figures[0]
         // Choosing what the figure shows by default clears the stored choice.
         const next = group.status === 'complete' ? 'parsed' : 'pdf'
-        void setFigureDisplayChoice(props.documentId, group.id, next === automaticFigureDisplay(group.display!.automatic) ? null : next).catch(() => messageApi.error({ key: 'reader-edit', content: '显示方式保存失败' }))
+        void setFigureDisplayChoice(props.documentId, group.id, next === automaticFigureDisplay(group.display!.automatic) ? null : next).catch(() => messageApi.error({ key: 'reader-edit', content: '顯示方式儲存失敗' }))
       } else if (key === 'figure-pdf' && subject.figures[0]) {
         const group = subject.figures[0]
         const mappingId = group.captionMappingId || group.mappingIds[0]
@@ -271,7 +271,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
         void report(async () => {
           const saved = Promise.all(targets.map(target => applyEdit(target, 'delete', undefined, shown)))
           const undo = (): void => { messageApi.destroy('reader-edit'); void report(async () => { await Promise.all(targets.map(target => applyEdit(target, 'restore'))) }) }
-          messageApi.success({ key: 'reader-edit', duration: 6, content: <span>{subject.figures.length ? '已删除此图' : '已删除此段'}，原文与译文均不再显示。<a onClick={undo}>撤销</a></span> })
+          messageApi.success({ key: 'reader-edit', duration: 6, content: <span>{subject.figures.length ? '已刪除此圖' : '已刪除此段'}，原文與譯文均不再顯示。<a onClick={undo}>撤銷</a></span> })
           await saved
         })
       } else if (key === 'restore') {
@@ -306,7 +306,7 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
   ): Promise<void> => {
     const snapshot = snapshots[view]
     if (!snapshot) {
-      messageApi.error('当前文档尚无可标注的产物')
+      messageApi.error('當前文件尚無可標註的產物')
       return
     }
     const queryKey = ['annotations', props.documentId, view]
@@ -331,17 +331,17 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
           queryClient.setQueryData(queryKey, replayError instanceof IpcClientError && replayError.code === 'ANNOTATION_CONFLICT'
             ? await reloadAnnotationSnapshot(props.documentId, view, queryClient)
             : snapshot)
-          messageApi.error(replayError instanceof Error ? replayError.message : '标注保存失败')
+          messageApi.error(replayError instanceof Error ? replayError.message : '標註儲存失敗')
           return
         }
       }
       queryClient.setQueryData(queryKey, snapshot)
-      messageApi.error(error instanceof Error ? error.message : '标注保存失败')
+      messageApi.error(error instanceof Error ? error.message : '標註儲存失敗')
     }
   }, [messageApi, props.documentId, queryClient, snapshots])
 
-  if (documentQuery.isError) return <div className="reader-loading">文档加载失败：{documentQuery.error.message}</div>
-  if (documentQuery.isPending || !document) return <div className="reader-loading"><AppleLoader label="正在打开论文" /></div>
+  if (documentQuery.isError) return <div className="reader-loading">文件載入失敗：{documentQuery.error.message}</div>
+  if (documentQuery.isPending || !document) return <div className="reader-loading"><AppleLoader label="正在開啟論文" /></div>
 
   const translatedReady = Boolean(document.translatedMarkdown)
   return (
@@ -350,13 +350,13 @@ export default function ReaderPage(props: { documentId: string; enterFromLibrary
       <header className="reader-header">
         <div className="reader-header-heading">{props.showBack === false ? null : <Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack} aria-label="返回" />}<Typography.Text strong ellipsis className="reader-title">{document.summary.displayName.replace(/\.pdf\s*$/iu, '')}</Typography.Text></div>
         <Space className="reader-header-actions">
-          <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="打开输出目录" />
-          <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存当前 Markdown' }] : []), { key: 'zip', label: '另存完整结果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
+          <Button type="text" icon={<FolderOpenOutlined />} onClick={() => void window.copilotix.openDocumentOutput(document.summary.id)} aria-label="開啟輸出目錄" />
+          <Dropdown menu={{ items: [...(focusedView === 'original' || focusedView === 'translated' ? [{ key: 'current', label: '另存當前 Markdown' }] : []), { key: 'zip', label: '另存完整結果 ZIP' }], onClick: ({ key }) => void saveDocument(document.summary.id, key, focusedView, messageApi) }}>
             <Button type="text" icon={<DownloadOutlined />} aria-label="另存" />
           </Dropdown>
           <ZoteroExportButton documentId={document.summary.id} messageApi={messageApi} />
           <DocumentLifecycleActions summary={document.summary} staleTranslation={document.translatedBlocks?.some((block) => block.sourceChanged)} messageApi={messageApi} onDeleted={props.onBack} />
-          {props.onClose ? <Button type="text" icon={<CloseOutlined />} onClick={props.onClose} aria-label="关闭分屏" /> : null}
+          {props.onClose ? <Button type="text" icon={<CloseOutlined />} onClick={props.onClose} aria-label="關閉分屏" /> : null}
         </Space>
       </header>
       <ReaderWorkspace
@@ -516,5 +516,5 @@ async function saveDocument(
     documentId,
     kind: key === 'zip' ? 'result-zip' : view === 'translated' ? 'translated-markdown' : 'original-markdown'
   })
-  if (result.saved) messageApi.success(key === 'zip' ? '已保存' : '已保存；含图片时，请将文档与旁边的图片文件夹一同传递')
+  if (result.saved) messageApi.success(key === 'zip' ? '已儲存' : '已儲存；含圖片時，請將文件與旁邊的圖片資料夾一同傳遞')
 }

@@ -133,7 +133,7 @@ describe('Codex generation lifecycle', () => {
     expect(state.turns).toHaveLength(1)
     sharedModelRuntime.clear()
     state.errorInfo = 'usageLimitExceeded'
-    await expect(f.runtime.generate(f.input)).rejects.toThrow('额度'); expect(state.turns).toHaveLength(2)
+    await expect(f.runtime.generate(f.input)).rejects.toThrow('額度'); expect(state.turns).toHaveLength(2)
     sharedModelRuntime.clear()
     state.scenario = 'partial-fail'; state.errorInfo = { responseStreamDisconnected: { httpStatusCode: null } }
     await expect(f.runtime.generate(f.input)).rejects.toMatchObject({ code: 'MODEL_CONNECTION_FAILED', partialOutput: true }); expect(state.turns).toHaveLength(3)
@@ -156,7 +156,7 @@ describe('Codex generation lifecycle', () => {
   })
   it('rejects a model missing from the current catalog before starting a turn', async () => {
     const f = fixture()
-    await expect(f.runtime.generate({ ...f.input, model: 'removed-model' })).rejects.toThrow('重新选择')
+    await expect(f.runtime.generate({ ...f.input, model: 'removed-model' })).rejects.toThrow('重新選擇')
     expect(state.starts).toEqual([]); f.runtime.close()
   })
 })

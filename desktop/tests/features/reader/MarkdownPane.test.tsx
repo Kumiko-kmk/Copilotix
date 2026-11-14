@@ -92,9 +92,9 @@ describe('MarkdownPane', () => {
     fireEvent.click(view.getByText('Editable paragraph'))
     fireEvent.click(view.getByText('Editable paragraph'))
     await new Promise(resolve => setTimeout(resolve, 300))
-    expect(view.queryByRole('textbox', { name: '编辑原文段落' })).toBeNull()
+    expect(view.queryByRole('textbox', { name: '編輯原文段落' })).toBeNull()
     fireEvent.doubleClick(view.getByText('Editable paragraph'))
-    const editor = view.getByRole('textbox', { name: '编辑原文段落' })
+    const editor = view.getByRole('textbox', { name: '編輯原文段落' })
     fireEvent.change(editor, { target: { value: 'Edited paragraph' } })
     fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ contentIndex: 0 }), 'Edited paragraph'))
@@ -225,9 +225,9 @@ describe('MarkdownPane', () => {
     fireEvent.error(firstImage)
 
     await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('error'))
-    expect(view.getByText('Markdown 无法完整显示')).toBeTruthy()
+    expect(view.getByText('Markdown 無法完整顯示')).toBeTruthy()
 
-    fireEvent.click(view.getByRole('button', { name: '重新加载' }))
+    fireEvent.click(view.getByRole('button', { name: '重新載入' }))
     const secondImage = view.container.querySelector('img')!
     expect(secondImage).not.toBe(firstImage)
     fireEvent.load(secondImage)
@@ -244,7 +244,7 @@ describe('MarkdownPane', () => {
     })
 
     expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('error')
-    expect(view.getByText('Markdown 资源加载超过 30 秒，请重新加载。')).toBeTruthy()
+    expect(view.getByText('Markdown 資源載入超過 30 秒，請重新載入。')).toBeTruthy()
   })
 
   it('renders academic HTML and KaTeX while removing unsafe markup', async () => {
@@ -283,7 +283,7 @@ describe('MarkdownPane', () => {
     const blocks = [
       { ...block('chart-a', '![](images/a.jpg)  \n(a)'), annotationKey: 'content:1' },
       { ...block('chart-b', '![](images/b.jpg)  \n(b)  \noriginal legend'), annotationKey: 'content:2', order: 1 },
-      { ...block('caption', '图 4：模型比较。'), annotationKey: 'content:3', order: 2 }
+      { ...block('caption', '圖 4：模型比較。'), annotationKey: 'content:3', order: 2 }
     ]
     const group: ReaderFigureGroup = {
       id: 'figure-4',
@@ -305,7 +305,7 @@ describe('MarkdownPane', () => {
       ownerBlockIndex: 0,
       captionBlockIndex: 2,
       memberBlockIndexes: [0, 1, 2],
-      captionMarkdown: '图 4：模型比较。'
+      captionMarkdown: '圖 4：模型比較。'
     }
     // The crop is ready on first render, which unmounts the source images the pane still waits on;
     // they are cached local assets here, so they count as decoded without a load event.
@@ -331,7 +331,7 @@ describe('MarkdownPane', () => {
     const snapshot = view.container.querySelector('.reader-figure-snapshot')!
     const caption = view.container.querySelector('.reader-figure-caption')!
     expect(view.container.querySelectorAll('.reader-figure-snapshot')).toHaveLength(1)
-    expect(caption.textContent).toBe('图 4：模型比较。')
+    expect(caption.textContent).toBe('圖 4：模型比較。')
     expect(snapshot.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(view.container.querySelectorAll('.markdown-body img')).toHaveLength(0)
   })
@@ -340,7 +340,7 @@ describe('MarkdownPane', () => {
     figureMock.initial = 'pending'
     const blocks = [
       { ...block('a', 'Before text.\n\n![](images/a.jpg)  \n(a)\n\n![Other](images/other.jpg)\n\nAfter text.'), mappingIds: ['a', 'prose', 'other'], annotationKey: 'content:0' },
-      { ...block('caption', '图 1：第一段。\n\n完整第二段。'), annotationKey: 'content:1' }
+      { ...block('caption', '圖 1：第一段。\n\n完整第二段。'), annotationKey: 'content:1' }
     ]
     const group: ReaderFigureGroup = {
       id: 'mixed', pageIndex: 0, cropBox: [10, 20, 500, 300], pageSize: [612, 792],
@@ -348,10 +348,10 @@ describe('MarkdownPane', () => {
       captionBlockPosition: '0-caption', status: 'complete', reason: 'fixture',
       members: [{ mappingId: 'a', kind: 'supporting', bbox: [10, 20, 20, 30], sourceText: '(a)' }],
       fallbackLegendText: '', ownerBlockIndex: 0, captionBlockIndex: 1, memberBlockIndexes: [0, 1],
-      captionMarkdown: '图 1：第一段。\n\n完整第二段。'
+      captionMarkdown: '圖 1：第一段。\n\n完整第二段。'
     }
     const menuSelect = vi.fn(), select = vi.fn()
-    const blockMenu = { items: () => [{ key: 'figure-pdf', label: '在 PDF 中查看' }], onSelect: menuSelect }
+    const blockMenu = { items: () => [{ key: 'figure-pdf', label: '在 PDF 中檢視' }], onSelect: menuSelect }
     const view = render(<MarkdownPane active blocks={blocks} figureGroups={[group]} pdfUrl="copilotix-asset://task/original.pdf"
       assetBaseUrl="copilotix-asset://task/" taskId="task" view="original" annotations={[]} highlightColor="yellow"
       onHighlightColorChange={() => undefined} onReplaceAnnotations={async () => undefined} selection={null}
@@ -371,7 +371,7 @@ describe('MarkdownPane', () => {
     // No standing buttons under the figure; its actions are in the right-click menu.
     expect(view.container.querySelector('.reader-figure-action')).toBeNull()
     fireEvent.contextMenu(view.container.querySelector('[data-annotation-block-key="content:0"]')!.closest('.markdown-block')!)
-    fireEvent.click(view.getByRole('menuitem', { name: '在 PDF 中查看' }))
+    fireEvent.click(view.getByRole('menuitem', { name: '在 PDF 中檢視' }))
     expect(menuSelect).toHaveBeenCalledWith('figure-pdf', expect.objectContaining({ annotationKey: 'content:0' }), [group])
     expect(view.queryByRole('menu')).toBeNull()
     expect(select).not.toHaveBeenCalled()
@@ -482,8 +482,8 @@ describe('MarkdownPane', () => {
     expect(select).not.toHaveBeenCalled()
     // Only resetting an existing order remains in the menu.
     fireEvent.contextMenu(view.getByText('Second'))
-    expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['恢复原始顺序'])
-    fireEvent.click(view.getByRole('menuitem', { name: '恢复原始顺序' }))
+    expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['恢復原始順序'])
+    fireEvent.click(view.getByRole('menuitem', { name: '恢復原始順序' }))
     expect(reset).toHaveBeenCalledOnce()
     expect(move).toHaveBeenCalledTimes(1)
   })
@@ -533,7 +533,7 @@ describe('MarkdownPane', () => {
     const onAddToChat = vi.fn()
     const annotationBlocks: ReaderBlock[] = [
       { ...block('first', 'Alpha'), annotationKey: 'content:0' },
-      { role: 'page-divider', markdown: '', text: '第 1 页', mappingIds: [], pageIndex: 0, order: 0.5 },
+      { role: 'page-divider', markdown: '', text: '第 1 頁', mappingIds: [], pageIndex: 0, order: 0.5 },
       { ...block('second', 'Bravo'), annotationKey: 'content:1', order: 1 }
     ]
     function Harness(): React.JSX.Element {
@@ -560,15 +560,15 @@ describe('MarkdownPane', () => {
     selectBetween(view.getByText('Alpha').firstChild!, 1, view.getByText('Bravo').firstChild!, 3)
     document.dispatchEvent(new Event('selectionchange'))
 
-    const toolbar = await view.findByRole('toolbar', { name: '文本标注' })
+    const toolbar = await view.findByRole('toolbar', { name: '文字標註' })
     expect(toolbar.querySelectorAll(':scope > button')).toHaveLength(3) // no note tool without onSaveNote
-    fireEvent.contextMenu(view.getByRole('button', { name: '荧光笔高亮' }))
+    fireEvent.contextMenu(view.getByRole('button', { name: '熒光筆高亮' }))
     expect(view.getAllByRole('option')).toHaveLength(5)
-    fireEvent.click(view.getByRole('option', { name: '选择蓝色' }))
+    fireEvent.click(view.getByRole('option', { name: '選擇藍色' }))
     expect(onReplaceAnnotations).not.toHaveBeenCalled()
-    expect(view.getByRole('button', { name: '荧光笔高亮' }).querySelector<HTMLElement>('.anticon')?.style.color).toBe('rgb(100, 168, 232)')
+    expect(view.getByRole('button', { name: '熒光筆高亮' }).querySelector<HTMLElement>('.anticon')?.style.color).toBe('rgb(100, 168, 232)')
 
-    fireEvent.click(view.getByRole('button', { name: '荧光笔高亮' }))
+    fireEvent.click(view.getByRole('button', { name: '熒光筆高亮' }))
     await waitFor(() => expect(onReplaceAnnotations).toHaveBeenCalledTimes(1))
     const saved = onReplaceAnnotations.mock.calls[0]![0]
     expect(saved.map((annotation: { blockKey: string; quote: string; color: string }) =>
@@ -579,7 +579,7 @@ describe('MarkdownPane', () => {
 
     selectBetween(view.getByText('Alpha').firstChild!, 0, view.getByText('Alpha').firstChild!, 5)
     document.dispatchEvent(new Event('selectionchange'))
-    fireEvent.click(await view.findByRole('button', { name: '添加到对话' }))
+    fireEvent.click(await view.findByRole('button', { name: '新增到對話' }))
     expect(onAddToChat).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task',
       view: 'original',
@@ -619,28 +619,28 @@ describe('MarkdownPane', () => {
     await waitFor(() => expect(view.container.querySelector('.markdown-scroll')?.getAttribute('data-render-state')).toBe('ready'))
     selectBetween(view.getByText('Alpha beta').firstChild!, 6, view.getByText('Alpha beta').firstChild!, 10)
     document.dispatchEvent(new Event('selectionchange'))
-    fireEvent.click(await view.findByRole('button', { name: '写笔记' }))
+    fireEvent.click(await view.findByRole('button', { name: '寫筆記' }))
 
-    const card = await view.findByRole('dialog', { name: '新建笔记' })
+    const card = await view.findByRole('dialog', { name: '新建筆記' })
     expect(card.textContent).toContain('beta')
-    fireEvent.change(view.getByRole('textbox', { name: '笔记内容' }), { target: { value: '  第一条笔记  ' } })
-    fireEvent.click(view.getByRole('button', { name: '保存' }))
+    fireEvent.change(view.getByRole('textbox', { name: '筆記內容' }), { target: { value: '  第一條筆記  ' } })
+    fireEvent.click(view.getByRole('button', { name: '儲存' }))
     await waitFor(() => expect(view.queryByRole('dialog')).toBeNull())
-    expect(saved[0]).toMatchObject({ view: 'translated', body: '第一条笔记', anchors: [{ blockKey: 'content:0', startOffset: 6, endOffset: 10, quote: 'beta', prefix: 'Alpha ', suffix: '' }] })
+    expect(saved[0]).toMatchObject({ view: 'translated', body: '第一條筆記', anchors: [{ blockKey: 'content:0', startOffset: 6, endOffset: 10, quote: 'beta', prefix: 'Alpha ', suffix: '' }] })
 
-    fireEvent.click(await view.findByRole('button', { name: '查看笔记' }))
-    const input = await view.findByRole('textbox', { name: '笔记内容' })
-    expect((input as HTMLTextAreaElement).value).toBe('第一条笔记')
-    fireEvent.change(input, { target: { value: '改过的笔记' } })
+    fireEvent.click(await view.findByRole('button', { name: '檢視筆記' }))
+    const input = await view.findByRole('textbox', { name: '筆記內容' })
+    expect((input as HTMLTextAreaElement).value).toBe('第一條筆記')
+    fireEvent.change(input, { target: { value: '改過的筆記' } })
     fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
     await waitFor(() => expect(saved).toHaveLength(2))
-    expect(saved[1]).toMatchObject({ id: saved[0]!.id, body: '改过的笔记', createdAt: saved[0]!.createdAt })
+    expect(saved[1]).toMatchObject({ id: saved[0]!.id, body: '改過的筆記', createdAt: saved[0]!.createdAt })
 
-    fireEvent.click(await view.findByRole('button', { name: '查看笔记' }))
-    fireEvent.click(await view.findByRole('button', { name: '删除' }))
-    fireEvent.click(view.getByRole('button', { name: '确认删除' }))
+    fireEvent.click(await view.findByRole('button', { name: '檢視筆記' }))
+    fireEvent.click(await view.findByRole('button', { name: '刪除' }))
+    fireEvent.click(view.getByRole('button', { name: '確認刪除' }))
     await waitFor(() => expect(deleted).toEqual([saved[0]!.id]))
-    await waitFor(() => expect(view.queryByRole('button', { name: '查看笔记' })).toBeNull())
+    await waitFor(() => expect(view.queryByRole('button', { name: '檢視筆記' })).toBeNull())
   })
 })
 

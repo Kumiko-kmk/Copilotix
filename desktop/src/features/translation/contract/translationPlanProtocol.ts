@@ -37,7 +37,7 @@ export interface TablePayload {
 
 export interface TableTranslationRequest {
   protocol: typeof TABLE_TRANSLATION_PROTOCOL
-  targetLanguage: 'zh-CN'
+  targetLanguage: 'zh-TW'
   tables: TablePayload[]
 }
 
@@ -53,7 +53,7 @@ export interface TableTranslationResponse {
 
 export interface PlainTranslationRequest {
   protocol: 'copilotix-translation-plain-v1'
-  targetLanguage: 'zh-CN'
+  targetLanguage: 'zh-TW'
   unitId: string
   sourceHash: string
   segments: TableTextSegment[]
@@ -145,7 +145,7 @@ const tableSchema = z.object({
 
 export const tableTranslationRequestSchema = z.object({
   protocol: z.literal(TABLE_TRANSLATION_PROTOCOL),
-  targetLanguage: z.literal('zh-CN'),
+  targetLanguage: z.literal('zh-TW'),
   tables: z.array(tableSchema).max(32)
 }).strict()
 
@@ -156,7 +156,7 @@ export const tableTranslationResponseSchema = z.object({
 
 export const plainTranslationRequestSchema = z.object({
   protocol: z.literal('copilotix-translation-plain-v1'),
-  targetLanguage: z.literal('zh-CN'),
+  targetLanguage: z.literal('zh-TW'),
   unitId: id,
   sourceHash: hash,
   segments: z.array(segmentSchema).max(256)
@@ -239,7 +239,7 @@ export function flattenSegments(request: TableTranslationRequest): TableTextSegm
 export function parseTableTranslationResponse(raw: string, request: TableTranslationRequest): TableTranslationResponse {
   const text = raw.trim().replace(/^```(?:json)?\s*/iu, '').replace(/\s*```$/u, '').trim()
   let parsed: unknown
-  try { parsed = JSON.parse(text) as unknown } catch { throw new Error('表格翻译源返回的内容不是有效 JSON') }
+  try { parsed = JSON.parse(text) as unknown } catch { throw new Error('表格翻譯源返回的內容不是有效 JSON') }
   return validateTableTranslationResponse(parsed, request)
 }
 
@@ -249,14 +249,14 @@ export function validateTableTranslationResponse(value: unknown, request: TableT
   const expected = new Set(expectedIds)
   const actual = new Map<string, string>()
   for (const segment of parsed.translations) {
-    if (!expected.has(segment.id)) throw new Error(`表格翻译响应包含未知 segment：${segment.id}`)
-    if (actual.has(segment.id)) throw new Error(`表格翻译响应包含重复 segment：${segment.id}`)
-    if (!segment.text.trim()) throw new Error(`表格翻译响应中的 segment 无有效译文：${segment.id}`)
+    if (!expected.has(segment.id)) throw new Error(`表格翻譯響應包含未知 segment：${segment.id}`)
+    if (actual.has(segment.id)) throw new Error(`表格翻譯響應包含重複 segment：${segment.id}`)
+    if (!segment.text.trim()) throw new Error(`表格翻譯響應中的 segment 無有效譯文：${segment.id}`)
     actual.set(segment.id, segment.text)
   }
   const missing = expectedIds.find((segmentId) => !actual.has(segmentId))
-  if (missing) throw new Error(`表格翻译响应缺少 segment：${missing}`)
-  if (parsed.translations.length !== expectedIds.length) throw new Error('表格翻译响应数量不匹配')
+  if (missing) throw new Error(`表格翻譯響應缺少 segment：${missing}`)
+  if (parsed.translations.length !== expectedIds.length) throw new Error('表格翻譯響應數量不匹配')
   return { protocol: TABLE_TRANSLATION_PROTOCOL, translations: expectedIds.map((segmentId) => ({ id: segmentId, text: actual.get(segmentId)! })) }
 }
 

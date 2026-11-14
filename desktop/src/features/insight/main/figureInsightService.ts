@@ -43,9 +43,9 @@ export class FigureInsightService {
 
   async coverSource(documentId: string): Promise<ArchiveCoverSource> {
     archiveCoverSourceRequestSchema.parse({ documentId })
-    if (!this.deps.coverSource) return Promise.reject(new Error('本地封面来源暂不可用。'))
+    if (!this.deps.coverSource) return Promise.reject(new Error('本地封面來源暫不可用。'))
     try { return await this.deps.coverSource(documentId) }
-    catch { throw new Error('无法读取本地封面来源，请检查论文图像清单后重试。') }
+    catch { throw new Error('無法讀取本地封面來源，請檢查論文影象清單後重試。') }
   }
 
   private emit(request: FigureInsightRequest, state: FigureInsightState): void {
@@ -63,14 +63,14 @@ export class FigureInsightService {
     try {
       const stored = await this.deps.get(request)
       return stored.status === 'ready' ? stored : this.failures.get(identity(request)) ?? stored
-    } catch { return { status: 'failed', error: '无法读取图片解读，请检查来源后重试。' } }
+    } catch { return { status: 'failed', error: '無法讀取圖片解讀，請檢查來源後重試。' } }
   }
 
   async generate(raw: FigureInsightRequest): Promise<void> {
     const request = figureInsightRequestSchema.parse(raw), key = identity(request)
     if (this.runs.has(key)) return
-    if (this.destroyed || this.paused || this.blocked.has(request.documentId) || !this.deps.canStart()) throw new Error('文库正在维护或退出，请稍后重试。')
-    if (this.runs.size >= 100) throw new Error('待生成图片过多，请稍后重试。')
+    if (this.destroyed || this.paused || this.blocked.has(request.documentId) || !this.deps.canStart()) throw new Error('文庫正在維護或退出，請稍後重試。')
+    if (this.runs.size >= 100) throw new Error('待生成圖片過多，請稍後重試。')
     let finish!: () => void
     const run: Run = { request, controller: new AbortController(), done: new Promise<void>(resolve => { finish = resolve }), finish: () => finish() }
     this.runs.set(key, run); this.queue.push(run)
@@ -89,9 +89,9 @@ export class FigureInsightService {
 
   private async authorize() {
     const settings = await this.deps.settings(), provider = resolvePaperChatProvider(settings)
-    if (!provider) throw new FigureAuthorizationError('请启用 Qwen、DeepSeek 或 Codex 服务。')
+    if (!provider) throw new FigureAuthorizationError('請啟用 Qwen、DeepSeek 或 Codex 服務。')
     const keys = provider === 'codex' ? [] : await this.deps.keys(provider)
-    if (provider !== 'codex' && (!keys.length || settings.credentials[provider].state !== 'valid')) throw new FigureAuthorizationError('请先保存并验证模型 API Key。')
+    if (provider !== 'codex' && (!keys.length || settings.credentials[provider].state !== 'valid')) throw new FigureAuthorizationError('請先儲存並驗證模型 API Key。')
     const name = resolveFigureInsightModel(provider, provider === 'codex' ? settings.codex?.chatModel ?? 'default' : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
     const model = figureInsightModelSchema.parse({ provider, name })
     return { settings, provider, keys, model }
@@ -104,7 +104,7 @@ export class FigureInsightService {
       signal.throwIfAborted()
       // Authorization is checked before touching/uploading paper context.
       try { await this.authorize() } catch (error) {
-        this.emit(request, { status: 'unavailable', reason: error instanceof FigureAuthorizationError ? error.message : '模型服务不可用。' }); return
+        this.emit(request, { status: 'unavailable', reason: error instanceof FigureAuthorizationError ? error.message : '模型服務不可用。' }); return
       }
       const descriptor = await abortable(this.deps.descriptor(request, signal), signal)
       if (descriptor.documentId !== request.documentId || descriptor.figureId !== request.figureId || descriptor.figure.figureId !== request.figureId) throw new Error('scope mismatch')
@@ -139,7 +139,7 @@ export class FigureInsightService {
         if (!content.success) {
           if (attempt === 0) {
             messages.push({ role: 'assistant', content: answer.slice(0, 2048) },
-              { role: 'user', content: `返回未通过校验：${JSON.stringify(content.error.issues.map(issue => ({ field: issue.path.join('.'), error: issue.message })))}。请只返回displayWeight（0–100整数）、overview（目标100–160字符、硬上限240）、takeaway（目标50–90字符、硬上限160）。英文、空格及标点也逐个计数，改用简短中文，不罗列英文标签。纯公式图两个文字字段为空且评分0。非零评分文字不能为空。不要添加字段或Markdown围栏。` })
+              { role: 'user', content: `返回未透過校驗：${JSON.stringify(content.error.issues.map(issue => ({ field: issue.path.join('.'), error: issue.message })))}。請只返回displayWeight（0–100整數）、overview（目標100–160字元、硬上限240）、takeaway（目標50–90字元、硬上限160）。英文、空格及標點也逐個計數，改用簡短中文，不羅列英文標籤。純公式圖兩個文字欄位為空且評分0。非零評分文字不能為空。不要新增欄位或Markdown圍欄。` })
             continue
           }
           throw new Error('invalid output')
@@ -149,7 +149,7 @@ export class FigureInsightService {
         this.emit(request, await this.deps.get(request)); return
       }
     } catch {
-      this.emit(request, { status: 'failed', error: signal.aborted ? '图片解读已取消或超时，可重新生成。' : '图片解读失败，请检查整图来源与模型服务后重试。' })
+      this.emit(request, { status: 'failed', error: signal.aborted ? '圖片解讀已取消或超時，可重新生成。' : '圖片解讀失敗，請檢查整圖來源與模型服務後重試。' })
     } finally { clearTimeout(timer) }
   }
 
@@ -160,7 +160,7 @@ export class FigureInsightService {
     const queued = this.queue.indexOf(run)
     if (queued >= 0) {
       this.queue.splice(queued, 1); this.runs.delete(identity(run.request))
-      this.emit(run.request, { status: 'failed', error: '图片解读已取消，可重新生成。' }); run.finish()
+      this.emit(run.request, { status: 'failed', error: '圖片解讀已取消，可重新生成。' }); run.finish()
     }
     return { cancelled: true }
   }

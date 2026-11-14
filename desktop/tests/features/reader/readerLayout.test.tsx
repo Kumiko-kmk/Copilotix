@@ -19,7 +19,7 @@ describe("readerLayout", () => {
   }
 
   describe('reader layout model', () => {
-    it('defaults to the balanced PDF | 原文·中文·问答 reader', () => {
+    it('defaults to the balanced PDF | 原文·中文·問答 reader', () => {
       expect(shape(defaultReaderLayout())).toEqual({
         root: { row: [{ views: ['pdf'], active: 'pdf' }, { views: ['original', 'translated', 'chat'], active: 'original' }], sizes: [50, 50] },
         hidden: []

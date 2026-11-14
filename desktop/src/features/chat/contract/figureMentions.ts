@@ -1,11 +1,11 @@
 /**
- * Figure references in paper text: "Fig. 1", "Figs. 2a and 3(b)", "Figures 1–3", "图 1(a)",
+ * Figure references in paper text: "Fig. 1", "Figs. 2a and 3(b)", "Figures 1–3", "圖 1(a)",
  * "Supplementary Fig. S2". Keys ignore panel letters, so "Fig. 1b" mentions figure 1.
  */
-const WORD = /(?:(supplementary|extended\s+data)\s+)?(?:fig(?:ure)?s?\.?|[附补補]?[图圖])\s*/giu
+const WORD = /(?:(supplementary|extended\s+data)\s+)?(?:fig(?:ure)?s?\.?|[附補補]?[圖圖])\s*/giu
 const NUMBER = /^([A-Z]\.?\s*)?(\d{1,3})(?!\d)/u
 const PANELS = /^(?:\s*[（(]\s*[a-z](?:\s*[-–—,，、]\s*[a-z])*\s*[)）]|[a-z](?:[-–—][a-z])?(?![A-Za-z]))/u
-const SEPARATOR = /^\s*(,|，|、|and|&|or|to|–|—|-|和|与|與|及|至)\s*(?=[A-Z]?\.?\s*\d)/iu
+const SEPARATOR = /^\s*(,|，|、|and|&|or|to|–|—|-|和|與|與|及|至)\s*(?=[A-Z]?\.?\s*\d)/iu
 
 export interface FigureMention { key: string; start: number; end: number; panels: string[] }
 

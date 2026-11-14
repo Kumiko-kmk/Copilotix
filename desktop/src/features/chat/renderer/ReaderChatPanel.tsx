@@ -15,21 +15,21 @@ import './paperChat.css'
 const PROVIDER_LABELS: Record<PaperChatProvider, string> = { qwen: 'Qwen', deepseek: 'DeepSeek', codex: 'Codex' }
 /** Starting points for a paper nobody has asked about yet, one per way of reading it. */
 const SUGGESTIONS = [
-  { kind: '速览', text: '用三句话说清这篇论文解决了什么问题、怎么做、效果如何' },
-  { kind: '方法', text: '核心方法的关键步骤是什么？依赖哪些假设？' },
-  { kind: '证据', text: '主要实验结论是什么？与哪些基线做了比较？' },
-  { kind: '延伸', text: '这项工作有哪些局限？可以从哪里继续研究？' }
+  { kind: '速覽', text: '用三句話說清這篇論文解決了什麼問題、怎麼做、效果如何' },
+  { kind: '方法', text: '核心方法的關鍵步驟是什麼？依賴哪些假設？' },
+  { kind: '證據', text: '主要實驗結論是什麼？與哪些基線做了比較？' },
+  { kind: '延伸', text: '這項工作有哪些侷限？可以從哪裡繼續研究？' }
 ]
 /** Follow-ups offered under the latest answer. */
-const FOLLOW_UPS = ['展开讲讲这个回答', '用更通俗的话再解释一遍', '原文哪些地方支持这个结论？']
+const FOLLOW_UPS = ['展開講講這個回答', '用更通俗的話再解釋一遍', '原文哪些地方支援這個結論？']
 /** Sent when the user attaches figures and presses send without typing a question. */
 export function defaultFigureQuestion(count: number): string {
-  return count > 1 ? '结合上下文，逐个子图详细解读这几张图' : '结合上下文，逐个子图详细解读这张图'
+  return count > 1 ? '結合上下文，逐個子圖詳細解讀這幾張圖' : '結合上下文，逐個子圖詳細解讀這張圖'
 }
 
 /** Lives in the reader's shared tab toolbar while the chat tab is active. */
 export function ReaderChatToolbar(props: { chat: PaperChatController; children?: React.ReactNode }): React.JSX.Element | null {
-  const menuItems = [{ key: 'clear', label: '清空对话', disabled: props.chat.loading || props.chat.turns.length === 0 }]
+  const menuItems = [{ key: 'clear', label: '清空對話', disabled: props.chat.loading || props.chat.turns.length === 0 }]
   return (
     <div className="reader-chat-toolbar">
       {props.children}
@@ -42,7 +42,7 @@ export function ReaderChatToolbar(props: { chat: PaperChatController; children?:
           }
         }}
       >
-        <Button type="text" size="small" icon={<MoreOutlined />} aria-label="更多问答操作" />
+        <Button type="text" size="small" icon={<MoreOutlined />} aria-label="更多問答操作" />
       </Dropdown>
     </div>
   )
@@ -56,8 +56,8 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: PaperChatR
     <div className="reader-chat-model-picker">
       <Select
         title=""
-        size="small" variant="borderless" aria-label="问答服务商" className="reader-chat-provider"
-        value={provider} disabled={props.locked} popupMatchSelectWidth={false} placement="topLeft" placeholder="服务商"
+        size="small" variant="borderless" aria-label="問答服務商" className="reader-chat-provider"
+        value={provider} disabled={props.locked} popupMatchSelectWidth={false} placement="topLeft" placeholder="服務商"
         options={(Object.keys(PROVIDER_LABELS) as PaperChatProvider[]).map((value) => ({ value, label: PROVIDER_LABELS[value], title: '', disabled: !routing.settings?.enabledTranslationProviders.includes(value) }))}
         onChange={(value: PaperChatProvider) => chat.setSelectedModel({ provider: value, model: resolvePaperChatModel(value, value === 'codex' ? routing.settings?.codex?.chatModel : value === 'qwen' ? routing.settings?.qwenChatModel : routing.settings?.deepseekChatModel) })}
       />
@@ -65,7 +65,7 @@ function ChatModelPicker(props: { chat: PaperChatController; routing: PaperChatR
         title=""
         size="small"
         variant="borderless"
-        aria-label="问答模型"
+        aria-label="問答模型"
         className="reader-chat-model"
         popupMatchSelectWidth={false}
         placement="topLeft"
@@ -130,14 +130,14 @@ export default function ReaderChatPanel(props: {
     try {
       const status = await window.copilotix.paperChat.ensureIndex({ documentId: props.documentId })
       if (status.state !== 'ready' || status.contentRevisionId !== citation.locator.contentRevisionId || citation.documentId !== props.documentId) {
-        setLocalError('来源已更新，请重新提问')
+        setLocalError('來源已更新，請重新提問')
         return
       }
       const mappingId = citation.locator.mappingIds[0]
-      if (!mappingId) { setLocalError('此引用没有可定位的段落'); return }
+      if (!mappingId) { setLocalError('此引用沒有可定位的段落'); return }
       props.onSelect({ mappingId, origin: 'citation' })
     } catch {
-      setLocalError('无法核对引用来源，请重试')
+      setLocalError('無法核對引用來源，請重試')
     }
   }, [props.documentId, props.onSelect])
 
@@ -162,10 +162,10 @@ export default function ReaderChatPanel(props: {
 
   const error = localError || chat.error
   return (
-    <section className="paper-chat" aria-label="论文 Chat">
+    <section className="paper-chat" aria-label="論文 Chat">
       <div className="paper-chat-scroll" ref={scrollRef}>
-        {chat.loading ? <p role="status">正在读取本地对话…</p> : null}
-        {chat.next ? <Button size="small" loading={chat.loadingOlder} onClick={() => void chat.loadOlder()}>查看更早的对话</Button> : null}
+        {chat.loading ? <p role="status">正在讀取本地對話…</p> : null}
+        {chat.next ? <Button size="small" loading={chat.loadingOlder} onClick={() => void chat.loadOlder()}>檢視更早的對話</Button> : null}
         {chat.loading ? null : chat.turns.length === 0 ? (
           <ChatEmptyState
             provider={routing.provider}
@@ -177,7 +177,7 @@ export default function ReaderChatPanel(props: {
             onSuggest={(text) => { chat.setDraft(text); inputRef.current?.focus() }}
           />
         ) : (
-          <div className="paper-chat-turns markdown-body" role="log" aria-label="问答记录">
+          <div className="paper-chat-turns markdown-body" role="log" aria-label="問答記錄">
             {chat.turns.map((turn, index) => (
               <ChatTurn
                 key={turn.id ?? `${turn.createdAt ?? index}:${turn.question}`}
@@ -198,22 +198,22 @@ export default function ReaderChatPanel(props: {
         {error ? <div className="paper-chat-error" role="alert">{error}</div> : null}
         {figureBlocked ? <div className="paper-chat-error" role="alert">{figureBlocked}</div> : null}
         {chat.figures.length > 0 ? (
-          <div className="paper-chat-pins" aria-label="附带的图片">
+          <div className="paper-chat-pins" aria-label="附帶的圖片">
             {chat.figures.map((figure, index) => (
               <span className="paper-chat-pin paper-chat-figure-pin" key={figure.figureId}>
                 <FigureLabel label={figure.label} pageIndex={figure.pageIndex} preview={figure.preview} assetBaseUrl={props.assetBaseUrl} />
-                <button type="button" aria-label={`移除图片 ${figure.label ?? index + 1}`} disabled={chat.busy} onClick={() => chat.removeFigure(index)}><CloseOutlined /></button>
+                <button type="button" aria-label={`移除圖片 ${figure.label ?? index + 1}`} disabled={chat.busy} onClick={() => chat.removeFigure(index)}><CloseOutlined /></button>
               </span>
             ))}
           </div>
         ) : null}
         {chat.pinned.length > 0 ? (
-          <div className="paper-chat-pins" aria-label="固定选区">
+          <div className="paper-chat-pins" aria-label="固定選區">
             {chat.pinned.map((pin, index) => {
               return (
                 <span className="paper-chat-pin" key={index}>
                   <SelectionLabel view={pin.view} text={pin.text} pageIndex={pin.fragments[0]?.pageIndex} />
-                  <button type="button" aria-label={`移除选区 ${index + 1}`} disabled={chat.busy} onClick={() => chat.removePin(index)}><CloseOutlined /></button>
+                  <button type="button" aria-label={`移除選區 ${index + 1}`} disabled={chat.busy} onClick={() => chat.removePin(index)}><CloseOutlined /></button>
                 </span>
               )
             })}
@@ -222,8 +222,8 @@ export default function ReaderChatPanel(props: {
         <div className="paper-chat-input">
           <Input.TextArea
             ref={(instance) => { inputRef.current = instance?.resizableTextArea?.textArea ?? null }}
-            aria-label="向当前论文提问"
-            placeholder={!routing.configured ? '配置翻译服务后即可提问' : chat.figures.length ? `直接发送将${defaultFigureQuestion(chat.figures.length)}，也可输入具体问题` : '向当前论文提问（Enter 发送，Shift+Enter 换行）'}
+            aria-label="向當前論文提問"
+            placeholder={!routing.configured ? '配置翻譯服務後即可提問' : chat.figures.length ? `直接傳送將${defaultFigureQuestion(chat.figures.length)}，也可輸入具體問題` : '向當前論文提問（Enter 傳送，Shift+Enter 換行）'}
             value={chat.draft}
             variant="borderless"
             maxLength={2000}
@@ -240,7 +240,7 @@ export default function ReaderChatPanel(props: {
             {chat.busy ? (
               <Button shape="circle" size="small" icon={<BorderOutlined />} aria-label="停止" onClick={chat.stop} />
             ) : (
-              <Button shape="circle" size="small" type="primary" icon={<ArrowUpOutlined />} aria-label="发送" disabled={!canSend} onClick={send} />
+              <Button shape="circle" size="small" type="primary" icon={<ArrowUpOutlined />} aria-label="傳送" disabled={!canSend} onClick={send} />
             )}
           </div>
         </div>
@@ -261,26 +261,26 @@ function ChatEmptyState(props: {
   if (!props.configured) {
     return (
       <Empty className="paper-chat-empty" image={Empty.PRESENTED_IMAGE_SIMPLE} description={props.provider
-        ? '请先在「服务连接」中验证翻译 API Key，问答直接共用'
-        : '当前翻译服务不支持问答，请在设置中选择 Qwen 或 DeepSeek'}>
-        <Button onClick={props.onOpenSettings}>前往设置</Button>
+        ? '請先在「服務連線」中驗證翻譯 API Key，問答直接共用'
+        : '當前翻譯服務不支援問答，請在設定中選擇 Qwen 或 DeepSeek'}>
+        <Button onClick={props.onOpenSettings}>前往設定</Button>
       </Empty>
     )
   }
   if (props.index?.state !== 'ready') {
-    const description = props.indexFailed ? '索引准备失败' : props.index?.state === 'unindexed' ? '请先完成论文解析' : '论文索引准备中'
+    const description = props.indexFailed ? '索引準備失敗' : props.index?.state === 'unindexed' ? '請先完成論文解析' : '論文索引準備中'
     return (
       <Empty className="paper-chat-empty" image={Empty.PRESENTED_IMAGE_SIMPLE} description={description}>
         {props.indexFailed || props.index?.state === 'failed'
-          ? <Button onClick={props.onRetryIndex}>重试索引</Button>
+          ? <Button onClick={props.onRetryIndex}>重試索引</Button>
           : <Progress className="paper-chat-index-progress" percent={props.index?.progress ?? 0} size="small" />}
       </Empty>
     )
   }
   return (
     <div className="paper-chat-welcome">
-      <h3>就这篇论文提问</h3>
-      <p>回答只依据本文，引用可点击跳到原文</p>
+      <h3>就這篇論文提問</h3>
+      <p>回答只依據本文，引用可點選跳到原文</p>
       <div className="paper-chat-suggestions">
         {SUGGESTIONS.map(({ kind, text }) => (
           <button type="button" key={text} aria-label={text} onClick={() => props.onSuggest(text)}>
@@ -313,7 +313,7 @@ function ChatTurn(props: {
   const remove = async (): Promise<void> => {
     setDeleting(true); setDeleteError('')
     try { await props.onDelete(); setConfirming(false) }
-    catch (error) { setDeleteError(error instanceof Error ? error.message : '删除失败，请重试') }
+    catch (error) { setDeleteError(error instanceof Error ? error.message : '刪除失敗，請重試') }
     finally { setDeleting(false) }
   }
   const citations = turn.status === 'completed' ? turn.citations : undefined
@@ -321,14 +321,14 @@ function ChatTurn(props: {
   return (
     <article className="paper-chat-turn">
       {turn.selections?.length ? (
-        <div className="paper-chat-turn-selections" aria-label="提问附带的选区">
+        <div className="paper-chat-turn-selections" aria-label="提問附帶的選區">
           {turn.selections.map((selection, index) => (
             <span className="paper-chat-pin" key={index}><SelectionLabel {...selection} /></span>
           ))}
         </div>
       ) : null}
       {figures.length ? (
-        <div className="paper-chat-turn-selections" aria-label="提问附带的图片">
+        <div className="paper-chat-turn-selections" aria-label="提問附帶的圖片">
           {figures.map((figure) => (
             <span className="paper-chat-pin paper-chat-figure-pin" key={figure.figureId}>
               <FigureLabel label={figure.label} pageIndex={figure.pageIndex} preview={figure.images?.[0]?.path ?? figure.preview} assetBaseUrl={props.assetBaseUrl} />
@@ -338,10 +338,10 @@ function ChatTurn(props: {
       ) : null}
       <div className="paper-chat-question-row">
         <Dropdown trigger={['click']} menu={{ items: [
-          { key: 'collapse', label: collapsed ? '展开回复' : '折叠回复' },
-          { key: 'delete', label: '删除聊天', danger: true, disabled: props.deleteDisabled || deleting }
+          { key: 'collapse', label: collapsed ? '展開回復' : '摺疊回覆' },
+          { key: 'delete', label: '刪除聊天', danger: true, disabled: props.deleteDisabled || deleting }
         ], onClick: ({ key }) => { if (key === 'collapse') setCollapsed(value => !value); else setConfirming(true) } }}>
-          <Button type="text" size="small" icon={<MoreOutlined />} aria-label="此条聊天操作" />
+          <Button type="text" size="small" icon={<MoreOutlined />} aria-label="此條聊天操作" />
         </Dropdown>
         <h4 className="paper-chat-question">{turn.question}</h4>
       </div>
@@ -354,27 +354,27 @@ function ChatTurn(props: {
           : null}
       </div>
       {turn.status !== 'pending' ? (
-        <div className="paper-chat-metadata" aria-label="回答信息">
-          <span>{turn.model ?? '模型未记录'}</span>
-          {turn.completedAt || turn.createdAt ? <time dateTime={turn.completedAt ?? turn.createdAt}>{new Date(turn.completedAt ?? turn.createdAt!).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time> : null}
+        <div className="paper-chat-metadata" aria-label="回答資訊">
+          <span>{turn.model ?? '模型未記錄'}</span>
+          {turn.completedAt || turn.createdAt ? <time dateTime={turn.completedAt ?? turn.createdAt}>{new Date(turn.completedAt ?? turn.createdAt!).toLocaleString('zh-TW', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time> : null}
           {turn.usage ? <span>{turn.usage.totalTokens.toLocaleString()} tokens</span> : null}
         </div>
       ) : null}
       {turn.status === 'cancelled' || turn.status === 'failed' ? (
         <div className="paper-chat-status">
-          <span>{turn.status === 'cancelled' ? '已停止' : '回答失败'}</span>
-          {props.retryable ? <Button type="link" size="small" onClick={props.onRetry}>重试</Button> : null}
+          <span>{turn.status === 'cancelled' ? '已停止' : '回答失敗'}</span>
+          {props.retryable ? <Button type="link" size="small" onClick={props.onRetry}>重試</Button> : null}
         </div>
       ) : null}
       {props.onFollowUp && turn.status === 'completed' ? (
-        <div className="paper-chat-follow-ups" role="group" aria-label="继续追问">
+        <div className="paper-chat-follow-ups" role="group" aria-label="繼續追問">
           {FOLLOW_UPS.map((text) => <button type="button" key={text} onClick={() => props.onFollowUp?.(text)}>{text}</button>)}
         </div>
       ) : null}
       </div>
-      <Modal title="删除聊天" open={confirming} okText="删除" cancelText="取消" okButtonProps={{ danger: true, disabled: props.deleteDisabled }} confirmLoading={deleting}
+      <Modal title="刪除聊天" open={confirming} okText="刪除" cancelText="取消" okButtonProps={{ danger: true, disabled: props.deleteDisabled }} confirmLoading={deleting}
         onOk={() => void remove()} onCancel={() => { if (!deleting) setConfirming(false) }}>
-        <p>确定删除这条问题及回复吗？删除后无法恢复。</p>
+        <p>確定刪除這條問題及回覆嗎？刪除後無法恢復。</p>
         <p className="paper-chat-delete-question">{turn.question}</p>
         {deleteError ? <p role="alert">{deleteError}</p> : null}
       </Modal>
@@ -385,7 +385,7 @@ function ChatTurn(props: {
 function SelectionLabel(props: { view: 'original' | 'translated'; text: string; pageIndex?: number | null }): React.JSX.Element {
   const page = props.pageIndex
   return <>
-    <span className="paper-chat-pin-source">{props.view === 'original' ? '原文' : '译文'}{page !== undefined && page !== null ? ` · 第 ${page + 1} 页` : ''}</span>
+    <span className="paper-chat-pin-source">{props.view === 'original' ? '原文' : '譯文'}{page !== undefined && page !== null ? ` · 第 ${page + 1} 頁` : ''}</span>
     <span className="paper-chat-pin-text">{props.text.slice(0, 40)}{props.text.length > 40 ? '…' : ''}</span>
   </>
 }
@@ -394,8 +394,8 @@ function FigureLabel(props: { label: string | null; pageIndex: number | null; pr
   const src = props.preview && props.assetBaseUrl ? resolveAsset(props.preview, props.assetBaseUrl) : undefined
   return <>
     {src ? <img className="paper-chat-figure-thumb" src={src} alt="" loading="lazy" decoding="async" /> : null}
-    <span className="paper-chat-pin-source">图片{props.pageIndex !== null ? ` · 第 ${props.pageIndex + 1} 页` : ''}</span>
-    <span className="paper-chat-pin-text">{props.label ?? '未编号的图'}</span>
+    <span className="paper-chat-pin-source">圖片{props.pageIndex !== null ? ` · 第 ${props.pageIndex + 1} 頁` : ''}</span>
+    <span className="paper-chat-pin-text">{props.label ?? '未編號的圖'}</span>
   </>
 }
 

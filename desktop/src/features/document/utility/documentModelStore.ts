@@ -29,7 +29,7 @@ export class DocumentModelStore {
       try {
         const path = policy.resolveChild(root, name)
         const info = await lstat(path)
-        if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024 * 1024) throw new Error('文档模型来源无效')
+        if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024 * 1024) throw new Error('文件模型來源無效')
         return await readFile(path, 'utf8')
       } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''; throw error }
     })) as Promise<[string, string, string]>
@@ -64,18 +64,18 @@ export class DocumentModelStore {
       const mappings = Array.isArray(parsed) ? z.array(blockMappingSchema).parse(parsed) : mappingFile.parse(parsed).mappings
       base = buildDocumentBase(documentId, sourceVersion, input[0], mappings, input[2] || '{}')
       this.builds++
-      if (this.version(await this.inputs(root, files)) !== sourceVersion) throw new Error('文档来源已变化，请重新读取')
+      if (this.version(await this.inputs(root, files)) !== sourceVersion) throw new Error('文件來源已變化，請重新讀取')
       await mkdir(policy.resolveChild(root, 'model'), { recursive: true })
       const partial = policy.resolveChild(root, 'model/base.v1.' + randomUUID() + '.partial')
       try {
         const handle = await open(partial, 'wx')
         try { await handle.writeFile(JSON.stringify({ digest: hash(JSON.stringify(base)), base })); await handle.sync() } finally { await handle.close() }
-        if (this.version(await this.inputs(root, files)) !== sourceVersion) throw new Error('文档来源已变化，请重新读取')
+        if (this.version(await this.inputs(root, files)) !== sourceVersion) throw new Error('文件來源已變化，請重新讀取')
         await rename(partial, path)
       } finally { await rm(partial, { force: true }).catch(() => undefined) }
     }
     const after = await this.signature(root, files)
-    if (this.version(await this.inputs(root, files)) !== sourceVersion || after !== await this.signature(root, files)) throw new Error('文档来源已变化，请重新读取')
+    if (this.version(await this.inputs(root, files)) !== sourceVersion || after !== await this.signature(root, files)) throw new Error('文件來源已變化，請重新讀取')
     this.cache.delete(key); this.cache.set(key, base)
     this.signatures.set(key, after)
     if (this.cache.size > 8) { const oldest = this.cache.keys().next().value!; this.cache.delete(oldest); this.signatures.delete(oldest) }

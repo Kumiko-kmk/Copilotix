@@ -10,9 +10,9 @@ export class LibraryAccessGate {
 
   async run<T>(channel: string, operation: () => T | Promise<T>): Promise<T> {
     if (channel.startsWith('window:')) return operation()
-    if (this.exclusive || this.restartPending) throw new Error('文档库正在维护，请稍候。')
+    if (this.exclusive || this.restartPending) throw new Error('文件庫正在維護，請稍候。')
     if (channel === 'library:manage') {
-      if (this.active) throw new Error('仍有文档操作尚未结束，请稍后再试。')
+      if (this.active) throw new Error('仍有文件操作尚未結束，請稍後再試。')
       this.exclusive = true
       try { return await operation() } finally { this.exclusive = false }
     }

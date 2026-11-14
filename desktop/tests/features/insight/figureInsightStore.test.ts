@@ -43,7 +43,7 @@ async function fixture() {
   const task = { id, sourceHash, outputDir: root } as CopilotixTask
   const store = new FigureInsightStore({ getTask: () => task })
   const request = { documentId: id, figureId: geometry.id }
-  const content = { displayWeight: 90, overview: '核心方法图。', takeaway: '关注输入输出。' }
+  const content = { displayWeight: 90, overview: '核心方法圖。', takeaway: '關注輸入輸出。' }
   return { root, store, request, figure, content, task }
 }
 
@@ -66,7 +66,7 @@ describe('figure insight persistence', () => {
   it('rejects tampered or missing whole images and never substitutes individual panels', async () => {
     const f = await fixture()
     await writeFile(join(f.root, f.figure.imagePath), 'tampered')
-    await expect(f.store.descriptor(f.request)).rejects.toThrow('校验失败')
+    await expect(f.store.descriptor(f.request)).rejects.toThrow('校驗失敗')
     await rm(join(f.root, f.figure.imagePath))
     await expect(f.store.descriptor(f.request)).rejects.toThrow()
     expect(await f.store.get(f.request)).toEqual({ status: 'missing' })
@@ -84,7 +84,7 @@ describe('figure insight persistence', () => {
     expect(await chat.source(f.request)).toMatchObject({ whole: false, images: [{ path: 'images/a.jpg', mimeType: 'image/jpeg', bytes: 5, sha256: hash(Buffer.from('ffd8ffe000', 'hex')) }] })
     await writeFile(join(f.root, 'images', 'a.jpg'), 'not an image')
     await expect(chat.source(f.request)).rejects.toThrow('格式')
-    await expect(chat.source({ ...f.request, figureId: 'reader-figure-missing' })).rejects.toThrow('不在当前解析版本')
+    await expect(chat.source({ ...f.request, figureId: 'reader-figure-missing' })).rejects.toThrow('不在當前解析版本')
   })
 
   it('rejects traversal in a manifest path', async () => {
@@ -97,6 +97,6 @@ describe('figure insight persistence', () => {
     const f = await fixture(), descriptor = await f.store.descriptor(f.request)
     await mkdir(join(f.root, 'redirect'))
     await symlink(join(f.root, 'redirect'), join(f.root, 'insight'), process.platform === 'win32' ? 'junction' : 'dir')
-    await expect(f.store.save({ ...f.request, sourceRevision: descriptor.sourceRevision, content: f.content, model: { provider: 'deepseek', name: 'deepseek-flash' } })).rejects.toThrow('目录无效')
+    await expect(f.store.save({ ...f.request, sourceRevision: descriptor.sourceRevision, content: f.content, model: { provider: 'deepseek', name: 'deepseek-flash' } })).rejects.toThrow('目錄無效')
   })
 })

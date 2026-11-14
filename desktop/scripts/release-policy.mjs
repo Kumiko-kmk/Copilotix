@@ -85,7 +85,7 @@ export function assertValidAuthenticodeSignature(result) {
   return result.signerSubject.trim()
 }
 
-const EXPECTED_LOCALES = Object.freeze(['zh-CN.pak'])
+const EXPECTED_LOCALES = Object.freeze(['zh-TW.pak'])
 const CANVAS_PATH_PATTERN = /(^|[\\/])@napi-rs[\\/]canvas(?:[-\\/]|$)/i
 const REQUIRED_ASAR_ENTRIES = Object.freeze([
   'out/main/index.js',

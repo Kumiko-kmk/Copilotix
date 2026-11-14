@@ -41,7 +41,7 @@ export function useArchiveInsight(paper: ArchivePaper | null, source?: PaperInsi
         return state.status === 'generating' && previous?.status === 'ready' ? previous : state
       } catch {
         signal.throwIfAborted()
-        return { status: 'failed', error: '无法读取本地档案卡，请重试。' }
+        return { status: 'failed', error: '無法讀取本地檔案卡，請重試。' }
       }
     },
     enabled: Boolean(id && source), staleTime: query => query.state.data?.status === 'ready' ? 30_000 : 0, gcTime: 120_000

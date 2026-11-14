@@ -57,7 +57,7 @@ const MATH_BEFORE = /[∈∉=<>≤≥×+*/^_]\s*$/u
 // Latin letters only: a Chinese translation writes 「Li等，2018」 with no space after the name.
 const NAME = String.raw`\p{Lu}[\p{Script=Latin}\p{M}'’\-]*\p{Script=Latin}`
 const NAMES = String.raw`(?:${NAME}\s+){0,2}${NAME}`
-const TAIL = String.raw`\s+et\s+al\.?|\s*等人?|\s*(?:and|&|和|与|及)\s*(${NAME})`
+const TAIL = String.raw`\s+et\s+al\.?|\s*等人?|\s*(?:and|&|和|與|及)\s*(${NAME})`
 const YEARS = String.raw`${YEAR}(?:\s*[,，]\s*${YEAR})*`
 const NARRATIVE = new RegExp(String.raw`(?<![\p{Script=Latin}\p{M}])(${NAMES})(?:${TAIL})?\s*[(（\[]\s*(${YEARS})\s*[)）\]]`, 'gu')
 const PARENTHETICAL_GROUP = /[(（]([^()（）]{4,600})[)）]/gu

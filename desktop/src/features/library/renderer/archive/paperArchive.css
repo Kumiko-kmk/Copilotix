@@ -1,4 +1,4 @@
-/* Paper archive (文库): layout and motion adapted from RhineLabUI (MIT, LBEILC), recoloured to Copilotix. */
+/* Paper archive (文庫): layout and motion adapted from RhineLabUI (MIT, LBEILC), recoloured to Copilotix. */
 .paper-archive-page {
   --archive-bg: var(--surface);
   /* Floor, cards, edges and index inlays follow the colour theme (theme.ts); read by the 3D scene. */

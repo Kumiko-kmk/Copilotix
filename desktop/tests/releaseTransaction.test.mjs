@@ -85,13 +85,13 @@ describe('separately installed Lite release', () => {
 
   it('keeps the full edition install instructions and tells Lite users the data is separate', () => {
     const full = installInstructions('setup.exe')
-    expect(full.startsWith('﻿Copilotix 安装说明\r\n')).toBe(true)
-    expect(full).toContain('从桌面打开 Copilotix；首次使用按应用内引导配置文库和翻译服务。')
+    expect(full.startsWith('﻿Copilotix 安裝說明\r\n')).toBe(true)
+    expect(full).toContain('從桌面開啟 Copilotix；首次使用按應用內引導配置文庫和翻譯服務。')
     expect(full).not.toContain('Lite')
     const lite = installInstructions('setup.exe', true)
-    expect(lite.startsWith('﻿Copilotix Lite 安装说明\r\n')).toBe(true)
-    expect(lite).toContain('资料和密钥互不共用')
-    expect(lite).not.toContain('文库')
+    expect(lite.startsWith('﻿Copilotix Lite 安裝說明\r\n')).toBe(true)
+    expect(lite).toContain('資料和金鑰互不共用')
+    expect(lite).not.toContain('文庫')
   })
 })
 

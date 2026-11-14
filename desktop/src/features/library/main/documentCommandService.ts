@@ -59,10 +59,10 @@ export class DocumentCommandService {
    * PDF's metadata title, which is kept only until the parsed title arrives.
    */
   async importPaths(paths: readonly string[], options: ImportDocumentsRequest, fileOptions: readonly ImportFileOptions[] = []): Promise<ImportPathsResult> {
-    if (!this.compute.importPdf) throw new Error('核心导入服务尚未初始化')
+    if (!this.compute.importPdf) throw new Error('核心匯入服務尚未初始化')
     const settings = await this.settingsService.get()
     assertParserCredentialUsable(settings)
-    if (!settings.enabledTranslationProviders.length) throw new Error('未配置翻译来源，请先在服务连接中启用来源')
+    if (!settings.enabledTranslationProviders.length) throw new Error('未配置翻譯來源，請先在服務連線中啟用來源')
     await mkdir(settings.outputRoot, { recursive: true })
     const documentsRoot = join(settings.outputRoot, 'documents-v2')
     await mkdir(documentsRoot, { recursive: true })
@@ -140,14 +140,14 @@ export class DocumentCommandService {
 
   /** `refreshStaleTranslation`: re-run a finished translation whose source blocks changed since. */
   async retry(taskId: string, options: { refreshStaleTranslation?: boolean } = {}): Promise<void> {
-    if (!this.jobRepository) throw new Error('作业队列尚未初始化')
-    if (!await this.repository.getTask(taskId)) throw new Error('任务不存在')
+    if (!this.jobRepository) throw new Error('作業佇列尚未初始化')
+    if (!await this.repository.getTask(taskId)) throw new Error('任務不存在')
     const jobs = await this.jobRepository.list({ documentId: taskId })
     const activeTranslation = jobs.find((job) => job.kind === 'translate' && job.status === 'running')
     if (activeTranslation && this.scheduler) {
       await this.scheduler.cancel(activeTranslation.id)
       const stopped = await this.jobRepository.get(activeTranslation.id)
-      if (stopped?.status !== 'cancelled') throw new Error('翻译状态已变化，请刷新后重试')
+      if (stopped?.status !== 'cancelled') throw new Error('翻譯狀態已變化，請重新整理後重試')
       await this.jobRepository.manualRetry({ jobId: stopped.id, now: new Date().toISOString() })
       this.scheduler.wake()
       return
@@ -160,7 +160,7 @@ export class DocumentCommandService {
     const finished = !job && options.refreshStaleTranslation
       ? jobs.filter((candidate) => candidate.kind === 'translate' && candidate.status === 'succeeded').sort(compareJobs).at(-1)
       : undefined
-    if (!job && !finished) throw new Error('任务当前不可重试')
+    if (!job && !finished) throw new Error('任務當前不可重試')
     await this.jobRepository.manualRetry(job
       ? { jobId: job.id, now: new Date().toISOString() }
       : { jobId: finished!.id, now: new Date().toISOString(), refreshTranslation: true })
@@ -172,25 +172,25 @@ export class DocumentCommandService {
    * other paragraph's last result (failures included), so only those paragraphs reach the model.
    */
   async retranslateEdited(taskId: string): Promise<void> {
-    if (!this.jobRepository) throw new Error('作业队列尚未初始化')
-    if (!await this.repository.getTask(taskId)) throw new Error('任务不存在')
+    if (!this.jobRepository) throw new Error('作業佇列尚未初始化')
+    if (!await this.repository.getTask(taskId)) throw new Error('任務不存在')
     const jobs = await this.jobRepository.list({ documentId: taskId })
     if (jobs.some((job) => (job.kind === 'parse' || job.kind === 'translate') && !['succeeded', 'partial', 'failed', 'cancelled'].includes(job.status))) {
-      throw new Error('论文仍在解析或翻译，完成后再重新翻译')
+      throw new Error('論文仍在解析或翻譯，完成後再重新翻譯')
     }
     const parse = jobs.filter((job) => job.kind === 'parse' && job.status === 'succeeded').sort(compareJobs).at(-1)
-    if (!parse) throw new Error('论文尚未解析完成')
+    if (!parse) throw new Error('論文尚未解析完成')
     await this.jobRepository.enqueue({ documentId: taskId, kind: 'translate', dependsOnJobId: parse.id, checkpoint: { stage: 'queued', reason: 'edited' }, now: new Date().toISOString() })
     this.scheduler?.wake()
   }
 
   /** User-initiated; refused while a parse or translation of the paper could still read the old text. */
   async repairTextLayer(taskId: string): Promise<{ repaired: number; unresolved: number }> {
-    if (!this.compute.repairTextLayer || !this.jobRepository) throw new Error('核心服务尚未初始化')
-    if (!await this.repository.getTask(taskId)) throw new Error('任务不存在')
+    if (!this.compute.repairTextLayer || !this.jobRepository) throw new Error('核心服務尚未初始化')
+    if (!await this.repository.getTask(taskId)) throw new Error('任務不存在')
     const jobs = await this.jobRepository.list({ documentId: taskId })
     if (jobs.some((job) => (job.kind === 'parse' || job.kind === 'translate') && !['succeeded', 'partial', 'failed', 'cancelled'].includes(job.status))) {
-      throw new Error('论文仍在解析或翻译，完成后再修复')
+      throw new Error('論文仍在解析或翻譯，完成後再修復')
     }
     const result = await this.compute.repairTextLayer(taskId)
     this.logger.info('documents.text-layer-repair', { taskId, repaired: result.repaired, unresolved: result.unresolved })
@@ -214,11 +214,11 @@ export class DocumentCommandService {
 
 function importFailureMessage(error: unknown): string {
   const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined
-  if (code === 'CORE_LIMIT_EXCEEDED') return '超过 200MB 或 600 页的解析限制'
-  if (code === 'CORE_NOT_FOUND') return '文件不存在或无法读取'
-  if (code === 'CORE_PROTOCOL_ERROR') return '不是可导入的 PDF 文件'
-  if (code === 'CORE_PDF_REWRITE_FAILED') return '无法跳过第 1 页（PDF 已加密、超过 64MB 或结构无法改写），请取消“跳过第 1 页”后重试'
-  return '导入失败，请稍后重试'
+  if (code === 'CORE_LIMIT_EXCEEDED') return '超過 200MB 或 600 頁的解析限制'
+  if (code === 'CORE_NOT_FOUND') return '檔案不存在或無法讀取'
+  if (code === 'CORE_PROTOCOL_ERROR') return '不是可匯入的 PDF 檔案'
+  if (code === 'CORE_PDF_REWRITE_FAILED') return '無法跳過第 1 頁（PDF 已加密、超過 64MB 或結構無法改寫），請取消“跳過第 1 頁”後重試'
+  return '匯入失敗，請稍後重試'
 }
 
 function originalFilenameTitle(name: string): string | null {
@@ -228,8 +228,8 @@ function originalFilenameTitle(name: string): string | null {
 }
 
 function assertParserCredentialUsable(settings: Awaited<ReturnType<SettingsService['get']>>): void {
-  if (settings.credentials.parser.state === 'missing') throw new Error('请先在系统设置中配置 Parser API Token')
-  if (settings.credentials.parser.state === 'invalid') throw new Error('Parser API Token 已失效，请在系统设置中重新验证')
+  if (settings.credentials.parser.state === 'missing') throw new Error('請先在系統設定中配置 Parser API Token')
+  if (settings.credentials.parser.state === 'invalid') throw new Error('Parser API Token 已失效，請在系統設定中重新驗證')
 }
 
 function compareJobs(left: Job, right: Job): number {

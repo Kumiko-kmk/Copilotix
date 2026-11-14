@@ -1,14 +1,14 @@
 /**
- * Library categories: papers grouped by what they are about, for the 文库 columns. Computed in
+ * Library categories: papers grouped by what they are about, for the 文庫 columns. Computed in
  * the Utility from local text (no model call) and named from the AI file cards when papers have
- * them. Paged like every list that grows with the library (docs/ARCHITECTURE_ZH.md 平台層執行契約).
+ * them. Paged like every list that grows with the library (docs/ARCHITECTURE_ZH.md 平臺層執行契約).
  */
 import { z } from 'zod'
 
 export const LIBRARY_CATEGORY_PAGE_SIZE = 200
 export const CATEGORY_NAME_MAX = 24
 /** The single category of a library too small or too uniform to split. */
-export const ALL_PAPERS_NAME = '全部论文'
+export const ALL_PAPERS_NAME = '全部論文'
 
 export const libraryCategoriesRequestSchema = z.object({
   /** Offset into the membership list of the revision being read. */

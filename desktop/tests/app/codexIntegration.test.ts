@@ -29,7 +29,7 @@ describe('Codex integration boundaries', () => {
     const database = new V2Database(':memory:')
     try {
       database.connection.prepare('INSERT INTO documents VALUES(?,?,?,?,?,?,?,?)').run('d', 'a.pdf', null, '/paper/d', 'hash', 'codex', 'now', 'now')
-      database.connection.prepare('INSERT INTO translation_cache VALUES(?,?,?,?,?)').run('key', '译文', 'codex', 'model', 'now')
+      database.connection.prepare('INSERT INTO translation_cache VALUES(?,?,?,?,?)').run('key', '譯文', 'codex', 'model', 'now')
       expect(database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([])
       expect(database.connection.prepare('PRAGMA foreign_keys').get()).toMatchObject({ foreign_keys: 1 })
       expect(database.migrationRows().at(-1)?.version).toBe(5)

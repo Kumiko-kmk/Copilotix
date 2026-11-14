@@ -28,7 +28,7 @@ describe("ipcContracts", () => {
 
     it('turns a failure envelope into a typed client error', () => {
       const envelope = ipcEnvelopeSchema(windowStateSchema).parse(
-        ipcFailure({ code: 'HANDLER_ERROR', message: '操作失败', retryable: true, traceId: 'trace-1' })
+        ipcFailure({ code: 'HANDLER_ERROR', message: '操作失敗', retryable: true, traceId: 'trace-1' })
       )
       expect(() => decodeIpcResponse(envelope, windowStateSchema)).toThrow(IpcClientError)
       try {
@@ -121,7 +121,7 @@ describe("ipcValidation", () => {
       expect(isTrustedRendererUrl(entryUrl, options)).toBe(true)
       expect(isTrustedRendererUrl(`${entryUrl}?query=1`, options)).toBe(false)
       expect(() => assertTrustedSender(makeEvent(entryUrl), options)).not.toThrow()
-      expect(() => assertTrustedSender(makeEvent('file:///untrusted/index.html'), options)).toThrow(/来源无效/)
+      expect(() => assertTrustedSender(makeEvent('file:///untrusted/index.html'), options)).toThrow(/來源無效/)
     })
 
     it('accepts every app window, and no window outside them', () => {
@@ -129,9 +129,9 @@ describe("ipcValidation", () => {
       const main = { isDestroyed: () => false }, reader = { isDestroyed: () => false }, foreign = { isDestroyed: () => false }
       const options = (source: typeof main) => ({ ...makeOptions(entryUrl), getWindows: () => [main, reader], fromWebContents: () => source })
       expect(() => assertTrustedSender(makeEvent(entryUrl), options(reader))).not.toThrow()
-      expect(() => assertTrustedSender(makeEvent(entryUrl), options(foreign))).toThrow(/来源无效/)
+      expect(() => assertTrustedSender(makeEvent(entryUrl), options(foreign))).toThrow(/來源無效/)
       const closed = { isDestroyed: () => true }
-      expect(() => assertTrustedSender(makeEvent(entryUrl), { ...makeOptions(entryUrl), getWindows: () => [closed], fromWebContents: () => closed })).toThrow(/来源无效/)
+      expect(() => assertTrustedSender(makeEvent(entryUrl), { ...makeOptions(entryUrl), getWindows: () => [closed], fromWebContents: () => closed })).toThrow(/來源無效/)
     })
 
     it('wraps successful results and validation failures in one response envelope', async () => {
@@ -176,7 +176,7 @@ describe("ipcValidation", () => {
     })
 
     it('preserves stable domain error codes and marks annotation conflicts non-retryable', () => {
-      const error = Object.assign(new Error('标注版本已变化'), { code: 'ANNOTATION_CONFLICT' })
+      const error = Object.assign(new Error('標註版本已變化'), { code: 'ANNOTATION_CONFLICT' })
       expect(toIpcError(error, 'HANDLER_ERROR')).toMatchObject({ code: 'ANNOTATION_CONFLICT', retryable: false })
     })
   })

@@ -38,7 +38,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 const row = (name: string) => within(document.querySelector(`.lite-service[data-service="${name}"]`) as HTMLElement)
 async function save(): Promise<SettingsUpdate> {
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '保存全部更改' })) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '儲存全部更改' })) })
   expect(saveSettings).toHaveBeenCalledOnce()
   return saveSettings.mock.calls[0]![0] as SettingsUpdate
 }
@@ -46,21 +46,21 @@ async function save(): Promise<SettingsUpdate> {
 describe('Lite settings window', () => {
   it('has three flat sections and no key manager, model page, advanced options or explanations', () => {
     render(<SettingsPage settings={settings()} onSaved={vi.fn()} onExit={vi.fn()} />)
-    const nav = within(screen.getByRole('navigation', { name: '设置分类' }))
-    expect(nav.getAllByRole('button').map((button) => button.textContent)).toEqual(['服务', '存储', '外观'])
-    for (const hidden of ['API 密钥', '模型设置', '高级设置', '管理密钥', '使用顺序']) expect(screen.queryByText(hidden)).toBeNull()
+    const nav = within(screen.getByRole('navigation', { name: '設定分類' }))
+    expect(nav.getAllByRole('button').map((button) => button.textContent)).toEqual(['服務', '儲存', '外觀'])
+    for (const hidden of ['API 金鑰', '模型設定', '高階設定', '管理金鑰', '使用順序']) expect(screen.queryByText(hidden)).toBeNull()
     expect(document.querySelector('details, .ant-tabs, .api-key-tabs, small')).toBeNull()
-    expect([...document.querySelectorAll('.lite-service')].map((element) => element.getAttribute('data-service'))).toEqual(['MinerU', '千问', 'DeepSeek', 'Codex'])
+    expect([...document.querySelectorAll('.lite-service')].map((element) => element.getAttribute('data-service'))).toEqual(['MinerU', '千問', 'DeepSeek', 'Codex'])
     // A stored key shows only its masked form; nothing waits to be saved yet.
     expect(row('DeepSeek').getByLabelText('DeepSeek API Key').getAttribute('placeholder')).toBe('sk-****9a2f')
-    expect(row('DeepSeek').getByText('已验证')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '保存全部更改' })).toBeNull()
+    expect(row('DeepSeek').getByText('已驗證')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '儲存全部更改' })).toBeNull()
   })
 
   it('saves a pasted key into the provider default connection', async () => {
     render(<SettingsPage settings={settings()} onSaved={vi.fn()} onExit={vi.fn()} />)
-    fireEvent.change(row('千问').getByLabelText('千问 API Key'), { target: { value: 'sk-qwen-new' } })
-    expect(row('千问').getByText('待保存')).toBeTruthy()
+    fireEvent.change(row('千問').getByLabelText('千問 API Key'), { target: { value: 'sk-qwen-new' } })
+    expect(row('千問').getByText('待儲存')).toBeTruthy()
     const update = await save()
     expect(update.keyMutations).toEqual({ 'qwen:default': { action: 'set', value: 'sk-qwen-new' } })
     expect(update.modelConnections?.some((connection) => connection.connectionId === 'qwen:default')).toBe(true)
@@ -68,14 +68,14 @@ describe('Lite settings window', () => {
 
   it('creates the default connection when the provider had none, and deleting removes it', async () => {
     const view = render(<SettingsPage settings={settings({ modelConnections: (DEFAULT_SETTINGS.modelConnections ?? []).filter((connection) => connection.provider !== 'qwen') })} onSaved={vi.fn()} onExit={vi.fn()} />)
-    fireEvent.change(row('千问').getByLabelText('千问 API Key'), { target: { value: 'sk-qwen-first' } })
+    fireEvent.change(row('千問').getByLabelText('千問 API Key'), { target: { value: 'sk-qwen-first' } })
     const update = await save()
     expect(update.keyMutations).toEqual({ 'qwen:default': { action: 'set', value: 'sk-qwen-first' } })
     expect(update.modelConnections?.filter((connection) => connection.provider === 'qwen').map((connection) => connection.connectionId)).toEqual(['qwen:default'])
     view.unmount(); saveSettings.mockClear()
 
     render(<SettingsPage settings={settings()} onSaved={vi.fn()} onExit={vi.fn()} />)
-    fireEvent.click(row('DeepSeek').getByRole('button', { name: '删除 DeepSeek API Key' }))
+    fireEvent.click(row('DeepSeek').getByRole('button', { name: '刪除 DeepSeek API Key' }))
     const removal = await save()
     expect(removal.modelConnections?.some((connection) => connection.provider === 'deepseek')).toBe(false)
   })
@@ -84,7 +84,7 @@ describe('Lite settings window', () => {
     render(<SettingsPage settings={settings()} onSaved={vi.fn()} onExit={vi.fn()} />)
     const before = settings().enabledTranslationProviders
     expect(before).toContain('deepseek')
-    fireEvent.click(row('DeepSeek').getByRole('switch', { name: '用DeepSeek翻译' }))
+    fireEvent.click(row('DeepSeek').getByRole('switch', { name: '用DeepSeek翻譯' }))
     const update = await save()
     expect(update.enabledTranslationProviders).not.toContain('deepseek')
   })

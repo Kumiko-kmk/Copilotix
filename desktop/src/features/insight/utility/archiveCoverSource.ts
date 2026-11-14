@@ -123,6 +123,6 @@ export async function loadArchiveCoverSource(repository: Repository, documentId:
     return { fingerprint: hash(JSON.stringify([...fingerprintBase, hash(source.bytes), signatures])), hasManifest: true, figures }
   } catch {
     signal?.throwIfAborted()
-    throw new Error('无法读取本地封面来源，请检查论文图像清单后重试。')
+    throw new Error('無法讀取本地封面來源，請檢查論文影象清單後重試。')
   }
 }

@@ -96,8 +96,8 @@ export default function ArchiveDetail(props: {
   const abstract = brief?.analysis?.abstract ?? profile?.translatedAbstract
   // The count beside a tab says how much is behind it before switching.
   const tabs: Array<[Tab, string, number?]> = brief
-    ? [['abstract', '摘要'], ['overview', '背景'], ['findings', '结论'], ['limits', '讨论']]
-    : [['abstract', '摘要'], ['structure', '结构', profile?.sections.length || undefined], ...(props.insights ? [['insight', 'AI 解读'] as [Tab, string]] : [])]
+    ? [['abstract', '摘要'], ['overview', '背景'], ['findings', '結論'], ['limits', '討論']]
+    : [['abstract', '摘要'], ['structure', '結構', profile?.sections.length || undefined], ...(props.insights ? [['insight', 'AI 解讀'] as [Tab, string]] : [])]
   const activeTab = tabs.some(([id]) => id === tab) ? tab : tabs[0]![0]
   const tabsRef = React.useRef<HTMLDivElement>(null)
   // One underline slides to the selected tab. It is placed without motion first, then moves.
@@ -118,9 +118,9 @@ export default function ArchiveDetail(props: {
   return (
     <>
       <button type="button" className="paper-archive-detail-back" onClick={props.onClose}>
-        <ArrowLeftOutlined aria-hidden="true" /><span>返回档案</span><kbd>Esc</kbd>
+        <ArrowLeftOutlined aria-hidden="true" /><span>返回檔案</span><kbd>Esc</kbd>
       </button>
-      <article ref={articleRef} className="paper-archive-detail" aria-label="论文档案" aria-busy={!revealed || details.isPending}>
+      <article ref={articleRef} className="paper-archive-detail" aria-label="論文件案" aria-busy={!revealed || details.isPending}>
         <div ref={redactionRef} className="paper-archive-redactions" aria-hidden="true" />
         <header>
           <span className="paper-archive-path">FILE NO.{String(props.fileNumber).padStart(3, '0')}<i>/</i>{props.category}</span>
@@ -129,15 +129,15 @@ export default function ArchiveDetail(props: {
           <p className="paper-archive-translated-title"><ArchiveText text={subtitle || '\u00a0'} /></p>
         </header>
         <div className="paper-archive-rule"><i /></div>
-        {details.isError ? <p className="paper-archive-detail-error" role="alert">论文内容读取失败，可以直接打开阅读。</p> : null}
+        {details.isError ? <p className="paper-archive-detail-error" role="alert">論文內容讀取失敗，可以直接開啟閱讀。</p> : null}
         <dl className="paper-archive-fields">
-          <Field index={2} wide label="作者 / 单位" value={profile?.authors ?? metadata?.authors?.value ?? (profile ? '未识别' : null)} />
-          {metadata?.venue ? <Field index={3} half label="期刊 / 会议" value={metadata.venue.value} /> : null}
-          {metadata?.year ? <Field index={4} half label="发表年份" value={metadata.year.value} /> : null}
+          <Field index={2} wide label="作者 / 單位" value={profile?.authors ?? metadata?.authors?.value ?? (profile ? '未識別' : null)} />
+          {metadata?.venue ? <Field index={3} half label="期刊 / 會議" value={metadata.venue.value} /> : null}
+          {metadata?.year ? <Field index={4} half label="發表年份" value={metadata.year.value} /> : null}
           {metadata?.doi ? <Field index={5} wide label="DOI" value={metadata.doi.value} /> : null}
 
         </dl>
-        <div ref={tabsRef} className="paper-archive-tabs" role="tablist" aria-label="档案内容">
+        <div ref={tabsRef} className="paper-archive-tabs" role="tablist" aria-label="檔案內容">
           {tabs.map(([id, label], index) => (
             <button key={id} type="button" role="tab" id={`paper-archive-tab-${id}`} aria-selected={activeTab === id}
               tabIndex={activeTab === id ? 0 : -1} aria-controls="paper-archive-tabpanel" onClick={() => setTab(id)}
@@ -163,17 +163,17 @@ export default function ArchiveDetail(props: {
               <div className="paper-archive-tabpanel-head">
                 <span className="paper-archive-eyebrow" data-archive-unredacted>ABSTRACT</span>
               </div>
-              <p data-annotation-block-key="archive:abstract:body" className="paper-archive-abstract paper-archive-translated-abstract"><ArchiveText text={abstract ?? (profile ? '暂无译文摘要。' : '正在读取…')} /></p>
+              <p data-annotation-block-key="archive:abstract:body" className="paper-archive-abstract paper-archive-translated-abstract"><ArchiveText text={abstract ?? (profile ? '暫無譯文摘要。' : '正在讀取…')} /></p>
             </>
           ) : briefState ? <BriefContent brief={briefState.brief} anchors={briefState.anchors} tab={activeTab as BriefTab} /> : activeTab === 'structure' ? (
             profile?.sections.length
               ? <ol className="paper-archive-outline">{profile.sections.map((section) => <li key={section}><ArchiveText text={section} /></li>)}</ol>
-              : <p className="paper-archive-abstract">{profile ? '未识别到章节标题。' : '正在读取…'}</p>
-          ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} /> : <p className="paper-archive-abstract">在阅读器中生成档案卡后，可在这里查看研究问题、证据、发现与局限。</p>}
+              : <p className="paper-archive-abstract">{profile ? '未識別到章節標題。' : '正在讀取…'}</p>
+          ) : ready && 'insight' in ready ? <InsightView insight={ready.insight} stale={ready.stale} /> : <p className="paper-archive-abstract">在閱讀器中生成檔案卡後，可在這裡檢視研究問題、證據、發現與侷限。</p>}
         </ArchiveReadingTools>
         <footer className="paper-archive-detail-actions">
           <button type="button" className="paper-archive-primary" disabled={props.phase !== 'open' || props.openingReader} onClick={props.onOpen}>
-            <span>{props.openingReader ? '正在打开…' : '打开阅读'}</span><span className="paper-archive-primary-end"><kbd aria-hidden="true">Enter</kbd><ArrowRightOutlined aria-hidden="true" /></span>
+            <span>{props.openingReader ? '正在開啟…' : '開啟閱讀'}</span><span className="paper-archive-primary-end"><kbd aria-hidden="true">Enter</kbd><ArrowRightOutlined aria-hidden="true" /></span>
           </button>
         </footer>
       </article>
@@ -228,13 +228,13 @@ function InsightView(props: { insight: PaperInsight; stale: boolean }): React.JS
     <div className="paper-archive-insight">
       <p className="paper-archive-abstract"><ArchiveText text={insight.summary} /></p>
       <dl>
-        <div><dt>研究问题</dt><dd><ArchiveText text={insight.researchQuestion} /></dd></div>
+        <div><dt>研究問題</dt><dd><ArchiveText text={insight.researchQuestion} /></dd></div>
         <div><dt>方法</dt><dd><ArchiveText text={insight.method} /></dd></div>
-        {list('贡献', insight.contributions)}
-        {list('主要发现', insight.findings)}
-        {list('局限', insight.limitations)}
+        {list('貢獻', insight.contributions)}
+        {list('主要發現', insight.findings)}
+        {list('侷限', insight.limitations)}
       </dl>
-      <small>{insight.model.name}{props.stale ? ' · 论文内容已更新' : ''}</small>
+      <small>{insight.model.name}{props.stale ? ' · 論文內容已更新' : ''}</small>
     </div>
   )
 }

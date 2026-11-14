@@ -48,7 +48,7 @@ const dark = (id: string, name: string, label: string, colors: Omit<ThemeColors,
 
 /** Three paper themes and three night themes, each with its own accent. */
 export const THEMES: readonly ThemeDefinition[] = [
-  light('archive', '档案纸', 'Archive paper', {
+  light('archive', '檔案紙', 'Archive paper', {
     surface: '#f7f2e8', sheet: '#fffdf8', mutedSurface: '#efe8dc', border: '#dcd4c7', text: '#27231e', ink: '#2f2a24', muted: '#7d7569',
     primary: '#5b58d6', primarySoft: '#ecebfb', archiveFloor: '#dccdbb', archiveCard: '#fff7ed', archiveEdge: '#fff5e9', archiveIndex: '#e4d6c5', archiveTray: '#806447'
   }),
@@ -56,11 +56,11 @@ export const THEMES: readonly ThemeDefinition[] = [
     surface: '#eef1ec', sheet: '#fafcf9', mutedSurface: '#e1e7e1', border: '#cbd5cd', text: '#1f2826', ink: '#24302d', muted: '#6b7873',
     primary: '#2f7d6d', primarySoft: '#dcece6', archiveFloor: '#c9d4cc', archiveCard: '#f6faf6', archiveEdge: '#f2f7f3', archiveIndex: '#d3ddd6', archiveTray: '#5d7a6d'
   }),
-  light('cinnabar', '朱砂', 'Cinnabar', {
+  light('cinnabar', '硃砂', 'Cinnabar', {
     surface: '#f5efe4', sheet: '#fffcf6', mutedSurface: '#ece3d4', border: '#dccfbd', text: '#2a2320', ink: '#2b211d', muted: '#7f7062',
     primary: '#b8432f', primarySoft: '#f6e3db', archiveFloor: '#dccab3', archiveCard: '#fff6ec', archiveEdge: '#fdf2e6', archiveIndex: '#e6d4c0', archiveTray: '#86553e'
   }),
-  dark('archive-night', '夜档', 'Night archive', {
+  dark('archive-night', '夜檔', 'Night archive', {
     surface: '#1b1916', sheet: '#24211d', mutedSurface: '#2c2823', border: '#3b362f', text: '#e4ddd1', ink: '#f1eadf', muted: '#999082',
     primary: '#9693f5', primarySoft: '#2b2a46', archiveFloor: '#26221d', archiveCard: '#3a352e', archiveEdge: '#4b453c', archiveIndex: '#4a4339', archiveTray: '#0f0d0b'
   }),
@@ -126,7 +126,7 @@ export function selectTheme(id: string): ThemeDefinition {
 
 /**
  * Appearance: the colour theme and the reader's text size and line height. Settings previews a choice at once,
- * and saves or reverts it with the page's own 保存全部更改 / 放弃更改.
+ * and saves or reverts it with the page's own 儲存全部更改 / 放棄更改.
  */
 export interface Appearance {
   themeId: string

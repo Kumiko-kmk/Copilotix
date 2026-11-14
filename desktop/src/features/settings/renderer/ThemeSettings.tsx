@@ -36,20 +36,20 @@ function ThemePreview(): React.JSX.Element {
 }
 
 /**
- * 显示设置: colour themes, then the reader's text size and line height. Choices preview at once;
- * the settings page saves or reverts them with its 保存全部更改 / 放弃更改 like every other setting.
+ * 顯示設定: colour themes, then the reader's text size and line height. Choices preview at once;
+ * the settings page saves or reverts them with its 儲存全部更改 / 放棄更改 like every other setting.
  */
 export default function ThemeSettings(props: { value: Appearance; onChange(next: Appearance): void }): React.JSX.Element {
   const { value, onChange } = props
   const groups: Array<[string, readonly ThemeDefinition[]]> = [
-    ['浅色', THEMES.filter((theme) => !theme.dark)],
+    ['淺色', THEMES.filter((theme) => !theme.dark)],
     ['深色', THEMES.filter((theme) => theme.dark)]
   ]
   return (
-    <section className="settings-section theme-settings" aria-label="显示设置">
+    <section className="settings-section theme-settings" aria-label="顯示設定">
       <div className="theme-groups">
         {groups.map(([name, themes]) => (
-          <div key={name} className="theme-group" role="radiogroup" aria-label={`${name}主题`}>
+          <div key={name} className="theme-group" role="radiogroup" aria-label={`${name}主題`}>
             <span className="theme-group-label">{name}</span>
             <div className="theme-grid">
               {themes.map((theme) => (
@@ -71,21 +71,21 @@ export default function ThemeSettings(props: { value: Appearance; onChange(next:
         ))}
       </div>
       <div className="theme-group reader-font-setting">
-        <span className="theme-group-label">阅读</span>
+        <span className="theme-group-label">閱讀</span>
         <ReaderStepper
-          id="reader-font-size" label="字号" name="阅读字号" range={READER_FONT_SIZES} value={value.readerFontSize}
+          id="reader-font-size" label="字號" name="閱讀字號" range={READER_FONT_SIZES} value={value.readerFontSize}
           decrease="A−" increase="A+" format={(size) => <>{size}<small>px</small></>}
           onChange={(readerFontSize) => onChange({ ...value, readerFontSize })}
         />
         <ReaderStepper
-          id="reader-line-height" label="行间距" name="阅读行间距" range={READER_LINE_HEIGHTS} value={value.readerLineHeight}
+          id="reader-line-height" label="行間距" name="閱讀行間距" range={READER_LINE_HEIGHTS} value={value.readerLineHeight}
           decrease="−" increase="+" format={(height) => <>{height.toFixed(1)}<small>倍</small></>}
           onChange={(readerLineHeight) => onChange({ ...value, readerLineHeight })}
         />
         <div className="reader-font-sample" style={{ fontSize: `${value.readerFontSize}px`, lineHeight: value.readerLineHeight }}>
           <p>
-          注意力机制已成为序列建模中不可或缺的一部分，使模型能够不受距离限制地刻画依赖关系。Attention mechanisms have become an integral part of sequence modeling, allowing modeling of dependencies without regard to their distance in the input or output sequences. 在多数情况下，这类机制与循环网络结合使用；本文提出的 Transformer 则完全依赖注意力机制来建立输入与输出之间的全局依赖。</p>
-          <p>Transformer 允许显著更多的并行化，在八块 P100 GPU 上仅训练十二小时，就能在翻译质量上达到新的水平。The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs. 我们在后文中描述其结构，并说明自注意力相较于卷积与循环层的优势。</p>
+          注意力機制已成為序列建模中不可或缺的一部分，使模型能夠不受距離限制地刻畫依賴關係。Attention mechanisms have become an integral part of sequence modeling, allowing modeling of dependencies without regard to their distance in the input or output sequences. 在多數情況下，這類機制與迴圈網路結合使用；本文提出的 Transformer 則完全依賴注意力機制來建立輸入與輸出之間的全域性依賴。</p>
+          <p>Transformer 允許顯著更多的並行化，在八塊 P100 GPU 上僅訓練十二小時，就能在翻譯質量上達到新的水平。The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs. 我們在後文中描述其結構，並說明自注意力相較於卷積與迴圈層的優勢。</p>
         </div>
       </div>
     </section>
@@ -110,12 +110,12 @@ function ReaderStepper(props: {
   return (
     <div className="reader-font-stepper">
       <span className="reader-font-stepper-label">{props.label}</span>
-      <button type="button" aria-label={`减小${props.name}`} disabled={value <= range.min} onClick={() => set(value - range.step)}>{props.decrease}</button>
+      <button type="button" aria-label={`減小${props.name}`} disabled={value <= range.min} onClick={() => set(value - range.step)}>{props.decrease}</button>
       <input id={props.id} type="range" aria-label={props.name} min={range.min} max={range.max} step={range.step} value={value}
         onChange={(event) => set(Number(event.target.value))} />
       <button type="button" aria-label={`增大${props.name}`} disabled={value >= range.max} onClick={() => set(value + range.step)}>{props.increase}</button>
       <output htmlFor={props.id}>{props.format(value)}</output>
-      <button type="button" className="reader-font-reset" disabled={isDefault} onClick={() => set(range.default)}>恢复默认</button>
+      <button type="button" className="reader-font-reset" disabled={isDefault} onClick={() => set(range.default)}>恢復預設</button>
     </div>
   )
 }

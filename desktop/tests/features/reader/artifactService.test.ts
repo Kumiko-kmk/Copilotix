@@ -57,13 +57,13 @@ describe('reader translation artifact recovery', () => {
         blockMappingVersion: BLOCK_MAPPING_VERSION,
         preferredProvider: 'codex',
         blocks: [
-          { sourceIndex: 0, markdown: '# 正确标题', mappingIds: [], provider: 'codex', status: 'completed' },
-          { sourceIndex: 1, markdown: '正确正文', mappingIds: [], provider: 'deepseek', status: 'completed' }
+          { sourceIndex: 0, markdown: '# 正確標題', mappingIds: [], provider: 'codex', status: 'completed' },
+          { sourceIndex: 1, markdown: '正確正文', mappingIds: [], provider: 'deepseek', status: 'completed' }
         ]
       }), 'utf8')
 
       const document = await service.getDocument(task.id)
-      expect(document).toMatchObject({ translatedMarkdown: '# 正确标题\n\n正确正文\n' })
+      expect(document).toMatchObject({ translatedMarkdown: '# 正確標題\n\n正確正文\n' })
       // Only blocks translated by a provider other than the preferred one carry a fallback mark.
       expect(document.translatedBlocks?.map(block => block.fallbackProvider)).toEqual([undefined, 'deepseek'])
       // A source block that changed after translation (e.g. a text-layer repair) is flagged; unchanged ones are not.
@@ -76,9 +76,9 @@ describe('reader translation artifact recovery', () => {
       await writeFile(join(outputDir, 'translation.manifest.json'), JSON.stringify(manifest), 'utf8')
       expect((await service.getDocument(task.id)).translatedBlocks?.map(block => block.sourceChanged)).toEqual([undefined, true])
       await expect(service.hasStaleTranslation(task.id)).resolves.toBe(true)
-      await writeFile(join(outputDir, 'full.zh-CN.md'), '# 其他论文的陈旧内容\n', 'utf8')
+      await writeFile(join(outputDir, 'full.zh-CN.md'), '# 其他論文的陳舊內容\n', 'utf8')
       await expect(service.getDocument(task.id)).resolves.toMatchObject({
-        translatedMarkdown: '# 正确标题\n\n正确正文\n'
+        translatedMarkdown: '# 正確標題\n\n正確正文\n'
       })
     } finally {
       await rm(outputDir, { recursive: true, force: true })

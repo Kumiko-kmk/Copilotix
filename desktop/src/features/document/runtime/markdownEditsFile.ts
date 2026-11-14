@@ -13,11 +13,11 @@ export async function readMarkdownEditsFile(root: string, documentId: string): P
   const path = policy.resolveChild(root, MARKDOWN_EDITS_FILE)
   let info
   try { info = await lstat(join(root, MARKDOWN_EDITS_FILE)) } catch (error) { if (missing(error)) return emptyMarkdownEdits(documentId); throw error }
-  if (!info.isFile() || info.isSymbolicLink() || info.size > MARKDOWN_EDITS_MAX_BYTES) throw new Error('段落修改文件无效或过大')
+  if (!info.isFile() || info.isSymbolicLink() || info.size > MARKDOWN_EDITS_MAX_BYTES) throw new Error('段落修改檔案無效或過大')
   const handle = await open(path, 'r')
   let file: MarkdownEditsFile
   try { file = markdownEditsFileSchema.parse(JSON.parse(await handle.readFile('utf8'))) } finally { await handle.close() }
-  if (file.documentId !== documentId) throw new Error('段落修改文件不属于当前论文')
+  if (file.documentId !== documentId) throw new Error('段落修改檔案不屬於當前論文')
   return file
 }
 
@@ -25,14 +25,14 @@ export async function readMarkdownEditsFile(root: string, documentId: string): P
 export async function writeMarkdownEditsFile(root: string, file: MarkdownEditsFile): Promise<void> {
   const value = markdownEditsFileSchema.parse(file)
   const body = JSON.stringify(value)
-  if (Buffer.byteLength(body) > MARKDOWN_EDITS_MAX_BYTES) throw new Error('段落修改超过保存上限')
+  if (Buffer.byteLength(body) > MARKDOWN_EDITS_MAX_BYTES) throw new Error('段落修改超過儲存上限')
   const directory = policy.resolveChild(root, 'edits')
   try {
     const info = await lstat(join(root, 'edits'))
-    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('段落修改目录无效')
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('段落修改目錄無效')
   } catch (error) { if (!missing(error)) throw error; await mkdir(directory) }
   const target = policy.resolveChild(root, MARKDOWN_EDITS_FILE)
-  try { if ((await lstat(join(root, MARKDOWN_EDITS_FILE))).isSymbolicLink()) throw new Error('段落修改文件不能是符号链接') } catch (error) { if (!missing(error)) throw error }
+  try { if ((await lstat(join(root, MARKDOWN_EDITS_FILE))).isSymbolicLink()) throw new Error('段落修改檔案不能是符號連結') } catch (error) { if (!missing(error)) throw error }
   const temporary = policy.resolveChild(root, `edits/.pending-${randomUUID()}`)
   try {
     const handle = await open(temporary, 'wx')

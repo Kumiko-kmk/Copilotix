@@ -97,7 +97,7 @@ export function SplitView(props: { split: LayoutSplit }): React.JSX.Element {
               <div
                 className="reader-split-handle"
                 role="separator"
-                aria-label={`调整 ${nodeLabel(split.children[index - 1]!, specs)} 与 ${nodeLabel(child, specs)} 阅读器${row ? '宽度' : '高度'}`}
+                aria-label={`調整 ${nodeLabel(split.children[index - 1]!, specs)} 與 ${nodeLabel(child, specs)} 閱讀器${row ? '寬度' : '高度'}`}
                 aria-orientation={row ? 'vertical' : 'horizontal'}
                 aria-valuemin={Math.round(cumulative - sizes[index - 1]! + minPercent(index - 1))}
                 aria-valuemax={Math.round(cumulative + sizes[index]! - minPercent(index))}
@@ -184,12 +184,12 @@ export function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
       ...splitItems(view),
       ...(others.length > 0 ? [{
         key: `move-menu:${view}`,
-        label: '移动到分组',
+        label: '移動到分組',
         children: others.map((item) => ({ key: `move:${item.id}:${view}`, label: groupLabel(item, groups, specs) }))
       }] : []),
       { type: 'divider' as const },
-      ...(groups.length > 1 ? [{ key: 'maximize', label: <MenuLabel text={maximized ? '还原分组' : '最大化分组'} keys="Ctrl+Shift+M" /> }] : []),
-      { key: `hide:${view}`, label: <MenuLabel text="关闭视图" keys="Ctrl+W" />, disabled: !canHide }
+      ...(groups.length > 1 ? [{ key: 'maximize', label: <MenuLabel text={maximized ? '還原分組' : '最大化分組'} keys="Ctrl+Shift+M" /> }] : []),
+      { key: `hide:${view}`, label: <MenuLabel text="關閉檢視" keys="Ctrl+W" />, disabled: !canHide }
     ]
   }
 
@@ -216,12 +216,12 @@ export function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
       ref={groupRef}
       className={`reader-group${focused ? ' focused' : ''}${maximized ? ' maximized' : ''}`}
       data-reader-group={group.id}
-      aria-label={`阅读分组 ${groupIndex + 1}`}
+      aria-label={`閱讀分組 ${groupIndex + 1}`}
       onPointerDownCapture={() => actions.focus(group.id)}
       onFocusCapture={() => actions.focus(group.id)}
     >
       <div className="reader-group-bar" ref={barRef}>
-        <div className="reader-tabs" role="tablist" aria-label="视图">
+        <div className="reader-tabs" role="tablist" aria-label="檢視">
           {views.map((view) => {
             const spec = specs[view]!
             const active = view === group.active
@@ -257,7 +257,7 @@ export function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
                     <span className="reader-tab-label">{spec.tab ?? spec.label}</span>
                   </button>
                   {canHide ? (
-                    <button type="button" className="reader-tab-close" aria-label={`关闭 ${spec.label}`} onClick={() => actions.hide(view)}>
+                    <button type="button" className="reader-tab-close" aria-label={`關閉 ${spec.label}`} onClick={() => actions.hide(view)}>
                       <CloseOutlined />
                     </button>
                   ) : null}
@@ -277,7 +277,7 @@ export function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
                 onClick: onMenuClick
               }}
             >
-              <button type="button" className="reader-group-button reader-tab-add" aria-label="打开已关闭的视图">
+              <button type="button" className="reader-group-button reader-tab-add" aria-label="開啟已關閉的檢視">
                 <PlusOutlined />
               </button>
             </Dropdown>
@@ -288,7 +288,7 @@ export function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
           <button
             type="button"
             className={synced ? 'reader-group-button reader-sync-toggle on' : 'reader-group-button reader-sync-toggle'}
-            aria-label="滚动同步"
+            aria-label="滾動同步"
             aria-pressed={synced}
             onClick={() => actions.toggleSync(group.active)}
           >
@@ -296,7 +296,7 @@ export function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
           </button>
         ) : null}
         {maximized ? (
-          <button type="button" className="reader-group-button" aria-label="还原分组" onClick={() => actions.toggleMaximize(group.id)}>
+          <button type="button" className="reader-group-button" aria-label="還原分組" onClick={() => actions.toggleMaximize(group.id)}>
             <ShrinkOutlined />
           </button>
         ) : null}
@@ -307,14 +307,14 @@ export function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
             items: [
               ...splitItems(group.active),
               { type: 'divider' as const },
-              ...(groups.length > 1 ? [{ key: 'maximize', label: <MenuLabel text={maximized ? '还原分组' : '最大化分组'} keys="Ctrl+Shift+M" /> }] : []),
+              ...(groups.length > 1 ? [{ key: 'maximize', label: <MenuLabel text={maximized ? '還原分組' : '最大化分組'} keys="Ctrl+Shift+M" /> }] : []),
               { key: 'equalize', label: '平均分配大小', disabled: !parentId },
-              { key: 'reset', label: '恢复默认布局' }
+              { key: 'reset', label: '恢復預設版面配置' }
             ],
             onClick: onMenuClick
           }}
         >
-          <button type="button" className="reader-group-button reader-group-more" aria-label="布局操作">
+          <button type="button" className="reader-group-button reader-group-more" aria-label="版面配置操作">
             <LayoutOutlined />
           </button>
         </Dropdown>
@@ -349,7 +349,7 @@ export function GroupView(props: { group: LayoutGroup }): React.JSX.Element {
 // ── Drag feedback (the only components that re-render while dragging) ─────
 
 export const ZONE_LABELS: Record<DropZone, string> = {
-  center: '移到此分组', left: '在左侧拆分', right: '在右侧拆分', top: '在上方拆分', bottom: '在下方拆分'
+  center: '移到此分組', left: '在左側拆分', right: '在右側拆分', top: '在上方拆分', bottom: '在下方拆分'
 }
 
 export function DropPreview(props: { groupId: string }): React.JSX.Element | null {
@@ -358,7 +358,7 @@ export function DropPreview(props: { groupId: string }): React.JSX.Element | nul
   if (!target || target.kind !== 'zone' || target.groupId !== props.groupId) return null
   return (
     <div className={`reader-drop-preview zone-${target.zone}${target.allowed ? '' : ' blocked'}`} aria-hidden="true">
-      <span>{target.allowed ? ZONE_LABELS[target.zone] : target.reason ?? '无法放置'}</span>
+      <span>{target.allowed ? ZONE_LABELS[target.zone] : target.reason ?? '無法放置'}</span>
     </div>
   )
 }
@@ -408,5 +408,5 @@ export function nodeLabel(node: LayoutNode, specs: ReaderViewSpecs): string {
 
 export function groupLabel(group: LayoutGroup, groups: LayoutGroup[], specs: ReaderViewSpecs): string {
   const names = group.views.map((view) => specs[view]?.label ?? view).join('、')
-  return `分组 ${groups.indexOf(group) + 1}（${names}）`
+  return `分組 ${groups.indexOf(group) + 1}（${names}）`
 }

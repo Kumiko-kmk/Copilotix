@@ -211,10 +211,10 @@ export async function publishRelease({ fromBuilt = false, lite = false } = {}) {
 
 export function installInstructions(setupName, lite = false) {
   const name = lite ? LITE_IDENTITY.productName : FULL_IDENTITY.productName
-  const firstUse = lite ? '首次使用在“设置”中配置解析和翻译服务' : '首次使用按应用内引导配置文库和翻译服务'
-  const library = lite ? '论文数据' : '文库'
-  const independence = lite ? `${name} 与完整版 Copilotix 各自安装，资料和密钥互不共用；可用“设置 → 文件存储”导入完整版导出的数据。\r\n` : ''
-  return `﻿${name} 安装说明\r\n\r\n1. 解压整个压缩包。双击 ${setupName}，按向导选择安装位置。\r\n2. 安装完成后，从桌面打开 ${name}；${firstUse}。\r\n3. 卸载时双击本目录的 uninstall.exe，也可使用 Windows 已安装应用中的卸载入口。\r\n\r\n安装位置存放程序；${library}位置在“设置 → 文件存储”中选择。\r\n${independence}升级或卸载前，请在系统托盘选择“退出”，等待后台任务结束。\r\n默认卸载保留资料；可在卸载向导选择同步清除${library}、设置与凭证，并确认清理位置。\r\n完整程序已压缩在 Setup 内，安装后即可运行。advanced 仅为校验资料，不需打开。\r\n卸载会移除已安装程序；下载并解压的本目录可在不用时自行删除。\r\n`
+  const firstUse = lite ? '首次使用在“設定”中配置解析和翻譯服務' : '首次使用按應用內引導配置文庫和翻譯服務'
+  const library = lite ? '論文資料' : '文庫'
+  const independence = lite ? `${name} 與完整版 Copilotix 各自安裝，資料和金鑰互不共用；可用“設定 → 檔案儲存”匯入完整版匯出的資料。\r\n` : ''
+  return `﻿${name} 安裝說明\r\n\r\n1. 解壓整個壓縮包。雙擊 ${setupName}，按嚮導選擇安裝位置。\r\n2. 安裝完成後，從桌面開啟 ${name}；${firstUse}。\r\n3. 解除安裝時雙擊本目錄的 uninstall.exe，也可使用 Windows 已安裝應用中的解除安裝入口。\r\n\r\n安裝位置存放程式；${library}位置在“設定 → 檔案儲存”中選擇。\r\n${independence}升級或解除安裝前，請在系統匣選擇“退出”，等待背景任務結束。\r\n預設解除安裝保留資料；可在解除安裝嚮導選擇同步清除${library}、設定與憑證，並確認清理位置。\r\n完整程式已壓縮在 Setup 內，安裝後即可執行。advanced 僅為校驗資料，不需開啟。\r\n解除安裝會移除已安裝程式；下載並解壓的本目錄可在不用時自行刪除。\r\n`
 }
 
 export function assertWindowsX64(platform = process.platform, architecture = process.arch) {
@@ -452,7 +452,7 @@ function payloadChecksums(layout, hashes) {
 }
 
 export async function assertReleaseRootContents(root, releaseName, setupName = setupNameForRelease(releaseName)) {
-  const expected = [setupName, 'uninstall.exe', '安装说明.txt', 'advanced'].sort()
+  const expected = [setupName, 'uninstall.exe', '安裝說明.txt', 'advanced'].sort()
   const actual = (await readdir(root)).sort()
   if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
     throw new Error(`Unexpected release staging contents: ${actual.join(', ')}`)
@@ -499,7 +499,7 @@ async function verifyReleaseZip(archivePath, verificationDirectory, rootName, ve
     for (const [key, path] of [['setup', metadata.installer.file], ['launcher', metadata.uninstaller.file]]) {
       if (!hashes || await sha256(join(bundleRoot, path)) !== hashes[key]) throw new Error(`Extracted bundle hash mismatch: ${key}`)
     }
-    await requireFile(join(bundleRoot, '安装说明.txt'))
+    await requireFile(join(bundleRoot, '安裝說明.txt'))
     if (verifySignature) {
       for (const path of [metadata.installer.file, metadata.uninstaller.file]) {
         if (await verifySignature(join(bundleRoot, path)) !== expectedSigner) throw new Error('Bundle executable signer differs from runtime')

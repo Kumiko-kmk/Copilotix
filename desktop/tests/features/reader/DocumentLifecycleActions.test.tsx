@@ -31,29 +31,29 @@ describe('DocumentLifecycleActions', () => {
   it('offers retry only for failed, partial and translating papers, without hover titles', () => {
     for (const status of ['failed', 'partial', 'translating'] as const) {
       const { unmount } = render(<DocumentLifecycleActions summary={summary(status)} messageApi={messageApi()} onDeleted={vi.fn()} />)
-      expect(screen.getByRole('button', { name: '重试' }).getAttribute('title')).toBeNull()
+      expect(screen.getByRole('button', { name: '重試' }).getAttribute('title')).toBeNull()
       unmount()
     }
     for (const status of ['queued', 'parsing', 'completed'] as const) {
       const { unmount } = render(<DocumentLifecycleActions summary={summary(status)} messageApi={messageApi()} onDeleted={vi.fn()} />)
-      expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '重試' })).toBeNull()
       unmount()
     }
   })
 
   it('queues a retry for the paper', async () => {
     render(<DocumentLifecycleActions summary={summary('failed')} messageApi={messageApi()} onDeleted={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    fireEvent.click(screen.getByRole('button', { name: '重試' }))
     await waitFor(() => expect(retryDocument).toHaveBeenCalledWith('paper-id'))
   })
 
   it('deletes after confirmation, removing local files by default, then leaves the reader', async () => {
     const onDeleted = vi.fn()
     render(<DocumentLifecycleActions summary={summary('completed')} messageApi={messageApi()} onDeleted={onDeleted} />)
-    fireEvent.click(screen.getByRole('button', { name: '删除论文' }))
-    expect(screen.getByRole('checkbox', { name: '同时删除本地结果文件（不可恢复）' })).toHaveProperty('checked', true)
+    fireEvent.click(screen.getByRole('button', { name: '刪除論文' }))
+    expect(screen.getByRole('checkbox', { name: '同時刪除本地結果檔案（不可恢復）' })).toHaveProperty('checked', true)
     expect(deleteDocument).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: /^删\s*除$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^刪\s*除$/u }))
     await waitFor(() => expect(onDeleted).toHaveBeenCalled())
     expect(deleteDocument).toHaveBeenCalledWith({ documentId: 'paper-id', deleteFiles: true })
   })
@@ -63,9 +63,9 @@ describe('DocumentLifecycleActions', () => {
     const onDeleted = vi.fn()
     const api = messageApi()
     render(<DocumentLifecycleActions summary={summary('completed')} messageApi={api} onDeleted={onDeleted} />)
-    fireEvent.click(screen.getByRole('button', { name: '删除论文' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: '同时删除本地结果文件（不可恢复）' }))
-    fireEvent.click(screen.getByRole('button', { name: /^删\s*除$/u }))
+    fireEvent.click(screen.getByRole('button', { name: '刪除論文' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '同時刪除本地結果檔案（不可恢復）' }))
+    fireEvent.click(screen.getByRole('button', { name: /^刪\s*除$/u }))
     await waitFor(() => expect(api.error).toHaveBeenCalledWith('busy'))
     expect(deleteDocument).toHaveBeenCalledWith({ documentId: 'paper-id', deleteFiles: false })
     expect(onDeleted).not.toHaveBeenCalled()

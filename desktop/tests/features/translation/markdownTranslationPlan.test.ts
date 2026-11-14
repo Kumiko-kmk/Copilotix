@@ -198,7 +198,7 @@ describe('utility markdown translation plan manager', () => {
       ]))
       const response = {
         protocol: 'copilotix-table-translation-v2',
-        translations: flattenSegments(request).map((segment) => ({ id: segment.id, text: `译:${segment.text}` }))
+        translations: flattenSegments(request).map((segment) => ({ id: segment.id, text: `譯:${segment.text}` }))
       }
       await writeFile(absolutePath(fixture.outputDir, descriptor.responsePath), `${JSON.stringify(response)}\n`, 'utf8')
       await expect(manager.apply(fixture.task.id, fixture.jobId, descriptor.unitId, descriptor.responsePath, 'qwen', 'fixture'))
@@ -208,15 +208,15 @@ describe('utility markdown translation plan manager', () => {
       expect(result).toContain('rowspan="2"')
       expect(result).toContain('colspan="2"')
       expect(result).toContain('<td></td>')
-      expect(result).toContain('译:Head')
-      expect(result).toContain('译:Value')
-      expect(result).toContain('译:Other')
+      expect(result).toContain('譯:Head')
+      expect(result).toContain('譯:Value')
+      expect(result).toContain('譯:Other')
       await manager.finalize(fixture.task.id, fixture.jobId)
       const published = await readFile(join(fixture.outputDir, 'full.zh-CN.md'), 'utf8')
       expect(published).toContain('<table')
       expect(published).toContain('rowspan="2"')
       expect(published).toContain('colspan="2"')
-      expect(published).toContain('译:Head')
+      expect(published).toContain('譯:Head')
       const manifest = await readJson(join(fixture.outputDir, 'translation.manifest.json'))
       expect(manifest.markdownFormat).toBe('markdown-html-math-v1')
       expect(manifest.blocks[0].markdown).toContain('<table')
@@ -283,7 +283,7 @@ describe('utility markdown translation plan manager', () => {
       await manager.apply(fixture.task.id, fixture.jobId, descriptor.unitId, descriptor.responsePath, 'qwen', 'fixture')
 
       const legacyKey = createHash('sha256')
-        .update(`${TRANSLATION_PIPELINE_VERSION}|qwen|fixture|zh-CN|${descriptor.sourceHash}`)
+        .update(`${TRANSLATION_PIPELINE_VERSION}|qwen|fixture|zh-TW|${descriptor.sourceHash}`)
         .digest('hex')
       expect(commits[0]?.cacheEntries[0]?.cacheKey).toBe(legacyKey)
       expect(commits[0]?.cacheEntries[0]?.cacheKey).not.toContain(':')

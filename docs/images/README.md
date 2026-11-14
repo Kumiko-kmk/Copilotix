@@ -1,35 +1,7 @@
-# README 图像
+# README 圖片與示範
 
-当前首页使用三张由内置 imagegen 生成、按实际代码核对的架构图：
-
-- `architecture-processes.png`：进程职责、IPC／Core RPC、受控资源与凭据库。
-- `architecture-document.png`：来源、基础模型、译文与编辑快照、锚点及重新解析后的匹配。
-- `architecture-models.png`：功能共用入口、额度预算与连接健康状态。
-
-[完整提示词与校对记录](architecture-prompts.md)。结构依据 `docs/ARCHITECTURE_ZH.md`、`features/document/README.md` 和 `platform/models/README.md`。真实演示仍使用下列 Claude 录屏。
-
-以下为保留的旧版插图及来源；装饰性主题图和流程图已从首页撤下。
-
-- `reading-hero.png`：内置 imagegen 生成的学术阅读主题插图。
-- `reading-workflow.png`：内置 imagegen 生成的收集、阅读、提问与整理流程插图。
-
-主题图提示词：
-
-> Use case: illustration-story. Create a premium editorial hero illustration for the GitHub README of Copilotix, an academic PDF reading and research desktop application. Wide landscape 16:9, warm ivory paper background, crisp charcoal fine linework, restrained cobalt-blue and sage-green accents, subtle tactile paper texture and shallow soft shadows. At the center a beautiful open scholarly paper in gentle perspective, its two pages populated with precise abstract paragraph rules, one small integral formula, a pale highlighted passage, a neat table grid and a three-panel scientific figure. Around it, a balanced constellation of four meaningful objects: a tidy small stack of papers with colored tabs at left, a translucent paired translation page slightly offset behind the open paper, a small dialogue card with three citation-like chips on the right, and a compact notebook with a bookmark below. Connect these objects with only a few delicate curved lines or tiny dots, readable hierarchy, no tangled network. Add restrained details such as margin marks, folded page corners, fine chart axes, selected text and small paper tabs; rich in craft but calm and not busy. Leave generous breathing room around the composition. The only text is 'Copilotix' in a refined large charcoal serif at upper left; all other content uses abstract lines, mathematical glyphs or visual shapes, no readable explanatory text. Sophisticated scientific publishing aesthetic, elegant and inviting, no photography, no people, no product screenshot, no fake toolbar, no giant 3D objects, no neon, no badges, no extra headings. Art direction should harmonize with an ivory/charcoal/cobalt/sage architecture diagram.
-
-流程图提示词：
-
-> Use case: infographic-diagram. A beautifully crafted horizontal editorial workflow illustration for Copilotix academic reading software, landscape 16:9. Warm ivory background, precise charcoal thin outlines, muted sage and cobalt accents, minimal soft paper shadows, clean flat-to-shallow-isometric hybrid matching refined open-source documentation. Four equally balanced small scenes aligned left to right with ample gaps and only three thin rightward connecting arrows. Scene one, labelled 'COLLECT': a folder and three scholarly paper cards with tiny chart, paragraph and image glyphs plus a small bookmark. Scene two, labelled 'READ': an open dual-column paper layout with a narrow page thumbnail rail, original and translated paragraph rules aligned with a tiny blue linkage mark, a highlighted sentence and a compact mathematical expression. Scene three, labelled 'ASK': two elegant conversation bubbles beside a magnified paper excerpt, three small numbered citation chips using simple dots instead of numerals, a tiny scientific figure brought into the conversation; the bubbles contain abstract horizontal rules only. Scene four, labelled 'KEEP': a neat notebook page with underlines and a bookmark, a paper/file stack with a tiny export arrow, and an organized table grid. Give each scene meaningful detail: fine dividers, folded paper corners, small axis ticks, one selected text band, restrained tabs. Clear hierarchy, rich but not complex, no giant enclosing cards, no excessive micro-icons, no decorative circuits, no dense network, no product UI screenshot, no legend or captions. Exactly four readable labels COLLECT, READ, ASK, KEEP in small elegant charcoal serif beneath their respective scenes. No other text besides a short mathematical glyph. Broad calm composition, no top heading, no logo, no gradient, no neon.
-
-- `demos/*.gif`：复用 `output/promo-20261019/` 的三段真实完整版录屏，未改动像素；展示日期为 2026-10-19。
-- `architecture-illustration.png`：通过内置 imagegen 生成的架构概念插图，非界面截图。结构依据当前 Electron Renderer / Main / Utility、SQLite 与文件存储、共享模型服务设计。
-
-新版 `architecture-illustration-v2.png` 在原图基础上通过内置 imagegen 编辑，增加双栏阅读、任务队列、结构化内容与本地存储的细节，保持七个标签与原有层次。README 使用新版，初版保留。
-
-新版编辑提示词：
-
-> Use case: precise-object-edit. Edit the attached Copilotix README architecture illustration, preserving its landscape layout, warm ivory paper, charcoal linework, restrained cobalt and sage accents, seven exact labels (Copilotix, READER, MAIN, UTILITY, Models, SQLite, Files) and connector topology. Make the illustration richer in meaningful fine details but still calm and immediately understandable. Reader: an elegant miniature dual-pane academic reading window with a narrow thumbnail rail, two paper columns represented by fine abstract lines, a highlighted passage, a compact figure chart and a small formula; no extra words. Main: replace the generic four oversized buttons with a tidy architectural gateway panel of small queue cards, a shield/key icon for controlled access, three status dots, and a few delicate routing traces. Utility: organized input paper layers flowing through three subtly separated processing tiles showing paragraph blocks, a table grid and a multi-panel figure, ending in a neatly assembled document. Give SQLite tasteful horizontal layers and Files two small folders and a paper stack. Models: keep cloud silhouette and add three small restrained connected model nodes inside above its label. Keep all labels readable, no additional microtext, no paragraphs, no legends. Preserve only READER bidirectional MAIN bidirectional UTILITY, Models connected to MAIN and UTILITY, and UTILITY connected to SQLite and Files. Use subtle rounded panels, fine inner dividers and soft shallow shadows, generous whitespace between modules. This is an editorial architecture concept illustration, not an actual UI screenshot. Avoid decoration unrelated to academic reading, excessive tiny controls, crossing arrows, neon, saturated backgrounds, or heavy 3D. Result should feel more crafted and informative, rich but not complex.
-
-初版架构插图提示词：
-
-> Create a polished, minimalist architecture illustration for the README of Copilotix, an academic PDF reading desktop app. Landscape 16:9 composition, warm ivory paper background, charcoal hairline strokes, restrained cobalt-blue accents and sage-green details, generous negative space, soft subtle shadows, precise editorial design. Three equally weighted aligned modules across the middle: on the left an elegant abstract split-page reading window with tiny paper and formula glyphs and the single label 'READER'; in the center a compact gateway/control module labelled 'MAIN'; on the right an organized document-processing module labelled 'UTILITY'. Thin clear bidirectional connectors only READER to MAIN, MAIN to UTILITY. Beneath UTILITY two small connected storage objects: a database cylinder labelled 'SQLite', and a neat stack of pages labelled 'Files'. Above MAIN and UTILITY a small shared cloud node labelled 'Models', with thin lines from the central and right modules. Preserve readable left-to-right hierarchy and calm visual balance. A small top-left wordmark text 'Copilotix' only. No subtitle, no paragraphs, no microtext, no legends, no counts, no extra labels, no simulated product screenshot, no excessive 3D effects, no glowing neon, no gradients. This is an architectural conceptual illustration, not a screenshot. All text must be precisely the seven specified labels. High quality elegant open-source software documentation graphic.
+- [架構圖](architecture-prompts.md) 使用英文標籤，依現行程式碼繪製。
+- `demos/` 包含正體中文版本的首頁、文庫瀏覽及論文檔案展開示範。
+- [操作畫面](screenshots/README.md) 來自正體中文版本與獨立測試文庫。
+- `pdf-structure-source.png` 和 `local-paper-files-1.1.0.png` 為英文流程圖。
+- `reading-hero.png`、`reading-workflow.png`、`architecture-illustration.png`、`architecture-illustration-v2.png` 為舊版英文插圖。

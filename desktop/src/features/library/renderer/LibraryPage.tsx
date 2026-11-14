@@ -35,7 +35,7 @@ export default function LibraryPage(props: {
   onCreate(): void
   /** AI structured readings; the AI tab is hidden until App provides a source. */
   insights?: PaperInsightSource
-  /** Content categories for the columns; without it the library is one "全部论文" category. */
+  /** Content categories for the columns; without it the library is one "全部論文" category. */
   loadCategories?: () => Promise<LibraryCategories>
 }): React.JSX.Element {
   const hostRef = React.useRef<HTMLDivElement>(null)
@@ -161,7 +161,7 @@ export default function LibraryPage(props: {
         palette: readPalette(host),
         reducedMotion: motionQuery.matches,
         getDetailCover: paper => coversRef.current?.peek(paper) ?? null,
-        prepareDetailCover: (paper, signal) => coversRef.current?.acquire(paper, signal) ?? Promise.reject(new Error('档案封面服务尚未就绪')),
+        prepareDetailCover: (paper, signal) => coversRef.current?.acquire(paper, signal) ?? Promise.reject(new Error('檔案封面服務尚未就緒')),
         onDetailCoverError: message => setCoverError(message),
         onSelect: (cell, paper) => {
           if (paper) lastPaperId = paper.id
@@ -318,21 +318,21 @@ export default function LibraryPage(props: {
   }
 
   return (
-    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}${overview ? ' overview-open' : ''}`} aria-label="文库" aria-busy={readerEntry.phase !== null} data-detail-phase={phase} data-reader-entry={readerEntry.phase ?? undefined}>
+    <section ref={pageRef} tabIndex={-1} className={`paper-archive-page${phase !== 'closed' ? ' detail-open' : ''}${overview ? ' overview-open' : ''}`} aria-label="文庫" aria-busy={readerEntry.phase !== null} data-detail-phase={phase} data-reader-entry={readerEntry.phase ?? undefined}>
       <div ref={hostRef} className="paper-archive-stage" onPointerDown={() => pageRef.current?.focus({ preventScroll: true })} />
       <div className="paper-archive-veil" aria-hidden="true" />
       <div className="paper-archive-floor-veil" aria-hidden="true" />
       {readerEntry.error || coverError ? <p className="paper-archive-reader-error" role="alert">{readerEntry.error || coverError}</p> : null}
       {stats ? (
-        <output className="paper-archive-stats" aria-label="文库渲染诊断">
+        <output className="paper-archive-stats" aria-label="文庫渲染診斷">
           {stats.fps} fps · DPR {stats.pixelRatio} × {stats.resolutionScale} · {stats.drawn} 卡 · {(stats.triangles / 1e6).toFixed(2)}M 三角形<br />{stats.gpu}
         </output>
       ) : null}
 
       <header className="paper-archive-brand">
         <span className="paper-archive-eyebrow">PAPER ARCHIVE</span>
-        <h1>文库</h1>
-        <p>{empty ? '暂无论文' : `${props.documents.length} 篇论文 · ${categoryCount} 个分类 · ${shelves.length} 列`}</p>
+        <h1>文庫</h1>
+        <p>{empty ? '暫無論文' : `${props.documents.length} 篇論文 · ${categoryCount} 個分類 · ${shelves.length} 列`}</p>
       </header>
       {overview ? (
         <>
@@ -341,14 +341,14 @@ export default function LibraryPage(props: {
             onPick={pickFromOverview} onClose={() => toggleOverview(false)} />
           {/* Same return control as an opened file, in the same place. */}
           <button type="button" className={`paper-archive-detail-back archive-overview-back${overviewClosing ? ' closing' : ''}`} onClick={() => toggleOverview(false)}>
-            <ArrowLeftOutlined aria-hidden="true" /><span>返回文库</span><kbd>Esc</kbd>
+            <ArrowLeftOutlined aria-hidden="true" /><span>返回文庫</span><kbd>Esc</kbd>
           </button>
         </>
       ) : null}
 
       {/* While a paper is extracted the index folds down into its rule and the rule retracts. */}
       <div className={`paper-archive-tools${phase !== 'closed' ? ' collapsed' : ''}`} inert={phase !== 'closed'} aria-hidden={phase !== 'closed' ? true : undefined}>
-        <div className="paper-archive-search" role="search" aria-label="文库检索"
+        <div className="paper-archive-search" role="search" aria-label="文庫檢索"
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false) }}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
@@ -360,7 +360,7 @@ export default function LibraryPage(props: {
           <label htmlFor="paper-archive-search" className="paper-archive-eyebrow">ARCHIVE INDEX</label>
           <div className="paper-archive-search-field">
             <input id="paper-archive-search" ref={searchRef} type="search" autoComplete="off"
-              aria-label="搜索文库" placeholder="搜索标题或文件名" value={query}
+              aria-label="搜尋文庫" placeholder="搜尋標題或檔名" value={query}
               aria-controls={searchOpen ? 'paper-archive-results' : undefined}
               onFocus={() => setSearchOpen(true)}
               onChange={(event) => { setQuery(event.target.value); setSearchOpen(true) }}
@@ -374,12 +374,12 @@ export default function LibraryPage(props: {
           </div>
           {searchOpen ? (
             <div id="paper-archive-results" className="paper-archive-results">
-              <p role="status">{matches.length ? `${matches.length} 篇论文${matches.length > SEARCH_LIMIT ? ` · 显示前 ${SEARCH_LIMIT} 篇，请细化关键词` : ''}` : '没有匹配的论文'}</p>
-              <ul aria-label="搜索结果">
+              <p role="status">{matches.length ? `${matches.length} 篇論文${matches.length > SEARCH_LIMIT ? ` · 顯示前 ${SEARCH_LIMIT} 篇，請細化關鍵詞` : ''}` : '沒有匹配的論文'}</p>
+              <ul aria-label="搜尋結果">
                 {matches.slice(0, SEARCH_LIMIT).map(({ paper: result, category }) => (
                   <li key={result.id}><button type="button" data-document-id={result.id} onClick={() => chooseResult(result)}>
                     <span>{result.displayName}</span>
-                    <small>{category} · {workflowSummaryText(result.workflow)}{unsupported ? ' · 打开阅读' : ''}</small>
+                    <small>{category} · {workflowSummaryText(result.workflow)}{unsupported ? ' · 開啟閱讀' : ''}</small>
                   </button></li>
                 ))}
               </ul>
@@ -390,14 +390,14 @@ export default function LibraryPage(props: {
 
       {unsupported ? (
         <div className="paper-archive-panel paper-archive-empty" role="status">
-          <h2>当前环境无法显示三维文库</h2>
-          <p>可以使用右上角搜索查找论文，选择搜索结果即可打开阅读。</p>
+          <h2>當前環境無法顯示三維文庫</h2>
+          <p>可以使用右上角搜尋查詢論文，選擇搜尋結果即可開啟閱讀。</p>
         </div>
       ) : empty ? (
         <div className="paper-archive-panel paper-archive-empty" role="status">
           <span className="paper-archive-path">LIBRARY / EMPTY</span>
-          <h2>文库还是空的</h2>
-          <p>解析第一篇论文后，它会作为档案出现在这里。</p>
+          <h2>文庫還是空的</h2>
+          <p>解析第一篇論文後，它會作為檔案出現在這裡。</p>
           <button type="button" className="paper-archive-action" onClick={props.onCreate}>
             <span>去新解析</span><ArrowRightOutlined aria-hidden="true" />
           </button>
@@ -421,13 +421,13 @@ export default function LibraryPage(props: {
           </dl>
           <div className="paper-archive-actions">
             <button type="button" className="paper-archive-action" disabled={!preparation.ready} onClick={() => { if (preparation.ready) sceneRef.current?.openDetail() }}>
-              <span>查看档案</span><ExpandOutlined aria-hidden="true" />
+              <span>檢視檔案</span><ExpandOutlined aria-hidden="true" />
             </button>
             <button type="button" className="paper-archive-action" disabled={readerEntry.phase !== null} onClick={() => readerEntry.open(paper.id)}>
-              <span>打开阅读</span><ArrowRightOutlined aria-hidden="true" />
+              <span>開啟閱讀</span><ArrowRightOutlined aria-hidden="true" />
             </button>
             <button type="button" className="paper-archive-action" disabled={phase !== 'closed'} onClick={() => toggleOverview(true)}>
-              <span>管理文库</span><DeploymentUnitOutlined aria-hidden="true" />
+              <span>管理文庫</span><DeploymentUnitOutlined aria-hidden="true" />
             </button>
           </div>
         </article>
@@ -452,7 +452,7 @@ export default function LibraryPage(props: {
             </div>
             <button type="button" aria-label="下一列" onClick={() => navigate('lane', 1)}><ArrowRightOutlined /></button>
           </div>
-          <p className="paper-archive-hints">←→ 切换列<i>/</i>↑↓ 前后论文<i>/</i>滚轮、拖拽 浏览<i>/</i>Enter 查看档案</p>
+          <p className="paper-archive-hints">←→ 切換列<i>/</i>↑↓ 前後論文<i>/</i>滾輪、拖拽 瀏覽<i>/</i>Enter 檢視檔案</p>
         </footer>
       ) : null}
     </section>
@@ -464,8 +464,8 @@ const RULER_TICKS = 9
 function BrowsePaperNotes({ keywords: words, summary }: { keywords: string[]; summary: string }): React.JSX.Element {
   const keywords = words.map((word) => word.trim().replace(/\s+/gu, ' ')).filter(Boolean).join(' ')
   return <>
-    <div className="paper-archive-keywords"><dt>关键词</dt><SingleLineKeywords text={keywords} /></div>
-    <div className="paper-archive-summary"><dt>总结</dt><dd key={summary} className="paper-archive-arrive">{summary || '暂无总结'}</dd></div>
+    <div className="paper-archive-keywords"><dt>關鍵詞</dt><SingleLineKeywords text={keywords} /></div>
+    <div className="paper-archive-summary"><dt>總結</dt><dd key={summary} className="paper-archive-arrive">{summary || '暫無總結'}</dd></div>
   </>
 }
 
@@ -561,7 +561,7 @@ function ArchiveStatusLabel(props: { paper: ArchivePaper; waiting: ArchivePrepar
   return (
     <span className="paper-archive-status" data-waiting={props.waiting}>
       {props.waiting === 'workflow' ? <WorkflowSteps workflow={props.paper.workflow} />
-        : <span role="status">{props.waiting === 'analysis-failed' ? '档案卡未生成' : '正在准备图片与封面'}</span>}
+        : <span role="status">{props.waiting === 'analysis-failed' ? '檔案卡未生成' : '正在準備圖片與封面'}</span>}
     </span>
   )
 }

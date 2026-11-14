@@ -86,7 +86,7 @@ export function paperChatImageInput(provider: 'qwen' | 'deepseek' | 'codex', mod
   return entry ? entry.image : null
 }
 export function paperChatImageUnsupportedMessage(provider: 'qwen' | 'deepseek' | 'codex', model: string, support: boolean | null): string {
-  if (support === null) return `无法确认 Codex 模型 ${model} 是否支持图片，请在「服务连接」中刷新 Codex 后重试`
-  const alternatives = provider === 'codex' ? '支持图片的 Codex 模型' : PAPER_CHAT_IMAGE_MODELS[provider].join('、')
-  return `当前问答模型 ${model} 不支持图片输入，请在问答中切换到 ${alternatives}`
+  if (support === null) return `無法確認 Codex 模型 ${model} 是否支援圖片，請在「服務連線」中重新整理 Codex 後重試`
+  const alternatives = provider === 'codex' ? '支援圖片的 Codex 模型' : PAPER_CHAT_IMAGE_MODELS[provider].join('、')
+  return `當前問答模型 ${model} 不支援圖片輸入，請在問答中切換到 ${alternatives}`
 }

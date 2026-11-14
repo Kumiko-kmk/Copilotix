@@ -37,7 +37,7 @@ describe('SettingsService credential isolation', () => {
     expect(vault.values.get('qwen-api-key')).toBe('qwen-old')
     expect(vault.values.get('deepseek-api-key')).toBe('deepseek-new')
     expect(result.fieldErrors).toEqual({
-      qwen: { code: 'CREDENTIAL_INVALID', message: '凭据验证失败' }
+      qwen: { code: 'CREDENTIAL_INVALID', message: '憑據驗證失敗' }
     })
     expect(result.settings.credentials.parser).toMatchObject({ state: 'valid', maskedValue: 'pa****ew' })
     expect(result.settings.credentials.qwen).toMatchObject({ state: 'unknown', maskedValue: 'qw****ld' })
@@ -88,7 +88,7 @@ describe('SettingsService credential isolation', () => {
     const repository = new SettingsRepository()
     const vault = new MemoryVault({ 'deepseek-api-key': 'deepseek-secret' })
     const first = new SettingsService(repository, vault, 'C:\\output', {
-      provider: async () => ({ ok: false, code: 'HTTP_401', message: '密钥无效' })
+      provider: async () => ({ ok: false, code: 'HTTP_401', message: '金鑰無效' })
     })
 
     await expect(first.validateCredential('deepseek')).resolves.toMatchObject({ state: 'invalid', errorCode: 'CREDENTIAL_INVALID' })
@@ -131,7 +131,7 @@ describe('SettingsService credential isolation', () => {
   it('distinguishes stale proxy failures from invalid credentials and preserves configuration errors', async () => {
     const repository = new SettingsRepository()
     const vault = new MemoryVault({})
-    let failure: HealthResult = { ok: false, code: 'PROXY_AUTH_REQUIRED', message: '网络代理要求身份验证，请检查或关闭代理后重试' }
+    let failure: HealthResult = { ok: false, code: 'PROXY_AUTH_REQUIRED', message: '網路代理要求身份驗證，請檢查或關閉代理後重試' }
     const service = new SettingsService(repository, vault, 'C:\\output', {
       provider: async () => failure
     })
@@ -139,14 +139,14 @@ describe('SettingsService credential isolation', () => {
     await expect(service.validateCredential('qwen', 'candidate-key')).resolves.toEqual({
       state: 'unknown',
       errorCode: 'CREDENTIAL_VALIDATION_UNAVAILABLE',
-      message: '网络代理要求身份验证，请检查或关闭代理后重试'
+      message: '網路代理要求身份驗證，請檢查或關閉代理後重試'
     })
 
-    failure = { ok: false, code: 'PROVIDER_CONFIGURATION_INVALID', message: 'qwen 服务地址或模型配置不可用（HTTP 400）' }
+    failure = { ok: false, code: 'PROVIDER_CONFIGURATION_INVALID', message: 'qwen 服務地址或模型配置不可用（HTTP 400）' }
     await expect(service.validateCredential('qwen', 'candidate-key')).resolves.toEqual({
       state: 'invalid',
       errorCode: 'PROVIDER_CONFIGURATION_INVALID',
-      message: 'qwen 服务地址或模型配置不可用（HTTP 400）'
+      message: 'qwen 服務地址或模型配置不可用（HTTP 400）'
     })
   })
 
@@ -231,7 +231,7 @@ describe('credential masking', () => {
 })
 
 function valid(ok: boolean): HealthResult {
-  return ok ? { ok: true, message: '验证成功' } : { ok: false, message: '凭据验证失败' }
+  return ok ? { ok: true, message: '驗證成功' } : { ok: false, message: '憑據驗證失敗' }
 }
 
 function publicUpdate(): SettingsUpdate {

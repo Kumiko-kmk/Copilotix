@@ -22,9 +22,9 @@ export default function SettingsDialog(props: Omit<SettingsPageProps, 'onExit'> 
       destroyOnHidden
       width="clamp(min(880px, calc(100vw - 48px)), calc(100vw - 280px), 1000px)"
       rootClassName="settings-dialog"
-      aria-label="设置"
+      aria-label="設定"
     >
-      {/* Two-character labels such as 测试 stay as written instead of being spread apart. */}
+      {/* Two-character labels such as 測試 stay as written instead of being spread apart. */}
       <ConfigProvider button={{ autoInsertSpace: false }}>
         <SettingsPage {...page} onExit={onClose} />
       </ConfigProvider>

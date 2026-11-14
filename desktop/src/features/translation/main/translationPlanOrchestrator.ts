@@ -79,7 +79,7 @@ export class TranslationPlanOrchestrator {
   async run(): Promise<TranslationPlanFinalizeResult> {
     const { task, jobId, signal } = this.options
     throwIfAborted(signal)
-    if (this.options.providerOrder.length === 0) throw new Error('没有可用的翻译服务')
+    if (this.options.providerOrder.length === 0) throw new Error('沒有可用的翻譯服務')
     const compute = requirePlanCompute(this.options.compute)
     const opened = translationPlanOpenResultSchema.parse(await compute.openTranslationPlan(task.id, jobId, signal))
     throwIfAborted(signal)
@@ -109,7 +109,7 @@ export class TranslationPlanOrchestrator {
         inFlight.add(task)
       }
       if (page.nextCursor === null) break
-      if (page.nextCursor <= cursor) throw new Error('翻译计划分页 cursor 未前进')
+      if (page.nextCursor <= cursor) throw new Error('翻譯計劃分頁 cursor 未前進')
       cursor = page.nextCursor
     } } finally { await Promise.all(inFlight); await queue.onIdle() }
     if (failure) throw (failure as { error: unknown }).error
@@ -162,7 +162,7 @@ export class TranslationPlanOrchestrator {
         if (cache.status === 'completed') return
       } catch (error) {
         if (isAbortError(error, signal)) throw abortError()
-        errors.push(`${providerId} 缓存: ${readableError(error)}`)
+        errors.push(`${providerId} 快取: ${readableError(error)}`)
         continue
       }
 
@@ -195,7 +195,7 @@ export class TranslationPlanOrchestrator {
         this.rememberMutation(descriptor, applied)
         await this.report(applied)
         if (applied.status === 'completed') return
-        throw new Error(`utility 未完成翻译单元（状态：${applied.status}）`)
+        throw new Error(`utility 未完成翻譯單元（狀態：${applied.status}）`)
       } catch (error) {
         if (isAbortError(error, signal)) throw abortError()
         if (error && typeof error === 'object' && 'partialOutput' in error && error.partialOutput) throw error
@@ -211,7 +211,7 @@ export class TranslationPlanOrchestrator {
 
     throwIfAborted(signal)
     if (unavailable) throw new ModelConnectionUnavailable('translation', 0, 'connection')
-    const message = (errors.length > 0 ? errors.join('；') : '没有可用的翻译源').slice(0, 32_768)
+    const message = (errors.length > 0 ? errors.join('；') : '沒有可用的翻譯源').slice(0, 32_768)
     const failed = translationPlanMutationResultSchema.parse(
       await compute.failTranslation(task.id, jobId, descriptor.unitId, message, signal)
     )
@@ -227,19 +227,19 @@ export class TranslationPlanOrchestrator {
     try {
       raw = await readFile(absolutePath, 'utf8')
     } catch (error) {
-      throw new Error(`无法读取翻译请求文件：${readableError(error)}`)
+      throw new Error(`無法讀取翻譯請求檔案：${readableError(error)}`)
     }
     throwIfAborted(this.options.signal)
     let value: unknown
     try {
       value = JSON.parse(raw) as unknown
     } catch {
-      throw new Error('翻译请求文件不是有效 JSON')
+      throw new Error('翻譯請求檔案不是有效 JSON')
     }
     if (descriptor.kind === 'plain') {
       const request = plainTranslationRequestSchema.parse(value)
       if (request.unitId !== descriptor.unitId || request.sourceHash !== descriptor.sourceHash) {
-        throw new Error('普通翻译请求与计划不匹配')
+        throw new Error('普通翻譯請求與計劃不匹配')
       }
       return request
     }
@@ -259,7 +259,7 @@ export class TranslationPlanOrchestrator {
 
   private resolvePlanPath(relativePath: string): string {
     if (!relativePath.startsWith('.translation/') || relativePath.includes('\\') || relativePath.split('/').some((part) => part === '..' || part.length === 0)) {
-      throw new Error('翻译计划路径无效')
+      throw new Error('翻譯計劃路徑無效')
     }
     return this.pathPolicy.resolveChild(this.options.task.outputDir, relativePath)
   }
@@ -301,7 +301,7 @@ type PlanComputePort = Required<Pick<
 
 function requirePlanCompute(compute: TaskComputePort): PlanComputePort {
   if (!compute.openTranslationPlan || !compute.listTranslationWork || !compute.tryTranslationCache || !compute.applyTranslation || !compute.failTranslation || !compute.finalizeTranslation) {
-    throw new Error('翻译计划计算接口尚未初始化')
+    throw new Error('翻譯計劃計算介面尚未初始化')
   }
   return compute as PlanComputePort
 }
@@ -350,7 +350,7 @@ async function translateLongText(text: string, provider: TranslationProvider, si
 
 /** Split provider-facing text while guaranteeing every request is <= 4000 chars. */
 export function splitText(text: string, limit = MAX_TRANSLATION_SEGMENT_LENGTH): string[] {
-  if (!Number.isInteger(limit) || limit < 1) throw new Error('翻译文本分段长度无效')
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('翻譯文字分段長度無效')
   const parts: string[] = []
   let remaining = text
   while (remaining.length > limit) {

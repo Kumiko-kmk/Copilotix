@@ -72,22 +72,22 @@ async function screenshot(name) {
 }
 const visible = selector => `document.querySelector(${JSON.stringify(selector)})?.checkVisibility()`
 try {
-  await waitFor(`navigator.language.toLowerCase() === 'zh-cn'`, 'Installed product did not select Simplified Chinese')
-  await waitFor(`Array.from(document.querySelectorAll('h1')).some(element => element.checkVisibility() && element.textContent === '今天想读些什么？')`, 'Installed home did not render')
-  await waitFor(visible('nav[aria-label="论文导航"]'), 'Installed sidebar did not render')
+  await waitFor(`navigator.language.toLowerCase() === 'zh-tw'`, 'Installed product did not select Traditional Chinese')
+  await waitFor(`Array.from(document.querySelectorAll('h1')).some(element => element.checkVisibility() && element.textContent === '今天想讀些什麼？')`, 'Installed home did not render')
+  await waitFor(visible('nav[aria-label="論文導覽"]'), 'Installed sidebar did not render')
   await waitFor(visible('.window-controls'), 'Installed window controls did not render')
   await screenshot('02-installed-home.png')
   await evaluate(`document.querySelector('.paper-sidebar-settings').click()`)
-  await waitFor(visible('nav[aria-label="设置分类"]'), 'Installed settings did not open')
-  for (const name of ['服务', '存储', '外观']) {
+  await waitFor(visible('nav[aria-label="設定分類"]'), 'Installed settings did not open')
+  for (const name of ['服務', '儲存', '外觀']) {
     await evaluate(`Array.from(document.querySelectorAll('.settings-nav button')).find(button => button.textContent === ${JSON.stringify(name)}).click()`)
     await waitFor(`document.querySelector('.settings-window-header h2')?.textContent === ${JSON.stringify(name)} && ${visible('.settings-content-body')}`, `Installed settings page did not render: ${name}`)
   }
   await screenshot('02-installed-settings.png')
-  await evaluate(`document.querySelector('button[aria-label="关闭设置"]').click()`)
-  await waitFor(`!document.querySelector('nav[aria-label="设置分类"]')`, 'Installed settings did not close')
+  await evaluate(`document.querySelector('button[aria-label="關閉設定"]').click()`)
+  await waitFor(`!document.querySelector('nav[aria-label="設定分類"]')`, 'Installed settings did not close')
   await writeFile(join(evidence, 'installed-ui.json'), JSON.stringify({
-    completed: true, locale: 'zh-CN', home: true, sidebar: true, settings: ['服务', '存储', '外观']
+    completed: true, locale: 'zh-TW', home: true, sidebar: true, settings: ['服務', '儲存', '外觀']
   }, null, 2))
   console.log('Installed Lite renderer: home, sidebar and all settings pages passed')
 } catch (error) {

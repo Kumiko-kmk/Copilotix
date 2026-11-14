@@ -20,10 +20,10 @@ function ActivityHeatmap(props: { days: UsageAnalyticsDay[] }): React.JSX.Elemen
   return (
     <article className="usage-panel activity-panel">
       <header className="usage-panel-header">
-        <strong>活动热力</strong>
-        <span className="usage-panel-total">共计 {totalPages} 页</span>
+        <strong>活動熱力</strong>
+        <span className="usage-panel-total">共計 {totalPages} 頁</span>
       </header>
-      <div className="activity-heatmap" role="img" aria-label={`最近十二週上傳 ${totalDocuments} 份文檔，共 ${totalPages} 頁`}>
+      <div className="activity-heatmap" role="img" aria-label={`最近十二週上傳 ${totalDocuments} 份文件，共 ${totalPages} 頁`}>
         {props.days.map((day, index) => {
           const score = scores[index] ?? 0
           const level = score === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil((score / maximum) * 4)))
@@ -85,10 +85,10 @@ function compactNumber(value: number): string {
 }
 
 const STORAGE_CATEGORY_DETAILS: Record<StorageInfo['categories'][number]['kind'], { label: string; color: string }> = {
-  source: { label: '源文档', color: '#5b58d6' },
-  image: { label: '图片资源', color: '#4a9d84' },
-  translation: { label: '翻译结果', color: '#d39b35' },
-  other: { label: '其他文件', color: '#b7ab98' }
+  source: { label: '源文件', color: '#5b58d6' },
+  image: { label: '圖片資源', color: '#4a9d84' },
+  translation: { label: '翻譯結果', color: '#d39b35' },
+  other: { label: '其他檔案', color: '#b7ab98' }
 }
 
 export function StorageMetric(props: { icon: React.ReactNode; label: string; value: string }): React.JSX.Element {
@@ -106,11 +106,11 @@ export function StorageComposition({ info }: { info: StorageInfo | null }): Reac
   })
   const background = stops.length > 0 ? `conic-gradient(${stops.join(', ')})` : 'var(--border)'
   return (
-    <section className="storage-insight-panel" aria-label="存储构成">
-      <div className="storage-insight-heading"><strong>存储构成</strong></div>
+    <section className="storage-insight-panel" aria-label="儲存構成">
+      <div className="storage-insight-heading"><strong>儲存構成</strong></div>
       <div className="storage-composition-body">
-        <div className="storage-donut" role="img" aria-label={`存储构成，总计 ${formatBytes(total)}`} style={{ background }}>
-          <div><strong>{formatBytes(total)}</strong><span>总计</span></div>
+        <div className="storage-donut" role="img" aria-label={`儲存構成，總計 ${formatBytes(total)}`} style={{ background }}>
+          <div><strong>{formatBytes(total)}</strong><span>總計</span></div>
         </div>
         <div className="storage-category-list">
           {(categories.length > 0 ? categories : Object.keys(STORAGE_CATEGORY_DETAILS).map((kind) => ({ kind: kind as keyof typeof STORAGE_CATEGORY_DETAILS, fileCount: 0, bytes: 0 }))).map((category) => {
@@ -132,9 +132,9 @@ export function StorageGrowth({ info }: { info: StorageInfo | null }): React.JSX
     return `${x},${y}`
   }).join(' ')
   return (
-    <section className="storage-insight-panel" aria-label="近期存储增长">
-      <div className="storage-insight-heading"><strong>近期存储增长</strong></div>
-      <svg className="storage-growth-chart" role="img" aria-label="近 14 日存储增长曲线" viewBox="0 0 520 160" preserveAspectRatio="none">
+    <section className="storage-insight-panel" aria-label="近期儲存增長">
+      <div className="storage-insight-heading"><strong>近期儲存增長</strong></div>
+      <svg className="storage-growth-chart" role="img" aria-label="近 14 日儲存增長曲線" viewBox="0 0 520 160" preserveAspectRatio="none">
         {[28, 80, 132].map((y) => <line className="storage-growth-grid" key={y} x1="20" x2="500" y1={y} y2={y} />)}
         {points ? <><polyline className="storage-growth-area" points={`20,132 ${points} 500,132`} /><polyline className="storage-growth-line" points={points} /></> : null}
       </svg>

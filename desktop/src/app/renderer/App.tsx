@@ -62,13 +62,13 @@ export default function App(): React.JSX.Element {
   return (
     <div className="app-shell">
       {view.name === 'new' ? null : <div className="titlebar-brand" aria-hidden="true">COPILOTIX</div>}
-      <EdgeDock label="展开主导航" persistent={<WindowControls />}>
-        <nav className="top-navigation" aria-label="主导航">
+      <EdgeDock label="展開主導覽" persistent={<WindowControls />}>
+        <nav className="top-navigation" aria-label="主導覽">
           <NavigationButton active={view.name === 'new'} icon={<FileAddOutlined />} label="新解析" onClick={() => requestViewChange({ name: 'new' })} />
-          <NavigationButton active={view.name === 'library'} icon={<AppstoreOutlined />} label="文库" onClick={() => requestViewChange({ name: 'library' })} />
-          <NavigationButton active={view.name === 'settings'} icon={<SettingOutlined />} label="设置" onClick={() => requestViewChange({ name: 'settings' })} />
-          <NavigationButton active={view.name === 'tutorial'} icon={<ReadOutlined />} label="新手教程" onClick={() => requestViewChange({ name: 'tutorial' })} />
-          <a className="top-navigation-item" href="https://github.com/Kumiko-kmk/Copilotix" target="_blank" rel="noreferrer" aria-label="打开 GitHub">
+          <NavigationButton active={view.name === 'library'} icon={<AppstoreOutlined />} label="文庫" onClick={() => requestViewChange({ name: 'library' })} />
+          <NavigationButton active={view.name === 'settings'} icon={<SettingOutlined />} label="設定" onClick={() => requestViewChange({ name: 'settings' })} />
+          <NavigationButton active={view.name === 'tutorial'} icon={<ReadOutlined />} label="新手教學" onClick={() => requestViewChange({ name: 'tutorial' })} />
+          <a className="top-navigation-item" href="https://github.com/Kumiko-kmk/Copilotix" target="_blank" rel="noreferrer" aria-label="開啟 GitHub">
             <GithubOutlined /><span>GitHub</span>
           </a>
         </nav>
@@ -91,7 +91,7 @@ export default function App(): React.JSX.Element {
           />
         ) : null}
         {view.name === 'library' ? (
-          <React.Suspense fallback={<div className="page-loading"><AppleLoader label="正在打开文库" /></div>}>
+          <React.Suspense fallback={<div className="page-loading"><AppleLoader label="正在開啟文庫" /></div>}>
             <LibraryPage insights={insights} loadCategories={loadLibraryCategories} documents={documents} onOpen={openFromLibrary} onCreate={() => requestViewChange({ name: 'new' })} />
           </React.Suspense>
         ) : null}
@@ -109,9 +109,9 @@ export default function App(): React.JSX.Element {
           }}
           onClose={() => requestViewChange({ name: 'new' })}
         /> : null}
-        {view.name === 'settings' && settings ? <React.Suspense fallback={<div className="page-loading"><AppleLoader label="正在打开设置" /></div>}><SettingsPage settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange} /></React.Suspense> : null}
+        {view.name === 'settings' && settings ? <React.Suspense fallback={<div className="page-loading"><AppleLoader label="正在開啟設定" /></div>}><SettingsPage settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange} /></React.Suspense> : null}
         {view.name === 'reader' ? (
-          <React.Suspense fallback={<div className="reader-loading"><AppleLoader label="正在打开论文" /></div>}>
+          <React.Suspense fallback={<div className="reader-loading"><AppleLoader label="正在開啟論文" /></div>}>
             <ActiveReaderPage documentId={view.documentId} enterFromLibrary={view.returnTo === 'library'} insights={insights} onBack={() => requestViewChange({ name: view.returnTo ?? 'new' })} onOpenSettings={() => requestViewChange({ name: 'settings' })} />
           </React.Suspense>
         ) : null}

@@ -115,9 +115,9 @@ describe("standardMarkdown", () => {
     })
 
     it('replaces invisible invalid controls visibly, with UTF-8, LF and stable normalization', () => {
-      const result = normalizeMarkdown('\uFEFF# 标题\r\n\r\n正文\u000F内容\u0000结束\r\n')
+      const result = normalizeMarkdown('\uFEFF# 標題\r\n\r\n正文\u000F內容\u0000結束\r\n')
       expect(result.controlsReplaced).toBe(2)
-      expect(result.markdown).toBe('# 标题\n\n正文�内容�结束\n')
+      expect(result.markdown).toBe('# 標題\n\n正文�內容�結束\n')
       expect(normalizeMarkdown(result.markdown).markdown).toBe(result.markdown)
     })
 
@@ -135,7 +135,7 @@ describe("standardMarkdown", () => {
       expect(normalizeMarkdown('<math><annotation encoding="application/x-tex">x^2</annotation></math>').markdown).toContain('$x^2$')
       expect(normalizeMarkdown('<math><mfrac><mi>x</mi><mi>y</mi></mfrac><msup><mi>z</mi><mn>2</mn></msup></math>').markdown).toContain(String.raw`$\frac{x}{y}{z}^{2}$`)
       expect(normalizeMarkdown('<table><caption>Empty</caption></table>').markdown).toContain('Empty')
-      expect(() => normalizeMarkdown('<table><tr><td colspan="999999">X</td></tr></table>')).toThrow('超出支持上限')
+      expect(() => normalizeMarkdown('<table><tr><td colspan="999999">X</td></tr></table>')).toThrow('超出支援上限')
     })
 
     it.each(['images/a.png', './a%20b.svg'])('identifies local images: %s', (url) => expect(isLocalMarkdownImage(url)).toBe(true))

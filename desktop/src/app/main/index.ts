@@ -30,8 +30,8 @@ function startupErrorCode(error: unknown): 'CORE_TIMEOUT' | 'CORE_UNAVAILABLE' |
 }
 
 function startNormalApp(): void {
-  // The product ships only Simplified Chinese resources, regardless of OS locale.
-  app.commandLine.appendSwitch('lang', 'zh-CN')
+  // The product ships only Traditional Chinese resources, regardless of OS locale.
+  app.commandLine.appendSwitch('lang', 'zh-TW')
   protocol.registerSchemesAsPrivileged([
     {
       scheme: 'copilotix-asset',
@@ -70,9 +70,9 @@ function startNormalApp(): void {
     // Playwright and other headless checks must not wait on a native modal.
     if (process.env.NODE_ENV !== 'test') {
       const message = (startup.phase === 'core-start' || startup.phase === 'repository-init')
-        ? '核心服务或文档数据库无法初始化。请勿删除原数据库或使用更旧版本反复尝试。升级前快照（如已生成）保存在下方目录，名称含 pre-migration；恢复方法见文档库管理指南。\n\n' + app.getPath('userData')
-        : '核心服务无法启动，请重试。'
-      dialog.showErrorBox(`${APP_IDENTITY.productName} 启动失败`, message)
+        ? '核心服務或文件資料庫無法初始化。請勿刪除原資料庫或使用更舊版本反覆嘗試。升級前快照（如已生成）儲存在下方目錄，名稱含 pre-migration；恢復方法見文件庫管理指南。\n\n' + app.getPath('userData')
+        : '核心服務無法啟動，請重試。'
+      dialog.showErrorBox(`${APP_IDENTITY.productName} 啟動失敗`, message)
     }
     app.quit()
   })

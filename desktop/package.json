@@ -96,7 +96,7 @@
     "asar": true,
     "compression": "maximum",
     "electronLanguages": [
-      "zh-CN"
+      "zh-TW"
     ],
     "asarUnpack": [
       "out/utility/**",
@@ -161,11 +161,10 @@
       "runAfterFinish": true,
       "unicode": true,
       "installerLanguages": [
-        "zh_CN",
         "zh_TW",
         "en_US"
       ],
-      "language": "2052",
+      "language": "1028",
       "displayLanguageSelector": true,
       "installerIcon": "resources/icon.ico",
       "uninstallerIcon": "resources/icon.ico",

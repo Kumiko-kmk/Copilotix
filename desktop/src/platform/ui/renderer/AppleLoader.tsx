@@ -16,7 +16,7 @@ const STREAKS = [
  * as it drops, while speed lines stream up past it. With reduced motion the lines and apple hold still.
  */
 export default function AppleLoader(props: { label?: string; size?: 'small' | 'large'; className?: string }): React.JSX.Element {
-  const label = props.label ?? '正在加载'
+  const label = props.label ?? '正在載入'
   if (__COPILOTIX_LITE__) return <span className="apple-loader-label" role="status" aria-label={label}>{label}</span>
   return (
     <div className={`apple-loader is-${props.size ?? 'large'}${props.className ? ` ${props.className}` : ''}`} role="status" aria-label={label}>

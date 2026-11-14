@@ -8,11 +8,11 @@ export async function loadDocumentBase<T extends { modelDescriptor?: DocumentMod
   if (!request) {
     request = (async () => {
       const response = await fetch(document.assetBaseUrl + descriptor.path + '?v=' + descriptor.sourceVersion)
-      if (!response.ok) throw new Error('无法读取文档模型')
+      if (!response.ok) throw new Error('無法讀取文件模型')
       const raw = await response.json() as { base: DocumentBase; digest: string }
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(raw.base)))
       const actual = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-      if (actual !== descriptor.digest || raw.base.documentId !== descriptor.documentId || raw.base.sourceVersion !== descriptor.sourceVersion) throw new Error('文档模型已变化，请重新读取')
+      if (actual !== descriptor.digest || raw.base.documentId !== descriptor.documentId || raw.base.sourceVersion !== descriptor.sourceVersion) throw new Error('文件模型已變化，請重新讀取')
       return raw.base
     })()
     pending.set(key, request)

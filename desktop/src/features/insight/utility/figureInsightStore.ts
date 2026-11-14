@@ -30,21 +30,21 @@ export class FigureInsightStore {
 
   private async root(documentId: string): Promise<string> {
     const task = this.repository.getTask(documentId)
-    if (!task) throw new Error('论文不存在')
+    if (!task) throw new Error('論文不存在')
     const info = await lstat(task.outputDir)
-    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('文献目录无效')
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('文獻目錄無效')
     return task.outputDir
   }
 
   private async read(root: string, name: string, limit: number): Promise<Buffer> {
     const path = this.policy.resolveChild(root, name)
     const info = await lstat(join(root, name))
-    if (!info.isFile() || info.isSymbolicLink() || info.size > limit) throw new Error('图片解读来源无效或过大')
+    if (!info.isFile() || info.isSymbolicLink() || info.size > limit) throw new Error('圖片解讀來源無效或過大')
     const handle = await open(path, 'r')
     try {
-      if ((await handle.stat()).size > limit) throw new Error('图片解读来源过大')
+      if ((await handle.stat()).size > limit) throw new Error('圖片解讀來源過大')
       const value = await handle.readFile()
-      if (value.length > limit) throw new Error('图片解读来源过大')
+      if (value.length > limit) throw new Error('圖片解讀來源過大')
       return value
     } finally { await handle.close() }
   }
@@ -63,20 +63,20 @@ export class FigureInsightStore {
     const layout = layoutBytes.toString('utf8')
     const snapshot = await getDocumentSnapshot(request.documentId, root)
     const markdown = snapshot.originalText
-    if (snapshot.base.markdown !== markdownBytes.toString('utf8')) throw new Error('文档版本已变化，请重新读取')
+    if (snapshot.base.markdown !== markdownBytes.toString('utf8')) throw new Error('文件版本已變化，請重新讀取')
     const geometry = (await documentModels.ensureBase(request.documentId, root)).figures.find(g => g.id === request.figureId && g.status === 'complete')
     const figure = manifest.figures.find(f => f.figureId === request.figureId)
-    if (!geometry || !figure) throw new Error('尚无已确认的完整大图，请先提取或打开阅读器生成整图')
+    if (!geometry || !figure) throw new Error('尚無已確認的完整大圖，請先提取或開啟閱讀器生成整圖')
     const pdf = await lstat(this.policy.resolveChild(root, 'original.pdf'))
     const revision = hash(JSON.stringify([task.sourceHash, pdf.size, pdf.mtimeMs, hash(layout)]))
     const geometryKey = JSON.stringify([geometry.pageIndex, geometry.cropBox, geometry.pageSize])
     const expectedPath = 'images/figures/figure-p' + (geometry.pageIndex + 1) + '-' + hash(revision + geometry.id + geometryKey).slice(0, 24) + '.png'
-    if (figure.sourceRevision !== revision || figure.imagePath !== expectedPath) throw new Error('整图来源已变化，请重新提取')
+    if (figure.sourceRevision !== revision || figure.imagePath !== expectedPath) throw new Error('整圖來源已變化，請重新提取')
     const png = await this.read(root, figure.imagePath, FIGURE_INSIGHT_MAX_IMAGE_BYTES)
     if (hash(png) !== figure.pngSha256 || png.length < 45 || png.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' ||
       png.subarray(12, 16).toString() !== 'IHDR' || png.subarray(-8).toString('hex') !== '49454e44ae426082' ||
       png.readUInt32BE(16) !== figure.width || png.readUInt32BE(20) !== figure.height || figure.width * figure.height > 8_000_000) {
-      throw new Error('整图校验失败')
+      throw new Error('整圖校驗失敗')
     }
     const captionIndex = mappings.findIndex(m => m.id === geometry.captionMappingId)
     const memberIds = new Set(geometry.mappingIds)
@@ -84,10 +84,10 @@ export class FigureInsightStore {
       (memberIds.has(m.id) && /^(?:image|chart)_caption$/u.test(m.type) && !/^\s*[（(]?[a-zA-Z][)）]?\s*$/u.test(m.sourceText)))
       .map(m => m.sourceText)
     const caption = clip([...new Set([...captionParts, geometry.fallbackLegendText].filter(Boolean))].join('\n'), 8000)
-    const label = /^\s*((?:(?:supplementary|extended\s+data)\s+)?(?:fig(?:ure)?\.?|[附补補]?图|[附補]?圖)\s*(?:[A-Z]\.?\s*)?\d+[A-Z]?)/iu.exec(caption)?.[1]
+    const label = /^\s*((?:(?:supplementary|extended\s+data)\s+)?(?:fig(?:ure)?\.?|[附補補]?圖|[附補]?圖)\s*(?:[A-Z]\.?\s*)?\d+[A-Z]?)/iu.exec(caption)?.[1]
     const compactLabel = (text: string): string => text.toLowerCase().replace(/figure/gu, 'fig').replace(/[\s.]/gu, '')
     const mentionsFigure = (text: string): boolean => Boolean(label && [...text.matchAll(
-      /(?:(?:supplementary|extended\s+data)\s+)?(?:fig(?:ure)?\.?|[附补補]?图|[附補]?圖)\s*(?:[A-Z]\.?\s*)?\d+[A-Z]?(?![A-Za-z0-9])/giu
+      /(?:(?:supplementary|extended\s+data)\s+)?(?:fig(?:ure)?\.?|[附補補]?圖|[附補]?圖)\s*(?:[A-Z]\.?\s*)?\d+[A-Z]?(?![A-Za-z0-9])/giu
     )].some(match => compactLabel(match[0]) === compactLabel(label)))
     const related = new Set<string>()
     // Caption neighbours plus every matching figure mention and its paragraph neighbours.
@@ -118,7 +118,7 @@ export class FigureInsightStore {
     let record: FigureInsightRecord
     try { record = figureInsightRecordSchema.parse(JSON.parse((await this.read(root, this.name(request.figureId), 64 * 1024)).toString('utf8'))) }
     catch (error) { if (absent(error)) return { status: 'missing' }; throw error }
-    if (record.documentId !== request.documentId || record.figure.figureId !== request.figureId) throw new Error('图片解读不属于当前图片')
+    if (record.documentId !== request.documentId || record.figure.figureId !== request.figureId) throw new Error('圖片解讀不屬於當前圖片')
     let stale = record.provenance.promptVersion !== FIGURE_INSIGHT_PROMPT_VERSION
     try { stale ||= record.provenance.sourceRevision !== (await this.descriptor(request)).sourceRevision }
     catch { stale = true }
@@ -128,21 +128,21 @@ export class FigureInsightStore {
   async save(raw: FigureInsightSave): Promise<{ saved: true }> {
     const request = figureInsightSaveSchema.parse(raw)
     const descriptor = await this.descriptor({ documentId: request.documentId, figureId: request.figureId })
-    if (request.sourceRevision !== descriptor.sourceRevision) throw new Error('图片或正文已更新，请重新生成')
+    if (request.sourceRevision !== descriptor.sourceRevision) throw new Error('圖片或正文已更新，請重新生成')
     const record = figureInsightRecordSchema.parse({ version: 1, documentId: request.documentId, figure: descriptor.figure,
       content: request.content, provenance: { sourceRevision: descriptor.sourceRevision, promptVersion: FIGURE_INSIGHT_PROMPT_VERSION,
         model: request.model, generatedAt: new Date().toISOString(), ...(request.upload ? { upload: request.upload } : {}) } })
     const root = await this.root(request.documentId)
     for (const name of ['insight', 'insight/figures']) {
       const path = this.policy.resolveChild(root, name)
-      try { const stat = await lstat(join(root, name)); if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('图片解读目录无效') }
+      try { const stat = await lstat(join(root, name)); if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('圖片解讀目錄無效') }
       catch (error) { if (!absent(error)) throw error; await mkdir(path) }
     }
     const path = this.policy.resolveChild(root, this.name(request.figureId))
-    try { if ((await lstat(join(root, this.name(request.figureId)))).isSymbolicLink()) throw new Error('解读文件不能是符号链接') }
+    try { if ((await lstat(join(root, this.name(request.figureId)))).isSymbolicLink()) throw new Error('解讀檔案不能是符號連結') }
     catch (error) { if (!absent(error)) throw error }
     const body = JSON.stringify(record)
-    if (Buffer.byteLength(body) > 64 * 1024) throw new Error('图片解读超过保存预算')
+    if (Buffer.byteLength(body) > 64 * 1024) throw new Error('圖片解讀超過儲存預算')
     const temporary = this.policy.resolveChild(root, `insight/figures/.pending-${randomUUID()}`)
     try {
       const handle = await open(temporary, 'wx')

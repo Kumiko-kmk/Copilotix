@@ -23,27 +23,27 @@ export async function loadFullBriefContext(documentId: string, signal: AbortSign
   source: () => Promise<BriefSource>): Promise<BriefContextResult> {
   signal.throwIfAborted()
   const descriptor = briefSourceSchema.parse(await source())
-  if (descriptor.documentId !== documentId) throw new PaperBriefInputError('论文来源不匹配')
+  if (descriptor.documentId !== documentId) throw new PaperBriefInputError('論文來源不匹配')
   for (const artifact of descriptor.sources) {
     signal.throwIfAborted()
     const info = await lstat(artifact.path)
-    if (!info.isFile() || info.isSymbolicLink() || info.size > 16 * 1024 * 1024) throw new PaperBriefInputError('论文全文来源无效或超过 16 MiB；未截断内容')
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 16 * 1024 * 1024) throw new PaperBriefInputError('論文全文來源無效或超過 16 MiB；未截斷內容')
     const handle = await open(artifact.path, 'r')
     let data: Buffer
     try {
-      if ((await handle.stat()).size > 16 * 1024 * 1024) throw new PaperBriefInputError('论文全文超过 16 MiB；未截断内容')
+      if ((await handle.stat()).size > 16 * 1024 * 1024) throw new PaperBriefInputError('論文全文超過 16 MiB；未截斷內容')
       data = await handle.readFile({ signal })
     } finally { await handle.close() }
-    if (createHash('sha256').update(data).digest('hex') !== artifact.hash) throw new PaperBriefInputError('论文内容正在更新，请重试')
+    if (createHash('sha256').update(data).digest('hex') !== artifact.hash) throw new PaperBriefInputError('論文內容正在更新，請重試')
     const markdown = data.toString('utf8')
     if (!markdown.trim()) continue
     signal.throwIfAborted()
     const after = briefSourceSchema.parse(await source())
-    if (after.documentId !== documentId || after.sourceRevision !== descriptor.sourceRevision || JSON.stringify(after.sources) !== JSON.stringify(descriptor.sources)) throw new PaperBriefInputError('论文内容正在更新，请重试')
+    if (after.documentId !== documentId || after.sourceRevision !== descriptor.sourceRevision || JSON.stringify(after.sources) !== JSON.stringify(descriptor.sources)) throw new PaperBriefInputError('論文內容正在更新，請重試')
     return briefContextResultSchema.parse({ documentId, sourceRevision: descriptor.sourceRevision,
       context: buildFullBriefContext(artifact.language === 'original' ? markdown : '', artifact.language === 'translated' ? markdown : '') })
   }
-  throw new PaperBriefInputError('论文正文为空')
+  throw new PaperBriefInputError('論文正文為空')
 }
 
 export interface PaperInsightDependencies {
@@ -90,10 +90,10 @@ export class PaperInsightService {
   private async authorization(selected?: PaperChatProvider) {
     const settings = await this.deps.settings()
     const provider = resolvePaperChatProvider(settings, selected)
-    if (!provider) return { reason: '请在设置中将已启用的 Qwen、DeepSeek 或 Codex 设为首选服务商。' } as const
+    if (!provider) return { reason: '請在設定中將已啟用的 Qwen、DeepSeek 或 Codex 設為首選服務商。' } as const
     const keys = provider === 'codex' ? [] : await this.deps.keys(provider)
-    if (provider !== 'codex' && !keys.length) return { reason: '请先在服务连接中保存模型 API Key。' } as const
-    if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') return { reason: '请先在服务连接中验证模型 API Key。' } as const
+    if (provider !== 'codex' && !keys.length) return { reason: '請先在服務連線中儲存模型 API Key。' } as const
+    if (provider !== 'codex' && settings.credentials[provider].state !== 'valid') return { reason: '請先在服務連線中驗證模型 API Key。' } as const
     const model = resolvePaperChatModel(provider, provider === 'codex' ? settings.codex?.chatModel : provider === 'qwen' ? settings.qwenChatModel : settings.deepseekChatModel)
     return { settings, provider, keys, model } as const
   }
@@ -114,7 +114,7 @@ export class PaperInsightService {
   async getSaved(documentId: string): Promise<PaperInsightState> {
     paperInsightRequestSchema.parse({ documentId })
     try { return paperInsightStateSchema.parse(await this.deps.get(documentId)) }
-    catch { return { status: 'failed', error: '无法读取本地解读，请检查论文目录后重试。' } }
+    catch { return { status: 'failed', error: '無法讀取本地解讀，請檢查論文目錄後重試。' } }
   }
 
   async get(documentId: string): Promise<PaperInsightState> {
@@ -126,14 +126,14 @@ export class PaperInsightService {
       const auth = await this.authorization()
       if (auth.reason !== undefined) return { status: 'unavailable', reason: auth.reason }
       return this.failures.get(documentId) ?? stored
-    } catch { return { status: 'failed', error: '无法读取本地解读，请检查论文目录后重试。' } }
+    } catch { return { status: 'failed', error: '無法讀取本地解讀，請檢查論文目錄後重試。' } }
   }
 
   async generate(documentId: string, automatic = false): Promise<void> {
     paperInsightRequestSchema.parse({ documentId })
     if (this.runs.has(documentId)) return
-    if (this.destroyed || this.paused || this.blocked.has(documentId) || !this.deps.canStart()) throw new Error('文库正在维护或退出，请稍后再试。')
-    if (this.runs.size >= 200) throw new Error('待生成解读过多，请稍后重试。')
+    if (this.destroyed || this.paused || this.blocked.has(documentId) || !this.deps.canStart()) throw new Error('文庫正在維護或退出，請稍後再試。')
+    if (this.runs.size >= 200) throw new Error('待生成解讀過多，請稍後重試。')
     let finish!: () => void
     const run: Run = { documentId, automatic, controller: new AbortController(), done: new Promise<void>((resolve) => { finish = resolve }), finish: () => finish() }
     this.runs.set(documentId, run)
@@ -273,16 +273,16 @@ export class PaperInsightService {
         ...(stage === 'parse' && problems ? { problems } : {}) })
       if (signal.aborted) {
         const stored = await this.deps.get(documentId).catch((): PaperInsightState => ({ status: 'missing' }))
-        this.emit(documentId, stored.status === 'ready' ? stored : { status: 'failed', error: '生成已取消或超时，可重新生成。' })
+        this.emit(documentId, stored.status === 'ready' ? stored : { status: 'failed', error: '生成已取消或超時，可重新生成。' })
       } else {
         // Never persist or forward provider bodies, prompts, paths or API keys in errors.
         this.emit(documentId, { status: 'failed', error: error instanceof PaperBriefInputError ? error.message
           : error instanceof Error && 'code' in error && error.code === 'RAG_LIMIT_EXCEEDED'
-            ? '论文全文超过所选模型或请求容量；未截断内容，请选择更大上下文的模型。'
+            ? '論文全文超過所選模型或請求容量；未截斷內容，請選擇更大上下文的模型。'
             : error instanceof Error && 'code' in error && error.code === 'EMBEDDING_RATE_LIMITED'
-              ? '服务商限流，请稍后重试。'
+              ? '服務商限流，請稍後重試。'
               // Codex messages are fixed application text, never provider bodies.
-              : error instanceof CodexGenerationError ? error.message : '生成或保存 AI 解读失败，请检查模型服务与论文内容后重试。' })
+              : error instanceof CodexGenerationError ? error.message : '生成或儲存 AI 解讀失敗，請檢查模型服務與論文內容後重試。' })
       }
     } finally { clearTimeout(timer) }
   }
@@ -313,7 +313,7 @@ export class PaperInsightService {
   resume(): void { if (!this.destroyed) { this.paused = false; this.pump() } }
   async dispose(): Promise<void> { this.destroyed = true; await this.pause() }
   async deleteDocument<T>(documentId: string, remove: () => Promise<T>): Promise<T> {
-    if (this.blocked.has(documentId)) throw new Error('论文正在删除')
+    if (this.blocked.has(documentId)) throw new Error('論文正在刪除')
     this.blocked.add(documentId)
     try {
       const run = this.runs.get(documentId)
@@ -342,7 +342,7 @@ function problemFields(problems: readonly string[]): string[] {
   return problems.slice(0, 12).map((problem) => {
     const [path = '', detail = ''] = problem.split('：', 2)
     const field = /^[\w.]{1,80}$/u.test(path) ? path : 'other'
-    const length = /^(\d+) (?:字|项)/u.exec(detail)?.[1]
+    const length = /^(\d+) (?:字|項|\u9879)/u.exec(detail)?.[1]
     return length ? `${field}:${length}` : field
   })
 }
