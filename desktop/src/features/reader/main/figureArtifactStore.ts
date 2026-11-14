@@ -30,9 +30,9 @@ export function figureImagePath(figure: ReaderFigureGeometry, revision: string):
 }
 function pngSize(png: Buffer): [number, number] {
   if (png.length < 45 || png.length > 32 * 1024 * 1024 || png.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' ||
-    png.subarray(12, 16).toString() !== 'IHDR' || png.subarray(-8).toString('hex') !== '49454e44ae426082') throw new Error('整圖必須是完整 PNG 圖片')
+    png.subarray(12, 16).toString() !== 'IHDR' || png.subarray(-8).toString('hex') !== '49454e44ae426082') throw new Error('整图必须是完整 PNG 图片')
   const width = png.readUInt32BE(16), height = png.readUInt32BE(20)
-  if (!width || !height || width > 8192 || height > 8192 || width * height > 8_000_000) throw new Error('整圖超過畫布上限')
+  if (!width || !height || width > 8192 || height > 8192 || width * height > 8_000_000) throw new Error('整图超过画布上限')
   return [width, height]
 }
 export async function readFigureArtifacts(outputDir: string, revision: string, geometries: readonly ReaderFigureGeometry[]): Promise<FigureArtifact[]> {
@@ -72,10 +72,10 @@ export async function writeDerivedFile(path: string, data: Buffer | string): Pro
 export async function storeFigureArtifact(outputDir: string, revision: string, geometry: ReaderFigureGeometry,
   pngBase64: string, previous: readonly FigureArtifact[]): Promise<FigureArtifact> {
   const png = Buffer.from(pngBase64, 'base64')
-  if (png.toString('base64') !== pngBase64) throw new Error('整圖編碼無效')
+  if (png.toString('base64') !== pngBase64) throw new Error('整图编码无效')
   const [width, height] = pngSize(png)
   const ratio = (geometry.cropBox[2] - geometry.cropBox[0]) / (geometry.cropBox[3] - geometry.cropBox[1])
-  if (Math.abs(width - ratio * height) > ratio + 1) throw new Error('整圖比例與 PDF 裁圖不一致')
+  if (Math.abs(width - ratio * height) > ratio + 1) throw new Error('整图比例与 PDF 裁图不一致')
   const imagePath = figureImagePath(geometry, revision)
   const artifact = { figureId: geometry.id, imagePath, sourceRevision: revision, pageIndex: geometry.pageIndex,
     cropBox: geometry.cropBox, mappingIds: geometry.mappingIds, sourceAssets: geometry.assetSources, width, height, pngSha256: sha256(png) }

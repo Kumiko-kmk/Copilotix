@@ -554,7 +554,7 @@ export class PaperArchiveScene {
       try { this.startDetail(prepared); return true }
       catch {
         prepared.release()
-        this.options.onDetailCoverError?.('無法顯示完整封面，請重試開啟檔案。')
+        this.options.onDetailCoverError?.('无法显示完整封面，请重试打开档案。')
         return false
       }
     }
@@ -568,7 +568,7 @@ export class PaperArchiveScene {
     request.timer = window.setTimeout(() => {
       if (this.openPreparation !== request) return
       this.cancelOpenPreparation()
-      this.options.onDetailCoverError?.('封面準備超時，請重試開啟檔案。')
+      this.options.onDetailCoverError?.('封面准备超时，请重试打开档案。')
     }, 30_000)
     try {
       void this.options.prepareDetailCover(paper, request.controller.signal).then(cover => {
@@ -577,15 +577,15 @@ export class PaperArchiveScene {
           `${selected.updatedAt ?? selected.createdAt}:${selected.workflow.status}` !== revision) { cover.release(); return }
         this.openPreparation = null
         window.clearTimeout(request.timer)
-        try { this.startDetail(cover) } catch { cover.release(); this.options.onDetailCoverError?.('無法顯示完整封面，請重試開啟檔案。') }
+        try { this.startDetail(cover) } catch { cover.release(); this.options.onDetailCoverError?.('无法显示完整封面，请重试打开档案。') }
       }, () => {
         if (this.openPreparation !== request) return
         this.cancelOpenPreparation()
-        this.options.onDetailCoverError?.('無法準備完整封面，請重試開啟檔案。')
+        this.options.onDetailCoverError?.('无法准备完整封面，请重试打开档案。')
       })
     } catch {
       this.cancelOpenPreparation()
-      this.options.onDetailCoverError?.('無法準備完整封面，請重試開啟檔案。')
+      this.options.onDetailCoverError?.('无法准备完整封面，请重试打开档案。')
     }
     return true
   }

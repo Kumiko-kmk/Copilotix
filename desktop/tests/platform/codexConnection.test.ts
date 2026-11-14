@@ -38,15 +38,15 @@ describe('Codex stdio transport', () => {
   })
   it('settles all pending calls on malformed output or process exit', async () => {
     const f = fixture(), pending = f.connection.request('one', {})
-    const rejected = expect(pending).rejects.toThrow('無效協議')
+    const rejected = expect(pending).rejects.toThrow('无效协议')
     f.child.stdout.write('not-json\n'); await rejected
     expect(f.child.kill).toHaveBeenCalledOnce()
-    await expect(f.connection.request('two', {})).rejects.toThrow('關閉')
+    await expect(f.connection.request('two', {})).rejects.toThrow('关闭')
   })
   it('bounds initialization time and ignores late replies', async () => {
     vi.useFakeTimers()
     const f = fixture(), pending = f.connection.request('initialize', {}, 10)
-    const rejected = expect(pending).rejects.toThrow('超時')
+    const rejected = expect(pending).rejects.toThrow('超时')
     await vi.advanceTimersByTimeAsync(11); await rejected
     f.child.stdout.write('{"id":1,"result":{}}\n')
     f.connection.close()

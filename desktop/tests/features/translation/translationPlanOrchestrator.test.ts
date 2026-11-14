@@ -120,7 +120,7 @@ async function makeFixture(sourceText = 'Hello', cacheHits: TranslationProviderI
   }
   const request: PlainTranslationRequest = {
     protocol: 'copilotix-translation-plain-v1',
-    targetLanguage: 'zh-TW',
+    targetLanguage: 'zh-CN',
     unitId,
     sourceHash: SOURCE_HASH,
     segments: [{ id: `${unitId}-segment-0`, text: sourceText }]
@@ -222,7 +222,7 @@ describe('translation plan orchestrator', () => {
       ['deepseek', provider('deepseek', async (text) => `d:${text}`, calls)]
     ])
 
-    await expect(run(fixture, providers, new AbortController().signal, [])).rejects.toThrow('沒有可用的翻譯服務')
+    await expect(run(fixture, providers, new AbortController().signal, [])).rejects.toThrow('没有可用的翻译服务')
     expect(calls).toEqual([])
     expect(fixture.compute.cacheCalls).toEqual([])
   })
@@ -230,7 +230,7 @@ describe('translation plan orchestrator', () => {
   it('uses a utility cache hit without calling a provider', async () => {
     const fixture = await makeFixture('Cached text', ['qwen'])
     const calls: string[] = []
-    const result = await run(fixture, new Map([['qwen', provider('qwen', async (text) => `譯:${text}`, calls)]]))
+    const result = await run(fixture, new Map([['qwen', provider('qwen', async (text) => `译:${text}`, calls)]]))
 
     expect(result.status).toBe('succeeded')
     expect(fixture.compute.cacheCalls).toEqual(['qwen'])
@@ -242,7 +242,7 @@ describe('translation plan orchestrator', () => {
   it('splits long plain segments into provider requests no longer than 4000', async () => {
     const fixture = await makeFixture('a'.repeat(9_001))
     const calls: string[] = []
-    await run(fixture, new Map([['qwen', provider('qwen', async (text) => `譯:${text}`, calls)]]))
+    await run(fixture, new Map([['qwen', provider('qwen', async (text) => `译:${text}`, calls)]]))
 
     const lengths = calls.map((entry) => Number(entry.split(':')[1]))
     expect(lengths.length).toBeGreaterThan(1)
@@ -306,7 +306,7 @@ describe('translation plan orchestrator', () => {
     }
     const calls: string[] = []
     const providers = new Map<TranslationProviderId, TranslationProvider>([
-      ['qwen', provider('qwen', async (text) => `譯:${text}`, calls)]
+      ['qwen', provider('qwen', async (text) => `译:${text}`, calls)]
     ])
 
     const result = await new TranslationPlanOrchestrator({
@@ -400,7 +400,7 @@ describe('translation plan orchestrator', () => {
             reject(new Error('provider observed abort'))
           }, { once: true })
         })
-        return `譯:${text}`
+        return `译:${text}`
       }, [])]
     ])
 

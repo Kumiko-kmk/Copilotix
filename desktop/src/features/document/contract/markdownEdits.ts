@@ -220,5 +220,5 @@ export function moveInOrder(order: readonly number[], unit: readonly number[], b
 }
 
 export function editExcerpt(markdown: string): string {
-  return markdown.replace(/!\[[^\]]*\]\([^)]*\)/gu, '[圖片]').replace(/[#*_>`$|\\]/gu, '').replace(/\s+/gu, ' ').trim().slice(0, 120)
+  return markdown.replace(/!\[[^\]]*\]\([^)]*\)/gu, '[图片]').replace(/[#*_>`$|\\]/gu, '').replace(/\s+/gu, ' ').trim().slice(0, 120)
 }

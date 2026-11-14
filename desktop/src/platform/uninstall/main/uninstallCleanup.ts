@@ -61,8 +61,8 @@ export async function runUninstallCleanup(identity: UninstallIdentity): Promise<
       message: english ? `Permanently remove the following ${identity.name} data?` : `永久移除以下 ${identity.name} 文庫與資料？`,
       detail: (english
         ? `Application data: ${plan.userData}\nDocuments: ${plan.documentCount}\nLibrary folders:\n`
-        : `應用資料：${plan.userData}\n文件數量：${plan.documentCount}\n文庫資料夾：\n`) +
-        (libraryRoots.join('\n') || (english ? '(No registered document folders)' : '（沒有登記的文件資料夾）')) +
+        : `應用資料：${plan.userData}\n文檔數量：${plan.documentCount}\n文庫資料夾：\n`) +
+        (libraryRoots.join('\n') || (english ? '(No registered document folders)' : '（沒有登記的文檔資料夾）')) +
         (english ? '\n\nSettings, history, caches and saved API credentials will also be removed. Original source files, unrelated files in shared folders and external backups are preserved. This cannot be undone.'
           : '\n\n同時移除設定、歷史記錄、快取與已儲存的 API 憑證。原始來源檔案、共用資料夾中的其他檔案及外部備份會保留。此操作無法復原。'),
       buttons: english ? ['Cancel', 'Permanently remove'] : ['取消', '永久移除'],
@@ -83,7 +83,7 @@ export async function runUninstallCleanup(identity: UninstallIdentity): Promise<
     app.exit(0)
   } catch {
     child?.kill()
-    dialog.showErrorBox(identity.name, '無法完成資料清理，解除安裝已停止。資料庫可能損壞、路徑含連結，或檔案／憑證無法移除。已清理的專案不會復原；請保留程式並重試，或取消清除選項以保留其餘資料。')
+    dialog.showErrorBox(identity.name, '無法完成資料清理，解除安裝已停止。資料庫可能損壞、路徑含連結，或檔案／憑證無法移除。已清理的項目不會復原；請保留程式並重試，或取消清除選項以保留其餘資料。')
     app.exit(1)
   }
 }

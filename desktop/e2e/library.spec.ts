@@ -34,14 +34,14 @@ test('backs up a complete library through the storage settings RPC in an isolate
     }, backupParent)
 
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('button', { name: '設定' }).click()
-    await window.getByRole('button', { name: /檔案儲存/u }).click()
-    const storage = window.getByRole('region', { name: '檔案儲存' })
+    await window.getByRole('button', { name: '设置' }).click()
+    await window.getByRole('button', { name: /文件存储/u }).click()
+    const storage = window.getByRole('region', { name: '文件存储' })
     const library = storage
     await expect(storage).toBeVisible()
     await expect(library).toBeVisible()
     await expect(window.locator('.settings-content-body > .settings-section.storage-management')).toHaveCount(1)
-    await expect(library.getByRole('button', { name: '匯出文庫', exact: true })).toBeEnabled()
+    await expect(library.getByRole('button', { name: '导出文库', exact: true })).toBeEnabled()
 
     const dimensions = await window.evaluate(() => {
       const root = document.documentElement
@@ -70,10 +70,10 @@ test('backs up a complete library through the storage settings RPC in an isolate
     await window.screenshot({ path: screenshotPath })
 
     // This is the only library-management button the spec clicks.
-    await library.getByRole('button', { name: '匯出文庫', exact: true }).click()
+    await library.getByRole('button', { name: '导出文库', exact: true }).click()
     const notice = window.locator('.ant-message-notice-content').last()
     await expect(notice).toBeVisible({ timeout: 15000 })
-    await expect(notice).toContainText('備份完成：')
+    await expect(notice).toContainText('备份完成：')
     expect(await app.evaluate(() => Reflect.get(globalThis, '__libraryDirectoryDialogCalls'))).toBe(1)
 
     const names = await readdir(backupParent)

@@ -100,11 +100,11 @@ export default function ZoteroImportDialog(props: {
       const result = await window.copilotix.zotero.importItems({ snapshotId: catalog.snapshotId, itemKeys: [...selected] })
       const parts = [
         result.created > 0 ? `新建 ${result.created} 篇` : null,
-        result.linked > 0 ? `${result.linked} 篇此前已匯入，已關聯 Zotero 條目` : null
+        result.linked > 0 ? `${result.linked} 篇此前已导入，已关联 Zotero 条目` : null
       ].filter(Boolean)
       if (result.failed.length > 0) {
         const examples = result.failed.slice(0, 3).map((item) => `${item.name}（${item.message}）`).join('；')
-        messageApi.warning(`${result.failed.length} 篇未匯入：${examples}${result.failed.length > 3 ? ' 等' : ''}`)
+        messageApi.warning(`${result.failed.length} 篇未导入：${examples}${result.failed.length > 3 ? ' 等' : ''}`)
       }
       if (parts.length > 0) messageApi.success(parts.join('，'))
       if (result.created > 0) props.onImported()
@@ -120,69 +120,69 @@ export default function ZoteroImportDialog(props: {
   return (
     <Modal
       className="zotero-import-dialog"
-      title="從 Zotero 匯入"
+      title="从 Zotero 导入"
       open={props.open}
       width={920}
       onCancel={() => { if (!importing) props.onClose() }}
       maskClosable={!importing}
       footer={(
         <div className="zotero-import-footer">
-          <span>{tooMany ? `一次最多匯入 ${ZOTERO_IMPORT_MAX} 篇` : `已選 ${selected.size} 篇`}</span>
+          <span>{tooMany ? `一次最多导入 ${ZOTERO_IMPORT_MAX} 篇` : `已选 ${selected.size} 篇`}</span>
           <Button onClick={props.onClose} disabled={importing}>取消</Button>
           <Button type="primary" loading={importing} disabled={!catalog || selected.size === 0 || tooMany || parserBlocked} onClick={() => void runImport()}>
-            匯入所選
+            导入所选
           </Button>
         </div>
       )}
     >
       {contextHolder}
       {parserBlocked ? (
-        <Alert className="zotero-import-alert" type="warning" showIcon message={parserState === 'missing' ? '需要先配置解析 API Token' : 'Parser API Token 驗證失敗'}
-          description={<Button type="link" onClick={props.onOpenSettings}>前往系統設定</Button>} />
+        <Alert className="zotero-import-alert" type="warning" showIcon message={parserState === 'missing' ? '需要先配置解析 API Token' : 'Parser API Token 验证失败'}
+          description={<Button type="link" onClick={props.onOpenSettings}>前往系统设置</Button>} />
       ) : null}
       {loadError ? (
-        <Alert className="zotero-import-alert" type="error" showIcon message="無法讀取 Zotero 文庫" description={loadError}
-          action={<Button size="small" onClick={() => void loadCatalog(true)}>重試</Button>} />
+        <Alert className="zotero-import-alert" type="error" showIcon message="无法读取 Zotero 文库" description={loadError}
+          action={<Button size="small" onClick={() => void loadCatalog(true)}>重试</Button>} />
       ) : null}
       {catalog ? (
         <div className="zotero-import-source" role="status">
           <span>
             {catalog.source === 'local-api'
-              ? '已連線正在執行的 Zotero（只讀）'
-              : `${catalog.fallbackReason ?? 'Zotero 本機介面不可用'}，改為讀取 zotero.sqlite 的只讀副本`}
+              ? '已连接正在运行的 Zotero（只读）'
+              : `${catalog.fallbackReason ?? 'Zotero 本机接口不可用'}，改为读取 zotero.sqlite 的只读副本`}
           </span>
-          <Button type="text" size="small" icon={<ReloadOutlined />} aria-label="重新讀取 Zotero 文庫" loading={loading} onClick={() => void loadCatalog(true)} />
+          <Button type="text" size="small" icon={<ReloadOutlined />} aria-label="重新读取 Zotero 文库" loading={loading} onClick={() => void loadCatalog(true)} />
         </div>
       ) : null}
       {loading && !catalog ? <div className="zotero-import-loading"><Spin /></div> : null}
       {catalog ? (
         <div className="zotero-import-body">
-          <nav className="zotero-import-collections" aria-label="Zotero 分類">
-            <ScopeButton active={scope === null} label="全部條目" count={catalog.totalItems} depth={0} onClick={() => setScope(null)} />
+          <nav className="zotero-import-collections" aria-label="Zotero 分类">
+            <ScopeButton active={scope === null} label="全部条目" count={catalog.totalItems} depth={0} onClick={() => setScope(null)} />
             <CollectionTree collections={catalog.collections} scope={scope} onSelect={setScope} />
-            <ScopeButton active={scope === 'unfiled'} label="未分類條目" count={catalog.unfiledItems} depth={0} onClick={() => setScope('unfiled')} />
+            <ScopeButton active={scope === 'unfiled'} label="未分类条目" count={catalog.unfiledItems} depth={0} onClick={() => setScope('unfiled')} />
           </nav>
-          <section className="zotero-import-items" aria-label="含 PDF 的 Zotero 條目">
+          <section className="zotero-import-items" aria-label="含 PDF 的 Zotero 条目">
             <div className="zotero-import-toolbar">
               <Checkbox checked={allVisibleSelected} indeterminate={!allVisibleSelected && selectable.some((item) => selected.has(item.itemKey))}
-                disabled={selectable.length === 0} onChange={(event) => toggleVisible(event.target.checked)}>全選已列出</Checkbox>
-              <Input.Search allowClear placeholder="按標題、作者或年份篩選" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="篩選 Zotero 條目" />
-              <small>{total} 條含 PDF</small>
+                disabled={selectable.length === 0} onChange={(event) => toggleVisible(event.target.checked)}>全选已列出</Checkbox>
+              <Input.Search allowClear placeholder="按标题、作者或年份筛选" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="筛选 Zotero 条目" />
+              <small>{total} 条含 PDF</small>
             </div>
             <div className="zotero-import-list">
-              {items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="沒有含 PDF 附件的條目" /> : null}
+              {items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有含 PDF 附件的条目" /> : null}
               {items.map((item) => (
                 <label className={item.importedDocumentId ? 'zotero-import-item imported' : 'zotero-import-item'} key={item.itemKey}>
                   <Checkbox checked={Boolean(item.importedDocumentId) || selected.has(item.itemKey)} disabled={Boolean(item.importedDocumentId)}
                     onChange={(event) => toggle(item.itemKey, event.target.checked)} />
                   <span className="zotero-import-item-text">
                     <strong>{item.title}</strong>
-                    <small>{[item.creators, item.year].filter(Boolean).join(' · ') || '未知作者'}{item.pdfCount > 1 ? ` · ${item.pdfCount} 個 PDF，匯入第一個` : ''}</small>
+                    <small>{[item.creators, item.year].filter(Boolean).join(' · ') || '未知作者'}{item.pdfCount > 1 ? ` · ${item.pdfCount} 个 PDF，导入第一个` : ''}</small>
                   </span>
-                  {item.importedDocumentId ? <span className="zotero-import-badge">已匯入</span> : null}
+                  {item.importedDocumentId ? <span className="zotero-import-badge">已导入</span> : null}
                 </label>
               ))}
-              {next !== null ? <Button type="link" onClick={() => void loadPage(next)}>載入更多</Button> : null}
+              {next !== null ? <Button type="link" onClick={() => void loadPage(next)}>加载更多</Button> : null}
             </div>
           </section>
         </div>

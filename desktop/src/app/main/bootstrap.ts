@@ -103,7 +103,7 @@ export async function bootstrap(): Promise<void> {
     encodeImage: async png => {
       if (png.length <= 2 * 1024 * 1024) return { bytes: png, mimeType: 'image/png' }
       const image = nativeImage.createFromBuffer(png)
-      if (image.isEmpty()) throw new Error('無法編碼整圖')
+      if (image.isEmpty()) throw new Error('无法编码整图')
       const jpeg = image.toJPEG(98)
       return jpeg.length < png.length ? { bytes: jpeg, mimeType: 'image/jpeg', jpegQuality: 98 } : { bytes: png, mimeType: 'image/png' }
     },
@@ -213,7 +213,7 @@ export async function bootstrap(): Promise<void> {
   registerCodexIpc(ipc, {
     codex: () => codex,
     chooseExecutable: async () => {
-      const result = await dialog.showOpenDialog(dialogParent(), { title: '選擇 codex.exe', properties: ['openFile'], filters: [{ name: 'Codex', extensions: ['exe'] }] })
+      const result = await dialog.showOpenDialog(dialogParent(), { title: '选择 codex.exe', properties: ['openFile'], filters: [{ name: 'Codex', extensions: ['exe'] }] })
       return result.canceled ? null : result.filePaths[0] ?? null
     }
   })

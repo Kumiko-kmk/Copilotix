@@ -243,7 +243,7 @@ export function mergeReaderBlocks(
       {
         role: 'page-divider',
         markdown: '',
-        text: '第 ' + String(pageIndex + 1) + ' 頁',
+        text: '第 ' + String(pageIndex + 1) + ' 页',
         mappingIds: [],
         pageIndex,
         order: lastOrder + 0.75

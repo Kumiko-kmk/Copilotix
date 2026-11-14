@@ -14,7 +14,7 @@ async function fixture() {
   const ids: string[] = [randomUUID(), randomUUID()]
   for (const id of ids) await mkdir(join(root, id))
   const store = () => new PaperChatStore((id) => ids.includes(id) ? join(root, id) : null)
-  const turn = (index = 0): StoredPaperChatTurn => ({ id: randomUUID(), createdAt: new Date(1_790_000_000_000 + index).toISOString(), provider: 'deepseek', model: 'deepseek-flash', question: `問題 ${index}`, answer: `回答 ${index}`, citations: {}, status: 'completed' })
+  const turn = (index = 0): StoredPaperChatTurn => ({ id: randomUUID(), createdAt: new Date(1_790_000_000_000 + index).toISOString(), provider: 'deepseek', model: 'deepseek-flash', question: `问题 ${index}`, answer: `回答 ${index}`, citations: {}, status: 'completed' })
   return { root, doc: ids[0]!, other: ids[1]!, store, turn }
 }
 
@@ -23,10 +23,10 @@ describe('paper-local chat storage', () => {
     const f = await fixture(), first = f.store()
     const turn = f.turn()
     turn.answer = '完整回答 😀 $x^2$ [E1]'
-    turn.citations.E1 = { citationId: randomUUID(), evidenceId: 'E1', documentId: f.doc, chunkId: 'chunk1', excerpt: '論文原文',
+    turn.citations.E1 = { citationId: randomUUID(), evidenceId: 'E1', documentId: f.doc, chunkId: 'chunk1', excerpt: '论文原文',
       locator: { documentId: f.doc, artifactId: randomUUID(), contentRevisionId: 'revision1', contentHash: 'a'.repeat(64), mappingIds: ['m1'], pageStart: 0, pageEnd: 0, sourceStartOffset: 0, sourceEndOffset: 4, offsetUnit: 'utf16' }, scoreProvenance: [{ source: 'full-text', rank: 1, score: 1 }] }
     await first.saveTurn(f.doc, turn)
-    const session = { ...emptyPaperChatSession(), draft: '下一個問題', selectedModel: { provider: 'deepseek' as const, model: 'deepseek-v4-pro' }, pinned: [{ view: 'original' as const, text: '論文原文', contentRevisionId: 'revision1', fragments: [{ mappingIds: ['m1'], quote: '論文原文', startOffset: 0, endOffset: 4 }] }] }
+    const session = { ...emptyPaperChatSession(), draft: '下一個問題', selectedModel: { provider: 'deepseek' as const, model: 'deepseek-v4-pro' }, pinned: [{ view: 'original' as const, text: '论文原文', contentRevisionId: 'revision1', fragments: [{ mappingIds: ['m1'], quote: '论文原文', startOffset: 0, endOffset: 4 }] }] }
     await first.saveSession(f.doc, session)
     expect(await f.store().load(f.doc)).toEqual({ turns: [turn], next: null })
     expect(await f.store().session(f.doc)).toEqual(session)
@@ -65,7 +65,7 @@ describe('paper-local chat storage', () => {
     expect(await readFile(join(f.root, f.doc, 'original.pdf'), 'utf8')).toBe('source')
     expect(await readFile(join(f.root, f.doc, 'chat', 'user-notes.txt'), 'utf8')).toBe('notes')
     expect(await store.clear(f.other)).toEqual({ cleared: true })
-    await expect(store.load(randomUUID())).rejects.toThrow('論文不存在')
+    await expect(store.load(randomUUID())).rejects.toThrow('论文不存在')
   })
   it('preserves a corrupt file for recovery, rejects unknown fields and refuses a linked chat directory', async () => {
     const f = await fixture(), store = f.store()

@@ -33,7 +33,7 @@ function writeZoteroDatabase(path: string): void {
     CREATE TABLE itemCreators (itemID INT, creatorID INT, orderIndex INT);
     CREATE TABLE itemAttachments (itemID INTEGER PRIMARY KEY, parentItemID INT, linkMode INT, contentType TEXT, path TEXT);
     INSERT INTO libraries VALUES (1, 'user'), (2, 'group');
-    INSERT INTO collections VALUES (1, '力學論文', NULL, 1, 'AJ59LQ7F'), (2, '子分類', 1, 1, 'BBBBBBBB'), (3, '回收站分類', NULL, 1, 'CCCCCCCC');
+    INSERT INTO collections VALUES (1, '力学论文', NULL, 1, 'AJ59LQ7F'), (2, '子分类', 1, 1, 'BBBBBBBB'), (3, '回收站分类', NULL, 1, 'CCCCCCCC');
     INSERT INTO deletedCollections VALUES (3);
     INSERT INTO itemTypesCombined VALUES (1, 'journalArticle'), (2, 'attachment'), (3, 'note'), (4, 'case');
     INSERT INTO fieldsCombined VALUES (1, 'title'), (2, 'date'), (3, 'caseName');
@@ -67,12 +67,12 @@ describe('Zotero catalog', () => {
     await mkdir(dataDir)
     writeZoteroDatabase(join(dataDir, 'zotero.sqlite'))
     const profile: ZoteroProfile = { dataDir, baseAttachmentPath: join(root, 'Base'), port: 23119 }
-    const snapshot = await readSqliteSnapshot(profile, join(root, 'tmp'), 'Zotero 未執行')
+    const snapshot = await readSqliteSnapshot(profile, join(root, 'tmp'), 'Zotero 未运行')
 
-    expect(snapshot).toMatchObject({ source: 'sqlite', fallbackReason: 'Zotero 未執行', libraryID: 1 })
+    expect(snapshot).toMatchObject({ source: 'sqlite', fallbackReason: 'Zotero 未运行', libraryID: 1 })
     expect(snapshot.collections).toEqual([
-      { key: 'AJ59LQ7F', name: '力學論文', parentKey: null },
-      { key: 'BBBBBBBB', name: '子分類', parentKey: 'AJ59LQ7F' }
+      { key: 'AJ59LQ7F', name: '力学论文', parentKey: null },
+      { key: 'BBBBBBBB', name: '子分类', parentKey: 'AJ59LQ7F' }
     ])
     expect(snapshot.entries.map((entry) => entry.itemKey)).toEqual(['ITEMBBBB', 'ITEMAAAA', 'LQNEPDFX'])
     const [linked, spall, loose] = snapshot.entries
@@ -88,7 +88,7 @@ describe('Zotero catalog', () => {
   it('uses the local API when Zotero answers and reports why it cannot', async () => {
     const profile: ZoteroProfile = { dataDir: join(root, 'Zotero'), baseAttachmentPath: null, port: 23119 }
     const responses: Record<string, unknown> = {
-      '/collections': [{ key: 'AJ59LQ7F', data: { name: '力學論文', parentCollection: false } }],
+      '/collections': [{ key: 'AJ59LQ7F', data: { name: '力学论文', parentCollection: false } }],
       '/items': [
         { key: 'ITEMAAAA', data: { itemType: 'journalArticle', title: 'A', collections: ['AJ59LQ7F'], creators: [{ lastName: 'Li' }], date: 'June 2014' }, meta: { parsedDate: '2014-06' } },
         { key: 'PDFAAAAA', data: { itemType: 'attachment', parentItem: 'ITEMAAAA', contentType: 'application/pdf', linkMode: 'imported_file', filename: 'a.pdf' } },
@@ -107,7 +107,7 @@ describe('Zotero catalog', () => {
     const forbidden = (async () => new Response('Local API is not enabled', { status: 403 })) as typeof fetch
     await expect(readLocalApiSnapshot(profile, forbidden)).rejects.toThrow(ZoteroUnavailableError)
     const refused = (async () => { throw new TypeError('fetch failed') }) as typeof fetch
-    await expect(readLocalApiSnapshot(profile, refused)).rejects.toThrow('Zotero 未執行')
+    await expect(readLocalApiSnapshot(profile, refused)).rejects.toThrow('Zotero 未运行')
   })
 
   it('finds the data folder from the default profile prefs', async () => {
@@ -134,8 +134,8 @@ describe('Zotero import', () => {
     const fresh = { id: '22222222-2222-4222-8222-222222222222', outputDir: join(root, 'docs', 'fresh') }
     const documents = [existing]
     const snapshot: ZoteroSnapshot = {
-      source: 'sqlite', fallbackReason: 'Zotero 未執行', libraryID: 1,
-      collections: [{ key: 'AJ59LQ7F', name: '力學論文', parentKey: null }],
+      source: 'sqlite', fallbackReason: 'Zotero 未运行', libraryID: 1,
+      collections: [{ key: 'AJ59LQ7F', name: '力学论文', parentKey: null }],
       entries: [
         { itemKey: 'ITEMAAAA', title: 'Already here', creators: '', year: null, itemType: 'journalArticle', collectionKeys: ['AJ59LQ7F'], pdfs: [{ attachmentKey: 'PDFAAAAA', path: pdfA }] },
         { itemKey: 'ITEMBBBB', title: 'New paper', creators: '', year: null, itemType: 'journalArticle', collectionKeys: [], pdfs: [{ attachmentKey: 'PDFBBBBB', path: pdfB }] },
@@ -145,7 +145,7 @@ describe('Zotero import', () => {
     const importedPaths: string[][] = []
     const service = new ZoteroImportService({
       locateProfile: async () => ({ dataDir: root, baseAttachmentPath: null, port: 23119 }),
-      readLocalApi: async () => { throw new ZoteroUnavailableError('Zotero 未執行') },
+      readLocalApi: async () => { throw new ZoteroUnavailableError('Zotero 未运行') },
       readSqlite: async () => snapshot,
       listDocuments: async () => documents,
       hashFile: async (path) => (path === pdfA ? 'hash-a' : 'hash-b'),
@@ -166,7 +166,7 @@ describe('Zotero import', () => {
     expect(catalog).toMatchObject({ source: 'sqlite', totalItems: 3, unfiledItems: 2, collections: [{ key: 'AJ59LQ7F', itemCount: 1 }] })
 
     const result = await service.importItems({ snapshotId: catalog.snapshotId, itemKeys: ['ITEMAAAA', 'ITEMBBBB', 'ITEMCCCC'] })
-    expect(result).toEqual({ created: 1, linked: 1, failed: [{ name: 'Missing file', message: 'PDF 附件檔案不存在：gone.pdf' }] })
+    expect(result).toEqual({ created: 1, linked: 1, failed: [{ name: 'Missing file', message: 'PDF 附件文件不存在：gone.pdf' }] })
     expect(importedPaths).toEqual([[pdfA, pdfB]])
     expect(await readZoteroLinks(existing.outputDir)).toEqual([{ libraryID: 1, groupID: null, itemKey: 'ITEMAAAA', attachmentKey: 'PDFAAAAA', linkedAt: '2026-10-21T00:00:00.000Z' }])
     expect((await readZoteroLinks(fresh.outputDir))[0]?.itemKey).toBe('ITEMBBBB')
@@ -185,7 +185,7 @@ describe('Zotero import', () => {
     const first = await service.catalog()
     expect(service.items({ snapshotId: first.snapshotId, collectionKey: 'AJ59LQ7F' }).items[0]?.importedDocumentId).toBe(existing.id)
     const second = await service.catalog(true)
-    expect(() => service.items({ snapshotId: first.snapshotId, collectionKey: null })).toThrow('已過期')
+    expect(() => service.items({ snapshotId: first.snapshotId, collectionKey: null })).toThrow('已过期')
     expect(second.snapshotId).not.toBe(first.snapshotId)
   })
 })
@@ -196,7 +196,7 @@ describe('Zotero export', () => {
     translatedTitle: '注意力就是全部',
     abstract: 'Abstract text',
     summary: 'AI & summary',
-    highlights: [{ view: 'original', quote: 'key sentence' }, { view: 'translated', quote: '關鍵句' }],
+    highlights: [{ view: 'original', quote: 'key sentence' }, { view: 'translated', quote: '关键句' }],
     notes: [{ quote: 'quoted', body: 'line 1\nline 2' }]
   }
   function fakeConnector(options: { attachmentFails?: boolean } = {}) {
@@ -205,7 +205,7 @@ describe('Zotero export', () => {
       ping: async () => undefined,
       saveItems: async (items) => { calls.push({ items }); return 'session-1' },
       saveAttachment: async (_session, parentItemID, _title, pdf) => {
-        if (options.attachmentFails) throw new Error('Zotero 當前文庫不接受附件檔案')
+        if (options.attachmentFails) throw new Error('Zotero 当前文库不接受附件文件')
         calls.push({ attachment: { parentItemID, bytes: pdf.length } })
       }
     }
@@ -235,7 +235,7 @@ describe('Zotero export', () => {
     expect(note.note).toContain('zotero://select/library/items/ITEMAAAA')
     expect(note.note).toContain('Copilotix：Attention &lt;Is&gt; All')
     expect(note.note).toContain('AI &amp; summary')
-    expect(note.note).toContain('［譯文］關鍵句')
+    expect(note.note).toContain('［译文］关键句')
     expect(note.note).toContain('line 1<br>line 2')
     expect(await readZoteroExports(outputDir)).toEqual([{ kind: 'note', exportedAt: '2026-10-22T00:00:00.000Z' }])
 
@@ -256,7 +256,7 @@ describe('Zotero export', () => {
     const failingDir = join(root, 'no-files')
     const failing = await serviceFor(fakeConnector({ attachmentFails: true }).connector, failingDir)
     const result = await failing.exportDocuments({ documentIds: [id] })
-    expect(result.failed[0]?.message).toContain('條目已在 Zotero 建立，但 PDF 未能附上')
+    expect(result.failed[0]?.message).toContain('条目已在 Zotero 建立，但 PDF 未能附上')
     // The item exists in Zotero, so the next export asks before creating another one.
     expect(await readZoteroExports(failingDir)).toHaveLength(1)
   })
@@ -276,6 +276,6 @@ describe('Zotero export', () => {
     expect(JSON.parse(seen[2]!.headers['X-Metadata']!)).toMatchObject({ sessionID: session, parentItemID: 'a' })
 
     const closed = createZoteroConnector(23119, (async () => { throw new TypeError('fetch failed') }) as typeof fetch)
-    await expect(closed.ping()).rejects.toThrow('請先開啟 Zotero')
+    await expect(closed.ping()).rejects.toThrow('请先打开 Zotero')
   })
 })

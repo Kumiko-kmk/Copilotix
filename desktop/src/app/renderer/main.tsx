@@ -2,9 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider, theme } from 'antd'
-import zhTW from 'antd/locale/zh_TW'
+import zhCN from 'antd/locale/zh_CN'
 import { currentTheme, mixHex, onThemeChange, restoreTheme, rgbChannels } from '@features/settings/renderer'
-import './taiwan-kai.css'
 import './styles.css'
 
 // Before the first render, so the stored theme is the first thing painted.
@@ -21,17 +20,17 @@ function Root(): React.JSX.Element {
   const rule = rgbChannels(colors.ink)
   return (
     <ConfigProvider
-      locale={zhTW}
+      locale={zhCN}
       theme={{
         algorithm: active.dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        // Archive language (文庫): square corners, flat surfaces, ink primary actions that turn to the accent on hover.
+        // Archive language (文库): square corners, flat surfaces, ink primary actions that turn to the accent on hover.
         token: {
           motion: !__COPILOTIX_LITE__,
           colorPrimary: colors.primary,
           borderRadius: 2,
           borderRadiusLG: 3,
           borderRadiusSM: 2,
-          fontFamily: 'var(--copilotix-font)',
+          fontFamily: 'Inter, "Microsoft YaHei UI", "PingFang SC", sans-serif',
           colorBgBase: colors.surface,
           colorBgContainer: mixHex(colors.surface, colors.sheet, 0.5),
           colorBgLayout: colors.surface,

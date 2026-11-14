@@ -6,9 +6,9 @@ import type { CodexRuntime } from '../../../src/platform/codex/runtime/codexRunt
 import type { PlainTranslationRequest } from '@features/translation/contract/translationPlanProtocol'
 import { flattenSegments } from '@features/translation/contract/translationPlanProtocol'
 import { buildTableTranslationPlan } from '../../../src/features/translation/utility/tableTranslation'
-const request: PlainTranslationRequest = { protocol: 'copilotix-translation-plain-v1', unitId: '11111111-1111-4111-8111-111111111111', sourceHash: 'a'.repeat(64), targetLanguage: 'zh-TW', segments: [{ id: 'one', text: 'First segment' }, { id: 'two', text: 'Second segment' }] }
+const request: PlainTranslationRequest = { protocol: 'copilotix-translation-plain-v1', unitId: '11111111-1111-4111-8111-111111111111', sourceHash: 'a'.repeat(64), targetLanguage: 'zh-CN', segments: [{ id: 'one', text: 'First segment' }, { id: 'two', text: 'Second segment' }] }
 it('translates all segments of one paragraph in one correlated model request', async () => {
-  const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: sent.protocol, translations: sent.segments.map((s: { id: string; text: string }) => ({ id: s.id, source: s.text, text: '譯文' })) })); return null })
+  const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: sent.protocol, translations: sent.segments.map((s: { id: string; text: string }) => ({ id: s.id, source: s.text, text: '译文' })) })); return null })
   const provider = new CodexTranslationProvider('model', { generate } as unknown as CodexRuntime)
   expect((await provider.translatePlain(request, new AbortController().signal)).translations).toHaveLength(2)
   expect(generate).toHaveBeenCalledOnce()
@@ -19,16 +19,16 @@ it('rejects duplicate, omitted, or foreign segment IDs before accepting output',
   await expect(provider.translatePlain(request, new AbortController().signal)).rejects.toThrow('不匹配')
 })
 it('batches concurrent paragraphs from one job and restores their original IDs independently', async () => {
-  const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: sent.protocol, translations: sent.segments.map((s: { id: string; text: string }) => ({ id: s.id, source: s.text, text: '譯:'+s.text })) })); return null })
+  const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: sent.protocol, translations: sent.segments.map((s: { id: string; text: string }) => ({ id: s.id, source: s.text, text: '译:'+s.text })) })); return null })
   const provider = new CodexTranslationProvider('model', { generate } as unknown as CodexRuntime)
   const signal = new AbortController().signal
   const [plain, text] = await Promise.all([provider.translatePlain(request, signal), provider.translate('Other paragraph', signal)])
   expect(plain.translations.map(s => s.id)).toEqual(['one', 'two'])
-  expect(text).toBe('譯:Other paragraph')
+  expect(text).toBe('译:Other paragraph')
   expect(generate).toHaveBeenCalledOnce()
 })
 it('cancels a queued batch without sending content and never combines separate job signals', async () => {
-  const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: sent.protocol, translations: sent.segments.map((s: { id: string; text: string }) => ({ id: s.id, source: s.text, text: '譯文' })) })); return null })
+  const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: sent.protocol, translations: sent.segments.map((s: { id: string; text: string }) => ({ id: s.id, source: s.text, text: '译文' })) })); return null })
   const provider = new CodexTranslationProvider('model', { generate } as unknown as CodexRuntime)
   const cancelled = new AbortController()
   const promise = provider.translate('Cancelled', cancelled.signal)
@@ -46,7 +46,7 @@ it('shortens table wire IDs and restores every original cell/caption ID without 
     const segments = flattenSegments(sent)
     expect(segments.every(s => /^t\d+$/u.test(s.id))).toBe(true)
     expect(sent.tables[0].rows[0][0].rowspan).toBe(2)
-    input.onDelta(JSON.stringify({ protocol: table.protocol, translations: segments.map(s => ({ id: s.id, text: '譯:'+s.text })) }))
+    input.onDelta(JSON.stringify({ protocol: table.protocol, translations: segments.map(s => ({ id: s.id, text: '译:'+s.text })) }))
     return null
   })
   const provider = new CodexTranslationProvider('model', { generate } as unknown as CodexRuntime)
@@ -61,27 +61,27 @@ it('re-sends each paragraph alone when a batch answer slides onto the next segme
   const generate = vi.fn(async input => {
     const sent = JSON.parse(input.messages[1].content) as { protocol: string; segments: Array<{ id: string; text: string }> }
     const translations = sent.segments.length > 1
-      ? sent.segments.map((s, index) => { const from = sent.segments[Math.max(0, index - 1)]!; return { id: s.id, source: from.text, text: '譯:' + from.text } })
-      : sent.segments.map(s => ({ id: s.id, source: s.text, text: '譯:' + s.text }))
+      ? sent.segments.map((s, index) => { const from = sent.segments[Math.max(0, index - 1)]!; return { id: s.id, source: from.text, text: '译:' + from.text } })
+      : sent.segments.map(s => ({ id: s.id, source: s.text, text: '译:' + s.text }))
     input.onDelta(JSON.stringify({ protocol: sent.protocol, translations }))
     return null
   })
   const provider = new CodexTranslationProvider('model', { generate } as unknown as CodexRuntime)
   const signal = new AbortController().signal
   const results = await Promise.all(paragraphs.map(text => provider.translate(text, signal)))
-  expect(results).toEqual(paragraphs.map(text => '譯:' + text))
+  expect(results).toEqual(paragraphs.map(text => '译:' + text))
   expect(generate).toHaveBeenCalledTimes(1 + paragraphs.length)
 })
 it('rejects a single paragraph whose echo belongs to another segment instead of caching it', async () => {
-  const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: sent.protocol, translations: [{ id: 's0', source: 'Neural network architecture', text: '神經網路架構' }] })); return null })
+  const generate = vi.fn(async input => { const sent = JSON.parse(input.messages[1].content); input.onDelta(JSON.stringify({ protocol: sent.protocol, translations: [{ id: 's0', source: 'Neural network architecture', text: '神经网络架构' }] })); return null })
   const provider = new CodexTranslationProvider('model', { generate } as unknown as CodexRuntime)
   await expect(provider.translate(paragraphs[1]!, new AbortController().signal)).rejects.toMatchObject({ code: 'TRANSLATION_ALIGNMENT_MISMATCH' })
 })
 it('accepts translations that share acronyms with a neighbour but rejects one carrying only the neighbour anchors', () => {
   const sources = [{ text: 'As shown in Figure 4, LAAF-PINN and SA-PINN converge faster than PINN, with a gap to PINO.' }, { text: 'Note that the contribution of PINO is orthogonal; PINN techniques transfer to PINO.' }]
-  const correct = [{ source: 'As shown in Figure 4', text: '如圖 4 所示，LAAF-PINN 和 SA-PINN 收斂快於 PINN，與 PINO 仍有差距。' }, { source: 'Note that the contribution', text: '需要注意的是，PINO 的貢獻是正交的；PINN 技術可遷移到 PINO。' }]
+  const correct = [{ source: 'As shown in Figure 4', text: '如图 4 所示，LAAF-PINN 和 SA-PINN 收敛快于 PINN，与 PINO 仍有差距。' }, { source: 'Note that the contribution', text: '需要注意的是，PINO 的贡献是正交的；PINN 技术可迁移到 PINO。' }]
   expect(segmentsAligned(sources, correct)).toBe(true)
-  const moved = [{ source: 'As shown in Figure 4', text: correct[0]!.text }, { source: 'Note that the contribution', text: '如圖 4 所示，LAAF-PINN 和 SA-PINN 收斂更快。' }]
+  const moved = [{ source: 'As shown in Figure 4', text: correct[0]!.text }, { source: 'Note that the contribution', text: '如图 4 所示，LAAF-PINN 和 SA-PINN 收敛更快。' }]
   expect(segmentsAligned([sources[0]!, { text: 'Results for ResNet-50 and U-Net in Table 3 differ.' }], moved)).toBe(false)
 })
 it('keys Codex cache entries by alignment version so earlier unchecked batch answers are not reused', () => {

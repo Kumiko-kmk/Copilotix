@@ -6,17 +6,17 @@ import type { ReaderAnnotationSnapshot } from '../src/features/reader/contract/r
 import type { CopilotixDesktopApi } from '../src/app/contract/desktopApi'
 
 const FIXTURE_TRANSLATED_MARKDOWN = [
-  '# 測試文件',
-  '<sub>艾達·洛夫萊斯</sub>和艾倫·圖靈',
-  '摘要 | 獨立對映的摘要。',
-  '第一頁在第二欄繼續。<sup>12</sup> 水是 H<sub>2</sub>O。',
+  '# 测试文档',
+  '<sub>艾达·洛夫莱斯</sub>和艾伦·图灵',
+  '摘要 | 独立映射的摘要。',
+  '第一页在第二栏继续。<sup>12</sup> 水是 H<sub>2</sub>O。',
   '第二段落包含 $E=mc^2$。',
-  '<table><tbody><tr><td>學術單元格</td></tr></tbody></table>',
-  '![測試圖片](images/fixture.png)'
+  '<table><tbody><tr><td>学术单元格</td></tr></tbody></table>',
+  '![测试图片](images/fixture.png)'
 ].join('\n\n')
 
 const COMPACT_TABLE_SOURCE = '<table><tbody><tr><td>Academic cell</td><td>123,456,789</td><td>223,456,789</td><td>323,456,789</td><td>423,456,789</td><td>523,456,789</td><td>623,456,789</td><td>723,456,789</td><td>823,456,789</td><td>923,456,789</td><td>1,023,456,789</td><td>1,123,456,789</td></tr><tr><td>$x$</td><td>$$y$$</td><td>\\(z\\)</td><td>\\[w\\]</td><td colspan="8">Symbols ± ≤ ≥</td></tr></tbody></table>'
-const COMPACT_TABLE_TRANSLATED = COMPACT_TABLE_SOURCE.replace('Academic cell', '學術單元格')
+const COMPACT_TABLE_TRANSLATED = COMPACT_TABLE_SOURCE.replace('Academic cell', '学术单元格')
 const COMPACT_MARKDOWN_SOURCE = [
   '# Compact table fixture',
   'Ada Lovelace and Alan Turing',
@@ -27,13 +27,13 @@ const COMPACT_MARKDOWN_SOURCE = [
   '![Fixture image](images/fixture.png)'
 ].join('\n\n')
 const COMPACT_MARKDOWN_TRANSLATED = [
-  '# 緊湊表格測試',
-  '艾達·洛夫萊斯和艾倫·圖靈',
-  '獨立對映的摘要。',
-  '第一頁在第二欄繼續。',
+  '# 紧凑表格测试',
+  '艾达·洛夫莱斯和艾伦·图灵',
+  '独立映射的摘要。',
+  '第一页在第二栏继续。',
   '段落公式 $E=mc^2$。',
   COMPACT_TABLE_TRANSLATED,
-  '![測試圖片](images/fixture.png)'
+  '![测试图片](images/fixture.png)'
 ].join('\n\n')
 
 async function isCentered(locator: Locator, containerSelector: string): Promise<boolean> {
@@ -82,7 +82,7 @@ async function selectText(locator: Locator, startOffset: number, endOffset: numb
       selection.addRange(range)
       document.dispatchEvent(new Event('selectionchange'))
     }, { startOffset, endOffset })
-    await expect(locator.page().getByRole('toolbar', { name: '文字標註' })).toBeVisible({ timeout: 500 })
+    await expect(locator.page().getByRole('toolbar', { name: '文本标注' })).toBeVisible({ timeout: 500 })
   }).toPass({ timeout: 5_000 })
 }
 
@@ -105,7 +105,7 @@ test('renders compact scrollable tables and independent real formula minimaps', 
         configurable: true
       })
     })
-    await window.getByText('譯文').click()
+    await window.getByText('译文').click()
     await assertCompactMarkdownLayout(activeTextPanel)
     await expect(activeTextPanel.locator('article')).not.toHaveText(/Academic cell/u)
     expect(await window.evaluate(() =>
@@ -179,7 +179,7 @@ test('fits PDF pages without an outer frame and preserves the current page while
         return Math.abs((viewport.top + element.clientHeight * 0.45 - page.top) / page.height - 0.35)
       })).toBeLessThan(0.01)
     }
-    const split = window.getByRole('separator', { name: '調整 PDF 與 原文 閱讀器寬度' })
+    const split = window.getByRole('separator', { name: '调整 PDF 与 原文 阅读器宽度' })
     for (const key of ['Home', 'End', 'Home', 'End']) {
       const previousWidth = await scroller.evaluate((element) => element.clientWidth)
       await split.press(key)
@@ -198,23 +198,23 @@ test('fits PDF pages without an outer frame and preserves the current page while
     await window.getByLabel('放大').click()
     await expect(window.getByText('110%')).toBeVisible()
     await expectReadingPosition()
-    await window.getByLabel('適合寬度', { exact: true }).click()
+    await window.getByLabel('适合宽度', { exact: true }).click()
     await expect(window.getByText('100%')).toBeVisible()
     await expectReadingPosition()
-    await window.getByLabel('跳轉到頁', { exact: true }).click()
-    await window.getByLabel('PDF 頁碼', { exact: true }).fill('15')
-    await window.getByLabel('PDF 頁碼', { exact: true }).press('Enter')
+    await window.getByLabel('跳转到页', { exact: true }).click()
+    await window.getByLabel('PDF 页码', { exact: true }).fill('15')
+    await window.getByLabel('PDF 页码', { exact: true }).press('Enter')
     await expect(window.getByText('15 / 15')).toBeVisible()
     await expect.poll(() => window.locator('[data-pdf-page="14"] canvas').evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
     await expect.poll(() => scroller.evaluate((element) => {
       const page = element.querySelector('[data-pdf-page="14"]')!.getBoundingClientRect()
       return Math.abs(page.top - element.getBoundingClientRect().top - Math.max(0, element.clientHeight - page.height))
     })).toBeLessThan(1)
-    await window.getByLabel('跳轉到頁', { exact: true }).click()
-    await window.getByLabel('PDF 頁碼', { exact: true }).fill('1')
-    await window.getByLabel('PDF 頁碼', { exact: true }).press('Enter')
+    await window.getByLabel('跳转到页', { exact: true }).click()
+    await window.getByLabel('PDF 页码', { exact: true }).fill('1')
+    await window.getByLabel('PDF 页码', { exact: true }).press('Enter')
     await expect(window.getByText('1 / 15')).toBeVisible()
-    await window.getByLabel('顯示區塊邊框', { exact: true }).click()
+    await window.getByLabel('显示区块边框', { exact: true }).click()
     await expect(window.locator('.pdf-pane')).toHaveAttribute('data-show-bounds', 'false')
     await window.screenshot({ path: testInfo.outputPath('reader-pdf-linking.png') })
   } finally {
@@ -269,8 +269,8 @@ test('uses the entire PDF viewport without scrollbar gutters or page gaps on a r
     await expectNoGutters()
     const viewport = (await scroller.boundingBox())!
     await window.mouse.move(viewport.x + viewport.width - 1, viewport.y + viewport.height - 1)
-    const vertical = window.getByRole('scrollbar', { name: 'PDF 垂直滾動' })
-    const horizontal = window.getByRole('scrollbar', { name: 'PDF 水平滾動' })
+    const vertical = window.getByRole('scrollbar', { name: 'PDF 垂直滚动' })
+    const horizontal = window.getByRole('scrollbar', { name: 'PDF 水平滚动' })
     await expect(vertical).toHaveClass(/visible/)
     await expect(horizontal).toHaveClass(/visible/)
     await expectNoGutters()
@@ -366,18 +366,18 @@ test('renders a local PDF with range requests before parsing succeeds', async ({
     await window.locator('[data-block-position="1-2"]').click()
     await expect.poll(() => isCentered(markdownImageBlock, '.markdown-scroll')).toBe(true)
 
-    await window.getByText('譯文').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(originalBlockCount)
     await expect(window.locator('[data-reader-tab-panel="original"] .markdown-scroll')).toHaveCount(0)
     await expect(activeTextPanel.locator('.markdown-body sup')).toHaveText('12')
     await expect(activeTextPanel.locator('.markdown-body sub', { hasText: /^2$/ })).toHaveText('2')
-    await expect(activeTextPanel.locator('.markdown-body td')).toHaveText('學術單元格')
+    await expect(activeTextPanel.locator('.markdown-body td')).toHaveText('学术单元格')
     await expect(activeTextPanel.locator('.markdown-body .katex').first()).toBeVisible()
     await expect(activeTextPanel.locator('.markdown-body .katex-error')).toHaveCount(0)
-    const translatedAuthors = activeTextPanel.locator('.markdown-block', { hasText: '艾達·洛夫萊斯' })
-    const translatedAbstract = activeTextPanel.locator('.markdown-block', { hasText: '獨立對映的摘要' })
-    await expect(translatedAuthors).not.toContainText('獨立對映的摘要')
+    const translatedAuthors = activeTextPanel.locator('.markdown-block', { hasText: '艾达·洛夫莱斯' })
+    const translatedAbstract = activeTextPanel.locator('.markdown-block', { hasText: '独立映射的摘要' })
+    await expect(translatedAuthors).not.toContainText('独立映射的摘要')
     await translatedAuthors.click()
     await expect(window.locator('[data-block-position="0-1"]')).toHaveClass(/active/)
     await expect(window.locator('[data-block-position="0-2"]')).not.toHaveClass(/active/)
@@ -417,10 +417,10 @@ test('renders a local PDF with range requests before parsing succeeds', async ({
     const originalWidth = await window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)
     await window.getByLabel('放大').click()
     await expect.poll(() => window.locator('.pdf-page canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(originalWidth)
-    await expect(window.getByLabel('下一頁')).toBeDisabled()
-    await window.getByLabel('上一頁').click()
+    await expect(window.getByLabel('下一页')).toBeDisabled()
+    await window.getByLabel('上一页').click()
     await expect(window.getByText('1 / 2')).toBeVisible()
-    await window.getByLabel('下一頁').click()
+    await window.getByLabel('下一页').click()
     await expect(window.getByText('2 / 2')).toBeVisible()
   } finally {
     await app.close()
@@ -441,12 +441,12 @@ test('persists original and translated Markdown annotations with color and under
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     const originalBlock = activeTextPanel.locator('.markdown-block', { hasText: 'Second paragraph with' })
     await selectText(originalBlock, 0, 6)
-    await expect(window.getByRole('toolbar', { name: '文字標註' })).toBeVisible()
-    await window.getByRole('button', { name: '熒光筆高亮' }).click({ button: 'right' })
+    await expect(window.getByRole('toolbar', { name: '文本标注' })).toBeVisible()
+    await window.getByRole('button', { name: '荧光笔高亮' }).click({ button: 'right' })
     await expect(window.getByRole('option')).toHaveCount(5)
-    await window.getByRole('option', { name: '選擇藍色' }).click()
-    await expect(window.getByRole('toolbar', { name: '文字標註' })).toBeVisible()
-    await window.getByRole('button', { name: '熒光筆高亮' }).click()
+    await window.getByRole('option', { name: '选择蓝色' }).click()
+    await expect(window.getByRole('toolbar', { name: '文本标注' })).toBeVisible()
+    await window.getByRole('button', { name: '荧光笔高亮' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
       const values = await (window as unknown as { copilotix: CopilotixDesktopApi }).copilotix.listReaderAnnotations({ documentId: id, view: 'original' })
       return values.annotations.map((value) => [value.view, value.kind, value.color, value.quote])
@@ -460,12 +460,12 @@ test('persists original and translated Markdown annotations with color and under
       (CSS as typeof CSS & { highlights?: { get(name: string): { size: number } | undefined } }).highlights?.get('copilotix-highlight-blue')?.size ?? 0
     )).toBeGreaterThan(0)
 
-    await window.getByText('譯文').click()
+    await window.getByText('译文').click()
     activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     const translatedBlock = activeTextPanel.locator('.markdown-block', { hasText: '第二段落包含' })
     await selectText(translatedBlock, 0, 4)
-    await window.getByRole('button', { name: '新增下劃線' }).click()
+    await window.getByRole('button', { name: '添加下划线' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
       const values = await Promise.all([
         (window as unknown as { copilotix: CopilotixDesktopApi }).copilotix.listReaderAnnotations({ documentId: id, view: 'original' }),
@@ -481,9 +481,9 @@ test('persists original and translated Markdown annotations with color and under
     activeTextPanel = window.locator('.reader-tab-panel.active')
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await selectText(activeTextPanel.locator('.markdown-block', { hasText: 'Second paragraph with' }), 0, 6)
-    await window.getByRole('button', { name: '熒光筆高亮' }).click({ button: 'right' })
-    await window.getByRole('option', { name: '選擇藍色' }).click()
-    await window.getByRole('button', { name: '熒光筆高亮' }).click()
+    await window.getByRole('button', { name: '荧光笔高亮' }).click({ button: 'right' })
+    await window.getByRole('option', { name: '选择蓝色' }).click()
+    await window.getByRole('button', { name: '荧光笔高亮' }).click()
     await expect.poll(() => window.evaluate(async (id) => {
       const values = await Promise.all([
         (window as unknown as { copilotix: CopilotixDesktopApi }).copilotix.listReaderAnnotations({ documentId: id, view: 'original' }),
@@ -522,7 +522,7 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
       'Fixture ending footer'
     ])
     await expect(activeTextPanel.locator('[data-reader-role="page-number"]')).toHaveCount(0)
-    await expect(activeTextPanel.locator('[data-reader-role="page-divider"]')).toHaveText(['第 1 頁', '第 2 頁'])
+    await expect(activeTextPanel.locator('[data-reader-role="page-divider"]')).toHaveText(['第 1 页', '第 2 页'])
 
     const headerColor = await activeTextPanel.locator('[data-reader-role="page-header"]').first()
       .evaluate((element) => getComputedStyle(element).color)
@@ -531,12 +531,12 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
     await expect(activeTextPanel.locator('.markdown-supplemental[data-block-ids]')).toHaveCount(0)
     await expect(window.locator('.pdf-block.discarded.active')).toHaveCount(0)
     await footnote.click()
-    await activeTextPanel.locator('[data-reader-role="page-divider"]', { hasText: '第 1 頁' }).click()
+    await activeTextPanel.locator('[data-reader-role="page-divider"]', { hasText: '第 1 页' }).click()
     await expect(window.getByText('1 / 2')).toBeVisible()
     await expect(window.locator('.pdf-block.discarded.active')).toHaveCount(0)
     await expect(activeTextPanel.locator('.markdown-block.active')).toHaveCount(0)
 
-    await window.getByText('譯文').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(activeTextPanel.locator('[data-reader-role="page-header"]')).toHaveText([
       'Fixture journal header',
@@ -548,7 +548,7 @@ test('restores discarded headers, footnotes and footers while hiding printed pag
       'Fixture ending footer'
     ])
     await expect(activeTextPanel.locator('[data-reader-role="page-number"]')).toHaveCount(0)
-    await expect(activeTextPanel.locator('[data-reader-role="page-divider"]')).toHaveText(['第 1 頁', '第 2 頁'])
+    await expect(activeTextPanel.locator('[data-reader-role="page-divider"]')).toHaveText(['第 1 页', '第 2 页'])
     await activeTextPanel.locator('.markdown-block', { hasText: '第二段落包含' }).click()
     await expect(window.locator('[data-block-position="1-1"]')).toHaveClass(/active/)
   } finally {
@@ -610,8 +610,8 @@ test('shows a recoverable error when the local PDF is missing', async () => {
   try {
     const window = await app.firstWindow()
     await openPaper(window, taskId)
-    await expect(window.getByText('PDF 無法開啟')).toBeVisible()
-    await expect(window.getByRole('button', { name: '重新載入' })).toBeVisible()
+    await expect(window.getByText('PDF 无法打开')).toBeVisible()
+    await expect(window.getByRole('button', { name: '重新加载' })).toBeVisible()
   } finally {
     await app.close()
     await workspace.cleanup()
@@ -680,7 +680,7 @@ test('renders and safely links an optional real Copilotix task', async () => {
         images.every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)
       )).toBe(true)
     }
-    await window.getByText('譯文').click()
+    await window.getByText('译文').click()
     await expect(activeTextPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready', { timeout: 30_000 })
     await expect(activeTextPanel.locator('.markdown-block')).toHaveCount(1110)
     await expect(activeTextPanel.locator('.markdown-block[data-block-ids=""]')).toHaveCount(1)
@@ -843,7 +843,7 @@ test('keeps the complete minimap static across long-document jumps', async () =>
     await headings.nth(headingIndex).press('Enter')
     await window.waitForTimeout(600)
     await expectSnapshot(original)
-    const split = window.getByRole('separator', { name: '調整 PDF 與 原文 閱讀器寬度' })
+    const split = window.getByRole('separator', { name: '调整 PDF 与 原文 阅读器宽度' })
     const initialWidth = await panel.locator('article').evaluate((element) => element.clientWidth)
     await split.focus()
     await split.press('End')

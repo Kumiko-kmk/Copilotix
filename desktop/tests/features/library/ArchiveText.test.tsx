@@ -21,20 +21,20 @@ describe('archive mathematics', () => {
   })
 
   it('renders matrices and repairs mismatched sizing just as the reader does', () => {
-    const { container } = render(<ArchiveText text={'$\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}$ 與 $\\left(x+1)$'} />)
+    const { container } = render(<ArchiveText text={'$\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}$ 与 $\\left(x+1)$'} />)
     expect(container.querySelectorAll('.katex')).toHaveLength(2)
     expect(container.querySelector('.katex-error')).toBeNull()
   })
 
   it('handles narrow legacy variables and roots without changing the input', () => {
-    const text = 'd_model=512，點積除以 √d_k；N_eff 與 p_data，θ_g。'
+    const text = 'd_model=512，点积除以 √d_k；N_eff 与 p_data，θ_g。'
     const { container } = render(<ArchiveText text={text} />)
     expect(container.querySelectorAll('.katex')).toHaveLength(5)
     expect(container.querySelectorAll('.katex-error')).toHaveLength(0)
     expect([...container.querySelectorAll('annotation')].map(node => node.textContent)).toEqual([
       'd_{\\mathrm{model}}', '\\sqrt{d_{k}}', 'N_{\\mathrm{eff}}', 'p_{\\mathrm{data}}', 'θ_{g}'
     ])
-    expect(text).toBe('d_model=512，點積除以 √d_k；N_eff 與 p_data，θ_g。')
+    expect(text).toBe('d_model=512，点积除以 √d_k；N_eff 与 p_data，θ_g。')
   })
 
   it('does not reinterpret code, escaped underscores, identifiers, URLs or paths', () => {
@@ -53,14 +53,14 @@ describe('archive mathematics', () => {
   })
 
   it('sanitizes model HTML, suppresses embedded images and keeps malformed math readable', () => {
-    const { container } = render(<ArchiveText text={'<script>alert(1)</script>\n\n<img src="https://example.com/pixel" onerror="alert(1)">\n\n[壞連結](javascript:alert(1)) $\\unknowncommand{x}$'} />)
+    const { container } = render(<ArchiveText text={'<script>alert(1)</script>\n\n<img src="https://example.com/pixel" onerror="alert(1)">\n\n[坏链接](javascript:alert(1)) $\\unknowncommand{x}$'} />)
     expect(container.querySelector('script, img, [onerror]')).toBeNull()
     expect(container.querySelector('a')?.getAttribute('href')).toBeNull()
     expect(container.textContent).toContain('\\unknowncommand')
   })
 
   it('keeps default reader images, tables, citations and formulas unchanged', () => {
-    const { container } = render(<SafeMarkdown markdown={'![圖](images/a.png)\n\n| A | B |\n|---|---|\n| $x_i$ | 2 |'} assetBaseUrl="copilotix-asset://paper/" />)
+    const { container } = render(<SafeMarkdown markdown={'![图](images/a.png)\n\n| A | B |\n|---|---|\n| $x_i$ | 2 |'} assetBaseUrl="copilotix-asset://paper/" />)
     expect(container.querySelector('img')?.getAttribute('src')).toBe('copilotix-asset://paper/images/a.png')
     expect(container.querySelector('.markdown-table-scroll table')).not.toBeNull()
     expect(container.querySelectorAll('.katex')).toHaveLength(1)
@@ -68,9 +68,9 @@ describe('archive mathematics', () => {
   })
 
   it('makes nested Markdown blocks safe inside a compact field', () => {
-    const { container } = render(<p><ArchiveText text={'# 標題\n\n**強調**\n\n- 專案\n\n> 引用\n\n```text\nd_model\n```\n\n|A|B|\n|---|---|\n|1|2|'} /></p>)
+    const { container } = render(<p><ArchiveText text={'# 标题\n\n**强调**\n\n- 项目\n\n> 引用\n\n```text\nd_model\n```\n\n|A|B|\n|---|---|\n|1|2|'} /></p>)
     expect(container.querySelector('p p, p div, p h1, p ul, p li, p blockquote, p pre, p table, p tr, p td')).toBeNull()
-    expect(container.querySelector('strong')?.textContent).toBe('強調')
+    expect(container.querySelector('strong')?.textContent).toBe('强调')
   })
 
   it('renders legacy brief fields and preserves excerpt disclosure and saved data without conclusion badges', () => {

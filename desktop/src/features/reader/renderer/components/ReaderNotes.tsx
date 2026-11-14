@@ -250,7 +250,7 @@ export function useReaderNoteLayer(options: {
     const body = current.draft.trim()
     if (!body) {
       if (current.noteId === null) { close(); return true }
-      setError('筆記內容不能為空；不再需要時請刪除')
+      setError('笔记内容不能为空；不再需要时请删除')
       return false
     }
     if (current.noteId !== null && current.draft === current.original) { close(); return true }
@@ -266,7 +266,7 @@ export function useReaderNoteLayer(options: {
       close()
       return true
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '筆記儲存失敗，請重試')
+      setError(cause instanceof Error ? cause.message : '笔记保存失败，请重试')
       return false
     } finally {
       setSaving(false)
@@ -283,7 +283,7 @@ export function useReaderNoteLayer(options: {
       await onDelete(current.noteId)
       close()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '筆記刪除失敗，請重試')
+      setError(cause instanceof Error ? cause.message : '笔记删除失败，请重试')
     } finally {
       setSaving(false)
     }
@@ -336,7 +336,7 @@ export function useReaderNoteLayer(options: {
     setConfirmingDelete(false)
     const anchors = readerNoteAnchors(article, selection)
     if (anchors.length > 64 || anchors.some((anchor) => anchor.quote.length > 16_384)) {
-      setError('選區過長，請縮小範圍後再寫筆記')
+      setError('选区过长，请缩小范围后再写笔记')
     } else {
       setError('')
     }
@@ -354,7 +354,7 @@ export function useReaderNoteLayer(options: {
             type="button"
             className={`reader-note-marker${card?.noteId === item.noteId ? ' active' : ''}`}
             style={{ left: item.marker.left, top: item.marker.top }}
-            aria-label="檢視筆記"
+            aria-label="查看笔记"
             onMouseEnter={() => hover(item.noteId)}
             onMouseLeave={() => hover(null)}
             onClick={() => openNote(item.noteId, 'edit')}
@@ -370,7 +370,7 @@ export function useReaderNoteLayer(options: {
         className={`reader-note-card${card.above ? ' above' : ''}`}
         style={{ left: card.left, top: card.top, width: CARD_WIDTH }}
         role="dialog"
-        aria-label={card.noteId ? '筆記' : '新建筆記'}
+        aria-label={card.noteId ? '笔记' : '新建笔记'}
         onMouseEnter={() => { if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current); closeTimerRef.current = null }}
         onMouseLeave={() => hover(null)}
         onFocus={() => setFocused(true)}
@@ -382,19 +382,19 @@ export function useReaderNoteLayer(options: {
       >
         <div className="reader-note-card-head">
           <QuillIcon />
-          <span>{card.noteId ? '筆記' : '新建筆記'}</span>
-          {note ? <time dateTime={note.updatedAt}>{new Date(note.updatedAt).toLocaleString('zh-TW', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time> : null}
+          <span>{card.noteId ? '笔记' : '新建笔记'}</span>
+          {note ? <time dateTime={note.updatedAt}>{new Date(note.updatedAt).toLocaleString('zh-CN', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time> : null}
         </div>
         <blockquote className="reader-note-card-quote">{card.anchors.map((anchor) => anchor.quote).join(' … ').slice(0, 120)}</blockquote>
         <Input.TextArea
-          aria-label="筆記內容"
+          aria-label="笔记内容"
           className="reader-note-card-input"
           variant="borderless"
           value={card.draft}
           maxLength={READER_NOTE_MAX_CHARS}
           autoSize={{ minRows: 3, maxRows: 10 }}
           autoFocus={card.origin === 'edit'}
-          placeholder="寫下對這段內容的想法…"
+          placeholder="写下对这段内容的想法…"
           disabled={tooLong}
           onChange={(event) => setCard({ ...card, draft: event.target.value })}
         />
@@ -402,11 +402,11 @@ export function useReaderNoteLayer(options: {
         <div className="reader-note-card-actions">
           {card.noteId ? (
             confirmingDelete
-              ? <button type="button" className="danger" disabled={saving} onClick={() => void remove()}>確認刪除</button>
-              : <button type="button" disabled={saving} onClick={() => setConfirmingDelete(true)}>刪除</button>
+              ? <button type="button" className="danger" disabled={saving} onClick={() => void remove()}>确认删除</button>
+              : <button type="button" disabled={saving} onClick={() => setConfirmingDelete(true)}>删除</button>
           ) : null}
-          <span className="reader-note-card-hint">Ctrl+Enter 儲存</span>
-          <button type="button" className="primary" disabled={saving || tooLong || (card.noteId !== null && !dirty)} onClick={() => void save()}>儲存</button>
+          <span className="reader-note-card-hint">Ctrl+Enter 保存</span>
+          <button type="button" className="primary" disabled={saving || tooLong || (card.noteId !== null && !dirty)} onClick={() => void save()}>保存</button>
         </div>
       </div>,
       document.body

@@ -144,8 +144,8 @@ describe("taskService", () => {
       })
       const vault = new MemoryVault({ 'parser-token': 'parser-token', 'qwen-api-key': 'qwen-key' })
       const settings = new SettingsService(repository, vault, join(root, 'output'), {
-        parser: async () => ({ ok: true, message: 'Token 驗證成功' }),
-        provider: async () => ({ ok: true, message: 'API Key 驗證成功' })
+        parser: async () => ({ ok: true, message: 'Token 验证成功' }),
+        provider: async () => ({ ok: true, message: 'API Key 验证成功' })
       })
       await settings.validateCredential('parser')
       await settings.validateCredential('qwen')
@@ -171,7 +171,7 @@ describe("taskService", () => {
       }
       const fetcher = async (input: string | URL | Request): Promise<Response> => {
         if (String(input).includes('/chat/completions')) {
-          return new Response(JSON.stringify({ choices: [{ message: { content: '這是譯文' } }] }), { status: 200 })
+          return new Response(JSON.stringify({ choices: [{ message: { content: '这是译文' } }] }), { status: 200 })
         }
         return new Response('', { status: 200 })
       }
@@ -225,7 +225,7 @@ describe("taskService", () => {
         ])
         expect(jobs.list({ documentId: task.id, kind: 'translate' })).toHaveLength(1)
         expect(repository.listTranslationBlocks(task.id, translate.id).every((block) => block.jobId === undefined || block.jobId === translate.id)).toBe(true)
-        await expect(readFile(join(outputDir, 'full.zh-CN.md'), 'utf8')).resolves.toContain('譯文')
+        await expect(readFile(join(outputDir, 'full.zh-CN.md'), 'utf8')).resolves.toContain('译文')
       } finally {
         database.close()
       }

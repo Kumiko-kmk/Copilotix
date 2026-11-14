@@ -87,8 +87,8 @@ try {
         $process=Start-Process -FilePath (Join-Path $testRoot 'uninstall.exe') -ArgumentList @("_?=$testRoot") -PassThru
         $welcome=Wait-Page { param($c) @($c | Where-Object { $_.Id -eq 1 -and $_.Class -eq 'Button' }).Count -eq 1 } 'extracted uninstall welcome' 20
         Click-Control $welcome 1
-        $options=Wait-Page { param($c) @($c | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'Also remove|同時移除|同時移除' }).Count -eq 1 } 'extracted library/data option' 20
-        $checkbox=($options.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'Also remove|同時移除|同時移除' }).Handle
+        $options=Wait-Page { param($c) @($c | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'Also remove|同时移除|同時移除' }).Count -eq 1 } 'extracted library/data option' 20
+        $checkbox=($options.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'Also remove|同时移除|同時移除' }).Handle
         Assert-That ([WizardNative]::SendMessage($checkbox,0x00F0,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 0) 'Data removal must default unchecked'
         Save-Page $options '02-options-default-unchecked'
         # Cancel before the uninstall section is ever entered. Existing install
@@ -137,8 +137,8 @@ try {
     $welcome=Wait-Page { param($c) @($c | Where-Object { $_.Id -eq 1 -and $_.Class -eq 'Button' }).Count -eq 1 } 'uninstall welcome' 20
     Save-Page $welcome '01-welcome'
     Click-Control $welcome 1
-    $options=Wait-Page { param($c) @($c | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'Also remove|同時移除|同時移除' }).Count -eq 1 } 'library/data option' 20
-    $checkbox=($options.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'Also remove|同時移除|同時移除' }).Handle
+    $options=Wait-Page { param($c) @($c | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'Also remove|同时移除|同時移除' }).Count -eq 1 } 'library/data option' 20
+    $checkbox=($options.Controls | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'Also remove|同时移除|同時移除' }).Handle
     Assert-That ([WizardNative]::SendMessage($checkbox,0x00F0,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 0) 'Data cleanup must default unchecked'
     Save-Page $options '02-options-default-unchecked'
     [WizardNative]::SendMessage($checkbox,0x00F1,[IntPtr]1,[IntPtr]::Zero) | Out-Null
@@ -150,7 +150,7 @@ try {
             foreach ($window in [WizardNative]::Windows($helper.Id)) {
                 $controls=@(Get-Controls $window)
                 if (Test-ConfirmationButton $controls) { $confirmation=[pscustomobject]@{ Window=$window; Controls=$controls }; break }
-                $ok=@($controls | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'OK|確定|確定' })
+                $ok=@($controls | Where-Object { $_.Class -eq 'Button' -and $_.Text -match 'OK|確定|确定' })
                 if ($ok.Count -and (Get-DialogText $window) -match '無法完成資料清理') {
                     [WizardNative]::PostMessage($ok[0].Handle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
                     throw 'Cleanup preview refused existing user data; no deletion was performed'

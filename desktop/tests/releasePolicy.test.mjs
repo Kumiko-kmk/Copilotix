@@ -100,9 +100,9 @@ describe("releasePolicy", () => {
       expect(() => assertReleaseMeasurements({ ...RELEASE_LIMITS, zipBytes: 245 * MEBIBYTE })).toThrow(/zipBytes/)
     })
 
-    it('only accepts the product Traditional Chinese locale', () => {
-      expect(() => assertLocales(['zh-TW.pak'])).not.toThrow()
-      expect(() => assertLocales(['zh-TW.pak', 'en-US.pak'])).toThrow(/Unexpected Electron locales/)
+    it('only accepts the product Simplified Chinese locale', () => {
+      expect(() => assertLocales(['zh-CN.pak'])).not.toThrow()
+      expect(() => assertLocales(['zh-CN.pak', 'en-US.pak'])).toThrow(/Unexpected Electron locales/)
       expect(() => assertLocales(['en-US.pak'])).toThrow(/Unexpected Electron locales/)
       expect(() => assertLocales([])).toThrow(/Unexpected Electron locales/)
     })

@@ -25,7 +25,7 @@ export default function ArchiveProgressRing({ documentId, progress, ready }: { d
   if (phase === 'hidden') return null
   const value = Math.min(100, Math.max(0, progress))
   return <span className={`paper-archive-progress ${phase}`} data-progress-phase={phase}
-    role={phase === 'progress' ? 'progressbar' : 'img'} aria-label={phase === 'progress' ? '背景處理進度' : '處理完成'}
+    role={phase === 'progress' ? 'progressbar' : 'img'} aria-label={phase === 'progress' ? '后台处理进度' : '处理完成'}
     aria-valuenow={phase === 'progress' ? Math.floor(value) : undefined} aria-valuemin={phase === 'progress' ? 0 : undefined} aria-valuemax={phase === 'progress' ? 100 : undefined}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle className="track" cx="12" cy="12" r="10" />
       <circle className="arc" cx="12" cy="12" r="10" style={{ strokeDashoffset: 62.832 * (1 - value / 100) }} />

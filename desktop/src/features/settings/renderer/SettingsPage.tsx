@@ -28,17 +28,17 @@ import type { SettingsNavigationGuard } from './settingsNavigation'
 type Section = 'connections' | 'keys' | 'models' | 'storage' | 'theme' | 'services'
 
 const SECTIONS: ReadonlyArray<[Section, string, () => React.JSX.Element]> = [
-  ['connections', '服務連線', ConnectionIcon],
-  ['keys', 'API 金鑰', KeyIcon],
-  ['models', '模型設定', ModelIcon],
-  ['storage', '檔案儲存', StorageIcon],
-  ['theme', '顯示設定', AppearanceIcon]
+  ['connections', '服务连接', ConnectionIcon],
+  ['keys', 'API 密钥', KeyIcon],
+  ['models', '模型设置', ModelIcon],
+  ['storage', '文件存储', StorageIcon],
+  ['theme', '显示设置', AppearanceIcon]
 ]
 /** The settings window (Lite) has three flat sections; services and their keys share one page. */
 const WINDOW_SECTIONS: ReadonlyArray<[Section, string, () => React.JSX.Element]> = [
-  ['services', '服務', ConnectionIcon],
-  ['storage', '儲存', StorageIcon],
-  ['theme', '外觀', AppearanceIcon]
+  ['services', '服务', ConnectionIcon],
+  ['storage', '存储', StorageIcon],
+  ['theme', '外观', AppearanceIcon]
 ]
 
 /** Only the MinerU token is edited here; model keys are managed in the API key view. */
@@ -49,15 +49,15 @@ const CREDENTIAL_LABELS: Record<'parser', string> = { parser: 'MinerU 解析 Tok
 
 const STATUS_LABELS: Record<CredentialValidation, string> = {
   missing: '未配置',
-  unknown: '待驗證',
-  valid: '已驗證',
-  invalid: '驗證失敗'
+  unknown: '待验证',
+  valid: '已验证',
+  invalid: '验证失败'
 }
 
 const MODEL_LABELS: Record<ActiveTranslationProviderId, string> = {
   codex: 'Codex',
   deepseek: 'DeepSeek',
-  qwen: '千問 / Qwen'
+  qwen: '千问 / Qwen'
 }
 
 export default function SettingsPage(props: {
@@ -133,12 +133,12 @@ export default function SettingsPage(props: {
     setLibraryAction(action)
     try {
       const result = await window.copilotix.manageLibrary({ action })
-      if (result.status === 'cancelled') { messageApi.info('文件庫操作已取消'); return }
+      if (result.status === 'cancelled') { messageApi.info('文档库操作已取消'); return }
       if (result.restartRequired) {
-        messageApi.success('文件庫操作完成，應用即將重啟')
+        messageApi.success('文档库操作完成，应用即将重启')
         return
       }
-      messageApi.success('備份完成：' + result.path)
+      messageApi.success('备份完成：' + result.path)
       await refreshStorageInfo()
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : String(error))
@@ -187,7 +187,7 @@ export default function SettingsPage(props: {
     const entry = credentials[name]
     const value = entry.editing ? entry.value.trim() : undefined
     if (entry.editing && !value) {
-      setCredentialErrors((current) => ({ ...current, [name]: '請輸入憑據後再驗證' }))
+      setCredentialErrors((current) => ({ ...current, [name]: '请输入凭据后再验证' }))
       return
     }
     setTesting(name)
@@ -205,9 +205,9 @@ export default function SettingsPage(props: {
       }))
       if (result.state === 'valid') {
         setCredentialErrors((current) => ({ ...current, [name]: undefined }))
-        messageApi.success(`${CREDENTIAL_LABELS[name]}驗證成功`)
+        messageApi.success(`${CREDENTIAL_LABELS[name]}验证成功`)
       } else {
-        const error = result.message ?? '憑據驗證失敗'
+        const error = result.message ?? '凭据验证失败'
         setCredentialErrors((current) => ({ ...current, [name]: error }))
         messageApi.error(error)
       }
@@ -246,7 +246,7 @@ export default function SettingsPage(props: {
       saveAppearance(appearance)
       setSavedAppearance(appearance)
       if (!settingsChanged) {
-        messageApi.success('設定已儲存')
+        messageApi.success('设置已保存')
         return true
       }
     }
@@ -278,8 +278,8 @@ export default function SettingsPage(props: {
         ? current
         : { parser: { value: '', editing: false, clear: false } })
       const failed = Object.keys(errors).length + Object.keys(result.keyErrors ?? {}).length
-      if (failed > 0) messageApi.warning('普通設定及有效憑據已儲存，請修正失敗欄位')
-      else messageApi.success('設定已儲存')
+      if (failed > 0) messageApi.warning('普通设置及有效凭据已保存，请修正失败字段')
+      else messageApi.success('设置已保存')
       return failed === 0
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : String(error))
@@ -338,7 +338,7 @@ export default function SettingsPage(props: {
     const count = (provider: 'qwen' | 'deepseek'): number => keys.filter((connection) => connection.provider === provider).length
     const states = [draft.credentials.deepseek.state, draft.credentials.qwen.state]
     const state: CredentialValidation = states.includes('valid') ? 'valid' : states.includes('unknown') ? 'unknown' : states.includes('invalid') ? 'invalid' : 'missing'
-    return { state, label: STATUS_LABELS[state], counts: `DeepSeek ${count('deepseek')} 個 · 千問 ${count('qwen')} 個` }
+    return { state, label: STATUS_LABELS[state], counts: `DeepSeek ${count('deepseek')} 个 · 千问 ${count('qwen')} 个` }
   }, [draft.credentials, draft.modelConnections])
 
   const discard = React.useCallback(() => {
@@ -360,8 +360,8 @@ export default function SettingsPage(props: {
     <section className={`page settings-page${windowed ? ' is-window' : ''}`}>
       {contextHolder}
       <div className="settings-layout">
-        <nav className="settings-nav" aria-label="設定分類">
-          <h1 className="settings-title">設定</h1>
+        <nav className="settings-nav" aria-label="设置分类">
+          <h1 className="settings-title">设置</h1>
           {sections.map(([id, label, SectionIcon]) => (
             <button key={id} type="button" className={section === id ? 'active' : ''} aria-current={section === id ? 'page' : undefined} onClick={() => setSection(id)}><SectionIcon />{label}</button>
           ))}
@@ -370,7 +370,7 @@ export default function SettingsPage(props: {
           {props.onExit ? (
             <header className="settings-window-header">
               <h2>{sections.find(([id]) => id === section)![1]}</h2>
-              <button type="button" className="settings-close" aria-label="關閉設定" onClick={props.onExit}><CloseIcon /></button>
+              <button type="button" className="settings-close" aria-label="关闭设置" onClick={props.onExit}><CloseIcon /></button>
             </header>
           ) : null}
           <div className="settings-content-body">
@@ -379,7 +379,7 @@ export default function SettingsPage(props: {
               parser={{ status: draft.credentials.parser, draft: credentials.parser, testing: testing === 'parser', error: credentialErrors.parser, onDraft: (patch) => updateCredentialDraft('parser', patch), onValidate: () => void validate('parser') }} />
           ) : null}
           {section === 'connections' ? (
-            <section className="settings-section service-connections" aria-label="服務連線">
+            <section className="settings-section service-connections" aria-label="服务连接">
               <ServiceCard
                 title="MinerU"
                 name="parser"
@@ -397,14 +397,14 @@ export default function SettingsPage(props: {
                 />
               </ServiceCard>
               <ServiceCard
-                title="模型金鑰"
+                title="模型密钥"
                 name="model-keys"
                 state={keySummary.state}
                 stateLabel={keySummary.label}
               >
                 <div className="model-key-summary">
                   <span>{keySummary.counts}</span>
-                  <Button onClick={() => setSection('keys')}>管理金鑰</Button>
+                  <Button onClick={() => setSection('keys')}>管理密钥</Button>
                 </div>
               </ServiceCard>
               <CodexSettingsCard value={draft.codex} onChange={codex => setDraft(current => ({ ...current, codex }))} />
@@ -421,10 +421,10 @@ export default function SettingsPage(props: {
             />
           ) : null}
           {section === 'models' ? (
-            <section className="settings-section model-priority" aria-label="模型設定">
+            <section className="settings-section model-priority" aria-label="模型设置">
               <div className="model-priority-card">
-                <div className="model-priority-heading"><strong>大語言模型優先順序</strong><span className="model-request-order"><span>請求順序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).filter(isActiveProvider).map((provider) => MODEL_LABELS[provider].replace(' / Qwen', '')).join(' → ') || '未配置'}</strong></span></div>
-                <div className="model-priority-list" role="list" aria-label="翻譯模型優先順序">
+                <div className="model-priority-heading"><strong>大语言模型优先级</strong><span className="model-request-order"><span>请求顺序</span><strong>{draft.translationProviderOrder.filter((provider) => draft.enabledTranslationProviders.includes(provider)).filter(isActiveProvider).map((provider) => MODEL_LABELS[provider].replace(' / Qwen', '')).join(' → ') || '未配置'}</strong></span></div>
+                <div className="model-priority-list" role="list" aria-label="翻译模型优先级">
                   {draft.translationProviderOrder.filter(isActiveProvider).map((provider, index) => {
                     const label = MODEL_LABELS[provider]
                     const credentialStatus = provider === 'qwen' || provider === 'deepseek' ? draft.credentials[provider] : null
@@ -443,7 +443,7 @@ export default function SettingsPage(props: {
                         <button
                           type="button"
                           className="model-drag-handle"
-                          aria-label={`移動${label}`}
+                          aria-label={`移动${label}`}
                           draggable={!saving}
                           disabled={saving}
                           onDragStart={(event) => {
@@ -458,14 +458,14 @@ export default function SettingsPage(props: {
                           }}
                         ><HolderOutlined /></button>
                         <Checkbox
-                          aria-label={`啟用${label}`}
+                          aria-label={`启用${label}`}
                           checked={draft.enabledTranslationProviders.includes(provider)}
                           disabled={saving}
                           onChange={() => toggleTranslationProvider(provider)}
                         />
                         <span className="model-priority-number">{index + 1}</span>
                         <span className="model-priority-copy">{label}</span>
-                        {credentialStatus && credentialStatus.state !== 'valid' ? <button type="button" className={`model-credential-warning status-${credentialStatus.state}`} onClick={() => setSection('keys')}>{credentialStatus.state === 'missing' ? '未新增金鑰' : STATUS_LABELS[credentialStatus.state]}</button> : null}
+                        {credentialStatus && credentialStatus.state !== 'valid' ? <button type="button" className={`model-credential-warning status-${credentialStatus.state}`} onClick={() => setSection('keys')}>{credentialStatus.state === 'missing' ? '未添加密钥' : STATUS_LABELS[credentialStatus.state]}</button> : null}
                       </div>
                     )
                   })}
@@ -481,10 +481,10 @@ export default function SettingsPage(props: {
           </div>
           {/* In the window the save bar only appears once there is something to save. */}
           {windowed && !hasUnsavedChanges && !saving ? null : <div className="settings-actions">
-            <Typography.Text type={hasUnsavedChanges ? 'warning' : 'secondary'}>{hasUnsavedChanges ? '有未儲存的更改' : '所有更改均已儲存'}</Typography.Text>
+            <Typography.Text type={hasUnsavedChanges ? 'warning' : 'secondary'}>{hasUnsavedChanges ? '有未保存的更改' : '所有更改均已保存'}</Typography.Text>
             <div className="settings-action-buttons">
-              <Button disabled={!hasUnsavedChanges || saving || libraryAction !== null} onClick={discard}>放棄更改</Button>
-              <Button type="primary" loading={saving} disabled={!hasUnsavedChanges || libraryAction !== null} onClick={() => void save()}>儲存全部更改</Button>
+              <Button disabled={!hasUnsavedChanges || saving || libraryAction !== null} onClick={discard}>放弃更改</Button>
+              <Button type="primary" loading={saving} disabled={!hasUnsavedChanges || libraryAction !== null} onClick={() => void save()}>保存全部更改</Button>
             </div>
           </div>}
         </div>

@@ -73,18 +73,18 @@ export class ArtifactService {
 
   /** Main resolves paths and recomputes complete geometry; Renderer supplies only bounded PNG data. */
   async cacheFigure(request: CacheDocumentFigureRequest): Promise<CacheDocumentFigureResult> {
-    if (this.blockedFigureWrites.has(request.documentId)) throw new Error('文獻正在刪除')
+    if (this.blockedFigureWrites.has(request.documentId)) throw new Error('文献正在删除')
     const pending = (this.figureWrites.get(request.documentId) ?? Promise.resolve()).catch(() => undefined).then(async () => {
       const document = await this.getDocument(request.documentId)
       const task = document.task
       const geometries = document.base!.figures
       const geometry = geometries.find(g => g.id === request.figureId && g.status === 'complete')
-      if (!geometry || figureGeometryKey(geometry) !== request.geometryKey) throw new Error('整圖來源已變化或歸屬不確定')
+      if (!geometry || figureGeometryKey(geometry) !== request.geometryKey) throw new Error('整图来源已变化或归属不确定')
       const revision = await figureSourceRevision(task.outputDir, task.sourceHash, document.layoutJson)
       const previous = await readFigureArtifacts(task.outputDir, revision, geometries)
       let artifact = previous.find(f => f.figureId === geometry.id)
       if (request.pngBase64) {
-        if (request.sourceRevision !== revision) throw new Error('文獻已更新，請重新生成整圖')
+        if (request.sourceRevision !== revision) throw new Error('文献已更新，请重新生成整图')
         artifact = await storeFigureArtifact(task.outputDir, revision, geometry, request.pngBase64, previous)
       }
       if (artifact) {
@@ -151,7 +151,7 @@ export class ArtifactService {
     const normalizedOriginal = original ? normalize(original) : ''
     const normalizedTranslated = translated ? normalize(translated) : ''
     await Promise.all([...images].map(async (path) => {
-      if (!(await lstat(path)).isFile()) throw new Error(`圖片資源不是普通檔案：${basename(path)}`)
+      if (!(await lstat(path)).isFile()) throw new Error(`图片资源不是普通文件：${basename(path)}`)
     }))
     const partial = `${destination}.partial-${randomUUID()}`
     try {
@@ -183,7 +183,7 @@ export class ArtifactService {
     await this.assertExportDestination(task, destination)
     const texts = await this.editedTexts(task)
     const source = kind === 'original-markdown' ? texts.original : texts.translated
-    if (!source) throw new Error('沒有可匯出的 Markdown')
+    if (!source) throw new Error('没有可导出的 Markdown')
     const folder = `${basename(destination, extname(destination))}.assets-${randomUUID()}`
     const assetDir = join(dirname(destination), folder)
     const partialAssets = `${assetDir}.partial`
@@ -200,7 +200,7 @@ export class ArtifactService {
       if (assets.size) {
         await mkdir(partialAssets)
         const copies = await Promise.allSettled([...assets].map(async ([sourcePath, name]) => {
-          if (!(await lstat(sourcePath)).isFile()) throw new Error(`圖片資源不是普通檔案：${basename(sourcePath)}`)
+          if (!(await lstat(sourcePath)).isFile()) throw new Error(`图片资源不是普通文件：${basename(sourcePath)}`)
           await copyFile(sourcePath, join(partialAssets, name))
         }))
         const failed = copies.find((result) => result.status === 'rejected')
@@ -221,10 +221,10 @@ export class ArtifactService {
     const taskRoot = await realpath(task.outputDir)
     const target = resolve(await realpath(dirname(destination)), basename(destination))
     const fromTask = relative(taskRoot, target)
-    if (!fromTask || (fromTask !== '..' && !fromTask.startsWith(`..${sep}`) && !isAbsolute(fromTask))) throw new Error('請將匯出檔案儲存到文件庫以外，避免覆蓋原始資料')
+    if (!fromTask || (fromTask !== '..' && !fromTask.startsWith(`..${sep}`) && !isAbsolute(fromTask))) throw new Error('请将导出文件保存到文档库以外，避免覆盖原始数据')
     try {
       const info = await lstat(destination)
-      if (!info.isFile() || info.isSymbolicLink()) throw new Error('匯出目標必須是普通檔案')
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('导出目标必须是普通文件')
     } catch (error) {
       if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) throw error
     }
@@ -320,7 +320,7 @@ export class ArtifactService {
 
   private async requireTask(taskId: string): Promise<CopilotixTask> {
     const task = await this.repository.getTask(taskId)
-    if (!task) throw new Error('任務不存在')
+    if (!task) throw new Error('任务不存在')
     return task
   }
 }

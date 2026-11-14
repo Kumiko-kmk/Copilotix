@@ -329,7 +329,7 @@ export function headingLevelOf(element: HTMLElement): number | null {
 }
 
 export function normalizeMinimapTitle(value: string | null): string {
-  return (value ?? '').replace(/\s+/g, ' ').trim() || '未命名章節'
+  return (value ?? '').replace(/\s+/g, ' ').trim() || '未命名章节'
 }
 
 export const emptyMinimapContent: MarkdownMinimapContent = {

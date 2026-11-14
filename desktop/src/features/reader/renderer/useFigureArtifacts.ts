@@ -5,9 +5,9 @@ import type { ReaderFigureGeometry } from '../core/readerFigureGroups'
 
 function pngBase64(canvas: HTMLCanvasElement): Promise<string> {
   return new Promise((resolve, reject) => canvas.toBlob(blob => {
-    if (!blob) { reject(new Error('無法編碼整圖')); return }
+    if (!blob) { reject(new Error('无法编码整图')); return }
     const reader = new FileReader()
-    reader.onerror = () => reject(new Error('無法讀取整圖'))
+    reader.onerror = () => reject(new Error('无法读取整图'))
     reader.onload = () => resolve(String(reader.result).split(',', 2)[1]!)
     reader.readAsDataURL(blob)
   }, 'image/png'))
@@ -66,7 +66,7 @@ export async function ensureFigureArtifacts(documentId: string, pdfUrl: string,
       } catch (error) {
         signal.throwIfAborted()
         result.failed++
-        console.warn('整圖檔案暫未生成', geometry.id, error)
+        console.warn('整图文件暂未生成', geometry.id, error)
       }
       onProgress?.(result.available, result.failed, figures.length)
       await new Promise(resolve => window.setTimeout(resolve, 32))
@@ -84,7 +84,7 @@ export function useFigureArtifacts(documentId: string, pdfUrl: string | undefine
     if (!pdfUrl || !geometries.length) return
     const controller = new AbortController()
     void ensureFigureArtifacts(documentId, pdfUrl, geometries, controller.signal)
-      .catch(error => { if (!controller.signal.aborted) console.warn('整圖檔案生成中斷', error) })
+      .catch(error => { if (!controller.signal.aborted) console.warn('整图文件生成中断', error) })
     return () => controller.abort()
   }, [documentId, pdfUrl, geometries])
 }

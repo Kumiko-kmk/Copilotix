@@ -67,16 +67,16 @@ export default function PaperSidebar(props: {
   const target = menuTarget ? props.documents.find((paper) => paper.id === menuTarget) : undefined
   const groupedTarget = target ? sections.find((section) => section.papers.some((paper) => paper.id === target.id)) : undefined
   const menuItems: MenuProps['items'] = target ? [
-    { key: 'window', label: '在新視窗中開啟' },
-    { key: 'split', label: '分屏開啟', disabled: target.id === props.activeDocumentId || target.id === props.splitDocumentId },
+    { key: 'window', label: '在新窗口中打开' },
+    { key: 'split', label: '分屏打开', disabled: target.id === props.activeDocumentId || target.id === props.splitDocumentId },
     { type: 'divider' },
-    { key: 'rename', label: '重新命名' },
-    { key: 'pin', label: prefs.pins.global.includes(target.id) ? '取消置頂' : '置頂' },
+    { key: 'rename', label: '重命名' },
+    { key: 'pin', label: prefs.pins.global.includes(target.id) ? '取消置顶' : '置顶' },
     ...(groupedTarget?.kind === 'category' || prefs.pins.group.includes(target.id)
-      ? [{ key: 'pin-group', label: prefs.pins.group.includes(target.id) ? '取消分組內置頂' : '在分組內置頂' }]
+      ? [{ key: 'pin-group', label: prefs.pins.group.includes(target.id) ? '取消分组内置顶' : '在分组内置顶' }]
       : []),
     { type: 'divider' },
-    { key: 'delete', label: '刪除', danger: true }
+    { key: 'delete', label: '删除', danger: true }
   ] : []
   const onMenu = (key: string, paper: DocumentSummary): void => {
     setMenuTarget(null)
@@ -113,16 +113,16 @@ export default function PaperSidebar(props: {
     <aside className="paper-sidebar">
       {contextHolder}
       <div className="paper-sidebar-head" aria-hidden="true" />
-      <nav className="paper-sidebar-nav" aria-label="論文導覽">
+      <nav className="paper-sidebar-nav" aria-label="论文导航">
         <div className="paper-sidebar-actions">
           <button type="button" className="paper-sidebar-action" aria-current={props.activeDocumentId === null ? 'page' : undefined} onClick={props.onNew}>
             <PlusOutlined aria-hidden="true" /><span>新建</span>
           </button>
-          <button type="button" className="paper-sidebar-search-toggle" aria-label={searching ? '關閉搜尋' : '搜尋論文'} aria-expanded={searching} onClick={() => searching ? closeSearch() : setSearching(true)}>
+          <button type="button" className="paper-sidebar-search-toggle" aria-label={searching ? '关闭搜索' : '搜索论文'} aria-expanded={searching} onClick={() => searching ? closeSearch() : setSearching(true)}>
             {searching ? <CloseOutlined aria-hidden="true" /> : <SearchOutlined aria-hidden="true" />}
           </button>
         </div>
-        {searching ? <input ref={input} type="search" className="paper-sidebar-search" aria-label="搜尋論文標題" placeholder="搜尋標題" value={query}
+        {searching ? <input ref={input} type="search" className="paper-sidebar-search" aria-label="搜索论文标题" placeholder="搜索标题" value={query}
           onChange={event => setQuery(event.target.value)} onKeyDown={event => {
             if (event.nativeEvent.isComposing) return
             if (event.key === 'Escape') { event.stopPropagation(); closeSearch() }
@@ -139,7 +139,7 @@ export default function PaperSidebar(props: {
             if (!element) event.preventDefault()
           }}>
             {query.trim() ? (
-              matches.length ? <ul className="paper-sidebar-list">{matches.map(item)}</ul> : <p className="paper-sidebar-empty" role="status">沒有匹配的論文</p>
+              matches.length ? <ul className="paper-sidebar-list">{matches.map(item)}</ul> : <p className="paper-sidebar-empty" role="status">没有匹配的论文</p>
             ) : !headed && sections[0] ? (
               <ul className="paper-sidebar-list">{sections[0].papers.map(item)}</ul>
             ) : sections.length ? (
@@ -156,12 +156,12 @@ export default function PaperSidebar(props: {
                   )
                 })}
               </ul>
-            ) : <p className="paper-sidebar-empty" role="status">匯入的論文會顯示在這裡</p>}
+            ) : <p className="paper-sidebar-empty" role="status">导入的论文会显示在这里</p>}
           </div>
         </Dropdown>
       </nav>
       <button type="button" className="paper-sidebar-action paper-sidebar-settings" onClick={props.onOpenSettings}>
-        <SettingOutlined aria-hidden="true" /><span>設定</span>
+        <SettingOutlined aria-hidden="true" /><span>设置</span>
       </button>
       <DeletePaperDialog paper={deleting} messageApi={messageApi} onClose={() => setDeleting(null)} onDeleted={(id) => props.onDeleted?.(id)} />
     </aside>
@@ -184,7 +184,7 @@ function RenameInput(props: { paper: DocumentSummary; onDone(title: string): voi
     else props.onCancel()
   }
   return (
-    <input ref={ref} className="paper-sidebar-rename" aria-label="論文標題" defaultValue={paperTitle(props.paper)} maxLength={200}
+    <input ref={ref} className="paper-sidebar-rename" aria-label="论文标题" defaultValue={paperTitle(props.paper)} maxLength={200}
       onBlur={() => finish(true)} onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return
         if (event.key === 'Enter') { event.preventDefault(); finish(true) }

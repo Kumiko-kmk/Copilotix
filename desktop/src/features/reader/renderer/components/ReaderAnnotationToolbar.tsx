@@ -38,17 +38,17 @@ export default function ReaderAnnotationToolbar(props: {
       style={{ left, top }}
       onMouseDown={(event) => event.preventDefault()}
       role="toolbar"
-      aria-label="文字標註"
+      aria-label="文本标注"
     >
       {props.paletteOpen ? (
-        <div className="reader-highlight-palette" role="listbox" aria-label="熒光筆顏色">
+        <div className="reader-highlight-palette" role="listbox" aria-label="荧光笔颜色">
           {READER_HIGHLIGHT_COLORS.map((color) => (
             <button
               key={color}
               type="button"
               className={color === props.color ? 'active' : ''}
               style={{ '--highlight-swatch': HIGHLIGHT_COLOR_VALUES[color] } as React.CSSProperties}
-              aria-label={`選擇${highlightColorLabel(color)}`}
+              aria-label={`选择${highlightColorLabel(color)}`}
               aria-selected={color === props.color}
               role="option"
               onClick={() => {
@@ -61,7 +61,7 @@ export default function ReaderAnnotationToolbar(props: {
       ) : null}
       <button
         type="button"
-        aria-label="熒光筆高亮"
+        aria-label="荧光笔高亮"
         onClick={props.onHighlight}
         onMouseEnter={props.onPaletteHover}
         onMouseLeave={props.onPaletteHoverEnd}
@@ -72,15 +72,15 @@ export default function ReaderAnnotationToolbar(props: {
       >
         <HighlightOutlined style={{ color: HIGHLIGHT_COLOR_VALUES[props.color] }} />
       </button>
-      <button type="button" aria-label="新增下劃線" onClick={props.onUnderline}>
+      <button type="button" aria-label="添加下划线" onClick={props.onUnderline}>
         <UnderlineOutlined />
       </button>
       {props.onNote ? (
-        <button type="button" aria-label="寫筆記" onClick={props.onNote}>
+        <button type="button" aria-label="写笔记" onClick={props.onNote}>
           <QuillIcon />
         </button>
       ) : null}
-      {props.onAddToChat ? <button type="button" aria-label="新增到對話" onClick={props.onAddToChat}>
+      {props.onAddToChat ? <button type="button" aria-label="添加到对话" onClick={props.onAddToChat}>
         <MessageOutlined />
       </button> : null}
     </div>
@@ -88,5 +88,5 @@ export default function ReaderAnnotationToolbar(props: {
 }
 
 function highlightColorLabel(color: HighlightColor): string {
-  return ({ yellow: '黃色', green: '綠色', blue: '藍色', pink: '粉色', purple: '紫色' })[color]
+  return ({ yellow: '黄色', green: '绿色', blue: '蓝色', pink: '粉色', purple: '紫色' })[color]
 }

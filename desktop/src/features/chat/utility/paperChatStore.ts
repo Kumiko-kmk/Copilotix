@@ -18,13 +18,13 @@ export class PaperChatStore {
 
   private async root(documentId: string, create = false): Promise<string> {
     const document = this.directory(documentId)
-    if (!document) throw new Error('論文不存在，無法讀取或儲存對話')
+    if (!document) throw new Error('论文不存在，无法读取或保存对话')
     const documentStat = await lstat(document)
-    if (!documentStat.isDirectory() || documentStat.isSymbolicLink()) throw new Error('文獻目錄無效')
+    if (!documentStat.isDirectory() || documentStat.isSymbolicLink()) throw new Error('文献目录无效')
     const root = this.policy.resolveChild(document, 'chat')
     try {
       const details = await lstat(join(document, 'chat'))
-      if (!details.isDirectory() || details.isSymbolicLink()) throw new Error('對話目錄無效')
+      if (!details.isDirectory() || details.isSymbolicLink()) throw new Error('对话目录无效')
     } catch (error) {
       if (!missing(error)) throw error
       if (create) await mkdir(root)
@@ -34,7 +34,7 @@ export class PaperChatStore {
 
   private async read(path: string): Promise<unknown> {
     const details = await lstat(path)
-    if (!details.isFile() || details.isSymbolicLink() || details.size > PAPER_CHAT_MAX_BYTES) throw new Error('對話檔案無效或超過大小限制')
+    if (!details.isFile() || details.isSymbolicLink() || details.size > PAPER_CHAT_MAX_BYTES) throw new Error('对话文件无效或超过大小限制')
     const handle = await open(path, 'r')
     try { return JSON.parse(await handle.readFile('utf8')) as unknown } finally { await handle.close() }
   }
@@ -42,7 +42,7 @@ export class PaperChatStore {
   private async write(documentId: string, name: string, value: unknown): Promise<void> {
     const root = await this.root(documentId, true)
     const target = this.policy.resolveChild(root, name)
-    try { if ((await lstat(join(root, name))).isSymbolicLink()) throw new Error('對話檔案不能是符號連結') } catch (error) { if (!missing(error)) throw error }
+    try { if ((await lstat(join(root, name))).isSymbolicLink()) throw new Error('对话文件不能是符号链接') } catch (error) { if (!missing(error)) throw error }
     const temporary = this.policy.resolveChild(root, `.pending-${randomUUID()}`)
     const handle = await open(temporary, 'wx')
     try {
@@ -55,7 +55,7 @@ export class PaperChatStore {
   async saveTurn(documentId: string, raw: StoredPaperChatTurn): Promise<{ saved: true }> {
     const turn = paperChatTurnSchema.parse(raw)
     for (const [id, citation] of Object.entries(turn.citations)) {
-      if (citation.documentId !== documentId || citation.locator.documentId !== documentId || citation.evidenceId !== id) throw new Error('對話引用不屬於當前論文')
+      if (citation.documentId !== documentId || citation.locator.documentId !== documentId || citation.evidenceId !== id) throw new Error('对话引用不属于当前论文')
     }
     const name = `${String(Date.parse(turn.createdAt)).padStart(13, '0')}-${turn.id}.json`
     paperChatCursorSchema.parse(name)
@@ -74,9 +74,9 @@ export class PaperChatStore {
     for (const name of names) {
       this.policy.resolveChild(root, name)
       const record = turnFileSchema.parse(await this.read(join(root, name)))
-      if (record.documentId !== documentId) throw new Error('對話檔案不屬於當前論文')
+      if (record.documentId !== documentId) throw new Error('对话文件不属于当前论文')
       for (const [id, citation] of Object.entries(record.turn.citations)) {
-        if (citation.documentId !== documentId || citation.locator.documentId !== documentId || citation.evidenceId !== id) throw new Error('對話引用無效')
+        if (citation.documentId !== documentId || citation.locator.documentId !== documentId || citation.evidenceId !== id) throw new Error('对话引用无效')
       }
       const turn = record.turn.status === 'pending' ? { ...record.turn, status: 'cancelled' as const } : record.turn
       const size = ragWireByteLength(turn) + 1
@@ -91,7 +91,7 @@ export class PaperChatStore {
     try {
       this.policy.resolveChild(root, 'session.json')
       const record = sessionFileSchema.parse(await this.read(join(root, 'session.json')))
-      if (record.documentId !== documentId) throw new Error('對話草稿不屬於當前論文')
+      if (record.documentId !== documentId) throw new Error('对话草稿不属于当前论文')
       return record.session
     } catch (error) { if (missing(error)) return emptyPaperChatSession(); throw error }
   }
@@ -109,7 +109,7 @@ export class PaperChatStore {
     const path = this.policy.resolveChild(root, name)
     try {
       const record = turnFileSchema.parse(await this.read(path))
-      if (record.documentId !== request.documentId || record.turn.id !== request.turnId || record.turn.createdAt !== request.createdAt) throw new Error('對話不屬於當前論文')
+      if (record.documentId !== request.documentId || record.turn.id !== request.turnId || record.turn.createdAt !== request.createdAt) throw new Error('对话不属于当前论文')
       await unlink(path)
     } catch (error) { if (!missing(error)) throw error }
     return { deleted: true }
@@ -122,7 +122,7 @@ export class PaperChatStore {
     // Remove only our recognized turn files. Keep drafts and all paper artifacts.
     for (const name of names) if (paperChatCursorSchema.safeParse(name).success) {
       const path = this.policy.resolveChild(root, name)
-      if ((await lstat(join(root, name))).isSymbolicLink()) throw new Error('對話檔案不能是符號連結')
+      if ((await lstat(join(root, name))).isSymbolicLink()) throw new Error('对话文件不能是符号链接')
       await unlink(path)
     }
     return { cleared: true }

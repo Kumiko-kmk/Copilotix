@@ -56,7 +56,7 @@ export function usePaperChat(documentId: string) {
       setTurns(page.turns); setNext(page.next)
       setSessionState({ documentId, session, ready: true })
     }).catch(() => {
-      if (documentEpoch.current === epoch) setError('本地對話讀取失敗，請重新開啟論文；原記錄未被覆蓋')
+      if (documentEpoch.current === epoch) setError('本地对话读取失败，请重新打开论文；原记录未被覆盖')
     }).finally(() => { if (documentEpoch.current === epoch) setLoading(false) })
     receive.current = (event) => {
       const current = active.current
@@ -98,7 +98,7 @@ export function usePaperChat(documentId: string) {
     const epoch = documentEpoch.current
     const timer = setTimeout(() => {
       void window.copilotix.paperChat.saveSession({ documentId, session: sessionState.session }).catch(() => {
-        if (documentEpoch.current === epoch) setError('對話草稿儲存失敗，請檢查文獻目錄')
+        if (documentEpoch.current === epoch) setError('对话草稿保存失败，请检查文献目录')
       })
     }, 200)
     return () => clearTimeout(timer)
@@ -112,7 +112,7 @@ export function usePaperChat(documentId: string) {
       const page = await window.copilotix.paperChat.load({ documentId, before: next })
       if (documentEpoch.current !== epoch) return
       setTurns((items) => [...page.turns, ...items]); setNext(page.next)
-    } catch { if (documentEpoch.current === epoch) setError('較早對話讀取失敗，請重試') }
+    } catch { if (documentEpoch.current === epoch) setError('较早对话读取失败，请重试') }
     finally { if (documentEpoch.current === epoch) setLoadingOlder(false) }
   }, [documentId, loadingOlder, next])
 
@@ -123,32 +123,32 @@ export function usePaperChat(documentId: string) {
   const addSelection = React.useCallback(async (selection: ReaderChatSelection): Promise<string | null> => {
     const generation = documentEpoch.current
     await hydration.current
-    if (documentEpoch.current !== generation) return '論文已切換'
+    if (documentEpoch.current !== generation) return '论文已切换'
     const epoch = active.current.epoch
-    if (selection.taskId !== documentId) return '選區不屬於當前論文'
+    if (selection.taskId !== documentId) return '选区不属于当前论文'
     const fail = (reason: string): string => { setError(reason); return reason }
-    if (pinnedCount.current >= 8) return fail('最多新增 8 個選區')
+    if (pinnedCount.current >= 8) return fail('最多添加 8 个选区')
     try {
       const status = await window.copilotix.paperChat.ensureIndex({ documentId })
-      if (epoch !== active.current.epoch) return '論文已切換'
-      if (status.state !== 'ready' || !status.contentRevisionId) return fail('論文正在準備索引，請稍後重新新增選區')
+      if (epoch !== active.current.epoch) return '论文已切换'
+      if (status.state !== 'ready' || !status.contentRevisionId) return fail('论文正在准备索引，请稍后重新添加选区')
       const pin = paperChatPinnedSchema.parse({ view: selection.view, text: selection.text, contentRevisionId: status.contentRevisionId, fragments: selection.fragments.map(({ blockKey: _blockKey, ...fragment }) => fragment) })
-      if (pinnedCount.current >= 8) return fail('最多新增 8 個選區')
+      if (pinnedCount.current >= 8) return fail('最多添加 8 个选区')
       pinnedCount.current += 1
       setSessionState((state) => ({ ...state, session: { ...state.session, pinned: [...state.session.pinned, pin].slice(0, 8) } }))
       return null
-    } catch { return fail('選區無法加入問答，請縮小範圍後重試') }
+    } catch { return fail('选区无法加入问答，请缩小范围后重试') }
   }, [documentId])
 
   /** Resolves to null once the figure waits in the composer, otherwise to the reason it was not added. */
   const addFigure = React.useCallback(async (raw: PaperChatFigurePin): Promise<string | null> => {
     const generation = documentEpoch.current
     await hydration.current
-    if (documentEpoch.current !== generation || sessionRef.current.documentId !== documentId) return '論文已切換'
+    if (documentEpoch.current !== generation || sessionRef.current.documentId !== documentId) return '论文已切换'
     const pin = paperChatFigurePinSchema.parse(raw)
     const current = sessionRef.current.session.figures ?? []
-    if (current.some((figure) => figure.figureId === pin.figureId)) return '這張圖已在 Chat 中'
-    if (current.length >= PAPER_CHAT_MAX_FIGURES) return `每次提問最多附帶 ${PAPER_CHAT_MAX_FIGURES} 張圖`
+    if (current.some((figure) => figure.figureId === pin.figureId)) return '这张图已在 Chat 中'
+    if (current.length >= PAPER_CHAT_MAX_FIGURES) return `每次提问最多附带 ${PAPER_CHAT_MAX_FIGURES} 张图`
     setSessionState((state) => state.documentId === documentId ? { ...state, session: { ...state.session, figures: [...(state.session.figures ?? []), pin] } } : state)
     return null
   }, [documentId])
@@ -187,13 +187,13 @@ export function usePaperChat(documentId: string) {
     } catch (e) {
       if (epoch !== state.epoch) return
       state.pending = false; state.requestId = null; setBusy(false)
-      setError(e instanceof Error ? e.message : '問答失敗，請重試')
+      setError(e instanceof Error ? e.message : '问答失败，请重试')
       setTurns((items) => items.map((t, i) => i === items.length - 1 ? { ...t, status: 'failed' } : t))
     }
   }, [documentId, figures, pinned, turns, updateSession])
 
   const deleteTurn = React.useCallback(async (turn: PaperChatTurn): Promise<void> => {
-    if (active.current.pending || loadingOlder) throw new Error('請等待當前操作完成後再刪除')
+    if (active.current.pending || loadingOlder) throw new Error('请等待当前操作完成后再删除')
     const epoch = documentEpoch.current
     if (turn.id && turn.createdAt) await window.copilotix.paperChat.deleteTurn({ documentId, turnId: turn.id, createdAt: turn.createdAt })
     if (documentEpoch.current !== epoch) return
@@ -208,7 +208,7 @@ export function usePaperChat(documentId: string) {
       await window.copilotix.paperChat.clear({ documentId })
       if (documentEpoch.current !== epoch) return
       setTurns([]); setNext(null); setError('')
-    } catch { if (documentEpoch.current === epoch) setError('清空本地對話失敗，請重試') }
+    } catch { if (documentEpoch.current === epoch) setError('清空本地对话失败，请重试') }
     finally { if (documentEpoch.current === epoch) setLoading(false) }
   }, [documentId, stop])
 
@@ -227,8 +227,8 @@ export function turnFigurePins(turn: PaperChatTurn): PaperChatFigurePin[] {
 }
 
 function figureNote(turn: PaperChatTurn): string {
-  const labels = turnFigurePins(turn).map((figure) => figure.label ?? (figure.pageIndex !== null ? `第 ${figure.pageIndex + 1} 頁的圖` : '一張圖'))
-  return labels.length ? `[附圖：${labels.join('、')}] ` : ''
+  const labels = turnFigurePins(turn).map((figure) => figure.label ?? (figure.pageIndex !== null ? `第 ${figure.pageIndex + 1} 页的图` : '一张图'))
+  return labels.length ? `[附图：${labels.join('、')}] ` : ''
 }
 
 export type PaperChatController = ReturnType<typeof usePaperChat>

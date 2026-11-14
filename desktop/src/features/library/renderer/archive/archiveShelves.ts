@@ -21,7 +21,7 @@ export interface ArchiveCategory {
 
 /** Shown until the library's categories arrive, or when they are unavailable. */
 export const ALL_PAPERS = ALL_PAPERS_NAME
-const UNSORTED = { id: 'pending', name: '待分類' }
+const UNSORTED = { id: 'pending', name: '待分类' }
 
 /** Physical position in the unbounded, looping archive plane. */
 export type ArchiveCell = { lane: number; row: number }
@@ -37,7 +37,7 @@ export function nearestOccurrence(value: number, center: number, period: number)
 
 /**
  * One shelf per content category, in the order given (largest first) and with each category's
- * papers in its own order. Papers the categories do not know yet (just imported) join 待分類.
+ * papers in its own order. Papers the categories do not know yet (just imported) join 待分类.
  * Without categories the whole library is one shelf, newest first.
  */
 export function groupPapersByCategory(papers: readonly ArchivePaper[], categories?: readonly ArchiveCategory[] | null): ArchiveShelf[] {

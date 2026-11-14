@@ -43,14 +43,14 @@ export function useGuardedViews<View extends { name: string }>(initial: View) {
     setPendingView(null)
   }
   const guardDialog = (
-    <Modal title="有未儲存的設定" open={pendingView !== null} closable={!leaving} maskClosable={!leaving}
+    <Modal title="有未保存的设置" open={pendingView !== null} closable={!leaving} maskClosable={!leaving}
       onCancel={() => { if (!leaving) setPendingView(null) }}
       footer={[
-        <Button key="stay" disabled={leaving} onClick={() => setPendingView(null)}>繼續編輯</Button>,
-        <Button key="discard" disabled={leaving || guardBusy} onClick={discardAndLeave}>放棄並離開</Button>,
-        <Button key="save" type="primary" loading={leaving} disabled={guardBusy} onClick={() => void saveAndLeave()}>儲存並離開</Button>
+        <Button key="stay" disabled={leaving} onClick={() => setPendingView(null)}>继续编辑</Button>,
+        <Button key="discard" disabled={leaving || guardBusy} onClick={discardAndLeave}>放弃并离开</Button>,
+        <Button key="save" type="primary" loading={leaving} disabled={guardBusy} onClick={() => void saveAndLeave()}>保存并离开</Button>
       ]}>
-      <p>離開前儲存修改，或放棄本次未儲存的更改。</p>
+      <p>离开前保存修改，或放弃本次未保存的更改。</p>
     </Modal>
   )
   return { view, requestViewChange, onNavigationGuardChange, guardDialog }

@@ -11,7 +11,7 @@ export function registerTaskNotifications(tasks: TaskService, repository: Pick<T
     const task = await repository.getTask(taskId)
     if (!task || !Notification.isSupported()) return
     const notification = new Notification({
-      title: status === 'failed' ? 'Copilotix 任務失敗' : status === 'partial' ? 'Copilotix 部分翻譯完成' : 'Copilotix 任務完成',
+      title: status === 'failed' ? 'Copilotix 任务失败' : status === 'partial' ? 'Copilotix 部分翻译完成' : 'Copilotix 任务完成',
       body: task.name
     })
     notification.on('click', () => {

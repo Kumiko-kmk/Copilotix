@@ -58,7 +58,7 @@ export async function waitForImage(image: HTMLImageElement, signal: AbortSignal)
     if (!image.complete || image.naturalWidth === 0) throw error
   }
   if (image.naturalWidth === 0) {
-    throw new Error(`圖片載入失敗：${image.currentSrc || image.src || '未知資源'}`)
+    throw new Error(`图片加载失败：${image.currentSrc || image.src || '未知资源'}`)
   }
 }
 
@@ -75,7 +75,7 @@ export function waitForImageEvent(image: HTMLImageElement, signal: AbortSignal):
     }
     const onError = (): void => {
       cleanup()
-      reject(new Error(`圖片載入失敗：${image.currentSrc || image.src || '未知資源'}`))
+      reject(new Error(`图片加载失败：${image.currentSrc || image.src || '未知资源'}`))
     }
     const onAbort = (): void => {
       cleanup()
@@ -109,7 +109,7 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 export function readableRenderError(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : 'Markdown 資源載入失敗，請重新載入。'
+  return error instanceof Error && error.message ? error.message : 'Markdown 资源加载失败，请重新加载。'
 }
 
 export function parseMappingIds(value: string | undefined): string[] {

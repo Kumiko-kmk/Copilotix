@@ -69,27 +69,27 @@ describe('MarkdownMinimap', () => {
     const heading = article.querySelector('h2')!
     const measure = vi.spyOn(heading, 'getBoundingClientRect').mockReturnValue(rect(0, 100, 300, 30))
     view.rerender(<Harness revision={1} />)
-    await waitFor(() => expect(view.getByRole('button', { name: '跳轉到Chapter' })).toBeTruthy())
+    await waitFor(() => expect(view.getByRole('button', { name: '跳转到Chapter' })).toBeTruthy())
     const calls = measure.mock.calls.length
     const textMeasurement = vi.spyOn(document, 'createTreeWalker')
-    const position = view.getByRole('button', { name: '跳轉到Chapter' }).getAttribute('style')
+    const position = view.getByRole('button', { name: '跳转到Chapter' }).getAttribute('style')
     scroller.scrollTop = 600
     fireEvent.scroll(scroller)
     measure.mockReturnValue(rect(0, 240, 300, 30))
     view.rerender(<Harness revision={2} />)
     await new Promise((resolve) => setTimeout(resolve, 60))
     expect(measure.mock.calls.length).toBe(calls)
-    expect(view.getByRole('button', { name: '跳轉到Chapter' }).getAttribute('style')).toBe(position)
+    expect(view.getByRole('button', { name: '跳转到Chapter' }).getAttribute('style')).toBe(position)
     width = 500
     setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 2000, scrollTop: 600 })
     view.rerender(<Harness revision={3} />)
     await new Promise((resolve) => setTimeout(resolve, 60))
     expect(measure.mock.calls.length).toBeGreaterThan(calls)
     expect(textMeasurement.mock.calls.filter(([, mode]) => mode === NodeFilter.SHOW_TEXT)).toHaveLength(0)
-    expect(view.getByRole('button', { name: '跳轉到Chapter' }).getAttribute('style')).toBe(position)
+    expect(view.getByRole('button', { name: '跳转到Chapter' }).getAttribute('style')).toBe(position)
     const scrollTo = vi.fn()
     Object.defineProperty(scroller, 'scrollTo', { configurable: true, value: scrollTo })
-    fireEvent.click(view.getByRole('button', { name: '跳轉到Chapter' }))
+    fireEvent.click(view.getByRole('button', { name: '跳转到Chapter' }))
     expect(scrollTo).toHaveBeenCalledWith({ top: 824, behavior: 'instant' })
   })
 
@@ -131,7 +131,7 @@ describe('MarkdownMinimap', () => {
     const canvas = article.querySelector('canvas')!
     vi.spyOn(source, 'getBoundingClientRect').mockReturnValue(rect(0, 200, 300, 100))
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(rect(0, 200, 300, 180))
-    expect(view.queryByRole('button', { name: '跳轉到Chapter' })).toBeNull()
+    expect(view.queryByRole('button', { name: '跳转到Chapter' })).toBeNull()
     expect(measureMarkdownMinimapContent(article, scroller, 60, 400).images.map(image => image.element)).toEqual([source])
 
     // Failed crops retain their sources; the completed crop is captured whole.
@@ -142,7 +142,7 @@ describe('MarkdownMinimap', () => {
     const onPrepared = vi.fn()
     view.rerender(<Harness revision={1} visualRevision="ready:first" figures={figures} onPrepared={onPrepared} />)
     await waitFor(() => expect(onPrepared).toHaveBeenCalledTimes(1))
-    expect(view.getByRole('button', { name: '跳轉到Chapter' })).toBeTruthy()
+    expect(view.getByRole('button', { name: '跳转到Chapter' })).toBeTruthy()
     expect(measureMarkdownMinimapContent(article, scroller, 60, 400).images.map(image => image.element)).toEqual([canvas])
   })
 
@@ -163,7 +163,7 @@ describe('MarkdownMinimap', () => {
     vi.spyOn(article.querySelector('h2')!, 'getBoundingClientRect').mockReturnValue(rect(0, 100, 300, 30))
     view.rerender(<Harness revision={1} figures={figures} onPrepared={onPrepared} />)
     await waitFor(() => expect(onPrepared).toHaveBeenCalledTimes(1))
-    expect(view.getByRole('button', { name: '跳轉到Chapter' })).toBeTruthy()
+    expect(view.getByRole('button', { name: '跳转到Chapter' })).toBeTruthy()
     expect(article.style.visibility).toBe('hidden')
   })
 
@@ -357,7 +357,7 @@ describe('MarkdownMinimap', () => {
   it('does not preview on hover and retains jump, drag, wheel and keyboard navigation', async () => {
     const view = render(<Harness revision={0} />)
     const scroller = view.container.querySelector<HTMLElement>('.markdown-scroll')!
-    const rail = view.getByRole('scrollbar', { name: 'Markdown 文件縮略導覽' })
+    const rail = view.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
     setElementMetrics(scroller, { clientHeight: 200, scrollHeight: 1_000, scrollTop: 0 })
     Object.defineProperty(rail, 'clientHeight', { configurable: true, value: 400 })
     Object.defineProperty(rail, 'clientWidth', { configurable: true, value: 60 })
@@ -370,7 +370,7 @@ describe('MarkdownMinimap', () => {
 
     view.rerender(<Harness revision={1} />)
     const frame = view.container.querySelector<HTMLElement>('.markdown-minimap-frame')!
-    await waitFor(() => expect(view.getByRole('button', { name: '跳轉到Chapter' })).toBeTruthy())
+    await waitFor(() => expect(view.getByRole('button', { name: '跳转到Chapter' })).toBeTruthy())
     expect(view.container.querySelector('article')?.classList.contains('markdown-minimap-measuring')).toBe(false)
     expect(frame.style.getPropertyValue('--markdown-minimap-frame-height')).toBe('80px')
 
@@ -378,7 +378,7 @@ describe('MarkdownMinimap', () => {
     expect(frame.dataset.preview).toBe('false')
     expect(frame.style.getPropertyValue('--markdown-minimap-frame-offset')).toBe('0px')
     expect(scroller.scrollTop).toBe(0)
-    expect(view.getByRole('button', { name: '跳轉到Chapter' }).hasAttribute('title')).toBe(false)
+    expect(view.getByRole('button', { name: '跳转到Chapter' }).hasAttribute('title')).toBe(false)
 
     fireEvent.pointerDown(rail, { clientY: 300, pointerId: 1 })
     railBounds.mockClear()
@@ -399,7 +399,7 @@ describe('MarkdownMinimap', () => {
     fireEvent.keyDown(rail, { key: 'Home' })
     expect(scroller.scrollTop).toBe(0)
 
-    fireEvent.click(view.getByRole('button', { name: '跳轉到Chapter' }))
+    fireEvent.click(view.getByRole('button', { name: '跳转到Chapter' }))
     expect(scrollTo).toHaveBeenCalledWith({ top: 84, behavior: 'instant' })
   })
 })

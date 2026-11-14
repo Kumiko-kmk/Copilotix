@@ -8,10 +8,10 @@ function mapping(id: string, order: number, sourceText: string, type = 'text'): 
 
 describe('structure-aware chunker', () => {
   it('is deterministic, preserves UTF-16 offsets, sections, types, and page provenance', () => {
-    const source = '# 方法 Introduction\n\n這是正文😀，包含公式 $x^2$。\n\n```ts\nconst value = 1\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |'
+    const source = '# 方法 Introduction\n\n这是正文😀，包含公式 $x^2$。\n\n```ts\nconst value = 1\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |'
     const mappings = [
       mapping('heading', 0, '方法 Introduction', 'title'),
-      mapping('body', 1, '這是正文，包含公式 x^2。'),
+      mapping('body', 1, '这是正文，包含公式 x^2。'),
       mapping('code', 2, 'const value = 1', 'code'),
       mapping('table', 3, 'A B 1 2', 'table')
     ]
@@ -35,7 +35,7 @@ describe('structure-aware chunker', () => {
   })
 
   it('splits only an overlong leaf at safe code-point boundaries and retains table headers', () => {
-    const long = Array.from({ length: 2_000 }, (_, index) => `詞${index}😀`).join(' ')
+    const long = Array.from({ length: 2_000 }, (_, index) => `词${index}😀`).join(' ')
     const source = `# Results\n\n${long}\n\n| Name | Value |\n| --- | --- |\n${Array.from({ length: 500 }, (_, index) => `| row ${index} | value ${index} |`).join('\n')}`
     const chunks = structureAwareChunk({ documentId: 'doc', contentRevisionId: 'rev', contentHash: 'h', sourceText: source, mappings: [] })
     const leaves = chunks.filter((chunk) => chunk.contentType === 'paragraph')
@@ -52,7 +52,7 @@ describe('structure-aware chunker', () => {
   it('bounds wide tables and oversized cells with deterministic column groups', () => {
     const longCell = Array.from({ length: 1_800 }, (_, index) => `cell${index}😀`).join(' ')
     const source = [
-      '| 指標 | Description | Notes |',
+      '| 指标 | Description | Notes |',
       '| --- | --- | --- |',
       `| 1 | ${longCell} | stable |`
     ].join('\n')
@@ -61,7 +61,7 @@ describe('structure-aware chunker', () => {
     expect(tables.length).toBeGreaterThan(1)
     expect(tables.every((chunk) => chunk.tokenCount <= DEFAULT_CHUNK_HARD_MAX_TOKENS)).toBe(true)
     expect(tables.every((chunk) => chunk.sourceText.includes('Table columns:') && chunk.sourceText.includes('Row:'))).toBe(true)
-    expect(tables.every((chunk) => /指標|Description|Notes/u.test(chunk.sourceText))).toBe(true)
+    expect(tables.every((chunk) => /指标|Description|Notes/u.test(chunk.sourceText))).toBe(true)
     const descriptionChunks = tables.filter((chunk) => chunk.sourceText.includes('Description'))
     expect(descriptionChunks.length).toBeGreaterThan(1)
     expect(descriptionChunks.every((chunk) => chunk.tokenCount > 32)).toBe(true)

@@ -31,7 +31,7 @@
 .credential-status.status-invalid { color: #d4574f; }
 .credential-status.status-valid::before, .credential-status.status-invalid::before { background: currentColor; }
 
-/* 服務連線: one row per service, usage below fills what is left. */
+/* 服务连接: one row per service, usage below fills what is left. */
 .service-connections { display: grid; height: 100%; min-height: 0; grid-template-rows: repeat(3, auto) minmax(0, 1fr); gap: 8px; overflow: hidden; }
 .service-card { display: grid; margin: 0; padding: 12px 16px; grid-template-columns: 148px minmax(0, 1fr); align-items: center; column-gap: 24px; }
 .service-card-identity { display: grid; min-width: 0; gap: 3px; }
@@ -77,7 +77,7 @@
 .token-line.qwen { stroke: #d39b35; }
 .token-line.codex { stroke: #60a88c; }
 
-/* 模型設定 and API 金鑰 share the ordered, draggable row. */
+/* 模型设置 and API 密钥 share the ordered, draggable row. */
 .model-priority { display: grid; align-content: start; }
 .model-priority-card { padding: 14px 16px 8px; }
 .model-priority-heading { display: flex; min-width: 0; margin: 0 0 6px; align-items: baseline; justify-content: space-between; gap: 20px; }
@@ -124,7 +124,7 @@
   .api-key-item { min-height: 48px; padding-block: 2px; }
 }
 
-/* 檔案儲存 */
+/* 文件存储 */
 .storage-management { display: grid; min-height: 0; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; overflow: hidden; }
 .storage-location-card { display: grid; padding: 14px 16px; gap: 12px; }
 .storage-location-field { display: grid; grid-template-columns: 148px minmax(0, 1fr); align-items: center; gap: 24px; }
@@ -160,7 +160,7 @@
 .storage-growth-footer strong { color: var(--ink); font-size: 13px; font-weight: 600; }
 .storage-growth-footer span:last-child { text-align: right; }
 
-/* 顯示設定: each theme card is a miniature of the app in its own palette. */
+/* 显示设置: each theme card is a miniature of the app in its own palette. */
 .theme-settings { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; overflow: auto; }
 .theme-groups { display: grid; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .theme-group { display: grid; min-width: 0; min-height: 0; align-content: start; gap: 10px; padding: 14px 16px; }
@@ -283,7 +283,7 @@
 .is-window .theme-settings { height: 100%; overflow: hidden; }
 .is-window .reader-font-sample { max-height: none; }
 
-/* 服務 (Lite): one flat row per service: name, its key and actions, state, and whether translation uses it. */
+/* 服务 (Lite): one flat row per service: name, its key and actions, state, and whether translation uses it. */
 .lite-services { display: grid; align-content: start; }
 .lite-service { display: grid; min-height: 52px; grid-template-columns: 84px minmax(0, 1fr) 64px 32px; align-items: center; column-gap: 16px; }
 .lite-service-name { color: var(--text); font-size: 13px; font-weight: 500; }

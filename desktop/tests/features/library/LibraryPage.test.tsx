@@ -86,7 +86,7 @@ function changePhase(phase: DetailPhase): void {
   scene.onPhase?.(phase)
 }
 
-function region(): HTMLElement { return screen.getByRole('region', { name: '文庫' }) }
+function region(): HTMLElement { return screen.getByRole('region', { name: '文库' }) }
 
 function paper(name: string, originalName = `${name}.pdf`): DocumentSummary {
   return {
@@ -102,7 +102,7 @@ describe('LibraryPage', () => {
     const pending = paper('Pending')
     pending.workflow = { ...pending.workflow, status: 'translating', progress: 80 }
     render(<LibraryPage documents={[pending]} onOpen={vi.fn()} onCreate={vi.fn()} />)
-    const button = screen.getByRole('button', { name: '檢視檔案' }) as HTMLButtonElement
+    const button = screen.getByRole('button', { name: '查看档案' }) as HTMLButtonElement
     expect(button.disabled).toBe(true)
     fireEvent.click(button)
     fireEvent.keyDown(region(), { key: 'Enter' })
@@ -127,56 +127,56 @@ describe('LibraryPage', () => {
       fireEvent.click(screen.getByRole('button', { name: '下一篇' }))
     }
     expect(Object.fromEntries(seen)).toEqual({
-      [papers[0]!.id]: ['✓上傳→✓解析→翻譯 12/80'],
-      [papers[1]!.id]: ['✓上傳→✓解析→翻譯 55/156'],
+      [papers[0]!.id]: ['✓上传→✓解析→翻译 12/80'],
+      [papers[1]!.id]: ['✓上传→✓解析→翻译 55/156'],
       [papers[2]!.id]: []
     })
   })
   it('searches titles and filenames without steering the archive while typing, then focuses the result', () => {
-    const alpha = paper('中文論文', 'Alpha Research.pdf')
+    const alpha = paper('中文论文', 'Alpha Research.pdf')
     const onOpen = vi.fn()
     render(<LibraryPage documents={[alpha, paper('Beta')]} onOpen={onOpen} onCreate={vi.fn()} />)
-    const search = screen.getByRole('searchbox', { name: '搜尋文庫' })
+    const search = screen.getByRole('searchbox', { name: '搜索文库' })
     fireEvent.keyDown(region(), { key: '/' })
     expect(document.activeElement).toBe(search)
     fireEvent.change(search, { target: { value: ' RESEARCH alpha ' } })
     fireEvent.keyDown(search, { key: 'ArrowDown' })
     expect(scene.navigate).not.toHaveBeenCalled()
-    const results = within(screen.getByRole('list', { name: '搜尋結果' }))
+    const results = within(screen.getByRole('list', { name: '搜索结果' }))
     expect(results.getAllByRole('button')).toHaveLength(1)
-    fireEvent.click(results.getByRole('button', { name: /中文論文/u }))
+    fireEvent.click(results.getByRole('button', { name: /中文论文/u }))
     expect(scene.focusPaper).toHaveBeenLastCalledWith(alpha.id)
     expect(onOpen).not.toHaveBeenCalled()
-    expect(document.activeElement).toBe(screen.getByRole('region', { name: '文庫' }))
-    expect(screen.queryByRole('list', { name: '搜尋結果' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('region', { name: '文库' }))
+    expect(screen.queryByRole('list', { name: '搜索结果' })).toBeNull()
   })
 
   it('handles no matches, Escape and IME Enter without accidentally opening a paper', () => {
     render(<LibraryPage documents={[paper('Alpha')]} onOpen={vi.fn()} onCreate={vi.fn()} />)
     scene.focusPaper.mockClear()
-    const search = screen.getByRole('searchbox', { name: '搜尋文庫' })
+    const search = screen.getByRole('searchbox', { name: '搜索文库' })
     fireEvent.focus(search)
     fireEvent.change(search, { target: { value: 'absent' } })
-    expect(screen.getByText('沒有匹配的論文')).toBeTruthy()
+    expect(screen.getByText('没有匹配的论文')).toBeTruthy()
     fireEvent.keyDown(search, { key: 'Enter' })
     expect(scene.focusPaper).not.toHaveBeenCalled()
     fireEvent.change(search, { target: { value: 'Alpha' } })
     fireEvent.keyDown(search, { key: 'Enter', isComposing: true })
     expect(scene.focusPaper).not.toHaveBeenCalled()
     fireEvent.keyDown(search, { key: 'Escape' })
-    expect(screen.queryByRole('list', { name: '搜尋結果' })).toBeNull()
-    expect(document.activeElement).toBe(screen.getByRole('region', { name: '文庫' }))
+    expect(screen.queryByRole('list', { name: '搜索结果' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('region', { name: '文库' }))
   })
 
   it('refreshes bounded search results when library contents change', () => {
     const documents = Array.from({ length: 45 }, (_, index) => paper(`Paper ${index}`))
     const props = { onOpen: vi.fn(), onCreate: vi.fn() }
     const view = render(<LibraryPage {...props} documents={documents} />)
-    fireEvent.focus(screen.getByRole('searchbox', { name: '搜尋文庫' }))
-    expect(within(screen.getByRole('list', { name: '搜尋結果' })).getAllByRole('button')).toHaveLength(40)
-    expect(screen.getByText(/顯示前 40 篇/u)).toBeTruthy()
+    fireEvent.focus(screen.getByRole('searchbox', { name: '搜索文库' }))
+    expect(within(screen.getByRole('list', { name: '搜索结果' })).getAllByRole('button')).toHaveLength(40)
+    expect(screen.getByText(/显示前 40 篇/u)).toBeTruthy()
     view.rerender(<LibraryPage {...props} documents={[]} />)
-    expect(screen.getByText('沒有匹配的論文')).toBeTruthy()
+    expect(screen.getByText('没有匹配的论文')).toBeTruthy()
     expect(screen.getByRole('button', { name: '去新解析' })).toBeTruthy()
   })
 
@@ -185,9 +185,9 @@ describe('LibraryPage', () => {
     const alpha = paper('Alpha')
     const onOpen = vi.fn()
     render(<LibraryPage documents={[alpha]} onOpen={onOpen} onCreate={vi.fn()} />)
-    expect(screen.getByRole('heading', { name: '當前環境無法顯示三維文庫' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '当前环境无法显示三维文库' })).toBeTruthy()
     fireEvent.keyDown(region(), { key: '/' })
-    const search = screen.getByRole('searchbox', { name: '搜尋文庫' })
+    const search = screen.getByRole('searchbox', { name: '搜索文库' })
     fireEvent.change(search, { target: { value: 'Alpha' } })
     fireEvent.keyDown(search, { key: 'Enter' })
     await vi.waitFor(() => expect(onOpen).toHaveBeenCalledWith(alpha.id))
@@ -196,17 +196,17 @@ describe('LibraryPage', () => {
   it('shows one column for 37 uncategorised papers and loops the HUD with ArrowRight', () => {
     render(<LibraryPage documents={Array.from({ length: 37 }, (_, index) => paper(`Paper ${index}`))} onOpen={vi.fn()} onCreate={vi.fn()} />)
     expect(screen.getByText('COLUMN 01 / 01')).toBeTruthy()
-    expect(screen.getByText('關鍵詞')).toBeTruthy()
-    expect(screen.getByText('總結')).toBeTruthy()
-    expect(screen.queryByText('型別')).toBeNull()
-    expect(screen.queryByText('建立')).toBeNull()
-    expect(screen.queryByText('檔案卡')).toBeNull()
-    expect(screen.queryByText('狀態')).toBeNull()
+    expect(screen.getByText('关键词')).toBeTruthy()
+    expect(screen.getByText('总结')).toBeTruthy()
+    expect(screen.queryByText('类型')).toBeNull()
+    expect(screen.queryByText('创建')).toBeNull()
+    expect(screen.queryByText('档案卡')).toBeNull()
+    expect(screen.queryByText('状态')).toBeNull()
     fireEvent.keyDown(region(), { key: 'ArrowRight' })
     expect(scene.navigate).toHaveBeenCalledWith('lane', 1)
     expect(screen.getByText('COLUMN 01 / 01')).toBeTruthy()
     expect(screen.getByRole('button', { name: '下一列' })).toBeTruthy()
-    expect(screen.queryByRole('checkbox', { name: '流暢模式' })).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: '流畅模式' })).toBeNull()
   })
 
   it('ignores held Enter and only opens the reader after detail is ready', () => {
@@ -221,7 +221,7 @@ describe('LibraryPage', () => {
     fireEvent.keyDown(region(), { key: 'Enter' })
     expect(scene.activate).not.toHaveBeenCalled()
     // No detail entry opens a half-extracted file.
-    fireEvent.click(screen.getByRole('button', { name: '開啟閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
     expect(onOpen).not.toHaveBeenCalled()
     act(() => changePhase('open'))
     fireEvent.keyDown(region(), { key: 'Enter', repeat: true })
@@ -236,13 +236,13 @@ describe('LibraryPage', () => {
     const onOpen = vi.fn()
     render(<LibraryPage documents={[paper('Alpha')]} onOpen={onOpen} onCreate={vi.fn()} />)
     act(() => changePhase('open'))
-    fireEvent.click(screen.getByRole('button', { name: '開啟閱讀' }))
-    expect(screen.getByRole('button', { name: '正在開啟…' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
+    expect(screen.getByRole('button', { name: '正在打开…' }).hasAttribute('disabled')).toBe(true)
     fireEvent.keyDown(document.body, { key: 'Escape' })
     await act(async () => { loaded({ default: () => null }) })
     expect(onOpen).not.toHaveBeenCalled()
     expect(region().hasAttribute('data-reader-entry')).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: '開啟閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
     fireEvent.keyDown(region(), { key: 'Enter', repeat: true })
     await vi.waitFor(() => expect(onOpen).toHaveBeenCalledOnce())
     expect(scene.enterReader).toHaveBeenCalledOnce()
@@ -253,12 +253,12 @@ describe('LibraryPage', () => {
     const view = render(<LibraryPage documents={[paper('Alpha')]} onOpen={onOpen} onCreate={vi.fn()} />)
     act(() => changePhase('open'))
     loader.loadReaderPage.mockRejectedValueOnce(new Error('Offline'))
-    fireEvent.click(screen.getByRole('button', { name: '開啟閱讀' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('閱讀器載入失敗')
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('阅读器加载失败')
     expect(onOpen).not.toHaveBeenCalled()
     let loaded!: (module: { default: () => null }) => void
     loader.loadReaderPage.mockReturnValueOnce(new Promise(resolve => { loaded = resolve }))
-    fireEvent.click(screen.getByRole('button', { name: '開啟閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '打开阅读' }))
     view.unmount()
     await act(async () => { loaded({ default: () => null }) })
     expect(onOpen).not.toHaveBeenCalled()
@@ -270,7 +270,7 @@ describe('LibraryPage', () => {
     expect(scene.navigate).not.toHaveBeenCalled()
     fireEvent.keyDown(region(), { key: 'Enter' })
     const abstract = screen.getByRole('tab', { name: /摘要/u })
-    const structure = screen.getByRole('tab', { name: /結構/u })
+    const structure = screen.getByRole('tab', { name: /结构/u })
     abstract.focus()
     fireEvent.keyDown(abstract, { key: 'ArrowRight' })
     expect(document.activeElement).toBe(structure)
@@ -291,13 +291,13 @@ describe('LibraryPage', () => {
 
   it('folds the search away while a paper is extracted and keeps the closing panel mounted but inert', () => {
     render(<LibraryPage documents={[paper('Alpha')]} onOpen={vi.fn()} onCreate={vi.fn()} />)
-    fireEvent.focus(screen.getByRole('searchbox', { name: '搜尋文庫' }))
-    expect(screen.getByRole('list', { name: '搜尋結果' })).toBeTruthy()
+    fireEvent.focus(screen.getByRole('searchbox', { name: '搜索文库' }))
+    expect(screen.getByRole('list', { name: '搜索结果' })).toBeTruthy()
     fireEvent.keyDown(region(), { key: 'Enter' })
     expect(scene.phase).toBe('opening')
     expect(region().querySelector('.paper-archive-tools')?.hasAttribute('inert')).toBe(true)
-    expect(screen.queryByRole('searchbox', { name: '搜尋文庫' })).toBeNull()
-    expect(screen.queryByRole('list', { name: '搜尋結果' })).toBeNull()
+    expect(screen.queryByRole('searchbox', { name: '搜索文库' })).toBeNull()
+    expect(screen.queryByRole('list', { name: '搜索结果' })).toBeNull()
     fireEvent.keyDown(region(), { key: 'Escape' })
     expect(scene.closeDetail).toHaveBeenCalledOnce()
     expect(document.activeElement).toBe(region())
@@ -309,6 +309,6 @@ describe('LibraryPage', () => {
     act(() => changePhase('closed'))
     expect(region().querySelector('.paper-archive-detail')).toBeNull()
     expect(region().querySelector('.paper-archive-tools')?.hasAttribute('inert')).toBe(false)
-    expect(screen.getByRole('searchbox', { name: '搜尋文庫' })).toBeTruthy()
+    expect(screen.getByRole('searchbox', { name: '搜索文库' })).toBeTruthy()
   })
 })

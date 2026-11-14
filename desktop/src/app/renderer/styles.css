@@ -5,7 +5,7 @@
 
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-body { color: var(--text); background: var(--app-bg); font-family: var(--copilotix-font); }
+body { color: var(--text); background: var(--app-bg); }
 button, input, select { font: inherit; }
 
 :root {
@@ -41,7 +41,7 @@ button, input, select { font: inherit; }
   --window-control-size: 12px;
   --new-parse-bg: #f1ede3;
   --upload-accent: var(--primary);
-  /* Archive (文庫) language shared by every page: hairline and ink rules, page gutter. */
+  /* Archive (文库) language shared by every page: hairline and ink rules, page gutter. */
   --rule: color-mix(in srgb, var(--ink) 18%, transparent);
   --rule-strong: color-mix(in srgb, var(--ink) 55%, transparent);
   --gutter: clamp(28px, 4.4vw, 64px);
@@ -387,7 +387,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .pdf-pane[data-show-bounds="false"] .pdf-merge-layer,
 .pdf-pane[data-show-bounds="false"] .pdf-merge-badge { visibility: hidden; }
 .pdf-page-input { width: 54px; height: 26px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); color: var(--text); text-align: center; font: inherit; }
-.reader-group-actions .pdf-toolbar .ant-btn[aria-label="跳轉到頁"] { width: auto; padding-inline: 4px; }
+.reader-group-actions .pdf-toolbar .ant-btn[aria-label="跳转到页"] { width: auto; padding-inline: 4px; }
 .pdf-block.discarded { border-color: rgba(125, 132, 145, .7); background: rgba(125, 132, 145, .025); }
 .pdf-merge-badge { position: absolute; min-width: 36px; padding: 2px 6px; color: white; background: #2f5eea; font-size: 11px; line-height: 17px; white-space: nowrap; pointer-events: none; }
 .pdf-merge-badge { top: auto; bottom: -21px; left: 50%; border-radius: 0 0 3px 3px; opacity: 1; transform: translateX(-50%); }
@@ -644,7 +644,7 @@ body.reader-tab-dragging, body.reader-tab-dragging * { cursor: grabbing !importa
 .reader-figure-mosaic { position: relative; max-width: 100%; margin: 8px auto; }
 .reader-figure-mosaic img { position: absolute; display: block; max-width: none; margin: 0; object-fit: contain; }
 
-/* Processing steps: 上傳 → 解析 → 翻譯 n/總數 */
+/* Processing steps: 上传 → 解析 → 翻译 n/总数 */
 .workflow-steps { display: inline-flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 2px 6px; font-variant-numeric: tabular-nums; }
 .workflow-step { color: var(--muted); white-space: nowrap; }
 .workflow-step[data-state="waiting"] { opacity: .55; }

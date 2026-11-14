@@ -36,9 +36,9 @@ export class PaperInsightStore {
 
   private async snapshot(documentId: string) {
     const task = this.repository.getTask(documentId)
-    if (!task) throw new Error('論文不存在')
+    if (!task) throw new Error('论文不存在')
     const stat = await lstat(task.outputDir)
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('文獻目錄無效')
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('文献目录无效')
     const original = this.repository.getLatestArtifactReference(documentId, 'parsed_markdown')
     const translated = this.repository.getLatestArtifactReference(documentId, 'translated_markdown')
     const revision = (ref: typeof original) => ref ? `${ref.id}:${ref.revision}:${ref.contentHash}` : 'none'
@@ -49,10 +49,10 @@ export class PaperInsightStore {
 
   private async read(path: string, maxBytes: number): Promise<string> {
     const stat = await lstat(path)
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > maxBytes) throw new Error('解讀來源或檔案無效、超過大小限制')
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > maxBytes) throw new Error('解读来源或文件无效、超过大小限制')
     const handle = await open(path, 'r')
     try {
-      if ((await handle.stat()).size > maxBytes) throw new Error('解讀檔案超過大小限制')
+      if ((await handle.stat()).size > maxBytes) throw new Error('解读文件超过大小限制')
       return await handle.readFile('utf8')
     } finally { await handle.close() }
   }
@@ -61,7 +61,7 @@ export class PaperInsightStore {
     const path = join(root, 'insight')
     try {
       const stat = await lstat(path)
-      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('解讀目錄無效')
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('解读目录无效')
     } catch (error) {
       if (!missing(error)) throw error
       if (create) await mkdir(this.policy.resolveChild(root, 'insight'))
@@ -76,7 +76,7 @@ export class PaperInsightStore {
       try {
         const record = paperBriefRecordSchema.parse(JSON.parse(await this.read(join(root, 'brief.v2.json'), PAPER_BRIEF_MAX_BYTES)))
         this.policy.resolveChild(root, 'brief.v2.json')
-        if (record.documentId !== documentId) throw new Error('檔案卡不屬於當前論文')
+        if (record.documentId !== documentId) throw new Error('档案卡不属于当前论文')
         return { status: 'ready', brief: record.brief, anchors: record.anchors,
           stale: !sameBriefSource(record.brief.provenance.sourceRevision, snapshot.sourceRevision, record.brief.provenance.language),
           promptOutdated: record.brief.provenance.promptVersion !== PAPER_BRIEF_PROMPT_VERSION }
@@ -84,7 +84,7 @@ export class PaperInsightStore {
       const path = join(root, 'insight.v1.json')
       const record = paperInsightRecordSchema.parse(JSON.parse(await this.read(path, PAPER_INSIGHT_MAX_BYTES)))
       this.policy.resolveChild(root, 'insight.v1.json')
-      if (record.documentId !== documentId) throw new Error('解讀不屬於當前論文')
+      if (record.documentId !== documentId) throw new Error('解读不属于当前论文')
       return { status: 'ready', insight: record.insight, stale: record.insight.sourceRevision !== snapshot.sourceRevision }
     } catch (error) { if (missing(error)) return { status: 'missing' }; throw error }
   }
@@ -96,7 +96,7 @@ export class PaperInsightStore {
     signal.throwIfAborted()
     const context = buildFullBriefContext(content.originalText, content.translatedText)
     const after = await this.snapshot(documentId)
-    if (after.sourceRevision !== snapshot.sourceRevision) throw new Error('論文內容正在更新，請重試')
+    if (after.sourceRevision !== snapshot.sourceRevision) throw new Error('论文内容正在更新，请重试')
     return briefContextResultSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, context })
   }
 
@@ -107,7 +107,7 @@ export class PaperInsightStore {
     for (const [text, language] of [[content.originalText, 'original'], [content.translatedText, 'translated']] as const) {
       if (text.trim()) sources.push({ ...await snapshotTextFile(snapshot.root, text), language })
     }
-    if ((await this.snapshot(documentId)).sourceRevision !== snapshot.sourceRevision) throw new Error('論文內容正在更新，請重試')
+    if ((await this.snapshot(documentId)).sourceRevision !== snapshot.sourceRevision) throw new Error('论文内容正在更新，请重试')
     return briefSourceSchema.parse({ documentId, sourceRevision: snapshot.sourceRevision, sources })
   }
 
@@ -156,11 +156,11 @@ export class PaperInsightStore {
   }
 
   private async commit(documentId: string, name: string, body: string, maxBytes: number): Promise<{ saved: true }> {
-    if (Buffer.byteLength(body) > maxBytes) throw new Error('解讀檔案超過大小限制')
+    if (Buffer.byteLength(body) > maxBytes) throw new Error('解读文件超过大小限制')
     const snapshot = await this.snapshot(documentId)
     const root = await this.insightRoot(snapshot.root, true)
     const target = join(root, name)
-    try { if ((await lstat(target)).isSymbolicLink()) throw new Error('解讀檔案不能是符號連結') } catch (error) { if (!missing(error)) throw error }
+    try { if ((await lstat(target)).isSymbolicLink()) throw new Error('解读文件不能是符号链接') } catch (error) { if (!missing(error)) throw error }
     this.policy.resolveChild(root, name)
     const temporary = this.policy.resolveChild(root, `.pending-${randomUUID()}`)
     try {

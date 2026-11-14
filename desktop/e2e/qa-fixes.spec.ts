@@ -5,7 +5,7 @@ import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTas
 
 async function navigate(page: Page, name: string) {
   await page.locator('[data-edge-dock="top"]').hover()
-  await page.getByRole('navigation', { name: '主導覽' }).getByRole('button', { name: new RegExp(`${name}$`, 'u') }).click()
+  await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: new RegExp(`${name}$`, 'u') }).click()
   await page.mouse.move(200, 200)
 }
 
@@ -24,8 +24,8 @@ test('long paper titles keep every reader action inside the minimum window', asy
     }))
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.width + 1)
     for (const button of metrics.buttons) { expect(button.left).toBeGreaterThanOrEqual(0); expect(button.right).toBeLessThanOrEqual(metrics.viewport) }
-    await page.getByRole('button', { name: '刪除論文', exact: true }).click()
-    await expect(page.getByRole('dialog', { name: '刪除論文' })).toBeVisible()
+    await page.getByRole('button', { name: '删除论文', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '删除论文' })).toBeVisible()
     await page.keyboard.press('Escape')
   } finally { await app.close(); await workspace.cleanup() }
 })
@@ -36,23 +36,23 @@ test('settings navigation confirms discard, stay, successful save and failed sav
   const app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
   try {
     const page = await app.firstWindow()
-    await navigate(page, '設定'); await page.getByRole('button', { name: /模型設定/u }).click()
+    await navigate(page, '设置'); await page.getByRole('button', { name: /模型设置/u }).click()
     const provider = page.getByRole('checkbox').first()
     await provider.uncheck(); await navigate(page, '新解析')
-    await page.getByRole('button', { name: '繼續編輯', exact: true }).click(); await expect(provider).not.toBeChecked()
-    await navigate(page, '新解析'); await page.getByRole('button', { name: '放棄並離開', exact: true }).click()
+    await page.getByRole('button', { name: '继续编辑', exact: true }).click(); await expect(provider).not.toBeChecked()
+    await navigate(page, '新解析'); await page.getByRole('button', { name: '放弃并离开', exact: true }).click()
     await expect(page.locator('.new-parse-page')).toBeVisible()
-    await navigate(page, '設定'); await page.getByRole('button', { name: /模型設定/u }).click(); await expect(provider).toBeChecked()
-    await provider.uncheck(); await navigate(page, '新解析'); await page.getByRole('button', { name: '儲存並離開', exact: true }).click()
+    await navigate(page, '设置'); await page.getByRole('button', { name: /模型设置/u }).click(); await expect(provider).toBeChecked()
+    await provider.uncheck(); await navigate(page, '新解析'); await page.getByRole('button', { name: '保存并离开', exact: true }).click()
     await expect(page.locator('.new-parse-page')).toBeVisible()
-    await navigate(page, '設定'); await page.getByRole('button', { name: /模型設定/u }).click(); await expect(provider).not.toBeChecked()
+    await navigate(page, '设置'); await page.getByRole('button', { name: /模型设置/u }).click(); await expect(provider).not.toBeChecked()
     await provider.check()
     // Reject only this isolated instance's save at the real Main IPC boundary.
     await app.evaluate(({ ipcMain }) => { ipcMain.removeHandler('settings:save'); ipcMain.handle('settings:save', () => { throw new Error('QA simulated save failure') }) })
-    await navigate(page, '新解析'); await page.getByRole('button', { name: '儲存並離開', exact: true }).click()
-    await expect(page.getByRole('dialog', { name: '有未儲存的設定' })).toBeHidden()
+    await navigate(page, '新解析'); await page.getByRole('button', { name: '保存并离开', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '有未保存的设置' })).toBeHidden()
     await expect(page.locator('.settings-page')).toBeVisible(); await expect(provider).toBeChecked()
-    await expect(page.getByText('有未儲存的更改')).toBeVisible()
+    await expect(page.getByText('有未保存的更改')).toBeVisible()
   } finally { await app.close(); await workspace.cleanup() }
 })
 
@@ -63,14 +63,14 @@ test('failed papers show a readable error and WebGL fallback still opens the rea
   try {
     const page = await app.firstWindow(); await openPaperFromLibrary(page, documentId)
     // The missing PDF also raises its own pane alert; this checks the document-state one.
-    await expect(page.getByRole('alert').filter({ hasText: '原文未生成，文件處理失敗' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '重試文件處理', exact: true })).toBeVisible()
+    await expect(page.getByRole('alert').filter({ hasText: '原文未生成，文档处理失败' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '重试文档处理', exact: true })).toBeVisible()
     await navigate(page, '新解析')
     await page.evaluate(() => { const original = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (...args: Parameters<typeof original>) { return /^webgl/u.test(String(args[0])) ? null : original.apply(this, args) } as typeof original })
-    await navigate(page, '文庫')
-    await expect(page.getByText('當前環境無法顯示三維文庫')).toBeVisible()
-    await expect(page.getByText(/可以使用右上角搜尋/u)).not.toContainText('任務管理')
-    await page.getByRole('searchbox', { name: '搜尋文庫' }).fill('missing')
+    await navigate(page, '文库')
+    await expect(page.getByText('当前环境无法显示三维文库')).toBeVisible()
+    await expect(page.getByText(/可以使用右上角搜索/u)).not.toContainText('任务管理')
+    await page.getByRole('searchbox', { name: '搜索文库' }).fill('missing')
     await page.keyboard.press('Enter'); await expect(page.locator('.reader-header')).toBeVisible()
   } finally { await app.close(); await workspace.cleanup() }
 })
@@ -90,11 +90,11 @@ test('import rejects empty and disguised PDFs, retains valid files in a mixed ba
     const { credentials: _credentials, ...update } = settings
     await page.evaluate(update => window.copilotix.saveSettings(update), { ...update, outputRoot: workspace.root, credentialMutations: { parser: { action: 'set' as const, value: 'qa-isolated-parser-token' } } })
     await page.reload(); await expect(page.locator('.new-parse-page')).toBeVisible()
-    await navigate(page, '新手教學'); await expect(page.getByRole('button', { name: '選擇文件', exact: true })).toBeEnabled()
+    await navigate(page, '新手教程'); await expect(page.getByRole('button', { name: '选择文档', exact: true })).toBeEnabled()
     await navigate(page, '新解析')
     await app.evaluate(({ dialog }, paths) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: paths }) }, [empty, invalid, valid])
-    await page.locator('input[type="file"]').setInputFiles([empty, invalid, valid]); await page.getByRole('button', { name: '開始解析', exact: true }).click()
-    await expect(page.locator('.ant-message')).toContainText('2 個 PDF 未匯入')
+    await page.locator('input[type="file"]').setInputFiles([empty, invalid, valid]); await page.getByRole('button', { name: '开始解析', exact: true }).click()
+    await expect(page.locator('.ant-message')).toContainText('2 个 PDF 未导入')
     await expect.poll(async () => (await page.evaluate(() => window.copilotix.listDocuments())).length).toBe(2)
     const docs = await page.evaluate(() => window.copilotix.listDocuments())
     expect(docs.some(doc => doc.originalName === 'valid.pdf')).toBe(true)

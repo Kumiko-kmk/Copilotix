@@ -26,7 +26,7 @@ function fixture(texts: string[]) {
 
 describe('PaperContextBuilder', () => {
   it('parses figure references with panels, lists and ranges, but not other numbers or words', () => {
-    expect(figureMentions('Figs. 2a and 3(b), Fig. S1, 圖 4（c） and Figures 6–8').map((m) => m.key)).toEqual(['2', '3', 'S1', '4', '6', '7', '8'])
+    expect(figureMentions('Figs. 2a and 3(b), Fig. S1, 图 4（c） and Figures 6–8').map((m) => m.key)).toEqual(['2', '3', 'S1', '4', '6', '7', '8'])
     expect(figureMentions('Fig. 1(a, b)')[0]!.panels).toEqual(['a', 'b'])
     expect(mentionsFigure('Fig. 10 and configure 1 and table 1', '1')).toBe(false)
     expect(captionFigureKey('Fig. 1. Comparison between models')).toEqual({ key: '1', label: 'Fig. 1' })
@@ -51,11 +51,11 @@ describe('PaperContextBuilder', () => {
     expect(paperContextResultSchema.safeParse(context).success).toBe(true)
   })
   it('sends a short paper in source order, retaining UTF-16 locations and full-text provenance', () => {
-    const f = fixture(['摘要😀貢獻', 'A contribution using attention.'])
+    const f = fixture(['摘要😀贡献', 'A contribution using attention.'])
     const context = f.builder.build(f.input)
     expect(context.truncated).toBe(false)
     expect(context.evidence.map((e) => e.evidenceId)).toEqual(['E1', 'E2'])
-    expect(context.evidence[1]!.locator.sourceStartOffset).toBe('摘要😀貢獻'.length)
+    expect(context.evidence[1]!.locator.sourceStartOffset).toBe('摘要😀贡献'.length)
     expect(context.evidence[0]!.scoreProvenance[0]!.source).toBe('full-text')
     expect(paperContextResultSchema.safeParse(context).success).toBe(true)
     expect(f.repository.listChunks).toHaveBeenCalledWith(revision)
@@ -86,13 +86,13 @@ describe('PaperContextBuilder', () => {
     f.chunks[1]!.mappingIds = ['m0']
     f.input.pinned = [{ view: 'original', text: 'part continued', contentRevisionId: revision, fragments: [{ quote: 'part continued', mappingIds: ['m0'], startOffset: 9, endOffset: 23 }] }]
     expect(f.builder.build(f.input).evidence).toHaveLength(2)
-    f.input.pinned = [{ ...f.input.pinned[0]!, view: 'translated', text: '譯文😀內容', fragments: [{ quote: '譯文😀內容', mappingIds: ['m0'], startOffset: 0, endOffset: 7 }] }]
+    f.input.pinned = [{ ...f.input.pinned[0]!, view: 'translated', text: '译文😀内容', fragments: [{ quote: '译文😀内容', mappingIds: ['m0'], startOffset: 0, endOffset: 7 }] }]
     const result = f.builder.build(f.input)
     expect(result.evidence.every((e) => e.mappingConfidence === 'translated')).toBe(true)
-    expect(result.evidence[0]!.translatedSelections).toEqual(['譯文😀內容'])
+    expect(result.evidence[0]!.translatedSelections).toEqual(['译文😀内容'])
     expect(result.evidence[0]!.text).toBe('original part ')
     // A translation without source alignment carries no mapping ids: the question still goes out.
-    f.input.pinned = [{ ...f.input.pinned[0]!, fragments: [{ quote: '譯文😀內容', mappingIds: [], startOffset: 0, endOffset: 7 }] }]
+    f.input.pinned = [{ ...f.input.pinned[0]!, fragments: [{ quote: '译文😀内容', mappingIds: [], startOffset: 0, endOffset: 7 }] }]
     expect(f.builder.build(f.input).evidence.every((e) => e.scoreProvenance[0]!.source !== 'selection')).toBe(true)
     f.input.pinned = [{ ...f.input.pinned[0]!, contentRevisionId: 'old-revision' }]
     expect(() => f.builder.build(f.input)).toThrow(expect.objectContaining({ code: 'SELECTION_STALE' }))
@@ -117,7 +117,7 @@ describe('PaperContextBuilder', () => {
     expect(() => f.builder.build(f.input)).toThrow(expect.objectContaining({ code: 'QUERY_SCOPE_INVALID' }))
   })
   it('enforces byte bounds for wide Unicode, without splitting source chunks', () => {
-    const f = fixture(Array.from({ length: 100 }, () => '漢'.repeat(900)))
+    const f = fixture(Array.from({ length: 100 }, () => '汉'.repeat(900)))
     f.input.budgetChars = 96_000
     const result = f.builder.build(f.input)
     expect(result.truncated).toBe(true)
@@ -136,10 +136,10 @@ describe('PaperContextBuilder', () => {
     expect(() => f.builder.build(f.input, controller.signal)).toThrow()
   })
   it('scores Latin words and CJK bigrams without splitting emoji or supplementary Han characters', () => {
-    expect(tokenizePaperQuery('ATTENTION 模型貢獻😀𠀀𠀁')).toEqual(['attention', '模型', '型貢', '貢獻', '𠀀𠀁'])
-    const f = fixture(['unrelated', 'Attention attention.', '模型貢獻'])
+    expect(tokenizePaperQuery('ATTENTION 模型贡献😀𠀀𠀁')).toEqual(['attention', '模型', '型贡', '贡献', '𠀀𠀁'])
+    const f = fixture(['unrelated', 'Attention attention.', '模型贡献'])
     expect(rankPaperChunks(f.chunks, 'attention')[0]!.index).toBe(1)
-    expect(rankPaperChunks(f.chunks, '貢獻')[0]!.index).toBe(2)
+    expect(rankPaperChunks(f.chunks, '贡献')[0]!.index).toBe(2)
     expect(rankPaperChunks([], 'empty')).toEqual([])
   })
   it('builds a thousand-chunk paper with a bounded pack', () => {

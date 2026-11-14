@@ -48,7 +48,7 @@ export function computeDocumentChange(
   const next = new Map<string, DocumentSummary>()
   for (const candidate of current) {
     const summary = documentSummarySchema.parse(candidate)
-    if (next.has(summary.id)) throw new Error(`重複的文件 ID: ${summary.id}`)
+    if (next.has(summary.id)) throw new Error(`重复的文档 ID: ${summary.id}`)
     next.set(summary.id, summary)
   }
 

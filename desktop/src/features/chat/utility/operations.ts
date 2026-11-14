@@ -45,7 +45,7 @@ export function createChatOperations(deps: ChatOperationDeps) {
     'chat:build-context': async (request, signal) => {
       const input = paperContextRequestSchema.parse(request.payload)
       const task = deps.repository().getTask(input.documentId)
-      if (!task) throw new Error('文件不存在')
+      if (!task) throw new Error('文档不存在')
       const [base, edits] = await Promise.all([documentModels.ensureBase(input.documentId, task.outputDir), deps.edits.read(input.documentId)])
       const snapshot = getSnapshot(base, '', null, edits, text => createHash('sha256').update(text).digest('hex'))
       return new PaperContextBuilder(deps.ragRepository()).build(input, signal, undefined, undefined, snapshot)

@@ -62,7 +62,7 @@ export function useArchiveReaderEntry(scene: React.RefObject<PaperArchiveScene |
       } catch (reason) {
         const cancelled = signal.aborted || (reason instanceof DOMException && reason.name === 'AbortError')
         if (active.current === controller && (!cancelled || timedOut)) {
-          setError(timedOut ? '閱讀器載入超時，請重試。' : '閱讀器載入失敗，請重試。')
+          setError(timedOut ? '阅读器加载超时，请重试。' : '阅读器加载失败，请重试。')
         }
       } finally {
         window.clearTimeout(timer)

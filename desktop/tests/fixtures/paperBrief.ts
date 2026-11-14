@@ -3,50 +3,50 @@ import type { PaperBriefContent } from '../../src/features/insight/core/paperBri
 /** A brief within every length range of BRIEF_LENGTHS, so one provider answer is accepted as is. */
 export const briefContent: PaperBriefContent = {
   paperType: 'method',
-  field: { discipline: '資訊科學', area: '論文閱讀與知識組織' },
-  tldr: '本文提出按研究問題、方法與發現組織論文內容的結構化提取方法，使讀者在兩分鐘內判斷論文是否值得精讀。',
+  field: { discipline: '信息科学', area: '论文阅读与知识组织' },
+  tldr: '本文提出按研究问题、方法与发现组织论文内容的结构化提取方法，使读者在两分钟内判断论文是否值得精读。',
   context: {
-    background: '科研人員每週需要瀏覽大量論文，現有閱讀工具大多按原文順序展示全文，或只給出一段籠統的摘要。讀者往往要通讀引言、方法與實驗三個部分，才能判斷一篇論文解決什麼問題、證據是否可靠，以及與自己的工作是否相關，這一過程費時且容易遺漏關鍵條件。',
-    gap: '已有的自動摘要多為一段連續文字，沒有區分研究問題、方法、證據和侷限，也不標註結論對應的原文位置，讀者難以核對，更難在多篇論文之間橫向比較。',
-    question: '如何提高論文閱讀效率？能否用統一的結構組織任意學科的論文，並讓每條結論都能追溯到原文？'
+    background: '科研人员每周需要浏览大量论文，现有阅读工具大多按原文顺序展示全文，或只给出一段笼统的摘要。读者往往要通读引言、方法与实验三个部分，才能判断一篇论文解决什么问题、证据是否可靠，以及与自己的工作是否相关，这一过程费时且容易遗漏关键条件。',
+    gap: '已有的自动摘要多为一段连续文字，没有区分研究问题、方法、证据和局限，也不标注结论对应的原文位置，读者难以核对，更难在多篇论文之间横向比较。',
+    question: '如何提高论文阅读效率？能否用统一的结构组织任意学科的论文，并让每条结论都能追溯到原文？'
   },
   approach: {
-    summary: '方法以解析後的論文為輸入：先按章節角色識別摘要、引言、方法、結果與結論，刪除參考文獻與附錄；再在固定預算內挑選資訊量最高的段落，保證每類內容至少有一段；最後讓模型按固定欄位填寫檔案卡，每條發現必須引用摘錄編號。生成後由程式核對編號是否存在、證據中的數字是否出現在原文，未透過的條目保留但標為需核對，侷限則區分作者自述與推斷。',
+    summary: '方法以解析后的论文为输入：先按章节角色识别摘要、引言、方法、结果与结论，删除参考文献与附录；再在固定预算内挑选信息量最高的段落，保证每类内容至少有一段；最后让模型按固定字段填写档案卡，每条发现必须引用摘录编号。生成后由程序核对编号是否存在、证据中的数字是否出现在原文，未通过的条目保留但标为需核对，局限则区分作者自述与推断。',
     keyIdeas: [
-      '按研究問題、方法、證據與侷限組織內容，而不是按原文章節順序',
-      '在固定位元組預算內按章節角色配額挑選段落，避免實驗結果擠佔篇幅',
-      '每條發現引用摘錄編號，生成後由程式核對編號與數字'
+      '按研究问题、方法、证据与局限组织内容，而不是按原文章节顺序',
+      '在固定字节预算内按章节角色配额挑选段落，避免实验结果挤占篇幅',
+      '每条发现引用摘录编号，生成后由程序核对编号与数字'
     ],
-    basis: '十四篇已解析論文的原文與譯文摘錄',
-    evaluation: '核對摘錄覆蓋率與數字一致性，摘錄未提供完整評測'
+    basis: '十四篇已解析论文的原文与译文摘录',
+    evaluation: '核对摘录覆盖率与数字一致性，摘录未提供完整评测'
   },
   findings: [
-    { claim: '結構化檔案卡便於快速瀏覽論文要點', evidence: '摘錄稱閱讀效率提升 99.7%，但沒有給出對照組、樣本量與測量方式，無法判斷這一數字的來源。', strength: 'limited', scope: '僅限摘錄所述場景', anchors: ['E1'] },
-    { claim: '按章節角色配額選段能覆蓋方法與結論', evidence: '摘錄說明選段會優先保留摘要、方法與結論各至少一段，並刪除參考文獻與附錄部分。', strength: 'moderate', scope: '', anchors: ['E1'] },
-    { claim: '引用摘錄編號使結論可以回到原文核對', evidence: '摘錄描述每條發現都附帶摘錄編號，讀者可以展開檢視對應原文段落，判斷結論是否成立。', strength: 'moderate', scope: '依賴摘錄本身準確', anchors: ['E1'] }
+    { claim: '结构化档案卡便于快速浏览论文要点', evidence: '摘录称阅读效率提升 99.7%，但没有给出对照组、样本量与测量方式，无法判断这一数字的来源。', strength: 'limited', scope: '仅限摘录所述场景', anchors: ['E1'] },
+    { claim: '按章节角色配额选段能覆盖方法与结论', evidence: '摘录说明选段会优先保留摘要、方法与结论各至少一段，并删除参考文献与附录部分。', strength: 'moderate', scope: '', anchors: ['E1'] },
+    { claim: '引用摘录编号使结论可以回到原文核对', evidence: '摘录描述每条发现都附带摘录编号，读者可以展开查看对应原文段落，判断结论是否成立。', strength: 'moderate', scope: '依赖摘录本身准确', anchors: ['E1'] }
   ],
   contributions: [
-    { kind: 'method', text: '提出跨學科通用的論文件案卡結構，統一研究問題、方法與證據' },
-    { kind: 'tool', text: '實現帶編號核對與數字核對的生成流程，未透過的條目標為需核對' }
+    { kind: 'method', text: '提出跨学科通用的论文档案卡结构，统一研究问题、方法与证据' },
+    { kind: 'tool', text: '实现带编号核对与数字核对的生成流程，未通过的条目标为需核对' }
   ],
   limitations: [
-    { text: '只依據挑選出的摘錄生成，未讀到的章節可能遺漏重要條件', source: 'inferred' },
-    { text: '效率提升的數字缺少對照實驗，摘錄未說明測量方法', source: 'inferred' }
+    { text: '只依据挑选出的摘录生成，未读到的章节可能遗漏重要条件', source: 'inferred' },
+    { text: '效率提升的数字缺少对照实验，摘录未说明测量方法', source: 'inferred' }
   ],
-  assumptions: ['解析後的論文章節標題足以識別摘要、方法與結論等角色'],
-  openQuestions: ['在人文與社科論文上，同一結構是否同樣適用？'],
+  assumptions: ['解析后的论文章节标题足以识别摘要、方法与结论等角色'],
+  openQuestions: ['在人文与社科论文上，同一结构是否同样适用？'],
   terms: [
-    { term: '檔案卡', definition: '按固定欄位整理的論文結構化概覽，便於快速瀏覽與比較' },
-    { term: '摘錄編號', definition: '傳送給模型的每段原文的編號，結論透過它回到原文核對' },
-    { term: '需核對', definition: '編號不存在或證據中的數字未在原文出現時給出的提示' }
+    { term: '档案卡', definition: '按固定字段整理的论文结构化概览，便于快速浏览与比较' },
+    { term: '摘录编号', definition: '发送给模型的每段原文的编号，结论通过它回到原文核对' },
+    { term: '需核对', definition: '编号不存在或证据中的数字未在原文出现时给出的提示' }
   ],
   reading: {
-    audience: '需要快速篩選大量論文的研究生與科研人員',
-    prerequisites: ['論文基本結構', '大語言模型基本用法'],
-    focus: [{ section: 'Method', reason: '瞭解段落挑選與核對的具體規則' }]
+    audience: '需要快速筛选大量论文的研究生与科研人员',
+    prerequisites: ['论文基本结构', '大语言模型基本用法'],
+    focus: [{ section: 'Method', reason: '了解段落挑选与核对的具体规则' }]
   },
-  keywords: ['論文閱讀', '結構化摘要', '資訊提取', '可追溯性'],
-  coverage: { basis: 'partial', missing: ['完整評測結果'] }
+  keywords: ['论文阅读', '结构化摘要', '信息提取', '可追溯性'],
+  coverage: { basis: 'partial', missing: ['完整评测结果'] }
 }
 
 /** Provider response for the four-section contract; legacy fixture above remains unchanged. */
@@ -56,7 +56,7 @@ export const briefGeneration = {
   keywords: briefContent.keywords, coverage: briefContent.coverage,
   analysis: {
     abstract: briefContent.context.background.repeat(3).slice(0, 250),
-    background: ['領域背景', '已有方法', '研究切入'].map(title => `${title}：${briefContent.context.background}`).join('\n\n'),
+    background: ['领域背景', '已有方法', '研究切入'].map(title => `${title}：${briefContent.context.background}`).join('\n\n'),
     conclusions: briefContent.findings.map(item => ({ title: item.claim,
       text: (item.evidence + briefContent.context.background.repeat(2)).slice(0, 130), anchors: item.anchors })),
     discussion: { contribution: briefContent.context.background.repeat(2).slice(0, 120),

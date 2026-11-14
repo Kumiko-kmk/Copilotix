@@ -24,10 +24,10 @@ export class ChatProvider {
   stream(input: { purpose?: 'translation' | 'chat' | 'brief' | 'figure'; provider: Exclude<PaperChatProvider, 'codex'>; baseUrl: string; model: string; key?: string; keys?: readonly ProviderKey[]; messages: MultimodalChatMessage[]; signal: AbortSignal; onDelta(text: string): void | Promise<void>; temperature?: number; maxOutputTokens?: number; responseFormat?: { type: 'json_object' }; maxRequestBytes?: number; firstByteMs?: number; lane?: 'interactive' | 'background' }): Promise<ProviderTokenUsage | null> {
     // The endpoint is never a renderer field, and even persisted settings must match the provider whitelist.
     const expected = MODEL_ENDPOINTS[input.provider]
-    if (input.baseUrl !== expected) return Promise.reject(new ChatProviderError('PROVIDER_UNAVAILABLE', '問答服務地址不受支援'))
+    if (input.baseUrl !== expected) return Promise.reject(new ChatProviderError('PROVIDER_UNAVAILABLE', '问答服务地址不受支持'))
     // keys are tried in order; a single key stands for the provider's default connection.
     const keys = input.keys ?? (input.key ? [{ connection: connectionFor(input.provider, input.baseUrl, input.key), key: input.key }] : [])
-    if (!keys.length) return Promise.reject(new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '請先儲存模型 API Key'))
+    if (!keys.length) return Promise.reject(new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '请先保存模型 API Key'))
     const byConnection = new Map(keys.map(entry => [entry.connection.connectionId, entry.key]))
     return sharedModelRuntime.execute({ purpose: input.purpose ?? 'chat', model: input.model, lane: input.lane ?? 'interactive', candidates: keys.map(entry => entry.connection), signal: input.signal }, async connection => {
       let partial = false
@@ -47,7 +47,7 @@ export class ChatProvider {
     let timer: ReturnType<typeof setTimeout> | undefined
     const arm = (ms: number): void => {
       clearTimeout(timer)
-      timer = setTimeout(() => controller.abort(new ChatProviderError('RAG_TIMEOUT', '模型響應超時，請重試')), ms)
+      timer = setTimeout(() => controller.abort(new ChatProviderError('RAG_TIMEOUT', '模型响应超时，请重试')), ms)
     }
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
     try {
@@ -66,7 +66,7 @@ export class ChatProvider {
       const send = (): Promise<Response> => {
         const serialized = JSON.stringify(body)
         if (input.maxRequestBytes !== undefined && Buffer.byteLength(serialized) > input.maxRequestBytes) {
-          throw new ChatProviderError('RAG_LIMIT_EXCEEDED', '論文摘錄超過模型輸入預算')
+          throw new ChatProviderError('RAG_LIMIT_EXCEEDED', '论文摘录超过模型输入预算')
         }
         return abortable(this.fetcher(`${input.baseUrl.replace(/\/$/u, '')}/chat/completions`, {
           method: 'POST', redirect: 'error', signal,
@@ -77,18 +77,18 @@ export class ChatProvider {
       if (response.status === 401 || response.status === 403) {
         await response.body?.cancel().catch(() => undefined)
         await this.options.invalidate?.(input.provider)
-        throw new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '模型憑據已失效，請重新驗證')
+        throw new ChatProviderError('CHAT_CREDENTIALS_REQUIRED', '模型凭据已失效，请重新验证')
       }
       if (response.status === 429) {
         const header = response.headers.get('Retry-After')
         const seconds = header && /^\d+(?:\.\d+)?$/u.test(header) ? Number(header) * 1000 : header ? Date.parse(header) - Date.now() : 1000
         const retryAfterMs = Number.isFinite(seconds) ? Math.min(86_400_000, Math.max(0, Math.ceil(seconds))) : 1000
         await response.body?.cancel().catch(() => undefined)
-        throw new ChatProviderError('EMBEDDING_RATE_LIMITED', '問答服務限流，請稍後重試', retryAfterMs)
+        throw new ChatProviderError('EMBEDDING_RATE_LIMITED', '问答服务限流，请稍后重试', retryAfterMs)
       }
       if (!response.ok || !response.body) {
         await response.body?.cancel().catch(() => undefined)
-        throw new ChatProviderError('PROVIDER_UNAVAILABLE', '問答服務暫時不可用', undefined, response.status)
+        throw new ChatProviderError('PROVIDER_UNAVAILABLE', '问答服务暂时不可用', undefined, response.status)
       }
       reader = response.body.getReader()
       const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -102,8 +102,8 @@ export class ChatProvider {
         const json = data.join('\n'); data = []
         if (json === '[DONE]') { done = true; return }
         let parsed: z.infer<typeof packetSchema>
-        try { parsed = packetSchema.parse(JSON.parse(json)) } catch { throw new ChatProviderError('PROVIDER_UNAVAILABLE', '模型返回了無效串流') }
-        if (parsed.error !== undefined) throw new ChatProviderError('PROVIDER_UNAVAILABLE', '模型串流返回錯誤')
+        try { parsed = packetSchema.parse(JSON.parse(json)) } catch { throw new ChatProviderError('PROVIDER_UNAVAILABLE', '模型返回了无效串流') }
+        if (parsed.error !== undefined) throw new ChatProviderError('PROVIDER_UNAVAILABLE', '模型串流返回错误')
         const delta = parsed.choices?.[0]?.delta.content
         if (delta) { signal.throwIfAborted(); await input.onDelta(delta) }
         if (parsed.usage) usage = { promptTokens: parsed.usage.prompt_tokens, completionTokens: parsed.usage.completion_tokens, totalTokens: parsed.usage.total_tokens }
@@ -116,12 +116,12 @@ export class ChatProvider {
           buffer += decoder.decode()
           if (buffer.startsWith('data:')) data.push(buffer.slice(5).trimStart().replace(/\r$/u, ''))
           await dispatch()
-          if (!done) throw new ChatProviderError('PROVIDER_UNAVAILABLE', '模型串流意外中斷，請重試')
+          if (!done) throw new ChatProviderError('PROVIDER_UNAVAILABLE', '模型串流意外中断，请重试')
           break
         }
         if (part.value.byteLength) first = false
         buffer += decoder.decode(part.value, { stream: true })
-        if (buffer.length + data.reduce((n, line) => n + line.length, 0) > 256 * 1024) throw new ChatProviderError('RAG_LIMIT_EXCEEDED', '模型串流片段過大')
+        if (buffer.length + data.reduce((n, line) => n + line.length, 0) > 256 * 1024) throw new ChatProviderError('RAG_LIMIT_EXCEEDED', '模型串流片段过大')
         let end: number
         while ((end = buffer.indexOf('\n')) >= 0 && !done) {
           const line = buffer.slice(0, end).replace(/\r$/u, '')
@@ -134,7 +134,7 @@ export class ChatProvider {
     } catch (error) {
       if (signal.aborted) throw signal.reason
       if (error instanceof ChatProviderError) throw error
-      throw new ChatProviderError('MODEL_CONNECTION_FAILED', '無法連線問答服務，請重試')
+      throw new ChatProviderError('MODEL_CONNECTION_FAILED', '无法连接问答服务，请重试')
     } finally {
       clearTimeout(timer)
       input.signal.removeEventListener('abort', relay)

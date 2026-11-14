@@ -89,12 +89,12 @@ describe('PaperChatService', () => {
   })
   it('tells the model which passages were selected and stores them with the turn', async () => {
     const f = setup()
-    const pinned = [{ view: 'translated' as const, text: '選中的譯文段落', contentRevisionId: 'revision-current', fragments: [{ startOffset: 0, endOffset: 7, quote: '選中的譯文段落', mappingIds: ['m1'], pageIndex: 2 }] }]
+    const pinned = [{ view: 'translated' as const, text: '选中的译文段落', contentRevisionId: 'revision-current', fragments: [{ startOffset: 0, endOffset: 7, quote: '选中的译文段落', mappingIds: ['m1'], pageIndex: 2 }] }]
     const messages = buildPaperChatMessages({ ...request, pinned }, context)
     expect(messages[0]!.content).toContain('userSelections are the passages the user selected')
-    expect(JSON.parse(messages.at(-1)!.content.split('\n')[1]!).userSelections).toEqual([{ view: 'translation', text: '選中的譯文段落' }])
+    expect(JSON.parse(messages.at(-1)!.content.split('\n')[1]!).userSelections).toEqual([{ view: 'translation', text: '选中的译文段落' }])
     await f.service.ask({ ...request, pinned }, f.send); await f.terminal()
-    expect(f.deps.saveTurn.mock.calls.at(-1)?.[1]).toMatchObject({ status: 'completed', selections: [{ view: 'translated', text: '選中的譯文段落', pageIndex: 2 }] })
+    expect(f.deps.saveTurn.mock.calls.at(-1)?.[1]).toMatchObject({ status: 'completed', selections: [{ view: 'translated', text: '选中的译文段落', pageIndex: 2 }] })
   })
   it.each([
     ['provider', 'CHAT_PROVIDER_REQUIRED'], ['key', 'CHAT_CREDENTIALS_REQUIRED'], ['unverified', 'CHAT_CREDENTIAL_UNVERIFIED'], ['invalid', 'CHAT_CREDENTIAL_UNVERIFIED']

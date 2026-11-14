@@ -35,11 +35,11 @@ export function dropZoneAt(bounds: Bounds, x: number, y: number): DropZone {
 export function dropVerdict(layout: ReaderLayout, view: ReaderViewId, groupId: string, zone: DropZone, bounds?: Bounds): { allowed: boolean; reason?: string } {
   const source = groupOfView(layout, view)
   if (!source || !findGroup(layout, groupId)) return { allowed: false }
-  if (zone === 'center') return source.id === groupId ? { allowed: false, reason: '已在此分組' } : { allowed: true }
-  if (source.id === groupId && source.views.length === 1) return { allowed: false, reason: '已在此分組' }
+  if (zone === 'center') return source.id === groupId ? { allowed: false, reason: '已在此分组' } : { allowed: true }
+  if (source.id === groupId && source.views.length === 1) return { allowed: false, reason: '已在此分组' }
   const horizontal = zone === 'left' || zone === 'right'
   const extent = horizontal ? bounds?.width : bounds?.height
   const minimum = horizontal ? MIN_GROUP_WIDTH : MIN_GROUP_HEIGHT
-  if (extent && extent < minimum * 2) return { allowed: false, reason: '空間不足' }
+  if (extent && extent < minimum * 2) return { allowed: false, reason: '空间不足' }
   return { allowed: true }
 }

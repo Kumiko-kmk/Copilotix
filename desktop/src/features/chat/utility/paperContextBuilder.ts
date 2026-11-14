@@ -94,16 +94,16 @@ export class PaperContextBuilder {
     const revision = knowledge?.activeContentRevisionId ? this.rag.getContentRevision(knowledge.activeContentRevisionId) : null
     if (knowledge?.localState !== 'ready' || !revision || revision.state !== 'ready') {
       const indexing = knowledge?.localState === 'indexing' || knowledge?.localState === 'queued'
-      throw new PaperContextError('CONTENT_NOT_READY', indexing ? '論文正在索引，請稍後重試' : '論文尚未建立可用索引，請先完成解析', true)
+      throw new PaperContextError('CONTENT_NOT_READY', indexing ? '论文正在索引，请稍后重试' : '论文尚未建立可用索引，请先完成解析', true)
     }
-    if (revision.documentId !== input.documentId) throw new PaperContextError('QUERY_SCOPE_INVALID', '論文索引範圍不一致')
-    if (snapshot && createHash('sha256').update(snapshot.base.markdown).digest('hex') !== revision.contentHash) throw new PaperContextError('CONTENT_NOT_READY', '文件已更新，正在等待索引', true)
+    if (revision.documentId !== input.documentId) throw new PaperContextError('QUERY_SCOPE_INVALID', '论文索引范围不一致')
+    if (snapshot && createHash('sha256').update(snapshot.base.markdown).digest('hex') !== revision.contentHash) throw new PaperContextError('CONTENT_NOT_READY', '文档已更新，正在等待索引', true)
     const indexed = this.rag.listChunks(revision.contentRevisionId)
     const chunks = snapshot ? documentContextChunks(snapshot, revision.contentRevisionId, indexed) : applyChunkEdits(indexed, edits, order)
-    if (!chunks.length) throw new PaperContextError('INSUFFICIENT_EVIDENCE', '論文中沒有找到依據')
+    if (!chunks.length) throw new PaperContextError('INSUFFICIENT_EVIDENCE', '论文中没有找到依据')
     const mappingIndex = new Map<string, number[]>()
     chunks.forEach((chunk, index) => {
-      if (chunk.contentRevisionId !== revision.contentRevisionId) throw new PaperContextError('QUERY_SCOPE_INVALID', '論文索引範圍不一致')
+      if (chunk.contentRevisionId !== revision.contentRevisionId) throw new PaperContextError('QUERY_SCOPE_INVALID', '论文索引范围不一致')
       for (const mapping of chunk.mappingIds) {
         const indices = mappingIndex.get(mapping) ?? []
         indices.push(index)
@@ -119,22 +119,22 @@ export class PaperContextBuilder {
       return text
     }
     for (const pin of input.pinned) {
-      if (pin.contentRevisionId !== revision.contentRevisionId) throw new PaperContextError('SELECTION_STALE', '選區來源已更新，請重新選擇')
+      if (pin.contentRevisionId !== revision.contentRevisionId) throw new PaperContextError('SELECTION_STALE', '选区来源已更新，请重新选择')
       for (const fragment of pin.fragments) {
         const candidates = [...new Set(fragment.mappingIds.flatMap((id) => mappingIndex.get(id) ?? []))].sort((a, b) => a - b)
         // A translation block without a source mapping (legacy or unaligned translation) cannot
         // pin source chunks; its text still reaches the model as a user selection.
         if (pin.view === 'translated' && !candidates.length) continue
-        if (!fragment.mappingIds.length || fragment.mappingIds.some((id) => !mappingIndex.has(id))) throw new PaperContextError('SELECTION_STALE', '選區無法對應當前論文')
+        if (!fragment.mappingIds.length || fragment.mappingIds.some((id) => !mappingIndex.has(id))) throw new PaperContextError('SELECTION_STALE', '选区无法对应当前论文')
         let matching = candidates
         if (pin.view === 'original') {
           const quote = compact(fragment.quote)
-          if (!quote || !compact(pin.text).includes(quote)) throw new PaperContextError('SELECTION_STALE', '選區文字與片段不一致')
+          if (!quote || !compact(pin.text).includes(quote)) throw new PaperContextError('SELECTION_STALE', '选区文本与片段不一致')
           matching = candidates.filter((i) => compact(chunks[i]!.sourceText).includes(quote))
           if (!matching.length) matching = candidates.filter((i) => visibleText(i).includes(quote))
           // A formula/paragraph can span several consecutive structural chunks.
           if (!matching.length && candidates.every((n, i) => i === 0 || n === candidates[i - 1]! + 1) && (compact(candidates.map((i) => chunks[i]!.sourceText).join('')).includes(quote) || candidates.map(visibleText).join('').includes(quote))) matching = candidates
-          if (!matching.length) throw new PaperContextError('SELECTION_STALE', '選區文字不屬於當前論文版本')
+          if (!matching.length) throw new PaperContextError('SELECTION_STALE', '选区文本不属于当前论文版本')
         }
         for (const index of matching) {
           pinnedIndices.add(index)
@@ -184,7 +184,7 @@ export class PaperContextBuilder {
       const evidenceBytes = ragWireByteLength(evidence) + (chosen.size ? 1 : 0)
       if (chars + length > input.budgetChars || chosen.size >= 9_999 || bytes + evidenceBytes > PAPER_CHAT_MAX_BYTES) {
         pack.truncated = true
-        if (required) throw new PaperContextError('RAG_LIMIT_EXCEEDED', '選區及相鄰內容超過上下文預算，請減少選區')
+        if (required) throw new PaperContextError('RAG_LIMIT_EXCEEDED', '选区及相邻内容超过上下文预算，请减少选区')
         return
       }
       chosen.set(index, evidence)
@@ -219,7 +219,7 @@ export class PaperContextBuilder {
       }))
     }
     pack.truncated ||= pack.evidence.length < chunks.length
-    if (!pack.evidence.length) throw new PaperContextError('RAG_LIMIT_EXCEEDED', '論文段落超過上下文預算')
+    if (!pack.evidence.length) throw new PaperContextError('RAG_LIMIT_EXCEEDED', '论文段落超过上下文预算')
     signal?.throwIfAborted()
     return paperContextResultSchema.parse(pack)
   }

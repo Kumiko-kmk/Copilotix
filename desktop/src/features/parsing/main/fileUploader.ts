@@ -41,7 +41,7 @@ export class ElectronFileUploader implements FileUploader {
         // The upload result body is intentionally discarded.
       }
     }
-    if (response.status !== 200) throw new Error(`上傳檔案失敗（HTTP ${response.status}）`)
+    if (response.status !== 200) throw new Error(`上传文件失败（HTTP ${response.status}）`)
     onProgress?.(body.size, body.size)
   }
 }

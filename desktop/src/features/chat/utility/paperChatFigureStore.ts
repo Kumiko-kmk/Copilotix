@@ -26,11 +26,11 @@ export class PaperChatFigureStore {
   private async read(root: string, name: string, limit: number): Promise<Buffer> {
     const path = this.policy.resolveChild(root, name)
     const info = await lstat(join(root, name))
-    if (!info.isFile() || info.isSymbolicLink() || info.size > limit) throw new Error('圖片來源無效或過大')
+    if (!info.isFile() || info.isSymbolicLink() || info.size > limit) throw new Error('图片来源无效或过大')
     const handle = await open(path, 'r')
     try {
       const value = await handle.readFile()
-      if (value.length > limit) throw new Error('圖片來源過大')
+      if (value.length > limit) throw new Error('图片来源过大')
       return value
     } finally { await handle.close() }
   }
@@ -39,15 +39,15 @@ export class PaperChatFigureStore {
     const request = paperChatFigureRequestSchema.parse(raw)
     signal?.throwIfAborted()
     const task = this.repository.getTask(request.documentId)
-    if (!task) throw new Error('論文不存在')
+    if (!task) throw new Error('论文不存在')
     const root = task.outputDir
     const info = await lstat(root)
-    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('文獻目錄無效')
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('文献目录无效')
     const [mappingBytes] = await Promise.all([this.read(root, 'block_list.json', 32 * 1024 * 1024), this.read(root, 'layout.json', 32 * 1024 * 1024)])
     signal?.throwIfAborted()
     const mappings = mappingsSchema.parse(JSON.parse(mappingBytes.toString('utf8'))).mappings
     const geometry = (await documentModels.ensureBase(request.documentId, root)).figures.find(item => item.id === request.figureId)
-    if (!geometry) throw new Error('圖片已不在當前解析版本中，請重新加入')
+    if (!geometry) throw new Error('图片已不在当前解析版本中，请重新加入')
     const members = new Set(geometry.mappingIds)
     const captionMappings = mappings.filter(m => m.id === geometry.captionMappingId ||
       (members.has(m.id) && /^(?:image|chart)_caption$/u.test(m.type) && !/^\s*[（(]?[a-zA-Z][)）]?\s*$/u.test(m.sourceText)))
@@ -72,12 +72,12 @@ export class PaperChatFigureStore {
         signal?.throwIfAborted()
         const bytes = await this.read(root, `images/${name}`, PAPER_CHAT_MAX_IMAGE_BYTES)
         const png = bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a'
-        if (!png && bytes.subarray(0, 3).toString('hex') !== 'ffd8ff') throw new Error('圖片格式不受支援')
+        if (!png && bytes.subarray(0, 3).toString('hex') !== 'ffd8ff') throw new Error('图片格式不受支持')
         images.push({ path: `images/${name}`, absolutePath: this.policy.resolveChild(root, `images/${name}`), bytes: bytes.length,
           sha256: createHash('sha256').update(bytes).digest('hex'), mimeType: png ? 'image/png' : 'image/jpeg' })
       }
     }
-    if (!images.length) throw new Error('這張圖還沒有可用的圖片檔案，請稍後重試')
+    if (!images.length) throw new Error('这张图还没有可用的图片文件，请稍后重试')
     return paperChatFigureSourceSchema.parse({ ...request, label: labelled?.label ?? null, key: labelled?.key ?? null,
       pageIndex: geometry.pageIndex, caption, captionMappingIds: captionMappings.map(m => m.id).slice(0, 64),
       mappingIds: geometry.mappingIds.slice(0, 512), whole, images })

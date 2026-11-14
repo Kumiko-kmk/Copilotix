@@ -1,9 +1,9 @@
 import type { DocumentBase } from '../contract/documentModel'
 import type { TranslatedMarkdownBlock, TranslationProviderId } from '../contract/translation'
-import { TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION, RICH_READER_TRANSLATION_PIPELINE_VERSION, TABLE_TRANSLATION_PROTOCOL, BLOCK_MAPPING_VERSION, MARKDOWN_MAPPING_ALGORITHM_VERSION } from '../contract/artifactVersions'
+import { TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION, TABLE_TRANSLATION_PROTOCOL, BLOCK_MAPPING_VERSION, MARKDOWN_MAPPING_ALGORITHM_VERSION } from '../contract/artifactVersions'
 export function readLegacyTranslations(manifest: unknown, base: DocumentBase, hash: (text: string) => string): TranslatedMarkdownBlock[] | null {
       if (!isRecord(manifest) || manifest.version !== 2 || manifest.taskId !== base.documentId ||
-        ![TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION, RICH_READER_TRANSLATION_PIPELINE_VERSION].includes(manifest.translationPipelineVersion as typeof TRANSLATION_PIPELINE_VERSION) ||
+        ![TRANSLATION_PIPELINE_VERSION, LEGACY_TRANSLATION_PIPELINE_VERSION, STANDARD_TRANSLATION_PIPELINE_VERSION].includes(manifest.translationPipelineVersion as typeof TRANSLATION_PIPELINE_VERSION) ||
         manifest.tableTranslationProtocol !== TABLE_TRANSLATION_PROTOCOL ||
         !Array.isArray(manifest.blocks)) return null
       const changed = new Set(manifest.blocks.flatMap(block => isRecord(block) && typeof block.sourceIndex === 'number' && typeof block.sourceHash === 'string' && base.content[block.sourceIndex] && hash(base.content[block.sourceIndex]!.markdown) !== block.sourceHash ? [block.sourceIndex] : []))

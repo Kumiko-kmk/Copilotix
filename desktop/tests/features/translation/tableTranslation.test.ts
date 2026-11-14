@@ -27,7 +27,7 @@ function mapping(id: string, order: number, type: string, sourceText: string): B
   }
 }
 
-function responseFor(request: TableTranslationRequest, prefix = '譯:'): TableTranslationResponse {
+function responseFor(request: TableTranslationRequest, prefix = '译:'): TableTranslationResponse {
   return {
     protocol: request.protocol,
     translations: flattenSegments(request).map((segment) => ({ id: segment.id, text: `${prefix}${segment.text}` }))
@@ -41,7 +41,7 @@ describe('table translation protocol', () => {
     expect(flattenSegments(plan.request).map((segment) => segment.text)).toEqual(['Model', 'Objective', 'Baseline'])
     applyTableTranslation(plan, responseFor(plan.request))
     const result = plan.blocks[0]!.render()
-    expect(result).toContain('[譯:Baseline](https://example.org)')
+    expect(result).toContain('[译:Baseline](https://example.org)')
     expect(result).toContain('$x^2$ `code` 3.17')
     expect(result).not.toContain('<table')
   })
@@ -72,7 +72,7 @@ describe('table translation protocol', () => {
     applyTableTranslation(plan!, responseFor(request))
     const rendered = plan!.blocks[0]!.render()
     expect(rendered).toContain('data-source="copilotix"')
-    expect(rendered).toContain('<strong>譯:Alpha</strong>')
+    expect(rendered).toContain('<strong>译:Alpha</strong>')
     expect(rendered).toContain('$x$')
     expect(rendered).toContain('rowspan="2"')
     expect(rendered).toContain('colspan="2"')
@@ -117,12 +117,12 @@ describe('table translation protocol', () => {
     expect(() => validateTableTranslationResponse({
       protocol: plan.request.protocol,
       translations: [valid.translations[0], valid.translations[0], valid.translations[1]]
-    }, plan.request)).toThrow(/重複 segment/)
+    }, plan.request)).toThrow(/重复 segment/)
     expect(() => validateTableTranslationResponse({ protocol: plan.request.protocol, translations: [] }, plan.request))
       .toThrow(/缺少 segment/)
     const emptyResponse = responseFor(plan.request)
     emptyResponse.translations[0]!.text = '   '
-    expect(() => validateTableTranslationResponse(emptyResponse, plan.request)).toThrow(/無有效譯文/)
+    expect(() => validateTableTranslationResponse(emptyResponse, plan.request)).toThrow(/无有效译文/)
     expect(() => parseTableTranslationResponse('{"protocol":', plan.request)).toThrow(/不是有效 JSON/)
   })
 
@@ -148,22 +148,22 @@ describe('table translation protocol', () => {
     const translations = flattenSegments(plan.request).map((segment) => ({
       id: segment.id,
       text: new Map([
-        ['Table 1: Benchmarks on Navier Stokes (fixing resolution ', '表1：Navier-Stokes 基準測試（固定解析度 '],
-        [' for both training and testing)', ' 用於訓練和測試）'],
+        ['Table 1: Benchmarks on Navier Stokes (fixing resolution ', '表1：Navier-Stokes 基准测试（固定分辨率 '],
+        [' for both training and testing)', ' 用于训练和测试）'],
         ['Config', '配置'],
-        ['Parameters', '引數量'],
-        ['Time per epoch', '每輪時間'],
-        ['With unsupervised pre-training', '使用無監督預訓練']
+        ['Parameters', '参数量'],
+        ['Time per epoch', '每轮时间'],
+        ['With unsupervised pre-training', '使用无监督预训练']
       ]).get(segment.text) ?? segment.text
     }))
 
     applyTableTranslation(plan, { protocol: plan.request.protocol, translations })
     const caption = plan.blocks[0]!.render()
     const table = plan.blocks[1]!.render()
-    expect(caption).toContain('表1：Navier-Stokes 基準測試')
+    expect(caption).toContain('表1：Navier-Stokes 基准测试')
     expect(caption).toContain('$64 \\times 64$')
-    expect(table).toContain('<td>配置</td><td>引數量</td><td>每輪時間</td>')
-    expect(table).toContain('<td colspan="4">使用無監督預訓練</td>')
+    expect(table).toContain('<td>配置</td><td>参数量</td><td>每轮时间</td>')
+    expect(table).toContain('<td colspan="4">使用无监督预训练</td>')
     expect(table).toContain('$\\nu = 1\\mathrm{e}-3$')
     expect(table).toContain('<td>414,517</td><td>127.80s</td><td>0.0128</td>')
     expect(table).toContain('data-source="copilotix"')

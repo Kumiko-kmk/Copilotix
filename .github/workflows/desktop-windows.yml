@@ -121,7 +121,7 @@ jobs:
           path: |
             release/setup.exe
             release/uninstall.exe
-            release/安裝說明.txt
+            release/安装说明.txt
             release/advanced/SHA256SUMS.txt
             release/advanced/release-manifest.json
       - uses: actions/upload-artifact@v4
@@ -253,8 +253,8 @@ jobs:
             if (-not $existing.isDraft) { throw "Release $tag already exists and is published; refusing to replace it." }
           } else {
             $version = $tag.Substring('desktop-v'.Length)
-            $notesPath = Join-Path 'docs/releases' "$version.zh-TW.md"
-            if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) { throw "Missing Traditional Chinese release notes: $notesPath" }
+            $notesPath = Join-Path 'docs/releases' "$version.zh-CN.md"
+            if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) { throw "Missing Simplified Chinese release notes: $notesPath" }
             $releaseTitle = (Get-Content -LiteralPath $notesPath -Encoding utf8 -TotalCount 1) -replace '^#\s*(?:🎉\s*)?', ''
             & gh release create $tag --repo $repo --draft --verify-tag --notes-file $notesPath --title $releaseTitle
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

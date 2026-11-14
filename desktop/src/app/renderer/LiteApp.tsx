@@ -152,7 +152,7 @@ export default function LiteApp(): React.JSX.Element {
             </>
           ) : null}
           {readers.length ? (
-            <React.Suspense fallback={activeDocumentId ? <div className="reader-loading"><AppleLoader label="正在開啟論文" /></div> : null}>
+            <React.Suspense fallback={activeDocumentId ? <div className="reader-loading"><AppleLoader label="正在打开论文" /></div> : null}>
               {/* Keyed: each paper keeps its own view state; hidden ones stay mounted but inert and unpainted. */}
               {readers.map((documentId) => (
                 <div key={documentId} className="lite-reader-slot" data-active={documentId === activeDocumentId ? 'true' : undefined} inert={documentId === activeDocumentId ? undefined : true}>
@@ -167,7 +167,7 @@ export default function LiteApp(): React.JSX.Element {
             <>
               <LiteSplitHandle ratio={split.ratio} onRatio={(ratio) => setSplit((current) => current && { ...current, ratio })} />
               <div className="lite-pane" style={{ flexGrow: 1 - split.ratio }} data-split="true" onPointerDownCapture={() => focusPane(true)} onFocusCapture={() => focusPane(true)}>
-                <React.Suspense fallback={<div className="reader-loading"><AppleLoader label="正在開啟論文" /></div>}>
+                <React.Suspense fallback={<div className="reader-loading"><AppleLoader label="正在打开论文" /></div>}>
                   <ReaderPage key={split.documentId} documentId={split.documentId} showBack={false} resumePosition onBack={closeSplit} onClose={closeSplit} onOpenSettings={openSettings} />
                 </React.Suspense>
               </div>
@@ -176,7 +176,7 @@ export default function LiteApp(): React.JSX.Element {
         </main>
       </div>
       {settings && settingsOpen ? (
-        <React.Suspense fallback={<div className="lite-settings-loading"><AppleLoader label="正在開啟設定" /></div>}>
+        <React.Suspense fallback={<div className="lite-settings-loading"><AppleLoader label="正在打开设置" /></div>}>
         <SettingsDialog open={settingsOpen} settings={settings} onSaved={onSettingsSaved} onNavigationGuardChange={onNavigationGuardChange}
           onClose={() => { if (view.name === 'settings') requestViewChange(view.under) }} />
         </React.Suspense>
@@ -184,7 +184,7 @@ export default function LiteApp(): React.JSX.Element {
       {/* After the page: Chromium applies drag regions in document order, so these must come later to stay clickable. */}
       <div className="edge-dock-persistent"><WindowControls /></div>
       {settingsOpen ? null : (
-        <button type="button" className="lite-sidebar-toggle" aria-label={collapsed ? '展開側邊欄' : '收起側邊欄'} aria-expanded={!collapsed} onClick={toggleSidebar}>
+        <button type="button" className="lite-sidebar-toggle" aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'} aria-expanded={!collapsed} onClick={toggleSidebar}>
           {collapsed ? <MenuUnfoldOutlined aria-hidden="true" /> : <MenuFoldOutlined aria-hidden="true" />}
         </button>
       )}

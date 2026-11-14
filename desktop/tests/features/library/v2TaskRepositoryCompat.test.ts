@@ -292,14 +292,14 @@ describe('temporary v2 task repository compatibility projection', () => {
         blockId: 'block-1',
         sourceHash: 'block-hash',
         sourceMarkdown: 'A source block',
-        translatedMarkdown: '一個源塊',
+        translatedMarkdown: '一个源块',
         provider: 'qwen',
         model: 'fixture',
         status: 'completed',
         error: null
       })
       expect(fixture.repository.listTranslationBlocks(fixture.task.id)).toEqual([expect.objectContaining({
-        taskId: fixture.task.id, blockId: 'block-1', translatedMarkdown: '一個源塊'
+        taskId: fixture.task.id, blockId: 'block-1', translatedMarkdown: '一个源块'
       })])
 
       const translatedPath = join(fixture.task.outputDir, 'full.zh-CN.md')
@@ -520,13 +520,13 @@ describe('temporary v2 task repository compatibility projection', () => {
           blockId: 'batch-block-1',
           sourceHash: 'batch-source-hash',
           sourceMarkdown: 'Batch source',
-          translatedMarkdown: '批次譯文',
+          translatedMarkdown: '批量译文',
           provider: 'qwen',
           model: 'fixture',
           status: 'completed',
           error: null
         }],
-        cacheEntries: [{ cacheKey: 'batch-cache', translated: '批次譯文', provider: 'qwen', model: 'fixture' }],
+        cacheEntries: [{ cacheKey: 'batch-cache', translated: '批量译文', provider: 'qwen', model: 'fixture' }],
         checkpoint: { totalBlocks: 1, completedBlocks: 1, failedBlocks: 0, failedBlockIds: [] }
       })
 
@@ -534,7 +534,7 @@ describe('temporary v2 task repository compatibility projection', () => {
         expect.objectContaining({ taskId: fixture.task.id, jobId: job.id, blockId: 'batch-block-1' })
       ])
       expect(fixture.database.connection.prepare('SELECT translated_markdown FROM translation_cache WHERE cache_key=?').get('batch-cache'))
-        .toEqual({ translated_markdown: '批次譯文' })
+        .toEqual({ translated_markdown: '批量译文' })
       const checkpoint = fixture.database.connection.prepare('SELECT checkpoint_json FROM jobs WHERE id=?').get(job.id) as { checkpoint_json: string }
       expect(JSON.parse(checkpoint.checkpoint_json)).toMatchObject({ totalBlocks: 1, completedBlocks: 1, failedBlocks: 0 })
       expect(() => fixture.repository.commitTranslationBatch({
@@ -542,7 +542,7 @@ describe('temporary v2 task repository compatibility projection', () => {
         jobId: 'not-this-job',
         blocks: [],
         cacheEntries: []
-      })).toThrow('翻譯作業尚未建立')
+      })).toThrow('翻译作业尚未创建')
     } finally {
       closeFixture(fixture.repository)
     }
@@ -585,7 +585,7 @@ describe('temporary v2 task repository compatibility projection', () => {
       const annotation = makeAnnotation(fixture.task.id, 'original', 'annotation-1')
       expect(() => fixture.repository.replaceReaderAnnotations({
         taskId: fixture.task.id, view: 'original', annotations: [annotation]
-      })).toThrow('當前文件尚無可標註的產物')
+      })).toThrow('当前文档尚无可标注的产物')
 
       fixture.repository.recordArtifactRevision(fixture.task.id, 'parsed_markdown', join(fixture.task.outputDir, 'full.md'), 'parsed-hash')
       expect(fixture.repository.replaceReaderAnnotations({

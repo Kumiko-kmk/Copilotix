@@ -16,16 +16,16 @@ describe('multiple model keys', () => {
   it('validates and stores an added key under its own account and routes keys in order', async () => {
     const { service, vault } = fixture({ 'qwen-api-key': 'qwen-default' })
     await service.validateCredential('qwen')
-    const result = await service.save(update([key('qwen:default'), key(EXTRA, '備用')], { [EXTRA]: { action: 'set', value: ' qwen-extra ' } }))
+    const result = await service.save(update([key('qwen:default'), key(EXTRA, '备用')], { [EXTRA]: { action: 'set', value: ' qwen-extra ' } }))
 
     expect(result.keyErrors).toBeUndefined()
     expect(vault.values.get(`api-key:${EXTRA.slice(5)}`)).toBe('qwen-extra')
-    expect(result.settings.modelConnections?.filter(value => value.provider === 'qwen').map(value => [value.connectionId, value.label])).toEqual([['qwen:default', undefined], [EXTRA, '備用']])
+    expect(result.settings.modelConnections?.filter(value => value.provider === 'qwen').map(value => [value.connectionId, value.label])).toEqual([['qwen:default', undefined], [EXTRA, '备用']])
     expect(result.settings.keyStatuses).toMatchObject({ 'qwen:default': { state: 'valid' }, [EXTRA]: { state: 'valid', maskedValue: 'qw****ra' } })
     expect((await service.providerKeys('qwen')).map(entry => [entry.connection.connectionId, entry.key])).toEqual([['qwen:default', 'qwen-default'], [EXTRA, 'qwen-extra']])
 
     // Reordering and disabling change the request order without touching stored values.
-    await service.save(update([{ ...key(EXTRA, '備用') }, { ...key('qwen:default'), enabled: false }]))
+    await service.save(update([{ ...key(EXTRA, '备用') }, { ...key('qwen:default'), enabled: false }]))
     expect((await service.providerKeys('qwen')).map(entry => entry.connection.connectionId)).toEqual([EXTRA])
     expect(vault.values.get('qwen-api-key')).toBe('qwen-default')
   })
@@ -147,7 +147,7 @@ function fixture(values: Partial<Record<CredentialAccount, string>>, accept: (va
   const vault = new MemoryVault(values)
   const service = new SettingsService(repository, vault, 'C:\\output', {
     parser: async () => ({ ok: true, message: 'ok' }),
-    provider: async (_name, value) => accept(value) ? { ok: true, message: 'ok' } : { ok: false, message: '憑據驗證失敗' }
+    provider: async (_name, value) => accept(value) ? { ok: true, message: 'ok' } : { ok: false, message: '凭据验证失败' }
   })
   return { service, vault, repository }
 }
