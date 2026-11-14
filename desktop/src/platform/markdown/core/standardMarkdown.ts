@@ -125,7 +125,7 @@ function htmlTable(table: Html, stats: MarkdownNormalization): Node[] {
       const rowSpan = Math.max(1, Number.parseInt(attribute(cell, 'rowspan') ?? '1', 10) || 1)
       const colSpan = Math.max(1, Number.parseInt(attribute(cell, 'colspan') ?? '1', 10) || 1)
       // Bound expansion; never silently truncate a malformed parser table.
-      if (r + rowSpan > 4096 || c + colSpan > 256) throw new Error('表格合并范围超出支持上限，请核对解析结果')
+      if (r + rowSpan > 4096 || c + colSpan > 256) throw new Error('表格合併範圍超出支援上限，請核對解析結果')
       const content = htmlInline(cell)
       const repeatRowLabel = markdownText({ type: 'root', children: content }).trim().length <= 32
       for (let rr = r; rr < r + rowSpan; rr += 1) {

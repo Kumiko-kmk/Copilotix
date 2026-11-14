@@ -35,18 +35,18 @@ export function ReaderBlockEditor(props: { block: ReaderBlock; editing: ReaderBl
   React.useEffect(() => { ref.current?.focus({ preventScroll: true }) }, [])
   const save = async (): Promise<void> => {
     if (saving) return
-    if (!value.trim()) { setError('段落不能为空；要去掉整段请用「删除此段」'); return }
+    if (!value.trim()) { setError('段落不能為空；要去掉整段請用「刪除此段」'); return }
     if (value === initial) { props.onClose(); return }
     setSaving(true); setError('')
     try { await props.editing.save(props.block, value); props.onClose() }
-    catch (failure) { setError(failure instanceof Error ? failure.message : '保存失败，请重试') }
+    catch (failure) { setError(failure instanceof Error ? failure.message : '儲存失敗，請重試') }
     finally { setSaving(false) }
   }
   return (
     <div className="reader-block-editor" data-reader-annotation-ignore="true" onClick={event => event.stopPropagation()}>
       <textarea
         ref={ref}
-        aria-label={props.editing.view === 'translated' ? '编辑译文段落' : '编辑原文段落'}
+        aria-label={props.editing.view === 'translated' ? '編輯譯文段落' : '編輯原文段落'}
         value={value}
         spellCheck={false}
         style={props.typography}
@@ -59,9 +59,9 @@ export function ReaderBlockEditor(props: { block: ReaderBlock; editing: ReaderBl
         }}
       />
       <div className="reader-block-editor-footer">
-        {error ? <span role="alert">{error}</span> : <span>Ctrl+Enter 保存，Esc 取消</span>}
+        {error ? <span role="alert">{error}</span> : <span>Ctrl+Enter 儲存，Esc 取消</span>}
         <Button size="small" onClick={props.onClose} disabled={saving}>取消</Button>
-        <Button size="small" type="primary" loading={saving} onClick={() => void save()}>保存</Button>
+        <Button size="small" type="primary" loading={saving} onClick={() => void save()}>儲存</Button>
       </div>
     </div>
   )

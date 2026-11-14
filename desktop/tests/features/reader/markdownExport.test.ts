@@ -27,10 +27,10 @@ describe('standard Markdown export and transfer', () => {
   it('normalizes legacy HTML and bundles each local image once, including reference and HTML images', async () => {
     const f = await fixture()
     try {
-      const source = '<table><tr><td>Model</td></tr><tr><td>DDPM $x^2$</td></tr></table>\n\n![图][figure]\n\n<img src="images/a%20b.png">\n\n![remote](https://example.org/a.png)\n\n[figure]: images/a%20b.png'
+      const source = '<table><tr><td>Model</td></tr><tr><td>DDPM $x^2$</td></tr></table>\n\n![圖][figure]\n\n<img src="images/a%20b.png">\n\n![remote](https://example.org/a.png)\n\n[figure]: images/a%20b.png'
       await writeFile(join(f.outputDir, 'full.md'), source)
       await writeFile(join(f.outputDir, 'images/a b.png'), 'real image bytes')
-      const destination = join(f.exports, '论文.md')
+      const destination = join(f.exports, '論文.md')
       await f.service.exportMarkdown(f.task.id, 'original-markdown', destination)
       const markdown = await readFile(destination, 'utf8')
       expect(markdown).toContain('| Model')
@@ -53,7 +53,7 @@ describe('standard Markdown export and transfer', () => {
       await writeFile(join(f.outputDir, 'translation.manifest.json'), JSON.stringify({
         version: 2, taskId: f.task.id, translationPipelineVersion: version,
         tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
-        blocks: [{ sourceIndex: 0, markdown: '<table><tr><td>模型</td></tr><tr><td>基线</td></tr></table>', mappingIds: [] }]
+        blocks: [{ sourceIndex: 0, markdown: '<table><tr><td>模型</td></tr><tr><td>基線</td></tr></table>', mappingIds: [] }]
       }))
       const destination = join(f.exports, '中文.md')
       await f.service.exportMarkdown(f.task.id, 'translated-markdown', destination)
@@ -82,8 +82,8 @@ describe('standard Markdown export and transfer', () => {
     try {
       await writeFile(join(f.outputDir, 'full.md'), '![escape](../secret.png)')
       await expect(f.service.exportMarkdown(f.task.id, 'original-markdown', join(f.exports, 'bad.md'))).rejects.toThrow('..')
-      await expect(f.service.exportMarkdown(f.task.id, 'original-markdown', join(f.outputDir, 'full.md'))).rejects.toThrow('文档库以外')
-      await expect(f.service.exportMarkdown(f.task.id, 'original-markdown', f.exports)).rejects.toThrow('普通文件')
+      await expect(f.service.exportMarkdown(f.task.id, 'original-markdown', join(f.outputDir, 'full.md'))).rejects.toThrow('文件庫以外')
+      await expect(f.service.exportMarkdown(f.task.id, 'original-markdown', f.exports)).rejects.toThrow('普通檔案')
       await expect(f.service.exportMarkdown('absent', 'original-markdown', join(f.exports, 'bad.md'))).rejects.toThrow('不存在')
     } finally { await rm(f.root, { recursive: true, force: true }) }
   })
@@ -92,7 +92,7 @@ describe('standard Markdown export and transfer', () => {
     const f = await fixture()
     try {
       await writeFile(join(f.outputDir, 'full.md'), '<table><tr><td>Source</td></tr></table>')
-      await writeFile(join(f.outputDir, 'full.zh-CN.md'), '<table><tr><td>译文</td></tr></table>')
+      await writeFile(join(f.outputDir, 'full.zh-CN.md'), '<table><tr><td>譯文</td></tr></table>')
       await mkdir(join(f.outputDir, '.translation'))
       await writeFile(join(f.outputDir, '.translation/request.json'), 'private plan')
       await writeFile(join(f.outputDir, 'images/a.png'), 'image')
@@ -101,11 +101,11 @@ describe('standard Markdown export and transfer', () => {
       const unpacked = join(f.exports, 'unpacked')
       await extractZip(destination, { dir: unpacked })
       expect(await readFile(join(unpacked, 'full.md'), 'utf8')).toContain('| Source')
-      expect(await readFile(join(unpacked, 'full.zh-CN.md'), 'utf8')).toContain('| 译文')
+      expect(await readFile(join(unpacked, 'full.zh-CN.md'), 'utf8')).toContain('| 譯文')
       expect(await readdir(unpacked)).not.toContain('.translation')
       expect(await readFile(join(unpacked, 'images/a.png'), 'utf8')).toBe('image')
       expect(await readFile(join(f.outputDir, 'full.md'), 'utf8')).toBe('<table><tr><td>Source</td></tr></table>')
-      expect(await readFile(join(f.outputDir, 'full.zh-CN.md'), 'utf8')).toBe('<table><tr><td>译文</td></tr></table>')
+      expect(await readFile(join(f.outputDir, 'full.zh-CN.md'), 'utf8')).toBe('<table><tr><td>譯文</td></tr></table>')
       expect((await readdir(f.exports)).some((name) => name.includes('.partial'))).toBe(false)
     } finally { await rm(f.root, { recursive: true, force: true }) }
   })
@@ -118,7 +118,7 @@ describe('standard Markdown export and transfer', () => {
       await writeFile(join(f.outputDir, 'full.md'), '![missing](images/missing.png)')
       await expect(f.service.createResultZip(f.task.id, destination)).rejects.toThrow()
       await writeFile(join(f.outputDir, 'full.md'), '<table><tr><td colspan="999999">Invalid</td></tr></table>')
-      await expect(f.service.createResultZip(f.task.id, destination)).rejects.toThrow('超出支持上限')
+      await expect(f.service.createResultZip(f.task.id, destination)).rejects.toThrow('超出支援上限')
       expect(await readFile(destination, 'utf8')).toBe('existing archive')
       expect(await readdir(f.exports)).toEqual(['result.zip'])
     } finally { await rm(f.root, { recursive: true, force: true }) }

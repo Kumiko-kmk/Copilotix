@@ -48,8 +48,8 @@ export function applyFigureDisplay(groups: readonly ReaderFigureGroup[], documen
     const choice = choices[group.id] ?? null
     const display = { documentId, automatic: group.status, choice }
     const shown = choice ?? automaticFigureDisplay(group.status)
-    if (shown === 'pdf' && group.status !== 'complete') return { ...group, status: 'complete', reason: choice ? '已选择以 PDF 原图显示' : '默认以 PDF 原图显示', display }
-    if (shown === 'parsed' && group.status === 'complete') return { ...group, status: 'ambiguous', reason: '已选择以解析子图显示', display }
+    if (shown === 'pdf' && group.status !== 'complete') return { ...group, status: 'complete', reason: choice ? '已選擇以 PDF 原圖顯示' : '預設以 PDF 原圖顯示', display }
+    if (shown === 'parsed' && group.status === 'complete') return { ...group, status: 'ambiguous', reason: '已選擇以解析子圖顯示', display }
     return { ...group, display }
   })
 }

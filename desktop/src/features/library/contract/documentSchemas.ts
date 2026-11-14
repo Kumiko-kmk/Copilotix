@@ -13,7 +13,7 @@ export const taskStatusSchema = z.enum(['uploading', 'parsing', 'translating', '
 export const copilotixTaskSchema: z.ZodType<CopilotixTask> = z.object({
   id: boundedId,
   originalName: safeName,
-  title: z.string().max(32_768).refine(noNul, '标题不能包含 NUL 字符').nullable(),
+  title: z.string().max(32_768).refine(noNul, '標題不能包含 NUL 字元').nullable(),
   titleSource: z.literal('pdf-metadata').optional(),
   name: safeName,
   sourcePath: boundedPath,
@@ -42,7 +42,7 @@ export const documentWorkflowSchema = z.object({
     completedBlocks: z.number().int().nonnegative(),
     failedBlocks: z.number().int().nonnegative()
   }).strict().optional(),
-  error: z.string().max(32_768).refine(noNul, '错误信息不能包含 NUL 字符').nullable()
+  error: z.string().max(32_768).refine(noNul, '錯誤資訊不能包含 NUL 字元').nullable()
 }).strict()
 
 export const documentProcessingSchema = z.object({
@@ -54,7 +54,7 @@ export const documentSummarySchema = z.object({
   id: uuid,
   originalName: documentFilename,
   displayName: documentFilename,
-  sourceHash: z.string().min(1).max(512).refine(noNul, '源文件摘要不能包含 NUL 字符'),
+  sourceHash: z.string().min(1).max(512).refine(noNul, '原始檔摘要不能包含 NUL 字元'),
   workflow: documentWorkflowSchema,
   processing: documentProcessingSchema,
   createdAt: documentTimestamp,
@@ -79,14 +79,14 @@ export const documentChangeEventSchema = z.object({
   const upsertedIds = new Set(value.upserted.map((document) => document.id))
   const removedIds = new Set(value.removedIds)
   if (upsertedIds.size !== value.upserted.length) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['upserted'], message: 'upserted 文档 ID 必须唯一' })
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['upserted'], message: 'upserted 文件 ID 必須唯一' })
   }
   if (removedIds.size !== value.removedIds.length) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['removedIds'], message: 'removedIds 必须唯一' })
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['removedIds'], message: 'removedIds 必須唯一' })
   }
   for (const id of upsertedIds) {
     if (removedIds.has(id)) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ['removedIds'], message: '同一文档不能同时 upsert 和 remove' })
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['removedIds'], message: '同一文件不能同時 upsert 和 remove' })
       break
     }
   }
@@ -123,14 +123,14 @@ export const MAX_IMPORT_PATHS = 2_000
 // of `paths`. Requests without it import every file unchanged, as before.
 export const importFileOptionsSchema = z.object({
   skipFirstPage: z.boolean().optional(),
-  metadataTitle: z.string().max(4_096).refine(noNul, '标题不能包含 NUL 字符').optional()
+  metadataTitle: z.string().max(4_096).refine(noNul, '標題不能包含 NUL 字元').optional()
 }).strict()
 export const importDocumentsIpcRequestSchema = z.object({
   options: importDocumentsRequestSchema,
   paths: z.array(boundedPath).max(MAX_IMPORT_PATHS).optional(),
   files: z.array(importFileOptionsSchema).max(MAX_IMPORT_PATHS).optional()
 }).strict().refine((request) => request.files === undefined || request.files.length === request.paths?.length, {
-  message: '导入选项必须与文件一一对应', path: ['files']
+  message: '匯入選項必須與檔案一一對應', path: ['files']
 })
 
 /** One unreadable or oversized PDF no longer aborts the rest of a selection. */
@@ -150,7 +150,7 @@ export type DeleteDocumentRequest = z.infer<typeof deleteDocumentRequestSchema>
 /** A title the user gives a paper; it replaces the one taken from the parsed text, and parsing no longer changes it. */
 export const renameDocumentRequestSchema = z.object({
   documentId: uuid,
-  title: z.string().trim().min(1).max(200).refine((value) => [...value].every((character) => character.charCodeAt(0) > 0x1f && character.charCodeAt(0) !== 0x7f), '标题不能包含控制字符')
+  title: z.string().trim().min(1).max(200).refine((value) => [...value].every((character) => character.charCodeAt(0) > 0x1f && character.charCodeAt(0) !== 0x7f), '標題不能包含控制字元')
 }).strict()
 export type RenameDocumentRequest = z.infer<typeof renameDocumentRequestSchema>
 

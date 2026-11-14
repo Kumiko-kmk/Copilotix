@@ -8,7 +8,7 @@ test('archive renders maths across fields and tabs without clipping or changing 
   testInfo.annotations.push({ type: 'browser', description: browserName })
   const workspace = await createE2EWorkspace()
   let app: Awaited<ReturnType<typeof launchElectron>> | undefined
-  const text = '输入 $x_i$，比例 \\(\\frac{a}{b}\\)，维度 d_model=512；代码 `d_model`。'
+  const text = '輸入 $x_i$，比例 \\(\\frac{a}{b}\\)，維度 d_model=512；程式碼 `d_model`。'
   // Parsed translation artifacts use the canonical dollar delimiter format.
   const documentText = text.replace('\\(\\frac{a}{b}\\)', '$\\frac{a}{b}$').replace('d_model=512', '$d_{\\mathrm{model}}=512$')
   try {
@@ -45,10 +45,10 @@ test('archive renders maths across fields and tabs without clipping or changing 
     }, { content, text })
     await mockSavedArchiveCatalog(app, page, { translatedTitle: '模型 $x_i$', keywords: content.keywords, tldr: content.tldr })
     await page.locator('[data-edge-dock="top"]').hover()
-    await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: /文库$/u }).click()
-    const archive = page.getByRole('region', { name: '文库', exact: true })
+    await page.getByRole('navigation', { name: '主導覽' }).getByRole('button', { name: /文庫$/u }).click()
+    const archive = page.getByRole('region', { name: '文庫', exact: true })
     await expect(archive.locator('canvas[data-archive-state="ready"]')).toBeVisible({ timeout: 20_000 })
-    await archive.getByRole('button', { name: '查看档案' }).click()
+    await archive.getByRole('button', { name: '檢視檔案' }).click()
     await expect(archive).toHaveAttribute('data-detail-phase', 'open', { timeout: 20_000 })
     await expect(archive.locator('.paper-archive-detail header .katex')).toHaveCount(2)
     await expect(archive.locator('.paper-archive-fields .katex')).toHaveCount(6)
@@ -58,17 +58,17 @@ test('archive renders maths across fields and tabs without clipping or changing 
       const win = await app.browserWindow(page)
       await win.evaluate((window, next) => window.setContentSize(next.width, next.height), size)
       await expect.poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight }))).toEqual(size)
-      for (const name of ['摘要', '背景', '结论', '讨论']) {
+      for (const name of ['摘要', '背景', '結論', '討論']) {
         const tab = archive.getByRole('tab', { name: new RegExp(name, 'u') })
         await tab.click()
         await expect(tab).toHaveAttribute('aria-selected', 'true')
         await expect(archive.getByRole('tabpanel').locator('.katex').first()).toBeVisible()
         expect(await archive.locator('.katex-error').count()).toBe(0)
-        if (name === '结论') {
+        if (name === '結論') {
           await archive.locator('.paper-archive-anchor summary').click()
           await expect(archive.locator('.paper-archive-anchor p .katex')).toHaveCount(3)
         }
-        if (name === '结论') {
+        if (name === '結論') {
           await expect(archive.getByRole('tabpanel').locator('.katex-display')).toHaveCount(1)
           const formula = await archive.getByRole('tabpanel').locator('.katex-display').evaluate(node => ({ scroll: node.scrollWidth, width: node.clientWidth }))
           expect(formula.scroll).toBeGreaterThan(formula.width)
@@ -86,7 +86,7 @@ test('archive renders maths across fields and tabs without clipping or changing 
       await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => undefined))))
       await page.screenshot({ path: testInfo.outputPath(`archive-math-${size.width}.png`) })
     }
-    await archive.getByRole('button', { name: /打开阅读/u }).click()
+    await archive.getByRole('button', { name: /開啟閱讀/u }).click()
     await expect(page.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
     await expect(page.locator('.markdown-body .katex').first()).toBeVisible({ timeout: 30_000 })
     expect(errors).toEqual([])

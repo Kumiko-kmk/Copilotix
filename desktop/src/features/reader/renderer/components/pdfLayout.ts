@@ -266,31 +266,31 @@ export function closestConnection(
 
 export function blockTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    text: '文本',
-    ref_text: '文本',
-    title: '标题',
-    image: '图片',
-    chart: '图表',
+    text: '文字',
+    ref_text: '文字',
+    title: '標題',
+    image: '圖片',
+    chart: '圖表',
     table: '表格',
     interline_equation: '公式',
     equation: '公式',
-    page_header: '页眉',
-    header: '页眉',
-    page_footer: '页脚',
-    footer: '页脚',
-    page_footnote: '脚注',
-    page_number: '页码'
+    page_header: '頁首',
+    header: '頁首',
+    page_footer: '頁尾',
+    footer: '頁尾',
+    page_footnote: '腳註',
+    page_number: '頁碼'
   }
-  return labels[type] ?? '区块'
+  return labels[type] ?? '區塊'
 }
 
 export function pdfErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return String(error)
-  if (error.name === 'InvalidPDFException') return 'PDF 文件已损坏或格式无效。'
-  if (error.name === 'MissingPDFException') return '本地 PDF 文件不存在。'
-  if (error.name === 'PasswordException') return '该 PDF 受密码保护，当前阅读器无法打开。'
-  if (error.name === 'UnexpectedResponseException') return '读取本地 PDF 时返回了异常响应，请重试。'
-  return error.message || '加载 PDF 时发生未知错误。'
+  if (error.name === 'InvalidPDFException') return 'PDF 檔案已損壞或格式無效。'
+  if (error.name === 'MissingPDFException') return '本地 PDF 檔案不存在。'
+  if (error.name === 'PasswordException') return '該 PDF 受密碼保護，當前閱讀器無法開啟。'
+  if (error.name === 'UnexpectedResponseException') return '讀取本地 PDF 時返回了異常響應，請重試。'
+  return error.message || '載入 PDF 時發生未知錯誤。'
 }
 
 export function isRenderingCancelled(error: unknown): boolean {

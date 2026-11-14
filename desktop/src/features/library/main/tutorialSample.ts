@@ -14,7 +14,7 @@ export async function verifiedTutorialPaperPath(options: { isPackaged: boolean; 
   const bytes = await readFile(path)
   const hash = createHash('sha256').update(bytes).digest('hex')
   if (bytes.length !== TUTORIAL_PAPER_BYTES || hash !== TUTORIAL_PAPER_SHA256) {
-    throw new Error('内置教程论文缺失或校验失败，请重新安装应用')
+    throw new Error('內建教學論文缺失或校驗失敗，請重新安裝應用')
   }
   return path
 }

@@ -113,7 +113,7 @@ describe('ChatProvider', () => {
     await expect(new ChatProvider(async () => response(text, 262144)).stream(input())).rejects.toMatchObject({ code: text.length > 262144 ? 'RAG_LIMIT_EXCEEDED' : 'PROVIDER_UNAVAILABLE' })
   })
   it('handles network and HTTP errors without forwarding raw exception text', async () => {
-    await expect(new ChatProvider(async () => { throw new Error('secret question') }).stream(input())).rejects.toMatchObject({ message: '无法连接问答服务，请重试' })
+    await expect(new ChatProvider(async () => { throw new Error('secret question') }).stream(input())).rejects.toMatchObject({ message: '無法連線問答服務，請重試' })
     sharedModelRuntime.clear()
     await expect(new ChatProvider(async () => new Response('secret', { status: 500 })).stream(input())).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
     sharedModelRuntime.clear()

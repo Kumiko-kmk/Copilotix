@@ -242,7 +242,7 @@ export default function MarkdownPane(props: {
       try {
         const timeout = new Promise<never>((_, reject) => {
           timeoutId = window.setTimeout(
-            () => reject(new Error('Markdown 资源加载超过 30 秒，请重新加载。')),
+            () => reject(new Error('Markdown 資源載入超過 30 秒，請重新載入。')),
             MARKDOWN_RENDER_TIMEOUT_MS
           )
         })

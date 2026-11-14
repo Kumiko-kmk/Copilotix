@@ -9,7 +9,7 @@ it('shows success once, disappears, and stays absent after remount and renewed b
   const view = render(<ArchiveProgressRing documentId={id} progress={82} ready={false} />)
   expect(screen.getByRole('progressbar').textContent).toBe('')
   view.rerender(<ArchiveProgressRing documentId={id} progress={100} ready />)
-  expect(screen.getByRole('img', { name: '处理完成' })).toBeTruthy()
+  expect(screen.getByRole('img', { name: '處理完成' })).toBeTruthy()
   act(() => { vi.advanceTimersByTime(1300) })
   expect(view.container.firstChild).toBeNull()
   view.unmount()

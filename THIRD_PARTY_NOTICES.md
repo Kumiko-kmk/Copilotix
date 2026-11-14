@@ -27,7 +27,7 @@ from installed dependency roots at packaging time. It includes development tools
 well as runtime packages and explicitly lists packages without root license text.
 This inventory supplements, and does not replace, embedded package notices.
 
-The paper archive (文库) page adapts motion curves, camera framing, materials,
+The paper archive (文庫) page adapts motion curves, camera framing, materials,
 lighting and the cassette shell geometry from RhineLabUI
 (https://github.com/LBEILC/RhineLabUI), MIT License, Copyright (c) 2026 LBEILC.
 desktop/src/features/library/renderer/archive/assets/archive-shell.glb contains only the shell

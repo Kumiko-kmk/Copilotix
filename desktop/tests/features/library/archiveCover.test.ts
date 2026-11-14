@@ -40,7 +40,7 @@ describe('archive cover threshold', () => {
         mocked.build.mockReturnValue(figures)
         const result = renderArchiveCover(paper, details(figures, base), new AbortController().signal)
         // A single-page fallback here would let the scene open a paper whose figures are not ready.
-        await expect(result).rejects.toThrow('封面整图清单尚未准备完整')
+        await expect(result).rejects.toThrow('封面整圖清單尚未準備完整')
         expect(mocked.ensure).toHaveBeenCalledOnce()
         expect(mocked.page.width).toBe(0)
       })
@@ -50,7 +50,7 @@ describe('archive cover threshold', () => {
   it('keeps refusing when complete groups sit beside ambiguous ones and none was cropped', async () => {
     const figures = [hint('ambiguous'), hint('complete')]
     mocked.ensure.mockResolvedValue({ available: 0, failed: 1 })
-    await expect(renderArchiveCover(paper, details(figures, true), new AbortController().signal)).rejects.toThrow('封面整图尚未准备完整')
+    await expect(renderArchiveCover(paper, details(figures, true), new AbortController().signal)).rejects.toThrow('封面整圖尚未準備完整')
   })
 
   it('still uses a single page when the paper has no figure hints at all', async () => {

@@ -404,7 +404,7 @@ describe('complete covers before extraction', () => {
     expect(prepareDetailCover.mock.calls[0]![1].aborted).toBe(true)
     expect(archive.detailPreparing).toBe(false)
     expect(archive.detailOpen).toBe(false)
-    expect(onDetailCoverError).toHaveBeenCalledWith(expect.stringContaining('超时'))
+    expect(onDetailCoverError).toHaveBeenCalledWith(expect.stringContaining('超時'))
     const late = completedCover('after-timeout')
     pending.resolve(late)
     await pending.promise

@@ -19,7 +19,7 @@ export default function DeletePaperDialog(props: {
     try {
       // Main settles this paper's chat before deleting it.
       await window.copilotix.deleteDocument({ documentId: paper.id, deleteFiles })
-      messageApi.success('论文已删除')
+      messageApi.success('論文已刪除')
       onClose()
       onDeleted(paper.id)
     } catch (error) {
@@ -29,10 +29,10 @@ export default function DeletePaperDialog(props: {
     }
   }
   return (
-    <Modal title="删除论文" open={paper !== null} okText="删除" okButtonProps={{ danger: true }} confirmLoading={deleting}
+    <Modal title="刪除論文" open={paper !== null} okText="刪除" okButtonProps={{ danger: true }} confirmLoading={deleting}
       onOk={() => void remove()} onCancel={() => { if (!deleting) onClose() }}>
-      <p>确定删除“{paper?.displayName.replace(/\.pdf\s*$/iu, '')}”吗？</p>
-      <Checkbox checked={deleteFiles} onChange={(event) => setDeleteFiles(event.target.checked)}>同时删除本地结果文件（不可恢复）</Checkbox>
+      <p>確定刪除“{paper?.displayName.replace(/\.pdf\s*$/iu, '')}”嗎？</p>
+      <Checkbox checked={deleteFiles} onChange={(event) => setDeleteFiles(event.target.checked)}>同時刪除本地結果檔案（不可恢復）</Checkbox>
     </Modal>
   )
 }

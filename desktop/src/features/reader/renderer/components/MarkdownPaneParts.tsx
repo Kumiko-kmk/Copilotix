@@ -33,7 +33,7 @@ export function MarkdownRenderStatus(props: {
           <AppleLoader label="正在排版正文" />
           {props.mounted ? <small>段落 {props.mounted.count} / {props.mounted.total}</small> : null}
           {renderState.status === 'loading' && renderState.totalImages > 0 ? (
-            <small>图片 {renderState.completedImages} / {renderState.totalImages}</small>
+            <small>圖片 {renderState.completedImages} / {renderState.totalImages}</small>
           ) : null}
         </div>
       ) : null}
@@ -42,9 +42,9 @@ export function MarkdownRenderStatus(props: {
           <Alert
             type="error"
             showIcon
-            message="Markdown 无法完整显示"
+            message="Markdown 無法完整顯示"
             description={renderState.message}
-            action={<Button onClick={props.onRetry}>重新加载</Button>}
+            action={<Button onClick={props.onRetry}>重新載入</Button>}
           />
         </div>
       ) : null}
@@ -61,7 +61,7 @@ export function MarkdownBlockMenuPopup(props: {
 }): React.JSX.Element {
   const { at: blockMenuAt } = props
   const moves: BlockMenuItem[] = [
-    ...(props.blockMove?.ordered ? [{ key: 'reset-order', label: '恢复原始顺序' }] : [])
+    ...(props.blockMove?.ordered ? [{ key: 'reset-order', label: '恢復原始順序' }] : [])
   ]
   return <BlockContextMenu x={blockMenuAt.x} y={blockMenuAt.y} items={[...props.menu.items(blockMenuAt.block, blockMenuAt.figures), ...moves]}
     onSelect={(key) => {

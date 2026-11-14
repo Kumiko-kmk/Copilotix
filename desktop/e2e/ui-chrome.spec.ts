@@ -5,13 +5,13 @@ import { createE2EWorkspace, launchElectron, openPaperFromLibrary, seedReaderTas
 import { MAX_PDF_PAGES } from '../src/features/library/contract/pdfLimits'
 
 const MINIMAP_TRANSLATED_MARKDOWN = [
-  '# 测试文档',
-  '<sub>艾达·洛夫莱斯</sub>和艾伦·图灵',
-  '摘要 | 独立映射的摘要。',
-  '第一页在第二栏继续。<sup>12</sup> 水是 H<sub>2</sub>O。',
+  '# 測試文件',
+  '<sub>艾達·洛夫萊斯</sub>和艾倫·圖靈',
+  '摘要 | 獨立對映的摘要。',
+  '第一頁在第二欄繼續。<sup>12</sup> 水是 H<sub>2</sub>O。',
   '第二段落包含 $E=mc^2$。',
-  '<table><tbody><tr><td>学术单元格</td></tr></tbody></table>',
-  '![测试图片](images/fixture.png)'
+  '<table><tbody><tr><td>學術單元格</td></tr></tbody></table>',
+  '![測試圖片](images/fixture.png)'
 ].join('\n\n')
 
 test('keeps hover chrome inside the minimum supported window size', async () => {
@@ -90,16 +90,16 @@ test('keeps the new parse page layout across supported sizes and themes', async 
     await expect(window.locator('.new-parse-page canvas.home-cipher')).toHaveCount(1)
     await expect(window.locator('.titlebar-brand')).toHaveCount(0)
     await expect(window.getByRole('img', { name: 'COPILOTIX' })).toBeVisible()
-    await expect(window.getByText('今天想读些什么？')).toBeVisible()
-    await expect(window.getByText('拖入文档')).toBeVisible()
-    await expect(window.getByText(`当前支持 PDF，单篇最多 ${MAX_PDF_PAGES} 页`)).toBeVisible()
-    await expect(window.getByRole('button', { name: '选择文档' })).toBeVisible()
+    await expect(window.getByText('今天想讀些什麼？')).toBeVisible()
+    await expect(window.getByText('拖入文件')).toBeVisible()
+    await expect(window.getByText(`當前支援 PDF，單篇最多 ${MAX_PDF_PAGES} 頁`)).toBeVisible()
+    await expect(window.getByRole('button', { name: '選擇文件' })).toBeVisible()
     await expect(window.getByText('需要先配置解析 API Token')).toHaveCount(0)
     await expect(uploadEntry).toHaveCSS('min-height', '94px')
     await expect(uploadEntry).toHaveCSS('border-top-style', 'solid')
     await expect(uploadEntry).toHaveCSS('backdrop-filter', 'none')
     const compactWordmarkBounds = await window.locator('.copilotix-wordmark').boundingBox()
-    const compactButtonBounds = await window.getByRole('button', { name: '选择文档' }).boundingBox()
+    const compactButtonBounds = await window.getByRole('button', { name: '選擇文件' }).boundingBox()
     expect(compactWordmarkBounds).not.toBeNull()
     expect(compactButtonBounds).not.toBeNull()
     expect(compactWordmarkBounds!.x).toBeGreaterThanOrEqual(0)
@@ -140,7 +140,7 @@ test('keeps the new parse page layout across supported sizes and themes', async 
       mimeType: 'application/pdf',
       buffer: Buffer.from('%PDF-1.4 fixture')
     })
-    await expect(window.getByRole('dialog', { name: '确认导入' })).toBeVisible()
+    await expect(window.getByRole('dialog', { name: '確認匯入' })).toBeVisible()
   } finally {
     await app.close()
     await workspace.cleanup()
@@ -157,17 +157,17 @@ test('lays out service credentials as compact connection cards', async () => {
       BrowserWindow.getAllWindows()[0]?.setSize(1440, 900)
     })
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('button', { name: '设置' }).click()
+    await window.getByRole('button', { name: '設定' }).click()
 
-    await expect(window.getByRole('region', { name: '服务连接' })).toBeVisible()
-    await expect(window.getByRole('heading', { name: '服务连接' })).toHaveCount(0)
-    await expect(window.getByText('文档解析必需')).toHaveCount(0)
+    await expect(window.getByRole('region', { name: '服務連線' })).toBeVisible()
+    await expect(window.getByRole('heading', { name: '服務連線' })).toHaveCount(0)
+    await expect(window.getByText('文件解析必需')).toHaveCount(0)
     await expect(window.getByRole('button', { name: /更多/u })).toHaveCount(0)
-    await expect(window.getByText('服务地址')).toHaveCount(0)
-    await expect(window.getByText('高级设置')).toHaveCount(0)
+    await expect(window.getByText('服務地址')).toHaveCount(0)
+    await expect(window.getByText('高階設定')).toHaveCount(0)
     const parserCard = window.locator('.service-card').filter({ has: window.locator('#credential-parser') })
     const tokenInput = parserCard.getByLabel('APIKey', { exact: true })
-    const testButton = parserCard.getByRole('button', { name: '测试连接' })
+    const testButton = parserCard.getByRole('button', { name: '測試連線' })
     const [inputBounds, buttonBounds] = await Promise.all([tokenInput.boundingBox(), testButton.boundingBox()])
     expect(inputBounds).not.toBeNull()
     expect(buttonBounds).not.toBeNull()
@@ -178,11 +178,11 @@ test('lays out service credentials as compact connection cards', async () => {
     // Model keys moved to their own view; the services page keeps one summary row for them.
     await expect(window.getByLabel('APIKey', { exact: true })).toHaveCount(1)
     await expect(window.locator('#credential-qwen')).toHaveCount(0)
-    await expect(window.locator('[data-provider="model-keys"]')).toContainText('DeepSeek 0 个 · 千问 0 个')
+    await expect(window.locator('[data-provider="model-keys"]')).toContainText('DeepSeek 0 個 · 千問 0 個')
     await expect(window.getByRole('region', { name: 'APIKey 用量分析' })).toBeVisible()
     await expect(window.locator('.settings-page')).toHaveCSS('overflow', 'hidden')
     expect(await window.locator('.settings-page').evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true)
-    await expect(window.getByRole('region', { name: 'Codex 连接' })).toBeVisible()
+    await expect(window.getByRole('region', { name: 'Codex 連線' })).toBeVisible()
     for (const size of [[1440, 900], [1100, 700]] as const) {
       await app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0]?.setSize(width, height), size)
       await expect.poll(() => window.locator('.settings-content-body').evaluate((element) => element.scrollHeight <= element.clientHeight && element.querySelector('.usage-dashboard')!.getBoundingClientRect().bottom <= element.getBoundingClientRect().bottom + 1)).toBe(true)
@@ -205,26 +205,26 @@ test('manages up to five keys per provider on one screen without saving unverifi
       BrowserWindow.getAllWindows()[0]?.setSize(1440, 900)
     })
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('button', { name: '设置' }).click()
-    await window.locator('[data-provider="model-keys"]').getByRole('button', { name: '管理密钥' }).click()
-    const view = window.getByRole('region', { name: 'API 密钥' })
+    await window.getByRole('button', { name: '設定' }).click()
+    await window.locator('[data-provider="model-keys"]').getByRole('button', { name: '管理金鑰' }).click()
+    const view = window.getByRole('region', { name: 'API 金鑰' })
     await expect(view).toBeVisible()
-    await expect(view.getByText('尚未添加密钥', { exact: false })).toBeVisible()
+    await expect(view.getByText('尚未新增金鑰', { exact: false })).toBeVisible()
     // Drafts only: adding a key never contacts the provider until the page is saved.
-    for (const [index, label] of ['主账号', '实验室', '备用一', '备用二', '备用三'].entries()) {
-      await view.getByLabel('新密钥名称').fill(label)
+    for (const [index, label] of ['主帳號', '實驗室', '備用一', '備用二', '備用三'].entries()) {
+      await view.getByLabel('新金鑰名稱').fill(label)
       await view.getByLabel('新 API Key').fill(`sk-e2e-draft-${index}`)
-      await view.getByRole('button', { name: /添加/u }).click()
+      await view.getByRole('button', { name: /新增/u }).click()
     }
     await expect(view.locator('.api-key-item')).toHaveCount(5)
     await expect(view.getByLabel('新 API Key')).toBeDisabled()
     await expect(view.getByRole('tab', { name: /DeepSeek/u })).toContainText('5/5')
-    await expect(view.locator('.model-request-order strong')).toHaveText('主账号 → 实验室 → 备用一 → 备用二 → 备用三')
-    await view.getByRole('checkbox', { name: '启用实验室' }).click()
-    await view.getByRole('button', { name: '移动备用三' }).focus()
+    await expect(view.locator('.model-request-order strong')).toHaveText('主帳號 → 實驗室 → 備用一 → 備用二 → 備用三')
+    await view.getByRole('checkbox', { name: '啟用實驗室' }).click()
+    await view.getByRole('button', { name: '移動備用三' }).focus()
     await window.keyboard.press('ArrowUp')
-    await expect(view.locator('.model-request-order strong')).toHaveText('主账号 → 备用一 → 备用三 → 备用二')
-    await expect(window.getByText('有未保存的更改')).toBeVisible()
+    await expect(view.locator('.model-request-order strong')).toHaveText('主帳號 → 備用一 → 備用三 → 備用二')
+    await expect(window.getByText('有未儲存的更改')).toBeVisible()
     for (const size of [[1440, 900], [1100, 700]] as const) {
       await app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0]?.setSize(width, height), size)
       await expect.poll(() => window.locator('.settings-content-body').evaluate((element) => {
@@ -233,7 +233,7 @@ test('manages up to five keys per provider on one screen without saving unverifi
       })).toBe(true)
       await capture(window, `settings-api-keys-${size[0]}x${size[1]}.png`)
     }
-    await window.getByRole('button', { name: '放弃更改' }).click()
+    await window.getByRole('button', { name: '放棄更改' }).click()
     await expect(view.locator('.api-key-item')).toHaveCount(0)
   } finally {
     await app.close()
@@ -247,16 +247,16 @@ test('reorders and enables translation providers with explicit persistent saves'
   try {
     let window = await app.firstWindow()
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('button', { name: '设置' }).click()
-    await window.getByRole('button', { name: /模型设置/u }).click()
+    await window.getByRole('button', { name: '設定' }).click()
+    await window.getByRole('button', { name: /模型設定/u }).click()
 
-    await expect(window.getByText('大语言模型优先级')).toBeVisible()
+    await expect(window.getByText('大語言模型優先順序')).toBeVisible()
     // Rows carry only the model name; no second line of explanation.
-    await expect(window.getByText('通过 DeepSeek API 提供大语言模型翻译')).toHaveCount(0)
-    await expect(window.getByText('通过阿里云百炼 API 提供专业翻译模型')).toHaveCount(0)
-    await expect(window.getByRole('button', { name: '保存全部更改' })).toBeDisabled()
-    await expect(window.getByText('拖动调整优先级，越靠上越优先使用')).toHaveCount(0)
-    await expect(window.getByText('无需密钥')).toHaveCount(0)
+    await expect(window.getByText('透過 DeepSeek API 提供大語言模型翻譯')).toHaveCount(0)
+    await expect(window.getByText('透過阿里雲百鍊 API 提供專業翻譯模型')).toHaveCount(0)
+    await expect(window.getByRole('button', { name: '儲存全部更改' })).toBeDisabled()
+    await expect(window.getByText('拖動調整優先順序，越靠上越優先使用')).toHaveCount(0)
+    await expect(window.getByText('無需金鑰')).toHaveCount(0)
     await expect(window.getByRole('button', { name: '配置', exact: true })).toHaveCount(0)
     const [contentBounds, actionBounds] = await Promise.all([
       window.locator('.settings-content').boundingBox(),
@@ -286,16 +286,16 @@ test('reorders and enables translation providers with explicit persistent saves'
     await capture(window, 'settings-models-reference.png')
 
     const requestOrder = window.locator('.model-request-order strong')
-    await expect(requestOrder).toHaveText('千问 → DeepSeek')
-    await window.getByRole('button', { name: '移动千问 / Qwen' }).dragTo(window.locator('[data-provider="codex"]'))
-    await expect(requestOrder).toHaveText('DeepSeek → 千问')
-    await window.getByRole('button', { name: '保存全部更改' }).click()
+    await expect(requestOrder).toHaveText('千問 → DeepSeek')
+    await window.getByRole('button', { name: '移動千問 / Qwen' }).dragTo(window.locator('[data-provider="codex"]'))
+    await expect(requestOrder).toHaveText('DeepSeek → 千問')
+    await window.getByRole('button', { name: '儲存全部更改' }).click()
     await expect.poll(async () => (await window.evaluate(() => window.copilotix.getSettings())).translationProviderOrder)
       .toEqual(['deepseek', 'codex', 'qwen'])
 
-    await window.getByRole('checkbox', { name: '启用DeepSeek' }).click()
-    await expect(requestOrder).toHaveText('千问')
-    await window.getByRole('button', { name: '保存全部更改' }).click()
+    await window.getByRole('checkbox', { name: '啟用DeepSeek' }).click()
+    await expect(requestOrder).toHaveText('千問')
+    await window.getByRole('button', { name: '儲存全部更改' }).click()
     await expect.poll(async () => (await window.evaluate(() => window.copilotix.getSettings())).enabledTranslationProviders)
       .toEqual(['qwen'])
 
@@ -303,10 +303,10 @@ test('reorders and enables translation providers with explicit persistent saves'
     app = await launchElectron({ args: [join(__dirname, '../out/main/index.js')], env: workspace.env })
     window = await app.firstWindow()
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('button', { name: '设置' }).click()
-    await window.getByRole('button', { name: /模型设置/u }).click()
-    await expect(window.locator('.model-request-order strong')).toHaveText('千问')
-    await expect(window.getByRole('checkbox', { name: '启用DeepSeek' })).not.toBeChecked()
+    await window.getByRole('button', { name: '設定' }).click()
+    await window.getByRole('button', { name: /模型設定/u }).click()
+    await expect(window.locator('.model-request-order strong')).toHaveText('千問')
+    await expect(window.getByRole('checkbox', { name: '啟用DeepSeek' })).not.toBeChecked()
   } finally {
     await app.close()
     await workspace.cleanup()
@@ -319,26 +319,26 @@ test('shows live file storage usage and location controls', async () => {
   try {
     const window = await app.firstWindow()
     await window.locator('[data-edge-dock="top"]').hover()
-    await window.getByRole('button', { name: '设置' }).click()
-    await window.getByRole('button', { name: /文件存储/u }).click()
+    await window.getByRole('button', { name: '設定' }).click()
+    await window.getByRole('button', { name: /檔案儲存/u }).click()
 
-    await expect(window.getByRole('region', { name: '文件存储' })).toBeVisible()
-    await expect(window.getByRole('heading', { name: '文件管理' })).toHaveCount(0)
-    await expect(window.getByLabel('文档保存位置')).not.toHaveValue('')
-    await expect(window.getByRole('button', { name: '导出文库' })).toBeVisible()
-    await expect(window.getByRole('button', { name: '导入文库' })).toBeVisible()
-    await expect(window.getByRole('button', { name: '迁移文库' })).toBeVisible()
-    await expect(window.getByRole('button', { name: '打开当前目录' })).toBeVisible()
-    await expect(window.getByRole('button', { name: /刷新用量/u })).toBeVisible()
-    await expect(window.getByText('占用空间')).toBeVisible()
-    await expect(window.getByRole('region', { name: '存储构成' })).toBeVisible()
-    await expect(window.getByRole('img', { name: /存储构成，总计/u })).toBeVisible()
-    await expect(window.getByRole('region', { name: '近期存储增长' })).toBeVisible()
-    await expect(window.getByRole('img', { name: '近 14 日存储增长曲线' })).toBeVisible()
+    await expect(window.getByRole('region', { name: '檔案儲存' })).toBeVisible()
+    await expect(window.getByRole('heading', { name: '檔案管理' })).toHaveCount(0)
+    await expect(window.getByLabel('文件儲存位置')).not.toHaveValue('')
+    await expect(window.getByRole('button', { name: '匯出文庫' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '匯入文庫' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '遷移文庫' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '開啟當前目錄' })).toBeVisible()
+    await expect(window.getByRole('button', { name: /重新整理用量/u })).toBeVisible()
+    await expect(window.getByText('佔用空間')).toBeVisible()
+    await expect(window.getByRole('region', { name: '儲存構成' })).toBeVisible()
+    await expect(window.getByRole('img', { name: /儲存構成，總計/u })).toBeVisible()
+    await expect(window.getByRole('region', { name: '近期儲存增長' })).toBeVisible()
+    await expect(window.getByRole('img', { name: '近 14 日儲存增長曲線' })).toBeVisible()
     // The restart notice lives in the import/migrate confirmation, not as a note under the page.
-    await expect(window.getByText(/导入或迁移会保留旧库并在完成后重启/u)).toHaveCount(0)
-    const changeLocationBounds = await window.getByRole('button', { name: '迁移文库' }).boundingBox()
-    const openLocationBounds = await window.getByRole('button', { name: '打开当前目录' }).boundingBox()
+    await expect(window.getByText(/匯入或遷移會保留舊庫並在完成後重啟/u)).toHaveCount(0)
+    const changeLocationBounds = await window.getByRole('button', { name: '遷移文庫' }).boundingBox()
+    const openLocationBounds = await window.getByRole('button', { name: '開啟當前目錄' }).boundingBox()
     expect(changeLocationBounds).not.toBeNull()
     expect(openLocationBounds).not.toBeNull()
     expect(changeLocationBounds!.x).toBeLessThan(openLocationBounds!.x)
@@ -364,8 +364,8 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await expect(window.locator('.reader-header')).toBeVisible({ timeout: 30_000 })
     const activePanel = window.locator('.reader-tab-panel.active')
     const scroller = activePanel.locator('.markdown-scroll')
-    const minimap = activePanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
-    const separator = window.getByRole('separator', { name: '调整 PDF 与 原文 阅读器宽度' })
+    const minimap = activePanel.getByRole('scrollbar', { name: 'Markdown 文件縮略導覽' })
+    const separator = window.getByRole('separator', { name: '調整 PDF 與 原文 閱讀器寬度' })
     await expect(scroller).toHaveAttribute('data-render-state', 'ready')
     // Compact reader chrome leaves more height for reading.
     await expect(window.locator('.reader-header')).toHaveCSS('height', '36px')
@@ -398,7 +398,7 @@ test('provides an interactive minimap for original and translated Markdown', asy
     const overlayStyle = '.markdown-minimap-heading, .markdown-minimap-frame, .markdown-minimap-frame-hit { visibility: hidden !important; }'
     const blankCanvas = await canvas.screenshot({ style: `${overlayStyle} .markdown-minimap-canvas { opacity: 0 !important; }` })
     await expect.poll(async () => (await canvas.screenshot({ style: overlayStyle })).equals(blankCanvas)).toBe(false)
-    const originalHeading = minimap.getByRole('button', { name: '跳转到Fixture document' })
+    const originalHeading = minimap.getByRole('button', { name: '跳轉到Fixture document' })
     await expect(originalHeading).toBeVisible()
     await expect(originalHeading).toHaveCSS('left', '4px')
 
@@ -420,12 +420,12 @@ test('provides an interactive minimap for original and translated Markdown', asy
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThan(80)
     await capture(window, 'reader-minimap-1100x700-original.png')
 
-    await window.getByText('译文').click()
+    await window.getByText('譯文').click()
     const translatedPanel = window.locator('.reader-tab-panel.active')
-    const translatedMinimap = translatedPanel.getByRole('scrollbar', { name: 'Markdown 文档缩略导航' })
+    const translatedMinimap = translatedPanel.getByRole('scrollbar', { name: 'Markdown 文件縮略導覽' })
     await expect(translatedPanel.locator('.markdown-scroll')).toHaveAttribute('data-render-state', 'ready')
     await expect(translatedPanel.locator('.markdown-block > p').first()).toHaveCSS('text-indent', '32px')
-    await expect(translatedMinimap.getByRole('button', { name: '跳转到测试文档' })).toHaveCSS('left', '4px')
+    await expect(translatedMinimap.getByRole('button', { name: '跳轉到測試文件' })).toHaveCSS('left', '4px')
     await expect(translatedMinimap.locator('.markdown-minimap-canvas')).toHaveCount(1)
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await expect(translatedMinimap).toHaveCSS('width', '60px')

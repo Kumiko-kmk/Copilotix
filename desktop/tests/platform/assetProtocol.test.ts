@@ -52,7 +52,7 @@ describe('copilotix-asset protocol response', () => {
 
     const missing = await createAssetResponse(
       new Request('copilotix-asset://task/../secret.pdf'),
-      () => { throw new Error('非法资源路径') }
+      () => { throw new Error('非法資源路徑') }
     )
     expect(missing.status).toBe(404)
   })

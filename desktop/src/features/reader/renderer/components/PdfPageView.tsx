@@ -34,7 +34,7 @@ export function PdfScrollbar(props: {
     props.onDragEnd()
   }
   return <div className={`pdf-scrollbar pdf-scrollbar-${props.axis}${props.visible ? ' visible' : ''}`}
-    role="scrollbar" tabIndex={0} aria-label={vertical ? 'PDF 垂直滚动' : 'PDF 水平滚动'}
+    role="scrollbar" tabIndex={0} aria-label={vertical ? 'PDF 垂直滾動' : 'PDF 水平滾動'}
     aria-controls={props.scrollerId} aria-orientation={props.axis} aria-valuemin={0} aria-valuemax={maximum} aria-valuenow={offset}
     onPointerDown={(event) => {
       if (event.button !== 0) return
@@ -128,7 +128,7 @@ export const PdfPage = React.memo(function PdfPage(props: {
       canvas.width = output.width
       canvas.height = output.height
       const context = canvas.getContext('2d', { alpha: false })
-      if (!context) throw new Error('无法创建 PDF 页面画布，请降低缩放比例后重试。')
+      if (!context) throw new Error('無法建立 PDF 頁面畫布，請降低縮放比例後重試。')
       return page.render({
         canvas,
         canvasContext: context,
@@ -177,7 +177,7 @@ export const PdfPage = React.memo(function PdfPage(props: {
           {connectors.map((connector) => (
             <g key={connector.key}>
               <line x1={connector.x1} y1={connector.y1} x2={connector.x2} y2={connector.y2} />
-              <text x={(connector.x1 + connector.x2) / 2} y={(connector.y1 + connector.y2) / 2 - 5}>合并</text>
+              <text x={(connector.x1 + connector.x2) / 2} y={(connector.y1 + connector.y2) / 2 - 5}>合併</text>
             </g>
           ))}
         </svg>
@@ -209,9 +209,9 @@ export const PdfPage = React.memo(function PdfPage(props: {
                 props.onSelect(mapping.id, box.blockPosition)
                 props.onBlockMenu!(mapping.id, event.clientX, event.clientY)
               } : undefined}
-              aria-label={`${blockTypeLabel(mapping.type)}区块 ${mapping.order + 1}${box.mergeRole === 'continuation' ? '（合并续块）' : ''}`}
+              aria-label={`${blockTypeLabel(mapping.type)}區塊 ${mapping.order + 1}${box.mergeRole === 'continuation' ? '（合併續塊）' : ''}`}
             >
-              {box.mergeRole === 'continuation' ? <span className="pdf-merge-badge">合并</span> : null}
+              {box.mergeRole === 'continuation' ? <span className="pdf-merge-badge">合併</span> : null}
             </button>
           )
         })}

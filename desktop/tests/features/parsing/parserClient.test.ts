@@ -120,20 +120,20 @@ describe('OfficialParserClient', () => {
 
   it('treats task-not-found as a successful non-mutating token probe', async () => {
     const client = new OfficialParserClient(
-      vi.fn(async () => jsonResponse({ code: -60012, msg: '找不到任务', trace_id: 'trace-1' })),
+      vi.fn(async () => jsonResponse({ code: -60012, msg: '找不到任務', trace_id: 'trace-1' })),
       { upload: vi.fn() }
     )
     await expect(client.verifyToken('token')).resolves.toEqual({
       ok: true,
-      message: 'Token 验证成功',
+      message: 'Token 驗證成功',
       code: -60012,
       traceId: 'trace-1'
     })
   })
 
   it.each([
-    ['A0202', 'Token 错误'],
-    ['A0211', 'Token 已过期']
+    ['A0202', 'Token 錯誤'],
+    ['A0211', 'Token 已過期']
   ])('reports official token error %s', async (code, message) => {
     const client = new OfficialParserClient(
       vi.fn(async () => jsonResponse({ code, msg: message, trace_id: 'token-trace' })),
@@ -149,7 +149,7 @@ describe('OfficialParserClient', () => {
 
   it('rejects non-zero API codes even when HTTP is 200', async () => {
     const client = new OfficialParserClient(
-      vi.fn(async () => jsonResponse({ code: -60005, msg: '文件大小超出限制', trace_id: 'trace-2' })),
+      vi.fn(async () => jsonResponse({ code: -60005, msg: '檔案大小超出限制', trace_id: 'trace-2' })),
       { upload: vi.fn() }
     )
     await expect(client.createUploadBatch([task], settings, 'token')).rejects.toThrow(/-60005.*trace_id=trace-2/)
@@ -222,8 +222,8 @@ describe('OfficialParserClient', () => {
     expect(result.entries[0]).toMatchObject({
       dataId: 'task-1',
       state: 'failed',
-      error: 'Copilotix 未检测到已上传文件，请重试任务。'
+      error: 'Copilotix 未檢測到已上傳檔案，請重試任務。'
     })
-    expect(updates).toEqual([{ state: 'failed', error: 'Copilotix 未检测到已上传文件，请重试任务。' }])
+    expect(updates).toEqual([{ state: 'failed', error: 'Copilotix 未檢測到已上傳檔案，請重試任務。' }])
   })
 })

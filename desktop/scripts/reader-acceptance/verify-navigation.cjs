@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 /** Runs against both the unpacked app and the actual portable executable. */
 module.exports = async function verifyNavigation(page) {
   const report = {}
-  for (const [view, label] of [['original', '原文'], ['translated', '译文']]) {
+  for (const [view, label] of [['original', '原文'], ['translated', '譯文']]) {
     console.log('Checking view', view)
     const started = Date.now()
     await page.getByRole('tab', { name: label, exact: true }).click()

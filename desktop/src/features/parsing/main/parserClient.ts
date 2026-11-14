@@ -130,7 +130,7 @@ export class OfficialParserClient implements ParserClient {
   }
 
   async verifyToken(token?: string | null): Promise<HealthResult> {
-    if (!token?.trim()) return { ok: false, code: 'PARSER_TOKEN_MISSING', message: '请先输入 Parser API Token' }
+    if (!token?.trim()) return { ok: false, code: 'PARSER_TOKEN_MISSING', message: '請先輸入 Parser API Token' }
     try {
       const response = await this.fetcher(
         `${PARSER_API_ORIGIN}/api/v4/extract-results/batch/${TOKEN_PROBE_BATCH_ID}`,
@@ -138,29 +138,29 @@ export class OfficialParserClient implements ParserClient {
       )
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'Parser API Token 无效' }
+          return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'Parser API Token 無效' }
         }
         if (response.status === 408 || response.status === 429 || response.status >= 500) {
-          return { ok: false, code: `HTTP_${response.status}`, message: 'Copilotix 验证服务暂不可用' }
+          return { ok: false, code: `HTTP_${response.status}`, message: 'Copilotix 驗證服務暫不可用' }
         }
-        return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'Parser API Token 验证失败' }
+        return { ok: false, code: 'PARSER_TOKEN_INVALID', message: 'Parser API Token 驗證失敗' }
       }
       const payload = await readEnvelope<RawBatchResultData>(response)
       const code = String(payload.code)
-      if (code === 'A0202') return resultFromEnvelope(false, payload, 'Token 错误')
-      if (code === 'A0211') return resultFromEnvelope(false, payload, 'Token 已过期')
+      if (code === 'A0202') return resultFromEnvelope(false, payload, 'Token 錯誤')
+      if (code === 'A0211') return resultFromEnvelope(false, payload, 'Token 已過期')
       if (payload.code === 0 || code === '-60012' || code === '-60013') {
-        return resultFromEnvelope(true, payload, 'Token 验证成功')
+        return resultFromEnvelope(true, payload, 'Token 驗證成功')
       }
-      return resultFromEnvelope(false, payload, payload.msg || 'Token 验证失败')
+      return resultFromEnvelope(false, payload, payload.msg || 'Token 驗證失敗')
     } catch (_error) {
-      return { ok: false, code: 'VALIDATION_UNAVAILABLE', message: '暂时无法连接 Copilotix 验证服务，请检查网络后重试' }
+      return { ok: false, code: 'VALIDATION_UNAVAILABLE', message: '暫時無法連線 Copilotix 驗證服務，請檢查網路後重試' }
     }
   }
 
   async createUploadBatch(tasks: CopilotixTask[], _settings: AppSettings, token?: string | null, signal?: AbortSignal): Promise<BatchSubmission> {
     if (!token?.trim()) throw new Error('未配置 Parser API Token')
-    if (tasks.length === 0) throw new Error('没有可提交的 PDF')
+    if (tasks.length === 0) throw new Error('沒有可提交的 PDF')
     const response = await this.fetcher(`${PARSER_API_ORIGIN}/api/v4/file-urls/batch`, {
       method: 'POST',
       headers: { ...authHeaders(token), 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -172,18 +172,18 @@ export class OfficialParserClient implements ParserClient {
       }),
       signal: signal ?? AbortSignal.timeout(30_000)
     })
-    const payload = await requireSuccess<UploadBatchData>(response, '申请文件上传链接失败')
+    const payload = await requireSuccess<UploadBatchData>(response, '申請檔案上傳連結失敗')
     if (!payload.data || typeof payload.data.batch_id !== 'string' || !Array.isArray(payload.data.file_urls)) {
-      throw new Error('Parser API 返回了无效的批次信息')
+      throw new Error('Parser API 返回了無效的批次資訊')
     }
-    if (payload.data.file_urls.length !== tasks.length) throw new Error('Copilotix 返回的上传链接数量与文件数量不一致')
+    if (payload.data.file_urls.length !== tasks.length) throw new Error('Copilotix 返回的上傳連結數量與檔案數量不一致')
 
     return {
       batchId: payload.data.batch_id,
       uploads: tasks.map((task, index) => ({
         taskId: task.id,
         dataId: task.id,
-        uploadUrl: requireHttpsUrl(payload.data!.file_urls[index]!, '上传链接')
+        uploadUrl: requireHttpsUrl(payload.data!.file_urls[index]!, '上傳連結')
       }))
     }
   }
@@ -194,7 +194,7 @@ export class OfficialParserClient implements ParserClient {
     onProgress?: (sent: number, total: number) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const target = requireHttpsUrl(uploadUrl, '上传链接')
+    const target = requireHttpsUrl(uploadUrl, '上傳連結')
     return signal === undefined
       ? this.uploader.upload(filePath, target, onProgress)
       : this.uploader.upload(filePath, target, onProgress, signal)
@@ -206,8 +206,8 @@ export class OfficialParserClient implements ParserClient {
       `${PARSER_API_ORIGIN}/api/v4/extract-results/batch/${encodeURIComponent(batchId)}`,
       { headers: authHeaders(token), signal: signal ?? AbortSignal.timeout(30_000) }
     )
-    const payload = await requireSuccess<RawBatchResultData>(response, '查询 Copilotix 批次结果失败')
-    if (!payload.data || !Array.isArray(payload.data.extract_result)) throw new Error('Parser API 返回了无效的批次结果')
+    const payload = await requireSuccess<RawBatchResultData>(response, '查詢 Copilotix 批次結果失敗')
+    if (!payload.data || !Array.isArray(payload.data.extract_result)) throw new Error('Parser API 返回了無效的批次結果')
     return {
       batchId: payload.data.batch_id || batchId,
       entries: payload.data.extract_result.map((entry) => {
@@ -220,9 +220,9 @@ export class OfficialParserClient implements ParserClient {
           state,
           fullZipUrl:
             state === 'done' && typeof entry.full_zip_url === 'string'
-              ? requireHttpsUrl(entry.full_zip_url, '结果下载链接')
+              ? requireHttpsUrl(entry.full_zip_url, '結果下載連結')
               : null,
-          error: state === 'failed' ? entry.err_msg || 'Copilotix 解析失败' : null,
+          error: state === 'failed' ? entry.err_msg || 'Copilotix 解析失敗' : null,
           progress:
             typeof extractedPages === 'number' && typeof totalPages === 'number' && totalPages > 0
               ? { extractedPages, totalPages }
@@ -260,24 +260,24 @@ export class OfficialParserClient implements ParserClient {
       await delay(delayMs, signal)
       delayMs = Math.min(10_000, Math.max(this.pollIntervalMs, Math.round(delayMs * 1.15)))
     }
-    throw new Error('等待 Copilotix 解析结果超时')
+    throw new Error('等待 Copilotix 解析結果超時')
   }
 
   async downloadResult(resultUrl: string, destinationPath: string, signal?: AbortSignal): Promise<void> {
     let completed = false
     try {
-      const response = await this.fetcher(requireHttpsUrl(resultUrl, '结果下载链接'), {
+      const response = await this.fetcher(requireHttpsUrl(resultUrl, '結果下載連結'), {
         signal: signal ?? AbortSignal.timeout(10 * 60 * 1000)
       })
-      if (!response.ok) throw new Error(`下载解析结果失败（HTTP ${response.status}）`)
+      if (!response.ok) throw new Error(`下載解析結果失敗（HTTP ${response.status}）`)
       const contentLengthHeader = response.headers.get('content-length')
       if (contentLengthHeader !== null) {
         const contentLength = Number(contentLengthHeader)
         if (!Number.isSafeInteger(contentLength) || contentLength < 4 || contentLength > MAX_RESULT_ZIP_BYTES) {
-          throw new Error('Copilotix 解析结果超过支持的 ZIP 大小限制')
+          throw new Error('Copilotix 解析結果超過支援的 ZIP 大小限制')
         }
       }
-      if (!response.body) throw new Error('Copilotix 解析结果缺少响应内容')
+      if (!response.body) throw new Error('Copilotix 解析結果缺少響應內容')
 
       let size = 0
       let header = Buffer.alloc(0)
@@ -286,7 +286,7 @@ export class OfficialParserClient implements ParserClient {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
           size += buffer.length
           if (size > MAX_RESULT_ZIP_BYTES) {
-            callback(new Error('Copilotix 解析结果超过支持的 ZIP 大小限制'))
+            callback(new Error('Copilotix 解析結果超過支援的 ZIP 大小限制'))
             return
           }
           if (header.length < 4) header = Buffer.concat([header, buffer]).subarray(0, 4)
@@ -299,7 +299,7 @@ export class OfficialParserClient implements ParserClient {
         createWriteStream(destinationPath, { flags: 'wx' }),
         { signal }
       )
-      if (header.length < 4 || header[0] !== 0x50 || header[1] !== 0x4b) throw new Error('Copilotix 解析结果不是有效的 ZIP 文件')
+      if (header.length < 4 || header[0] !== 0x50 || header[1] !== 0x4b) throw new Error('Copilotix 解析結果不是有效的 ZIP 檔案')
       const handle = await open(destinationPath, 'r+')
       try {
         await handle.sync()
@@ -319,7 +319,7 @@ function expireUnregisteredUploads(result: BatchResult, expectedDataIds: Set<str
   if (!expired) return result
   const entries = result.entries.map((entry) =>
     entry.dataId && expectedDataIds.has(entry.dataId) && entry.state === 'waiting-file'
-      ? { ...entry, state: 'failed' as const, error: 'Copilotix 未检测到已上传文件，请重试任务。' }
+      ? { ...entry, state: 'failed' as const, error: 'Copilotix 未檢測到已上傳檔案，請重試任務。' }
       : entry
   )
   const present = new Set(entries.map((entry) => entry.dataId).filter((dataId): dataId is string => Boolean(dataId)))
@@ -330,7 +330,7 @@ function expireUnregisteredUploads(result: BatchResult, expectedDataIds: Set<str
       fileName: '',
       state: 'failed',
       fullZipUrl: null,
-      error: 'Copilotix 批次结果未返回对应 data_id，请重试任务。',
+      error: 'Copilotix 批次結果未返回對應 data_id，請重試任務。',
       progress: null
     })
   }
@@ -349,7 +349,7 @@ async function requireSuccess<T>(response: Response, prefix: string): Promise<Ap
     // Keep remote response text out of the Error.  The service can echo
     // request data in `msg`; callers persist/log this error and must never
     // accidentally expose the bearer token.
-    const reason = !response.ok ? `HTTP ${response.status}` : 'Parser API 返回业务错误'
+    const reason = !response.ok ? `HTTP ${response.status}` : 'Parser API 返回業務錯誤'
     throw new ParserApiError(
       `${prefix}：${reason}（code=${String(code)}${trace}）`,
       code,
@@ -364,10 +364,10 @@ async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
   try {
     payload = await response.json()
   } catch {
-    throw new ParserApiError(`Parser API 返回非 JSON 响应（HTTP ${response.status}）`, `HTTP_${response.status}`)
+    throw new ParserApiError(`Parser API 返回非 JSON 響應（HTTP ${response.status}）`, `HTTP_${response.status}`)
   }
   if (!payload || typeof payload !== 'object' || !('code' in payload)) {
-    throw new Error('Parser API 返回了无效响应')
+    throw new Error('Parser API 返回了無效響應')
   }
   const envelope = payload as ApiEnvelope<T>
   return { ...envelope, msg: typeof envelope.msg === 'string' ? envelope.msg : '' }
@@ -379,7 +379,7 @@ function resultFromEnvelope(ok: boolean, payload: ApiEnvelope<unknown>, message:
 
 function normalizeState(value: unknown): OfficialTaskState {
   if (typeof value === 'string' && KNOWN_STATES.has(value as OfficialTaskState)) return value as OfficialTaskState
-  throw new Error(`Copilotix 返回未知任务状态：${String(value)}`)
+  throw new Error(`Copilotix 返回未知任務狀態：${String(value)}`)
 }
 
 function requireHttpsUrl(value: string, label: string): string {
@@ -387,20 +387,20 @@ function requireHttpsUrl(value: string, label: string): string {
   try {
     url = new URL(value)
   } catch {
-    throw new Error(`${label}无效`)
+    throw new Error(`${label}無效`)
   }
-  if (url.protocol !== 'https:') throw new Error(`${label}必须使用 HTTPS`)
+  if (url.protocol !== 'https:') throw new Error(`${label}必須使用 HTTPS`)
   return url.toString()
 }
 
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(new Error('请求已取消'))
+  if (signal?.aborted) return Promise.reject(new Error('請求已取消'))
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, milliseconds)
     signal?.addEventListener('abort', () => {
       clearTimeout(timer)
-      reject(new Error('请求已取消'))
+      reject(new Error('請求已取消'))
     }, { once: true })
   })
 }

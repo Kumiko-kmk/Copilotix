@@ -22,11 +22,11 @@ function paper(): ArchivePaper {
 }
 function saved(paper: ArchivePaper, patch: Partial<ArchiveInsightSnapshot> = {}): ArchiveInsightSnapshot {
   return { documentId: paper.id, updatedAt: paper.updatedAt ?? paper.createdAt, workflowStatus: paper.workflow.status,
-    savedStatus: 'ready', ready: true, translatedTitle: '已保存的译名', keywords: ['机制'], tldr: '已保存的论文总结。', ...patch }
+    savedStatus: 'ready', ready: true, translatedTitle: '已儲存的譯名', keywords: ['機制'], tldr: '已儲存的論文總結。', ...patch }
 }
 function savedState(): PaperInsightState {
-  return { status: 'ready', stale: false, insight: { summary: '已保存的论文总结。', researchQuestion: '问题', method: '方法',
-    contributions: [], findings: [], limitations: [], keywords: ['机制'], model: { provider: 'deepseek', name: 'deepseek-flash' },
+  return { status: 'ready', stale: false, insight: { summary: '已儲存的論文總結。', researchQuestion: '問題', method: '方法',
+    contributions: [], findings: [], limitations: [], keywords: ['機制'], model: { provider: 'deepseek', name: 'deepseek-flash' },
     generatedAt: '2026-10-26T00:00:00Z', sourceRevision: 'persisted-source' } }
 }
 function sourceFor(papers: ArchivePaper[]) {

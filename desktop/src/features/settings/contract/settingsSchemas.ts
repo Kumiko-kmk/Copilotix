@@ -12,10 +12,10 @@ export const credentialNameSchema: z.ZodType<CredentialName> = z.enum(['parser',
 
 export const credentialValueSchema = z.string()
   .trim()
-  .min(1, '凭据不能为空')
-  .max(16_384, '凭据过长')
-  .refine(noNul, '凭据不能包含 NUL 字符')
-  .refine((value) => !hasControlCharacters(value), '凭据不能包含控制字符')
+  .min(1, '憑據不能為空')
+  .max(16_384, '憑據過長')
+  .refine(noNul, '憑據不能包含 NUL 字元')
+  .refine((value) => !hasControlCharacters(value), '憑據不能包含控制字元')
 
 export const credentialMutationSchema: z.ZodType<CredentialMutation> = z.union([
   z.object({ action: z.literal('set'), value: credentialValueSchema }).strict(),
@@ -30,12 +30,12 @@ export const credentialStatusesSchema: z.ZodType<CredentialStatuses> = z.object(
 
 export const translationProviderOrderSchema = z.array(activeProviderSchema).length(3).refine(
   (providers) => new Set(providers).size === providers.length,
-  '翻译模型顺序必须完整且不能重复'
+  '翻譯模型順序必須完整且不能重複'
 )
 
 export const enabledTranslationProvidersSchema = z.array(activeProviderSchema).max(3).refine(
   (providers) => new Set(providers).size === providers.length,
-  '启用的翻译模型不能重复'
+  '啟用的翻譯模型不能重複'
 )
 
 export function credentialStatusSchemaPlaceholder(): z.ZodType<CredentialStatus> {
@@ -56,7 +56,7 @@ export const keyStatusSchema: z.ZodType<KeyStatus> = z.object({
   retryAt: z.number().int().nonnegative().optional()
 }).strict()
 
-const keyRecord = <T extends z.ZodTypeAny>(value: T) => z.record(connectionIdSchema, value).refine(record => Object.keys(record).length <= 16, '密钥数量超出上限')
+const keyRecord = <T extends z.ZodTypeAny>(value: T) => z.record(connectionIdSchema, value).refine(record => Object.keys(record).length <= 16, '金鑰數量超出上限')
 
 export const credentialFieldErrorSchema: z.ZodType<CredentialFieldError> = z.object({
   code: z.string().min(1).max(128).refine(noNul),
@@ -99,7 +99,7 @@ export const appSettingsSchema: z.ZodType<AppSettings> = z.object({
   keyStatuses: keyRecord(keyStatusSchema).optional()
 }).strict().refine(
   (settings) => (settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) ?? null) === settings.translationProvider,
-  '首选翻译模型必须是顺序中第一个已启用模型'
+  '首選翻譯模型必須是順序中第一個已啟用模型'
 )
 
 export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
@@ -131,7 +131,7 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
   keyStatuses: z.unknown().optional().transform(() => undefined)
 }).strict().refine(
   (settings) => (settings.translationProviderOrder.find((provider) => settings.enabledTranslationProviders.includes(provider)) ?? null) === settings.translationProvider,
-  '首选翻译模型必须是顺序中第一个已启用模型'
+  '首選翻譯模型必須是順序中第一個已啟用模型'
 )
 
 export const settingsSaveResultSchema: z.ZodType<SettingsSaveResult> = z.object({

@@ -82,13 +82,13 @@ launch:
 
 missing:
   ${If} $quiet == 0
-    MessageBox MB_OK|MB_ICONINFORMATION "未找到目前使用者的 ${PRODUCT_NAME} 安裝。請先執行 Setup；若已移除，無需再次卸載。$\r$\n$\r$\nNo ${PRODUCT_NAME} installation was found for this Windows account. Run Setup first, or no further removal is needed."
+    MessageBox MB_OK|MB_ICONINFORMATION "未找到目前使用者的 ${PRODUCT_NAME} 安裝。請先執行 Setup；若已移除，無需再次解除安裝。$\r$\n$\r$\nNo ${PRODUCT_NAME} installation was found for this Windows account. Run Setup first, or no further removal is needed."
   ${EndIf}
   SetErrorLevel 2
   Goto done
 invalid:
   ${If} $quiet == 0
-    MessageBox MB_OK|MB_ICONSTOP "無法安全確認 ${PRODUCT_NAME} 安裝位置，未執行任何卸載。請使用 Windows 設定中的已安裝應用程式，或重新執行 Setup 修復安裝。$\r$\n$\r$\nThe registered ${PRODUCT_NAME} installation could not be verified. No removal was performed. Use Windows Installed apps or repair the installation with Setup."
+    MessageBox MB_OK|MB_ICONSTOP "無法安全確認 ${PRODUCT_NAME} 安裝位置，未執行任何解除安裝。請使用 Windows 設定中的已安裝應用程式，或重新執行 Setup 修復安裝。$\r$\n$\r$\nThe registered ${PRODUCT_NAME} installation could not be verified. No removal was performed. Use Windows Installed apps or repair the installation with Setup."
   ${EndIf}
   SetErrorLevel 2
 done:

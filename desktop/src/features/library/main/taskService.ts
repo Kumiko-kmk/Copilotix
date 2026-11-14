@@ -82,7 +82,7 @@ export class TaskService extends EventEmitter {
   /** The user's own title; parsing keeps it (it only fills a title that is missing or still provisional). */
   async rename(taskId: string, title: string): Promise<void> {
     const displayTitle = title.trim().replace(/.pdf$/iu, '').trim()
-    if (!displayTitle) throw new Error('标题不能为空')
+    if (!displayTitle) throw new Error('標題不能為空')
     await this.repository.updateDocumentMetadata(taskId, { displayTitle })
     this.emit('changed', { documentId: taskId, kind: 'metadata' })
   }

@@ -1,6 +1,6 @@
 # insight
 
-AI 檔案卡（paper brief，文庫詳情頁）與圖片解讀（閱讀器圖組）。生成、存儲、授權與恢復語義見 [AI 檔案卡](../../../../docs/PAPER_INSIGHT_ZH.md)、[檔案卡格式](../../../../docs/PAPER_BRIEF_ZH.md)、[圖片解讀](../../../../docs/FIGURE_INSIGHT_ZH.md)。
+AI 檔案卡（paper brief，文庫詳情頁）與圖片解讀（閱讀器圖組）。生成、儲存、授權與恢復語義見 [AI 檔案卡](../../../../docs/PAPER_INSIGHT_ZH.md)、[檔案卡格式](../../../../docs/PAPER_BRIEF_ZH.md)、[圖片解讀](../../../../docs/FIGURE_INSIGHT_ZH.md)。
 
 ## 公開 API
 
@@ -13,25 +13,25 @@ AI 檔案卡（paper brief，文庫詳情頁）與圖片解讀（閱讀器圖組
 
 ## 文庫小型目錄
 
-`PaperInsightSource.list?`／preload `paperInsight.list?({documentIds})` 經 `paperInsight:list` IPC、`insight:list` Core RPC 一次讀取最多 200 篇本地快照，直接回傳陣列。`ArchiveInsightSnapshot` 包含文檔 ID、與文庫 summary 同投影的 `updatedAt`／`workflowStatus`、`savedStatus`（ready／missing／stale／failed）、`ready`、譯名、關鍵詞與一句話總結；不傳路徑、全文、摘錄或圖片。方法為可選以兼容既有呼叫與測試替身，Main／Utility／Preload 隨同一應用版本更新，無 migration 或持久化格式變更。
+`PaperInsightSource.list?`／preload `paperInsight.list?({documentIds})` 經 `paperInsight:list` IPC、`insight:list` Core RPC 一次讀取最多 200 篇本地快照，直接回傳陣列。`ArchiveInsightSnapshot` 包含文件 ID、與文庫 summary 同投影的 `updatedAt`／`workflowStatus`、`savedStatus`（ready／missing／stale／failed）、`ready`、譯名、關鍵詞與一句話總結；不傳路徑、全文、摘錄或圖片。方法為可選以相容既有呼叫與測試替身，Main／Utility／Preload 隨同一應用版本更新，無 migration 或持久化格式變更。
 
-進入成熟檔案後，`PaperInsightSource.readSaved?` 經原 `paperInsight:get` 的可選 `savedOnly: true` 讀完整已保存內容，不由正在生成的 run 覆蓋成 generating，保持與 catalog 的成熟判斷一致。不帶該欄位的 get、生成／取消及閱讀器狀態語義不變；get 請求單獨使用 read schema，generate／cancel 仍只接受原文檔 ID schema。無新頻道、Core RPC、磁碟或資料庫格式變更；讀取失敗只回傳通用本地錯誤，不外洩路徑或上游內容。
+進入成熟檔案後，`PaperInsightSource.readSaved?` 經原 `paperInsight:get` 的可選 `savedOnly: true` 讀完整已儲存內容，不由正在生成的 run 覆蓋成 generating，保持與 catalog 的成熟判斷一致。不帶該欄位的 get、生成／取消及閱讀器狀態語義不變；get 請求單獨使用 read schema，generate／cancel 仍只接受原文件 ID schema。無新頻道、Core RPC、磁碟或資料庫格式變更；讀取失敗只回傳通用本地錯誤，不外洩路徑或上游內容。
 
-Utility 每頁最多 4 篇並行，只讀並校驗已有 brief／legacy 檔案的 schema、document ID 與 artifact revision；成熟標記還要求 workflow completed、結果非 stale、對應全文 artifact 安全且非空。使用已保存結果，不被正在重新生成的 run 蓋成 generating。任何一篇缺失、損壞、檔案不安全或讀取中 revision 改變，只將該篇標記 unavailable（failed／stale），其他篇照常回傳。譯名僅從已存在、非 symlink、位於文獻根目錄內的 translated artifact 安全讀取最多 16 KiB 頭部，按共用 `archiveTranslatedTitle` 規則提取；不讀原文全文、不裁圖、不渲染封面，不發送模型請求。請求取消停止後續處理；維護仍受既有 IPC 與 Utility 生命週期門禁保護。
+Utility 每頁最多 4 篇並行，只讀並校驗已有 brief／legacy 檔案的 schema、document ID 與 artifact revision；成熟標記還要求 workflow completed、結果非 stale、對應全文 artifact 安全且非空。使用已儲存結果，不被正在重新生成的 run 蓋成 generating。任何一篇缺失、損壞、檔案不安全或讀取中 revision 改變，只將該篇標記 unavailable（failed／stale），其他篇照常回傳。譯名僅從已存在、非 symlink、位於文獻根目錄內的 translated artifact 安全讀取最多 16 KiB 頭部，按共用 `archiveTranslatedTitle` 規則提取；不讀原文全文、不裁圖、不渲染封面，不傳送模型請求。請求取消停止後續處理；維護仍受既有 IPC 與 Utility 生命週期門禁保護。
 
 ## 資料檔（文獻目錄，無 migration）
 
-- `insight/brief.v2.json`：檔案卡；舊 `insight/insight.v1.json` 只讀兼容。
+- `insight/brief.v2.json`：檔案卡；舊 `insight/insight.v1.json` 只讀相容。
 - `insight/figures/<hash>.v1.json`：每張圖的解讀。
 
 ## 封面來源快照
 
-可選 preload `figureInsight.coverSource({documentId})` 經 `figureInsight:cover-source` IPC／Core RPC 回傳 `ArchiveCoverSource`（fingerprint、hasManifest、figureId／imagePath／尺寸／頁碼／cropBox／可選 displayWeight），與原圖片解讀 get／descriptor／生成完全分開。只讀安全文獻目錄中的 `figures.json`（最多 2 MiB）與每圖既有評分檔（最多 64 KiB），評分須通過 schema、文檔 ID、圖 ID、PNG hash、整圖來源 revision 及位置一致性校驗；壞評分只忽略權重，壞清單回傳通用錯誤，缺少清單才回 hasManifest=false。PNG 只檢查路徑與檔案 stat，不讀圖片或全文、layout、mapping 內容、不調用 descriptor、不發模型請求。
+可選 preload `figureInsight.coverSource({documentId})` 經 `figureInsight:cover-source` IPC／Core RPC 回傳 `ArchiveCoverSource`（fingerprint、hasManifest、figureId／imagePath／尺寸／頁碼／cropBox／可選 displayWeight），與原圖片解讀 get／descriptor／生成完全分開。只讀安全文獻目錄中的 `figures.json`（最多 2 MiB）與每圖既有評分檔（最多 64 KiB），評分須透過 schema、文件 ID、圖 ID、PNG hash、整圖來源 revision 及位置一致性校驗；壞評分只忽略權重，壞清單回傳通用錯誤，缺少清單才回 hasManifest=false。PNG 只檢查路徑與檔案 stat，不讀圖片或全文、layout、mapping 內容、不呼叫 descriptor、不發模型請求。
 
-指紋包含封面來源算法版本、PDF sourceHash、最新 source_pdf／parsed_markdown／layout／block_mappings artifact 的版本與 hash、清單 bytes hash、評分 bytes hash、PNG 的 manifest hash 與 size／mtime。整圖缺失仍保留清單候選並將 missing 納入指紋，避免誤存為無圖單頁；讀取期間清單或 artifact 版本變化則失敗重試。每次最多 4 圖並行，僅保留小型投影，供 Renderer 的持久化雙頁快取失效，不改 catalog row 或文庫 schema。Main／Utility／Preload 隨同版本更新；舊呼叫與測試替身可省略新 API。此只讀接口不改磁碟／DB 格式，無 migration。
+指紋包含封面來源演算法版本、PDF sourceHash、最新 source_pdf／parsed_markdown／layout／block_mappings artifact 的版本與 hash、清單 bytes hash、評分 bytes hash、PNG 的 manifest hash 與 size／mtime。整圖缺失仍保留清單候選並將 missing 納入指紋，避免誤存為無圖單頁；讀取期間清單或 artifact 版本變化則失敗重試。每次最多 4 圖並行，僅保留小型投影，供 Renderer 的持久化雙頁快取失效，不改 catalog row 或文庫 schema。Main／Utility／Preload 隨同版本更新；舊呼叫與測試替身可省略新 API。此只讀介面不改磁碟／DB 格式，無 migration。
 
 ## 測試
 
 `tests/features/insight/`（`pnpm desktop:test --module insight`）；E2E `e2e/paper-insight.spec.ts`、`archive-math.spec.ts`。
 
-檔案全文與圖解上下文改讀 document snapshot；大文本以內容定址檔案的受控描述傳到 Main，來源／編輯版本變更拒絕過期輸入。圖組幾何取 document base，原完整裁圖驗證門檻不變。模型傳輸／健康／預算由 platform/models 共用；檔案保留已授權備援，圖解不自動回退，部分輸出一律不重放。
+檔案全文與圖解上下文改讀 document snapshot；大文字以內容定址檔案的受控描述傳到 Main，來源／編輯版本變更拒絕過期輸入。圖組幾何取 document base，原完整裁圖驗證門檻不變。模型傳輸／健康／預算由 platform/models 共用；檔案保留已授權備援，圖解不自動回退，部分輸出一律不重放。

@@ -51,7 +51,7 @@ const ASSETS = new Set(['image', 'chart', 'image_body', 'chart_body'])
 const CAPTIONS = new Set(['image_caption', 'chart_caption'])
 const FOOTNOTES = new Set(['image_footnote', 'chart_footnote'])
 const HEADERS = /^(?:header|footer|page_header|page_footer|page_number|page_num|page_count)$/u
-const FIGURE_PREFIX = /^\s*(?:(?:supplementary|extended\s+data)\s+)?(?:fig(?:ure)?\.?|[附補补]?圖|[附补]?图)\s*((?:[A-Z]\.?\s*)?\d+[A-Z]?)(?:\b|(?=[：:．.、\s]))/iu
+const FIGURE_PREFIX = /^\s*(?:(?:supplementary|extended\s+data)\s+)?(?:fig(?:ure)?\.?|[附補補]?圖|[附補]?圖)\s*((?:[A-Z]\.?\s*)?\d+[A-Z]?)(?:\b|(?=[：:．.、\s]))/iu
 function captionLabel(markdown: string): string | undefined {
   return FIGURE_PREFIX.exec(captionFromMarkdown(markdown))?.[1]?.replace(/[.\s]/gu, '').toUpperCase()
 }
@@ -75,7 +75,7 @@ function isCaption(entry: Entry): boolean {
 }
 function isAsset(entry: Entry): boolean { return ASSETS.has(type(entry)) }
 /** "Fig. 6 | Results…": Nature-style captions run the full figure width below (or beside) it. */
-const BAR_CAPTION = /^\s*(?:fig(?:ure)?\.?|[附補补]?圖|[附补]?图)\s*\d+[A-Z]?\s*[|｜]/iu
+const BAR_CAPTION = /^\s*(?:fig(?:ure)?\.?|[附補補]?圖|[附補]?圖)\s*\d+[A-Z]?\s*[|｜]/iu
 /**
  * Panels whose bottom edge sits right on top of a bar caption form the figure's last row. Such a
  * caption is left-aligned and often shorter than the figure, so on its own it cannot separate a
@@ -186,7 +186,7 @@ function isSupporting(entry: Entry, assets: readonly Entry[]): boolean {
   // Width alone cannot distinguish a legend from a short body paragraph.
   // Without structural ownership, require recognisable graphical notation.
   const graphical = /\b(?:solid|dashed|dotted)\s*:/iu.test(entry.mapping.sourceText) ||
-    /(?:实线|實線|虚线|虛線|点线|點線)\s*[：:]/u.test(entry.mapping.sourceText) ||
+    /(?:\u5b9e\u7ebf|實線|\u865a\u7ebf|虛線|\u70b9\u7ebf|點線)\s*[：:]/u.test(entry.mapping.sourceText) ||
     /^\s*\d+(?:\.\d+)?\s*(?:[μµu]?m|nm|mm|cm|ms|s|h|%)\s*$/u.test(entry.mapping.sourceText)
   return assets.some(asset => relatedParent(entry, asset) ||
     (graphical && entry.bbox[2] - entry.bbox[0] <= entry.pageSize[0] * 0.25 &&
@@ -327,7 +327,7 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
       // A blocked parent on the opposite side cannot invalidate a clear geometric owner.
       const linked = nearest ? structural.filter(asset => captionSide(asset, caption) === captionSide(nearest, caption)) : structural
       if (!nearest || (!linked.length && distance(nearest, caption) > 0.12)) {
-        proposals.push({ caption, captionBoxes, members: [], status: 'unsupported', reason: '没有可靠的图体与图说关联' })
+        proposals.push({ caption, captionBoxes, members: [], status: 'unsupported', reason: '沒有可靠的圖體與圖說關聯' })
         seeds.push(new Map())
         linkedPanels.push(linked)
         continue
@@ -353,7 +353,7 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
     for (const [index, proposal] of proposals.entries()) {
       if (proposal.status === 'unsupported') continue
       const members = nodes.filter((_, nodeIndex) => owners[nodeIndex]!.includes(index))
-      if (!members.some(isAsset)) { proposal.status = 'unsupported'; proposal.reason = '图体优先归属于其他图说'; continue }
+      if (!members.some(isAsset)) { proposal.status = 'unsupported'; proposal.reason = '圖體優先歸屬於其他圖說'; continue }
       const foreignBarriers = barriers.filter(entry => !proposal.captionBoxes!.includes(entry))
       const region = union(members.map(e => e.bbox))
       const hasForeign = foreignBarriers.some(b => overlap(region, b.bbox))
@@ -361,7 +361,7 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
       const captionInside = proposal.captionBoxes!.some(entry => overlap(region, entry.bbox))
       const missingLinked = linkedPanels[index]!.some(asset => !members.includes(asset))
       Object.assign(proposal, { members, status: hasForeign || unknown || captionInside || missingLinked ? 'ambiguous' : 'complete',
-        reason: hasForeign ? '图区内包含其他图说、正文或表格' : unknown ? '图区内存在未知图片' : captionInside ? '无法将图说与图体分离' : missingLinked ? '结构化图体被正文或表格分隔' : '图说与完整空间图区唯一对应' })
+        reason: hasForeign ? '圖區內包含其他圖說、正文或表格' : unknown ? '圖區記憶體在未知圖片' : captionInside ? '無法將圖說與圖體分離' : missingLinked ? '結構化圖體被正文或表格分隔' : '圖說與完整空間圖區唯一對應' })
     }
     const used = new Set(proposals.flatMap(p => p.members))
     for (const asset of assets) if (!used.has(asset)) {
@@ -372,12 +372,12 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
       const complete = Boolean(parent) && members.every(m => !isAsset(m) || Boolean(m.mapping.sourceAsset)) &&
         !barriers.some(b => overlap(union(members.map(m => m.bbox)), b.bbox))
       proposals.push({ members, status: complete ? 'complete' : 'unsupported',
-        reason: complete ? '解析器明确保留了完整复合图体' : '缺少完整图说或明确整图边界' })
+        reason: complete ? '解析器明確保留了完整複合圖體' : '缺少完整圖說或明確整圖邊界' })
     }
     for (const proposal of proposals) {
       if (proposals.some(other => other !== proposal && proposal.members.some(m => other.members.includes(m)))) {
         proposal.status = 'ambiguous'
-        proposal.reason = '子图存在多个图说归属'
+        proposal.reason = '子圖存在多個圖說歸屬'
       }
       const visual = proposal.members.filter(isAsset).sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0] || a.key.localeCompare(b.key))
       const sorted = [...proposal.members].sort((a, b) => a.mapping.order - b.mapping.order)
@@ -400,15 +400,15 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
         barriers.includes(entry) || HEADERS.test(type(entry)) || (isAsset(entry) && !proposal.members.includes(entry))))
       if (proposal.status === 'complete' && barriers.some(b => overlap(cropBox, b.bbox))) {
         proposal.status = 'ambiguous'
-        proposal.reason = '裁图边缘与图说、正文或表格重叠'
+        proposal.reason = '裁圖邊緣與圖說、正文或表格重疊'
       }
       if (proposal.status === 'complete' && entries.some(e => HEADERS.test(type(e)) && overlap(cropBox, e.bbox))) {
         proposal.status = 'ambiguous'
-        proposal.reason = '裁图包含页眉或页脚'
+        proposal.reason = '裁圖包含頁首或頁尾'
       }
       if (proposal.status === 'complete' && assets.some(asset => !proposal.members.includes(asset) && overlap(cropBox, asset.bbox))) {
         proposal.status = 'ambiguous'
-        proposal.reason = '裁图边缘包含归属未确认的图片'
+        proposal.reason = '裁圖邊緣包含歸屬未確認的圖片'
       }
       // A lost coordinate must not turn a known compound figure into a partial
       // success. A valid alternative box or layout recovery can resolve it.
@@ -420,7 +420,7 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
           figureAssetName(mapping.sourceAsset) === figureAssetName(asset.mapping.sourceAsset))))
       if (proposal.status === 'complete' && (unresolved || sorted.some(e => e.pageSize[0] !== size[0] || e.pageSize[1] !== size[1]))) {
         proposal.status = 'ambiguous'
-        proposal.reason = unresolved ? '同页图片坐标损坏，无法确认整图完整性' : '成员页面尺寸不一致'
+        proposal.reason = unresolved ? '同頁圖片座標損壞，無法確認整圖完整性' : '成員頁面尺寸不一致'
       }
       result.push({
         id: 'reader-figure-' + pageIndex + '-' + (proposal.caption?.key ?? visual[0]!.key),
@@ -439,7 +439,7 @@ export function buildReaderFigureGeometries(mappings: readonly BlockMapping[], l
   for (const geometry of result) if (geometry.status === 'complete' && result.some(other => other !== geometry &&
     other.pageIndex !== geometry.pageIndex && geometry.mappingIds.some(id => other.mappingIds.includes(id)))) {
     geometry.status = 'ambiguous'
-    geometry.reason = '图体映射跨页，保留逐页来源'
+    geometry.reason = '圖體對映跨頁，保留逐頁來源'
   }
   return result.sort((a, b) => a.pageIndex - b.pageIndex || a.cropBox[1] - b.cropBox[1])
 }
@@ -482,14 +482,14 @@ export function projectReaderFigureGroups(geometries: readonly ReaderFigureGeome
       group.supportingTextsByBlock![index] = projected.texts
       if (!projected.complete && group.status === 'complete') {
         group.status = 'ambiguous'
-        group.reason = '译文图内文字与来源结构不一致，保留全部来源'
+        group.reason = '譯文圖內文字與來源結構不一致，保留全部來源'
       }
     }
     if (referenceBlocks && group.status === 'complete' && geometry.members.some(member => member.kind === 'supporting' &&
       member.sourceText.trim() && !isFigureLabel(member.sourceText) && !resolvedTexts.has(member.sourceText) &&
       referenceBlocks.some(block => block.markdown.replace(/\s+/gu, '').includes(member.sourceText.replace(/\s+/gu, ''))))) {
       group.status = 'ambiguous'
-      group.reason = '无法确认译文图内文字归属，保留全部来源'
+      group.reason = '無法確認譯文圖內文字歸屬，保留全部來源'
     }
     return [group]
   })
@@ -498,7 +498,7 @@ export function projectReaderFigureGroups(geometries: readonly ReaderFigureGeome
       (labels[i] === group.captionLabel || labels[i] === other.captionLabel) &&
       [group, other].some(owner => blockAssets[i]!.every(asset => owner.assetSources.some(source => figureAssetName(source) === asset))))))) {
     group.status = 'ambiguous'
-    group.reason = '同一阅读区块包含多个图区，保留完整来源'
+    group.reason = '同一閱讀區塊包含多個圖區，保留完整來源'
   }
   return groups
 }

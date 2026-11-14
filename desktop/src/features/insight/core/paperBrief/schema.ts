@@ -18,16 +18,16 @@ export const PAPER_BRIEF_SCHEMA_VERSION = 2
 export const PAPER_TYPES = ['empirical', 'method', 'theoretical', 'system', 'resource', 'review', 'position', 'case_study', 'qualitative', 'other'] as const
 export const FINDING_STRENGTHS = ['strong', 'moderate', 'limited', 'unclear'] as const
 export const FINDING_STRENGTH_LABELS: Record<typeof FINDING_STRENGTHS[number], string> = {
-  strong: '证据充分', moderate: '证据一般', limited: '证据有限', unclear: '无法判断'
+  strong: '證據充分', moderate: '證據一般', limited: '證據有限', unclear: '無法判斷'
 }
 export const CONTRIBUTION_KINDS = ['method', 'theory', 'empirical', 'resource', 'tool', 'synthesis', 'application', 'other'] as const
 export const CONTRIBUTION_KIND_LABELS: Record<typeof CONTRIBUTION_KINDS[number], string> = {
-  method: '新方法', theory: '新理论', empirical: '新发现', resource: '数据与基准', tool: '工具与系统',
-  synthesis: '综述与整合', application: '应用', other: '其他'
+  method: '新方法', theory: '新理論', empirical: '新發現', resource: '資料與基準', tool: '工具與系統',
+  synthesis: '綜述與整合', application: '應用', other: '其他'
 }
 
 const NO_CONTROL = (value: string): boolean => ![...value].some((char) => char.charCodeAt(0) < 32 && !'\t\n\r'.includes(char))
-const text = (max: number) => z.string().trim().min(1).max(max).refine(NO_CONTROL, '不能包含控制字符')
+const text = (max: number) => z.string().trim().min(1).max(max).refine(NO_CONTROL, '不能包含控制字元')
 const anchors = z.array(z.string().regex(/^E\d{1,4}$/u)).max(4)
 const metadataFact = z.object({ value: text(8192), evidence: text(8192), anchors: anchors.min(1) }).strict().nullable()
 export const paperMetadataSchema = z.object({ title: metadataFact, authors: metadataFact, year: metadataFact, venue: metadataFact, doi: metadataFact }).strict()
@@ -54,7 +54,7 @@ export const paperBriefGenerationSchema = z.object({
 
 /** Native decoding targets a comfortable middle length; acceptance still uses display counts. */
 const modelConclusion = archiveAnalysisSchema.shape.conclusions.element.extend({ text: z.union([
-  text(700).min(Math.round((ARCHIVE_LENGTHS.conclusion[0] + ARCHIVE_LENGTHS.conclusion[1]) / 2)), z.literal('原文未说明')
+  text(700).min(Math.round((ARCHIVE_LENGTHS.conclusion[0] + ARCHIVE_LENGTHS.conclusion[1]) / 2)), z.literal('原文未說明')
 ]) })
 export const paperBriefModelOutputSchema = paperBriefGenerationSchema.extend({
   analysis: paperBriefGenerationSchema.shape.analysis.extend({ conclusions: z.array(modelConclusion).length(3) })
@@ -124,5 +124,5 @@ export const paperBriefSchema = paperBriefContentSchema.extend({
     sentBytes: z.number().int().nonnegative(),
     sourceBytes: z.number().int().nonnegative()
   }).strict()
-}).strict().refine((brief) => brief.checks.length === brief.findings.length, { message: 'checks 必须与 findings 一一对应' })
+}).strict().refine((brief) => brief.checks.length === brief.findings.length, { message: 'checks 必須與 findings 一一對應' })
 export type PaperBrief = z.infer<typeof paperBriefSchema>

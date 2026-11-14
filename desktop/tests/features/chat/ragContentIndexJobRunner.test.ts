@@ -39,7 +39,7 @@ async function fixture(markdown: string): Promise<{ database: V2Database; rag: S
 
 describe('rag content index runner', () => {
   it('reads only registered artifacts and atomically publishes deterministic chunks', async () => {
-    const value = await fixture('# Intro\n\n这是内容😀。')
+    const value = await fixture('# Intro\n\n這是內容😀。')
     const first = await value.service.index({ documentId: 'doc', contentRevisionId: value.revisionId })
     const ids = value.rag.listChunks(value.revisionId).map((chunk) => [chunk.chunkId, chunk.contentHash])
     const second = await value.service.index({ documentId: 'doc', contentRevisionId: value.revisionId })

@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider, theme } from 'antd'
-import zhCN from 'antd/locale/zh_CN'
+import zhTW from 'antd/locale/zh_TW'
 import { currentTheme, mixHex, onThemeChange, restoreTheme, rgbChannels } from '@features/settings/renderer'
 import './styles.css'
 
@@ -20,17 +20,17 @@ function Root(): React.JSX.Element {
   const rule = rgbChannels(colors.ink)
   return (
     <ConfigProvider
-      locale={zhCN}
+      locale={zhTW}
       theme={{
         algorithm: active.dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        // Archive language (文库): square corners, flat surfaces, ink primary actions that turn to the accent on hover.
+        // Archive language (文庫): square corners, flat surfaces, ink primary actions that turn to the accent on hover.
         token: {
           motion: !__COPILOTIX_LITE__,
           colorPrimary: colors.primary,
           borderRadius: 2,
           borderRadiusLG: 3,
           borderRadiusSM: 2,
-          fontFamily: 'Inter, "Microsoft YaHei UI", "PingFang SC", sans-serif',
+          fontFamily: 'Inter, "DFKai-SB", BiauKai, "Microsoft JhengHei", sans-serif',
           colorBgBase: colors.surface,
           colorBgContainer: mixHex(colors.surface, colors.sheet, 0.5),
           colorBgLayout: colors.surface,

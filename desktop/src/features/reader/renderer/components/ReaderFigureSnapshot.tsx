@@ -60,7 +60,7 @@ export default function ReaderFigureSnapshot(props: {
       const request = acquireRegion(input.pdfUrl, input.group, width * Math.max(1, window.devicePixelRatio))
       release = request.release
       const timeout = new Promise<never>((_, reject) => {
-        timeoutId = window.setTimeout(() => reject(new Error('整图预渲染超时')), FIGURE_RENDER_TIMEOUT_MS)
+        timeoutId = window.setTimeout(() => reject(new Error('整圖預渲染超時')), FIGURE_RENDER_TIMEOUT_MS)
       })
       void Promise.race([request.promise, timeout]).then(source => {
         if (cancelled || !canvasRef.current) return
@@ -68,7 +68,7 @@ export default function ReaderFigureSnapshot(props: {
         canvas.width = source.width
         canvas.height = source.height
         const context = canvas.getContext('2d')
-        if (!context) throw new Error('无法创建复合图画布')
+        if (!context) throw new Error('無法建立複合圖畫布')
         context.drawImage(source, 0, 0)
         setState({ key, status: 'ready' })
         callbacks.current.onStateChange('ready')
@@ -96,8 +96,8 @@ export default function ReaderFigureSnapshot(props: {
     <div ref={hostRef} className="reader-figure-snapshot" data-rendered={status === 'ready'}
       data-failed={status === 'failed'} data-reader-annotation-ignore="true"
       style={status === 'ready' ? { aspectRatio: (props.group.cropBox[2] - props.group.cropBox[0]) + ' / ' + (props.group.cropBox[3] - props.group.cropBox[1]) } : undefined}>
-      <canvas ref={canvasRef} className="reader-figure-snapshot-canvas" aria-label="PDF 复合图" />
-      {status === 'failed' ? <button type="button" className="reader-figure-action" onClick={() => setAttempt(value => value + 1)}>重试整图</button> : null}
+      <canvas ref={canvasRef} className="reader-figure-snapshot-canvas" aria-label="PDF 複合圖" />
+      {status === 'failed' ? <button type="button" className="reader-figure-action" onClick={() => setAttempt(value => value + 1)}>重試整圖</button> : null}
     </div>
   )
 }
@@ -203,7 +203,7 @@ async function savedCropCanvas(pdfUrl: string, group: ReaderFigureGroup, signal:
     canvas.height = bitmap.height
     try {
       const context = canvas.getContext('2d')
-      if (!context) throw new Error('无法创建复合图画布')
+      if (!context) throw new Error('無法建立複合圖畫布')
       context.drawImage(bitmap, 0, 0)
       return canvas
     } catch (error) { canvas.width = 0; canvas.height = 0; throw error }
@@ -272,7 +272,7 @@ export async function renderDocumentRegion(
   const top = group.cropBox[1] / size[1] * base.height
   const cropWidth = (group.cropBox[2] - group.cropBox[0]) / size[0] * base.width
   const cropHeight = (group.cropBox[3] - group.cropBox[1]) / size[1] * base.height
-  if (![left, top, cropWidth, cropHeight].every(Number.isFinite) || cropWidth <= 0 || cropHeight <= 0) throw new Error('无效图区')
+  if (![left, top, cropWidth, cropHeight].every(Number.isFinite) || cropWidth <= 0 || cropHeight <= 0) throw new Error('無效圖區')
   const [width, height] = figurePixelSize(cropWidth, cropHeight, pixelWidth)
   const scale = width / cropWidth
   const viewport = page.getViewport({ scale })
@@ -282,7 +282,7 @@ export async function renderDocumentRegion(
   const context = canvas.getContext('2d')
   let cancel: (() => void) | undefined
   try {
-    if (!context) throw new Error('无法创建复合图画布')
+    if (!context) throw new Error('無法建立複合圖畫布')
     const task = page.render({ canvas, canvasContext: context, viewport,
       transform: [1, 0, 0, 1, -left * scale, -top * scale] })
     cancel = () => task.cancel()

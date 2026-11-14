@@ -250,7 +250,7 @@ describe('main quality boundaries', () => {
     } as unknown as TaskRepositoryCompat
     const service = new ArtifactService(repository, compute, new PathPolicy())
     await writeFile(join(root, 'full.md'), '# Source', 'utf8')
-    await writeFile(join(root, 'full.zh-CN.md'), '# 译文', 'utf8')
+    await writeFile(join(root, 'full.zh-CN.md'), '# 譯文', 'utf8')
     await writeFile(join(root, 'layout.json'), '{"pages":[]}', 'utf8')
     await writeFile(blockPath, JSON.stringify({ version: BLOCK_MAPPING_VERSION, mappings: [mapping] }), 'utf8')
     await writeFile(join(root, 'translation.manifest.json'), JSON.stringify({
@@ -260,20 +260,20 @@ describe('main quality boundaries', () => {
       tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
       mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
       blockMappingVersion: BLOCK_MAPPING_VERSION,
-      blocks: [{ sourceIndex: 0, markdown: '# 译文', mappingIds: ['mapping-1'] }]
+      blocks: [{ sourceIndex: 0, markdown: '# 譯文', mappingIds: ['mapping-1'] }]
     }), 'utf8')
 
     const payload = await service.getDocument(task.id)
     expect(payload.markdown).toBe('# Source')
     // A legacy ordinal without a source version/hash cannot prove paragraph identity.
-    expect(payload.translatedBlocks).toEqual([{ sourceIndex: undefined, markdown: '# 译文', mappingIds: [], unmatched: true, sourceChanged: true }])
-    expect(payload.translatedMarkdown).toBe('# 译文\n')
+    expect(payload.translatedBlocks).toEqual([{ sourceIndex: undefined, markdown: '# 譯文', mappingIds: [], unmatched: true, sourceChanged: true }])
+    expect(payload.translatedMarkdown).toBe('# 譯文\n')
 
     const currentManifest = JSON.parse(await readFile(join(root, 'translation.manifest.json'), 'utf8'))
     currentManifest.sourceVersion = payload.base!.sourceVersion
     await writeFile(join(root, 'translation.manifest.json'), JSON.stringify(currentManifest), 'utf8')
     expect((await service.getDocument(task.id)).translatedBlocks).toEqual([
-      { sourceIndex: 0, sourceVersion: payload.base!.sourceVersion, markdown: '# 译文', mappingIds: ['mapping-1'] }
+      { sourceIndex: 0, sourceVersion: payload.base!.sourceVersion, markdown: '# 譯文', mappingIds: ['mapping-1'] }
     ])
 
     await writeFile(join(root, 'translation.manifest.json'), JSON.stringify({
@@ -283,10 +283,10 @@ describe('main quality boundaries', () => {
       tableTranslationProtocol: TABLE_TRANSLATION_PROTOCOL,
       mappingAlgorithmVersion: MARKDOWN_MAPPING_ALGORITHM_VERSION,
       blockMappingVersion: BLOCK_MAPPING_VERSION - 1,
-      blocks: [{ sourceIndex: 0, markdown: '# 译文', mappingIds: ['stale-mapping'] }]
+      blocks: [{ sourceIndex: 0, markdown: '# 譯文', mappingIds: ['stale-mapping'] }]
     }), 'utf8')
     await expect(service.loadTranslatedBlocks(task)).resolves.toEqual([
-      { sourceIndex: undefined, markdown: '# 译文', mappingIds: [], unmatched: true, sourceChanged: true }
+      { sourceIndex: undefined, markdown: '# 譯文', mappingIds: [], unmatched: true, sourceChanged: true }
     ])
 
     expect(await service.resolveAsset(task.id, '/images/figure.png')).toBe(join(await realpath(root), 'images', 'figure.png'))
@@ -302,7 +302,7 @@ describe('main quality boundaries', () => {
     await rm(blockPath, { force: true })
     await expect(service.loadMappings(task)).resolves.toEqual([])
     await expect(service.readOptional(join(root, 'missing.txt'), 'fallback')).resolves.toBe('fallback')
-    await expect(service.getDocument('missing')).rejects.toThrow('任务不存在')
+    await expect(service.getDocument('missing')).rejects.toThrow('任務不存在')
   })
 
   it('projects document DTOs and exercises stable job transition/error contracts', () => {
@@ -342,8 +342,8 @@ describe('main quality boundaries', () => {
       has: async (account) => values.has(account)
     }
     const service = new SettingsService(repository, vault, 'C:\\default-output', {
-      parser: async (value) => ({ ok: value === 'parser-next', message: 'Token 验证成功' }),
-      provider: async (name, value) => ({ ok: value === name, message: `${name} 验证成功` })
+      parser: async (value) => ({ ok: value === 'parser-next', message: 'Token 驗證成功' }),
+      provider: async (name, value) => ({ ok: value === name, message: `${name} 驗證成功` })
     })
     await expect(service.get()).resolves.toMatchObject({ credentials: { parser: { state: 'unknown', maskedValue: 'pa****er' }, qwen: { state: 'missing' } } })
     const result = await service.save({
@@ -440,7 +440,7 @@ describe('main quality boundaries', () => {
     const first = await service.importPaths([duplicateSource, join(root, 'oversized.pdf'), duplicateSource, textFile], {})
     expect(first.created).toHaveLength(1)
     // One bad file is reported without aborting the rest of the selection.
-    expect(first.failed).toEqual([{ name: 'oversized.pdf', message: '超过 200MB 或 600 页的解析限制' }])
+    expect(first.failed).toEqual([{ name: 'oversized.pdf', message: '超過 200MB 或 600 頁的解析限制' }])
     expect(scheduler.wake).toHaveBeenCalled()
     // A selection larger than one RPC batch is inserted in bounded batches.
     const bulk = Array.from({ length: 205 }, (_, index) => join(root, `bulk-${index}.pdf`))
@@ -450,10 +450,10 @@ describe('main quality boundaries', () => {
     expect(enqueued).toEqual([])
     await expect(service.retry(baseTask.id)).resolves.toBeUndefined()
     expect(enqueued).toHaveLength(1)
-    await expect(service.retry('missing')).rejects.toThrow('任务不存在')
+    await expect(service.retry('missing')).rejects.toThrow('任務不存在')
     const noRetryJobs = { ...jobs, list: async () => [] } as unknown as JobRepositoryPort
     const noRetryService = new DocumentCommandService(repository, { get: async () => settings } as never, compute, new PathPolicy(), logger, { jobRepository: noRetryJobs })
-    await expect(noRetryService.retry(baseTask.id)).rejects.toThrow('不可重试')
+    await expect(noRetryService.retry(baseTask.id)).rejects.toThrow('不可重試')
     await expect(service.delete(baseTask.id, false)).resolves.toBeUndefined()
     await expect(service.delete('missing', true)).resolves.toBeUndefined()
 
@@ -473,7 +473,7 @@ describe('main quality boundaries', () => {
     expect(isTrustedRendererUrl('https://renderer.test/page', { rendererEntryPath: entry, rendererOrigin: 'https://renderer.test/' })).toBe(true)
     expect(isTrustedRendererUrl('https://other.test/page', { rendererEntryPath: entry, rendererOrigin: 'https://renderer.test/' })).toBe(false)
     const traceId = '00000000-0000-4000-8000-000000000098'
-    expect(toIpcError(new Error(''), 'HANDLER_ERROR', traceId)).toMatchObject({ code: 'HANDLER_ERROR', message: 'IPC 请求失败', traceId })
+    expect(toIpcError(new Error(''), 'HANDLER_ERROR', traceId)).toMatchObject({ code: 'HANDLER_ERROR', message: 'IPC 請求失敗', traceId })
     expect(toIpcError({ code: 'DOMAIN' }, 'HANDLER_ERROR', traceId)).toMatchObject({ code: 'DOMAIN', retryable: false })
     const send = vi.fn()
     const contents = { mainFrame: { url: 'file:///renderer/index.html' }, getURL: () => 'file:///renderer/index.html', isDestroyed: () => false, send }

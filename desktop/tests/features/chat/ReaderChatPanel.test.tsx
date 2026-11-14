@@ -44,17 +44,17 @@ function setup(consented = true, configured = true) {
   function Harness(props: { documentId: string }) {
     const chat = usePaperChat(props.documentId)
     const [visible, setVisible] = React.useState(true)
-    return <><button onClick={() => void chat.addSelection({ ...selection, taskId: props.documentId })}>添加选区</button><button onClick={chat.stop}>关闭面板</button><button onClick={() => setVisible((value) => !value)}>切换面板显示</button>{visible ? <><ReaderChatToolbar chat={chat} /><ReaderChatPanel documentId={props.documentId} chat={chat} active onSelect={onSelect} onOpenSettings={onOpenSettings} /></> : null}</>
+    return <><button onClick={() => void chat.addSelection({ ...selection, taskId: props.documentId })}>新增選區</button><button onClick={chat.stop}>關閉面板</button><button onClick={() => setVisible((value) => !value)}>切換面板顯示</button>{visible ? <><ReaderChatToolbar chat={chat} /><ReaderChatPanel documentId={props.documentId} chat={chat} active onSelect={onSelect} onOpenSettings={onOpenSettings} /></> : null}</>
   }
   const view = render(<QueryClientProvider client={client}><Harness documentId={doc} /></QueryClientProvider>)
   const emit = (event: RagStreamEvent): void => { act(() => listener?.(event)) }
   const input = async (): Promise<void> => {
     // A reopened paper may already contain a sendable persisted draft.
-    fireEvent.change(screen.getByLabelText('向当前论文提问'), { target: { value: '' } })
-    await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(true))
-    fireEvent.change(screen.getByLabelText('向当前论文提问'), { target: { value: '论文主要贡献？' } })
-    await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole('button', { name: /^发\s*送$/u }))
+    fireEvent.change(screen.getByLabelText('向當前論文提問'), { target: { value: '' } })
+    await waitFor(() => expect((screen.getByRole('button', { name: /^傳\s*送$/u }) as HTMLButtonElement).disabled).toBe(true))
+    fireEvent.change(screen.getByLabelText('向當前論文提問'), { target: { value: '論文主要貢獻？' } })
+    await waitFor(() => expect((screen.getByRole('button', { name: /^傳\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /^傳\s*送$/u }))
   }
   const complete = (): void => {
     emit({ requestId, sequence: 0, type: 'accepted' }); emit({ requestId, sequence: 1, type: 'retrieving' }); emit({ requestId, sequence: 2, type: 'evidence-ready', resultCount: 1 });
@@ -64,7 +64,7 @@ function setup(consented = true, configured = true) {
 }
 
 async function chooseModel(label: string): Promise<void> {
-  fireEvent.mouseDown(await screen.findByRole('combobox', { name: '问答模型' }))
+  fireEvent.mouseDown(await screen.findByRole('combobox', { name: '問答模型' }))
   fireEvent.click(await screen.findByText(label, { selector: '.ant-select-item-option-content' }))
 }
 
@@ -73,29 +73,29 @@ function shownModel(): string | null {
 }
 
 async function openMenu(): Promise<void> {
-  fireEvent.click(screen.getByRole('button', { name: '更多问答操作' }))
+  fireEvent.click(screen.getByRole('button', { name: '更多問答操作' }))
   await screen.findByRole('menu')
 }
 
 describe('ReaderChatPanel and local paper sessions', () => {
   it('adds and removes pins, sends a bounded selection snapshot, streams and navigates verified citations', async () => {
     const f = setup()
-    fireEvent.click(screen.getByRole('button', { name: '添加选区' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增選區' }))
     await screen.findByText('source text')
-    expect(screen.getByText('原文 · 第 1 页')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '移除选区 1' })); expect(screen.queryByText('source text')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '添加选区' })); await screen.findByText('source text')
+    expect(screen.getByText('原文 · 第 1 頁')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '移除選區 1' })); expect(screen.queryByText('source text')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '新增選區' })); await screen.findByText('source text')
     await f.input(); await waitFor(() => expect(f.ask).toHaveBeenCalled())
     expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ documentId: doc, pinned: [expect.objectContaining({ contentRevisionId: 'revision1', text: 'source text' })] }))
     // The selection leaves the composer with the question and is shown on the sent turn.
-    expect(screen.queryByRole('group', { name: '固定选区' }) ?? document.querySelector('[aria-label="固定选区"]')).toBeNull()
-    expect(document.querySelector('[aria-label="提问附带的选区"]')?.textContent).toContain('source text')
+    expect(screen.queryByRole('group', { name: '固定選區' }) ?? document.querySelector('[aria-label="固定選區"]')).toBeNull()
+    expect(document.querySelector('[aria-label="提問附帶的選區"]')?.textContent).toContain('source text')
     f.complete()
     fireEvent.click(screen.getByRole('button', { name: '引用 1' }))
     await waitFor(() => expect(f.onSelect).toHaveBeenCalledWith({ mappingId: 'm1', origin: 'citation' }))
     f.ensureIndex.mockResolvedValueOnce({ state: 'ready', progress: 100, contentRevisionId: 'new-revision' })
     fireEvent.click(screen.getByRole('button', { name: '引用 1' }))
-    await screen.findByText('来源已更新，请重新提问')
+    await screen.findByText('來源已更新，請重新提問')
     expect(f.onSelect).toHaveBeenCalledTimes(1)
   })
   it('rejects duplicate and out-of-order events, stops immediately, and ignores late deltas', async () => {
@@ -111,13 +111,13 @@ describe('ReaderChatPanel and local paper sessions', () => {
   it('sends without a separate consent step or settings write', async () => {
     const f = setup(false); await f.input()
     await waitFor(() => expect(f.ask).toHaveBeenCalledTimes(1))
-    expect(screen.queryByText('同意发送论文片段')).toBeNull()
+    expect(screen.queryByText('同意傳送論文片段')).toBeNull()
     expect(window.copilotix.saveSettings).not.toHaveBeenCalled()
   })
   it('offers model setup and clears pins/conversation when switching papers', async () => {
     const f = setup(true, false)
-    fireEvent.click(await screen.findByRole('button', { name: '前往设置' })); expect(f.onOpenSettings).toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '添加选区' })); await screen.findByText('source text')
+    fireEvent.click(await screen.findByRole('button', { name: '前往設定' })); expect(f.onOpenSettings).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '新增選區' })); await screen.findByText('source text')
     const nextDoc = '10000000-0000-4000-8000-000000000099'
     f.view.rerender(<QueryClientProvider client={f.client}><f.Harness documentId={nextDoc} /></QueryClientProvider>)
     await waitFor(() => expect(screen.queryByText('source text')).toBeNull())
@@ -126,7 +126,7 @@ describe('ReaderChatPanel and local paper sessions', () => {
   })
   it('cancels an active request when the panel closes and removes the subscription on unmount', async () => {
     const f = setup(); await f.input(); await waitFor(() => expect(f.ask).toHaveBeenCalled())
-    fireEvent.click(screen.getByRole('button', { name: '关闭面板' })); expect(f.cancel).toHaveBeenCalledWith({ requestId })
+    fireEvent.click(screen.getByRole('button', { name: '關閉面板' })); expect(f.cancel).toHaveBeenCalledWith({ requestId })
     f.view.unmount(); expect(f.unsubscribe).toHaveBeenCalled()
   })
   it('buffers events until ask returns the matching identity and rejects unrelated early events', async () => {
@@ -175,29 +175,29 @@ describe('ReaderChatPanel and local paper sessions', () => {
   })
   it('offers preset models without a revoke menu', async () => {
     setup(); await chooseModel('qwen3.8-flash'); await openMenu()
-    expect(screen.queryByRole('menuitem', { name: '撤销发送授权' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '撤銷傳送授權' })).toBeNull()
   })
   it('keeps the model when reopening chat and resets it when switching papers', async () => {
     const f = setup()
     await chooseModel('qwen3.8-flash')
-    fireEvent.click(screen.getByRole('button', { name: '切换面板显示' }))
-    expect(screen.queryByRole('combobox', { name: '问答模型' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '切换面板显示' }))
+    fireEvent.click(screen.getByRole('button', { name: '切換面板顯示' }))
+    expect(screen.queryByRole('combobox', { name: '問答模型' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '切換面板顯示' }))
     await waitFor(() => expect(shownModel()).toBe('qwen3.8-flash'))
     f.view.rerender(<QueryClientProvider client={f.client}><f.Harness documentId="10000000-0000-4000-8000-000000000099" /></QueryClientProvider>)
     await waitFor(() => expect(shownModel()).toBe('qwen-plus'))
   })
   it('sends with Enter, keeps Shift+Enter and IME composition as input, and fills suggestions', async () => {
     const f = setup()
-    fireEvent.click(await screen.findByRole('button', { name: '用三句话说清这篇论文解决了什么问题、怎么做、效果如何' }))
-    const question = screen.getByLabelText('向当前论文提问') as HTMLTextAreaElement
-    expect(question.value).toBe('用三句话说清这篇论文解决了什么问题、怎么做、效果如何')
-    await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(await screen.findByRole('button', { name: '用三句話說清這篇論文解決了什麼問題、怎麼做、效果如何' }))
+    const question = screen.getByLabelText('向當前論文提問') as HTMLTextAreaElement
+    expect(question.value).toBe('用三句話說清這篇論文解決了什麼問題、怎麼做、效果如何')
+    await waitFor(() => expect((screen.getByRole('button', { name: /^傳\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.keyDown(question, { key: 'Enter', shiftKey: true })
     fireEvent.keyDown(question, { key: 'Enter', isComposing: true })
     expect(f.ask).not.toHaveBeenCalled()
     fireEvent.keyDown(question, { key: 'Enter' })
-    await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ question: '用三句话说清这篇论文解决了什么问题、怎么做、效果如何' })))
+    await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ question: '用三句話說清這篇論文解決了什麼問題、怎麼做、效果如何' })))
     expect(question.value).toBe('')
   })
   it('keeps citation navigation without a hover preview and clears the conversation from the menu', async () => {
@@ -208,18 +208,18 @@ describe('ReaderChatPanel and local paper sessions', () => {
     fireEvent.click(screen.getByRole('button', { name: '引用 1' }))
     await waitFor(() => expect(f.onSelect).toHaveBeenCalledWith({ mappingId: 'm1', origin: 'citation' }))
     // The latest finished answer offers follow-ups; one fills the composer without sending.
-    fireEvent.click(within(screen.getByRole('group', { name: '继续追问' })).getByRole('button', { name: '原文哪些地方支持这个结论？' }))
-    expect((screen.getByRole('textbox', { name: '向当前论文提问' }) as HTMLTextAreaElement).value).toBe('原文哪些地方支持这个结论？')
+    fireEvent.click(within(screen.getByRole('group', { name: '繼續追問' })).getByRole('button', { name: '原文哪些地方支援這個結論？' }))
+    expect((screen.getByRole('textbox', { name: '向當前論文提問' }) as HTMLTextAreaElement).value).toBe('原文哪些地方支援這個結論？')
     expect(f.ask).toHaveBeenCalledTimes(1)
     await openMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: '清空对话' }))
-    await waitFor(() => expect(screen.queryByRole('log', { name: '问答记录' })).toBeNull())
-    expect(screen.getByRole('button', { name: '用三句话说清这篇论文解决了什么问题、怎么做、效果如何' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: '清空對話' }))
+    await waitFor(() => expect(screen.queryByRole('log', { name: '問答記錄' })).toBeNull())
+    expect(screen.getByRole('button', { name: '用三句話說清這篇論文解決了什麼問題、怎麼做、效果如何' })).toBeTruthy()
   })
   it('selects DeepSeek independently from the translation provider and sends the selected model', async () => {
     const f = setup()
     f.settings.credentials.deepseek = { state: 'valid' }
-    fireEvent.mouseDown(await screen.findByRole('combobox', { name: '问答服务商' }))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: '問答服務商' }))
     fireEvent.click(await screen.findByText('DeepSeek', { selector: '.ant-select-item-option-content' }))
     await waitFor(() => expect(shownModel()).toBe('deepseek-flash'))
     await chooseModel('deepseek-v4-pro')
@@ -230,35 +230,35 @@ describe('ReaderChatPanel and local paper sessions', () => {
   it('restores paper-local turns and keeps its draft and model after leaving and reopening the reader', async () => {
     const f = setup()
     await waitFor(() => expect(shownModel()).toBe('qwen-plus'))
-    const stored = { id: requestId, createdAt: new Date().toISOString(), provider: 'qwen' as const, model: 'qwen-plus', question: '已保存的问题', answer: '已保存的回答 [E1]', status: 'completed' as const, citations: { E1: citation } }
+    const stored = { id: requestId, createdAt: new Date().toISOString(), provider: 'qwen' as const, model: 'qwen-plus', question: '已儲存的問題', answer: '已儲存的回答 [E1]', status: 'completed' as const, citations: { E1: citation } }
     f.load.mockResolvedValue({ turns: [stored], next: null })
-    fireEvent.change(screen.getByLabelText('向当前论文提问'), { target: { value: '待发送草稿' } })
+    fireEvent.change(screen.getByLabelText('向當前論文提問'), { target: { value: '待傳送草稿' } })
     await chooseModel('qwen3.8-flash')
     f.view.unmount()
     render(<QueryClientProvider client={f.client}><f.Harness documentId={doc} /></QueryClientProvider>)
-    await screen.findByText('已保存的问题')
-    expect((screen.getByLabelText('向当前论文提问') as HTMLTextAreaElement).value).toBe('待发送草稿')
+    await screen.findByText('已儲存的問題')
+    expect((screen.getByLabelText('向當前論文提問') as HTMLTextAreaElement).value).toBe('待傳送草稿')
     expect(shownModel()).toBe('qwen3.8-flash')
     expect(screen.getByRole('button', { name: '引用 1' })).toBeTruthy()
-    await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
+    await waitFor(() => expect((screen.getByRole('button', { name: /^傳\s*送$/u }) as HTMLButtonElement).disabled).toBe(false))
     await f.input()
     await waitFor(() => expect(f.ask).toHaveBeenCalledWith(expect.objectContaining({ history: [{ role: 'user', content: stored.question }, { role: 'assistant', content: stored.answer }] })))
   })
   it('loads older turns and refuses to overwrite history when disk loading fails', async () => {
     const f = setup()
     await waitFor(() => expect(shownModel()).toBe('qwen-plus'))
-    const stored = { id: requestId, createdAt: new Date().toISOString(), provider: 'qwen' as const, model: 'qwen-plus', question: '最近问题', answer: '回答', status: 'completed' as const, citations: {} }
+    const stored = { id: requestId, createdAt: new Date().toISOString(), provider: 'qwen' as const, model: 'qwen-plus', question: '最近問題', answer: '回答', status: 'completed' as const, citations: {} }
     f.load.mockResolvedValueOnce({ turns: [stored], next: '1790000000000-10000000-0000-4000-8000-000000000002.json' })
-      .mockResolvedValueOnce({ turns: [{ ...stored, question: '更早问题' }], next: null })
+      .mockResolvedValueOnce({ turns: [{ ...stored, question: '更早問題' }], next: null })
     f.view.unmount()
     const view = render(<QueryClientProvider client={f.client}><f.Harness documentId={doc} /></QueryClientProvider>)
-    fireEvent.click(await screen.findByRole('button', { name: '查看更早的对话' }))
-    await screen.findByText('更早问题')
+    fireEvent.click(await screen.findByRole('button', { name: '檢視更早的對話' }))
+    await screen.findByText('更早問題')
     expect(f.load).toHaveBeenLastCalledWith(expect.objectContaining({ before: expect.any(String) }))
     view.unmount()
     f.load.mockRejectedValue(new Error('broken file')); f.saveSession.mockClear()
     render(<QueryClientProvider client={f.client}><f.Harness documentId={doc} /></QueryClientProvider>)
-    await screen.findByText('本地对话读取失败，请重新打开论文；原记录未被覆盖')
+    await screen.findByText('本地對話讀取失敗，請重新開啟論文；原記錄未被覆蓋')
     await new Promise((resolve) => setTimeout(resolve, 250))
     expect(f.saveSession).not.toHaveBeenCalled()
   })

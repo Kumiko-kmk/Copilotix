@@ -35,7 +35,7 @@ export function CredentialEditor(props: {
             autoComplete="new-password"
             value={props.draft.value}
             onChange={(event) => props.onDraft({ value: event.target.value, clear: false })}
-            placeholder="输入新密钥"
+            placeholder="輸入新金鑰"
             visibilityToggle={false}
           />
         ) : (
@@ -44,7 +44,7 @@ export function CredentialEditor(props: {
             aria-label="APIKey"
             value=""
             readOnly
-            placeholder={configured ? undefined : '输入新密钥'}
+            placeholder={configured ? undefined : '輸入新金鑰'}
             onFocus={() => props.onDraft({ editing: true, value: '', clear: false })}
           />
         )}
@@ -55,8 +55,8 @@ export function CredentialEditor(props: {
           icon={<DeleteOutlined />}
           disabled={!configured && !props.draft.value && !props.draft.clear}
           onClick={() => props.onDraft({ editing: true, value: '', clear: true })}
-        >删除</Button>
-        <Button className="credential-validate" loading={props.testing} disabled={props.draft.clear || (editing && !props.draft.value.trim())} onClick={props.onValidate}>测试连接</Button>
+        >刪除</Button>
+        <Button className="credential-validate" loading={props.testing} disabled={props.draft.clear || (editing && !props.draft.value.trim())} onClick={props.onValidate}>測試連線</Button>
       </div>
       <div className="credential-meta">
         {distinctError ? <Typography.Text type="danger">{distinctError}</Typography.Text> : null}

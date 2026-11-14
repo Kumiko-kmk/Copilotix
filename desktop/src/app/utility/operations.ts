@@ -136,12 +136,12 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     'compute:document-model': async request => {
       const { documentId } = documentModelRequest.parse(request.payload)
       const task = requireRepository().getTask(documentId)
-      if (!task) throw new Error('文档不存在')
+      if (!task) throw new Error('文件不存在')
       return documentModels.descriptor(documentId, task.outputDir)
     },
     'library:check': () => { assertLibraryIdle(requireDatabase()); return { idle: true } },
     'library:manage': async (request, signal) => {
-      if (!state.databasePath) throw new Error('文档库尚未初始化')
+      if (!state.databasePath) throw new Error('文件庫尚未初始化')
       const result = await manageLibrary(requireDatabase(), state.databasePath, libraryCoreRequestSchema.parse(request.payload), signal)
       if (result.restartRequired) state.translationPlanManager = undefined
       return result
@@ -227,7 +227,7 @@ export function createUtilityOperationHandlers(state: UtilityPersistenceState = 
     if (!lane) continue
     handlers[operation] = (request, signal) => runOnLane(lane, () => handler(request, signal)).catch((error: unknown) => {
       if (operation === 'library:manage' || operation === 'library:check') {
-        const message = error instanceof Error ? error.message : '文档库操作失败，请检查目录权限与磁盘空间。'
+        const message = error instanceof Error ? error.message : '文件庫操作失敗，請檢查目錄許可權與磁碟空間。'
         throw new CoreUtilityOperationError('LIBRARY_MAINTENANCE_FAILED', message, false)
       }
       if (error instanceof SqliteJobRepositoryError || error instanceof SqliteRagRepositoryError || error instanceof RagContentIndexError || error instanceof PaperContextError) {

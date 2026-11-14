@@ -1,73 +1,73 @@
-# 配置解析、翻译与问答服务
+# 配置解析、翻譯與問答服務
 
-**适用版本：1.2.0（含 Codex 接入）。** Copilotix 不提供或代付第三方 API 凭据；额度、费用、模型权限和数据处理条款以服务商当前说明为准。
+**適用版本：1.2.0（含 Codex 接入）。** Copilotix 不提供或代付第三方 API 憑據；額度、費用、模型許可權和資料處理條款以服務商當前說明為準。
 
-## MinerU：PDF 在线解析
+## MinerU：PDF 線上解析
 
-1. 登录 [MinerU Token 管理页](https://mineru.net/apiManage/token)申请 Token。
-2. 在「设置 → 服务连接 → MinerU」粘贴 Token 本身，不加 `Bearer` 前缀。
-3. 点击「测试连接」，成功后点击「保存全部更改」。
-4. 确认已验证，再创建解析任务。
+1. 登入 [MinerU Token 管理頁](https://mineru.net/apiManage/token)申請 Token。
+2. 在「設定 → 服務連線 → MinerU」貼上 Token 本身，不加 `Bearer` 字首。
+3. 點選「測試連線」，成功後點選「儲存全部更改」。
+4. 確認已驗證，再建立解析任務。
 
-解析使用 MinerU 在线 v4 API，PDF 会上传至其提供的地址；安装包不含本地解析模型。
+解析使用 MinerU 線上 v4 API，PDF 會上傳至其提供的地址；安裝包不含本地解析模型。
 
-![PDF 解析为 Markdown、图片和来源定位信息](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/pdf-structure-source.png)
+![PDF 解析為 Markdown、圖片和來源定位資訊](https://raw.githubusercontent.com/Kumiko-kmk/Copilotix/master/docs/images/pdf-structure-source.png)
 
-*处理流程示意图：内容块保留页码、坐标框及来源信息。这是概念图，实际界面见阅读工作台指南。*
+*處理流程示意圖：內容塊保留頁碼、座標框及來源資訊。這是概念圖，實際介面見閱讀工作台指南。*
 
-## 翻译来源与问答模型
+## 翻譯來源與問答模型
 
-| 服务 | 翻译选择项 | 论文问答选择项 |
+| 服務 | 翻譯選擇項 | 論文問答選擇項 |
 | --- | --- | --- |
-| Qwen／千问 | `qwen-mt-plus` | `qwen-plus`、`qwen3.8-flash`、`qwen3.8-max` |
+| Qwen／千問 | `qwen-mt-plus` | `qwen-plus`、`qwen3.8-flash`、`qwen3.8-max` |
 | DeepSeek | `deepseek-flash` | `deepseek-flash`、`deepseek-v4-pro` |
-| Codex（可选） | 本机目录中的文本模型 | 本机目录中的文本／视觉模型 |
-| Bing | 应用内无需 Key 的网页翻译 | 不支持 |
-| 腾讯 TranSmart | 应用内无需 Key 的网页翻译 | 不支持 |
+| Codex（可選） | 本機目錄中的文字模型 | 本機目錄中的文字／視覺模型 |
+| Bing | 應用內無需 Key 的網頁翻譯 | 不支援 |
+| 騰訊 TranSmart | 應用內無需 Key 的網頁翻譯 | 不支援 |
 
-表中是 **1.2.0 预设选项**，不是对服务端可用性的保证；实际调用取决于账号、地域、额度与服务商当前模型列表。Qwen／DeepSeek 不接受自定义模型名称，旧自定义选择回退到预设。Codex 从本机动态读取模型目录；已选模型消失时提示重新选择，保留历史，不自动替换。
+表中是 **1.2.0 預設選項**，不是對服務端可用性的保證；實際呼叫取決於帳號、地域、額度與服務商當前模型列表。Qwen／DeepSeek 不接受自定義模型名稱，舊自定義選擇回退到預設。Codex 從本機動態讀取模型目錄；已選模型消失時提示重新選擇，保留歷史，不自動替換。
 
 ### Qwen
 
-1. 在[阿里云百炼控制台](https://bailian.console.aliyun.com/)开通服务并创建 API Key。
-2. 当前应用地址为 `https://dashscope.aliyuncs.com/compatible-mode/v1`，对应北京地域。地域不同的 Key、域名和模型列表不能混用，见[官方 API Key 文档](https://help.aliyun.com/zh/model-studio/get-api-key)。
-3. 确认业务空间和权限支持所选翻译／问答模型。
-4. 填入 Qwen 服务卡片，测试连接后保存。
+1. 在[阿里雲百鍊控制檯](https://bailian.console.aliyun.com/)開通服務並建立 API Key。
+2. 當前應用地址為 `https://dashscope.aliyuncs.com/compatible-mode/v1`，對應北京地域。地域不同的 Key、域名和模型列表不能混用，見[官方 API Key 文件](https://help.aliyun.com/zh/model-studio/get-api-key)。
+3. 確認業務空間和許可權支援所選翻譯／問答模型。
+4. 填入 Qwen 服務卡片，測試連線後儲存。
 
 ### DeepSeek
 
-1. 在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建 API Key。
-2. 确认余额与调用权限。
-3. 填入 DeepSeek 卡片，测试连接后保存。
+1. 在 [DeepSeek 開放平臺](https://platform.deepseek.com/api_keys)建立 API Key。
+2. 確認餘額與呼叫許可權。
+3. 填入 DeepSeek 卡片，測試連線後儲存。
 
-当前应用地址为 `https://api.deepseek.com`，服务细节见[官方文档](https://api-docs.deepseek.com/zh-cn/)。
+當前應用地址為 `https://api.deepseek.com`，服務細節見[官方文件](https://api-docs.deepseek.com/)。
 
 ### Bing／TranSmart
 
-可用于翻译与回退，应用内无需填写 Key，但仍需网络，且依赖第三方网页接口。它们不提供论文问答功能。
+可用於翻譯與回退，應用內無需填寫 Key，但仍需網路，且依賴第三方網頁介面。它們不提供論文問答功能。
 
-### Codex：复用本机登录
+### Codex：複用本機登入
 
-1. 安装 Codex CLI **0.159.x**，在本机运行 `codex login` 完成 ChatGPT 登录。
-2. 在「设置 → 服务连接 → Codex」点击「刷新连接与模型」。自动发现失败时选择实际的 `codex.exe`（不选 `.cmd` 启动脚本）。
-3. 分别选择翻译模型、问答／解读模型及推理强度；点击模型测试确认当前账户可以调用，再保存全部更改。
-4. 在「模型设置」启用 Codex，并调整顺序；默认仍关闭。希望优先使用 Codex 时将它移到首位。
-5. 问答可在面板选择 Codex；档案卡总结和图片解读沿用其问答模型，识图需要目录标记支持图片的模型。
+1. 安裝 Codex CLI **0.159.x**，在本機執行 `codex login` 完成 ChatGPT 登入。
+2. 在「設定 → 服務連線 → Codex」點選「重新整理連線與模型」。自動發現失敗時選擇實際的 `codex.exe`（不選 `.cmd` 啟動指令碼）。
+3. 分別選擇翻譯模型、問答／解讀模型及推理強度；點選模型測試確認當前賬戶可以呼叫，再儲存全部更改。
+4. 在「模型設定」啟用 Codex，並調整順序；預設仍關閉。希望優先使用 Codex 時將它移到首位。
+5. 問答可在面板選擇 Codex；檔案卡總結和圖片解讀沿用其問答模型，識圖需要目錄標記支援圖片的模型。
 
-这是本机 CLI 接口接入，**不是离线模型**：内容仍经 Codex 发往其配置的模型服务，受登录、网络、账户额度和模型权限限制。Copilotix 不读取登录令牌、不替你登录，也不更改个人 Codex 配置。PDF 解析仍使用 MinerU。
+這是本機 CLI 介面接入，**不是離線模型**：內容仍經 Codex 發往其配置的模型服務，受登入、網路、賬戶額度和模型許可權限制。Copilotix 不讀取登入令牌、不替你登入，也不更改個人 Codex 配置。PDF 解析仍使用 MinerU。
 
-目录可见不等于实际可调用。模型繁忙时可稍后重试或手动换模型；不会自动换 Codex 模型。Codex 限流时会自动降速并重试；仍失败的翻译段落会交给顺序中下一个已启用的服务，译文中以「X 回退翻译」标出，档案卡也会改用已启用的 Qwen／DeepSeek。若要确保内容仅发往 Codex，请在模型设置中关闭其他翻译来源。连接异常先检查 `codex login status`、CLI 版本及所选模型。该接入使用 [Codex App Server](https://learn.chatgpt.com/docs/app-server)，当前只启用已验证的 0.159.x 协议。
+目錄可見不等於實際可呼叫。模型繁忙時可稍後重試或手動換模型；不會自動換 Codex 模型。Codex 限流時會自動降速並重試；仍失敗的翻譯段落會交給順序中下一個已啟用的服務，譯文中以「X 回退翻譯」標出，檔案卡也會改用已啟用的 Qwen／DeepSeek。若要確保內容僅發往 Codex，請在模型設定中關閉其他翻譯來源。連線異常先檢查 `codex login status`、CLI 版本及所選模型。該接入使用 [Codex App Server](https://learn.chatgpt.com/docs/app-server)，當前只啟用已驗證的 0.159.x 協議。
 
-## 启用、顺序与共用凭据
+## 啟用、順序與共用憑據
 
-在「设置 → 模型设置」启用需要的翻译服务，并设置顺序。默认 **Qwen → DeepSeek → Bing → TranSmart**，跳过未启用或没有有效凭据的 Qwen／DeepSeek；失败可能回退到后续已启用来源。只希望向指定来源发送文本时，请关闭其他来源并保存。
+在「設定 → 模型設定」啟用需要的翻譯服務，並設定順序。預設 **Qwen → DeepSeek → Bing → TranSmart**，跳過未啟用或沒有有效憑據的 Qwen／DeepSeek；失敗可能回退到後續已啟用來源。只希望向指定來源傳送文字時，請關閉其他來源並儲存。
 
-问答共用相应服务在「服务连接」中保存的 API 凭据，默认沿用翻译服务商，面板可选择已启用的 Qwen／DeepSeek／Codex 与独立问答模型。切换问答模型不修改翻译模型。服务未启用、凭据无效或未保存时，问答会提示前往设置。
+問答共用相應服務在「服務連線」中儲存的 API 憑據，預設沿用翻譯服務商，面板可選擇已啟用的 Qwen／DeepSeek／Codex 與獨立問答模型。切換問答模型不修改翻譯模型。服務未啟用、憑據無效或未儲存時，問答會提示前往設定。
 
-## 验证与保存
+## 驗證與儲存
 
-「测试连接」成功不等于已保存，仍需点击「保存全部更改」。单个字段失败时按提示修正。凭据保存在 Windows 系统凭据存储中，不写入论文 `chat/`，也不包含在文库备份里。
+「測試連線」成功不等於已儲存，仍需點選「儲存全部更改」。單個欄位失敗時按提示修正。憑據儲存在 Windows 系統憑據儲存中，不寫入論文 `chat/`，也不包含在文庫備份裡。
 
-使用程序即同意向已选服务发送功能所需的论文文本及图片；问答、总结与识图直接发送，无单独确认步骤。Codex 测试连接成功会填入程序路径，所选模型测试通过后显示绿色「验证成功」。
+使用程式即同意向已選服務傳送功能所需的論文文字及圖片；問答、總結與識圖直接傳送，無單獨確認步驟。Codex 測試連線成功會填入程式路徑，所選模型測試透過後顯示綠色「驗證成功」。
 
-Codex 连接与模型验证状态会保留，重新启动自动检测连接。AI 问答的每条结果下方显示实际模型、时间、用时及输入／输出／总 Token；服务未返回用量或旧记录缺失时明确显示未提供。
+Codex 連線與模型驗證狀態會保留，重新啟動自動檢測連線。AI 問答的每條結果下方顯示實際模型、時間、用時及輸入／輸出／總 Token；服務未返回用量或舊記錄缺失時明確顯示未提供。

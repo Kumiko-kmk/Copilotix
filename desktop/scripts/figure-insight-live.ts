@@ -17,7 +17,7 @@ const nonStream = process.argv.includes('--non-stream')
 const limitArg = process.argv.find(arg => arg.startsWith('--limit='))
 const limit = limitArg ? Number(limitArg.slice(8)) : Infinity
 if (!(limit > 0)) throw new Error('Invalid limit')
-const library = resolve('F:/12479/文档/Copilotix/documents-v2')
+const library = resolve('F:/12479/文件/Copilotix/documents-v2')
 const evidence = resolve(process.cwd(), '../../investigation/figure-insight-live-20261011')
 const selected = [
   '1af0b11d-9e8a-47a0-a9d8-7c667b7ae11a', // Transformer

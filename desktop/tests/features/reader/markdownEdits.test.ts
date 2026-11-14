@@ -54,8 +54,8 @@ describe('reader edit layer', () => {
     const root = await paperDir()
     const store = new MarkdownEditStore(() => root)
     await expect(store.apply({ documentId: DOC, expectedRevision: 0, target: target(1), action: 'set-original', markdown: 'Second paragraph, corrected.' })).resolves.toEqual({ revision: 1 })
-    await expect(store.apply({ documentId: DOC, expectedRevision: 0, target: target(2), action: 'delete' })).rejects.toThrow('刷新')
-    await expect(store.apply({ documentId: DOC, expectedRevision: 1, target: { ...target(2), mappingIds: ['m1'] }, action: 'delete' })).rejects.toThrow('位置已变化')
+    await expect(store.apply({ documentId: DOC, expectedRevision: 0, target: target(2), action: 'delete' })).rejects.toThrow('重新整理')
+    await expect(store.apply({ documentId: DOC, expectedRevision: 1, target: { ...target(2), mappingIds: ['m1'] }, action: 'delete' })).rejects.toThrow('位置已變化')
     await store.apply({ documentId: DOC, expectedRevision: 1, target: target(2), action: 'delete' })
     await store.apply({ documentId: DOC, expectedRevision: 2, target: { kind: 'supplemental', mappingId: 'h0' }, action: 'delete' })
     const saved = await readMarkdownEditsFile(root, DOC)
@@ -78,7 +78,7 @@ describe('reader edit layer', () => {
     await store.apply({ documentId: DOC, expectedRevision: 0, target: target(1), action: 'set-original', markdown: 'Second paragraph, corrected.' })
     await store.apply({ documentId: DOC, expectedRevision: 1, target: target(2), action: 'delete' })
     await store.apply({ documentId: DOC, expectedRevision: 2, target: { kind: 'supplemental', mappingId: 'h0' }, action: 'delete' })
-    const translated = ['第一段。', '第二段。', '期刊噪声。'].map((markdown, sourceIndex) => ({ sourceIndex, markdown, mappingIds: [`m${sourceIndex}`], sourceHash: sha(MARKDOWN.split('\n\n')[sourceIndex]!.trim()) }))
+    const translated = ['第一段。', '第二段。', '期刊噪聲。'].map((markdown, sourceIndex) => ({ sourceIndex, markdown, mappingIds: [`m${sourceIndex}`], sourceHash: sha(MARKDOWN.split('\n\n')[sourceIndex]!.trim()) }))
     const edits = resolveReaderEdits(MARKDOWN, MAPPINGS, translated, await readMarkdownEditsFile(root, DOC))
     expect(edits.blocks.find(block => block.index === 1)).toMatchObject({ stale: true, mappingIds: ['m1'], excerpt: 'Second paragraph, corrected.' })
     const original = buildOriginalReaderBlocks(MARKDOWN, MAPPINGS, edits).filter(block => block.role === 'content')
@@ -112,17 +112,17 @@ describe('reader edit layer', () => {
       for (const item of work.filter(unit => unit.status === 'pending')) {
         const request = JSON.parse(await readFile(join(outputDir, ...item.requestPath.split('/')), 'utf8'))
         await writeFile(join(outputDir, ...item.responsePath.split('/')), JSON.stringify({ protocol: request.protocol, unitId: request.unitId, sourceHash: request.sourceHash,
-          translations: request.segments.map((segment: { id: string; text: string }) => ({ id: segment.id, text: `译:${segment.text}` })) }))
+          translations: request.segments.map((segment: { id: string; text: string }) => ({ id: segment.id, text: `譯:${segment.text}` })) }))
         await manager.apply(DOC, jobId, item.unitId, item.responsePath, 'qwen', 'fixture')
       }
       await manager.finalize(DOC, jobId)
       const manifest = JSON.parse(await readFile(join(outputDir, 'translation.manifest.json'), 'utf8'))
-      expect(manifest.blocks.map((block: { markdown: string }) => block.markdown)).toEqual(['译:First paragraph about cracks.', '译:Second paragraph, corrected.', ''])
+      expect(manifest.blocks.map((block: { markdown: string }) => block.markdown)).toEqual(['譯:First paragraph about cracks.', '譯:Second paragraph, corrected.', ''])
       const blocks = manifest.blocks.map((block: { sourceIndex: number; markdown: string; sourceHash: string }) => ({ sourceIndex: block.sourceIndex, markdown: block.markdown, mappingIds: [], sourceHash: block.sourceHash }))
       expect(resolveReaderEdits(MARKDOWN, MAPPINGS, blocks, await readMarkdownEditsFile(outputDir, DOC)).blocks.find(block => block.index === 1)?.stale).toBe(false)
       expect(manifest.generatedAt).toEqual(expect.any(String))
 
-      // 重新翻译此段: a new run translates only that block, past the cache; the others keep their translation.
+      // 重新翻譯此段: a new run translates only that block, past the cache; the others keep their translation.
       database.connection.prepare("UPDATE jobs SET status='succeeded' WHERE id=?").run(jobId)
       await store.apply({ documentId: DOC, expectedRevision: 2, target: target(0), action: 'retranslate' })
       const rerun = new SqliteJobRepository(database).enqueue({ documentId: DOC, kind: 'translate', checkpoint: { stage: 'queued', reason: 'edited' }, now: '2026-10-22T00:01:00.000Z' })
@@ -133,11 +133,11 @@ describe('reader edit layer', () => {
       await expect(again.tryCache(DOC, rerun.id, rework[0]!.unitId, 'qwen', 'fixture')).resolves.toMatchObject({ status: 'pending' })
       const request = JSON.parse(await readFile(join(outputDir, ...rework[0]!.requestPath.split('/')), 'utf8'))
       await writeFile(join(outputDir, ...rework[0]!.responsePath.split('/')), JSON.stringify({ protocol: request.protocol, unitId: request.unitId, sourceHash: request.sourceHash,
-        translations: request.segments.map((segment: { id: string }) => ({ id: segment.id, text: '重译的第一段' })) }))
+        translations: request.segments.map((segment: { id: string }) => ({ id: segment.id, text: '重譯的第一段' })) }))
       await again.apply(DOC, rerun.id, rework[0]!.unitId, rework[0]!.responsePath, 'qwen', 'fixture')
       await again.finalize(DOC, rerun.id)
       const rerunManifest = JSON.parse(await readFile(join(outputDir, 'translation.manifest.json'), 'utf8'))
-      expect(rerunManifest.blocks.map((block: { markdown: string }) => block.markdown)).toEqual(['重译的第一段', '译:Second paragraph, corrected.', ''])
+      expect(rerunManifest.blocks.map((block: { markdown: string }) => block.markdown)).toEqual(['重譯的第一段', '譯:Second paragraph, corrected.', ''])
     } finally { repository.close() }
   })
 
@@ -168,7 +168,7 @@ describe('reader edit layer', () => {
   it('keeps a reading order of whole blocks for reading, translation, chat and export, and ignores it for another parse', async () => {
     const root = await paperDir()
     const store = new MarkdownEditStore(() => root)
-    await expect(store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'order', sequence: [1, 0] }, action: 'reorder' })).rejects.toThrow('位置已变化')
+    await expect(store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'order', sequence: [1, 0] }, action: 'reorder' })).rejects.toThrow('位置已變化')
     expect(() => store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'order', sequence: [2, 0, 1] }, action: 'delete' })).toThrow('Reordering')
     await store.apply({ documentId: DOC, expectedRevision: 0, target: { kind: 'order', sequence: moveInOrder([0, 1, 2], [2], 0) }, action: 'reorder' })
     await store.apply({ documentId: DOC, expectedRevision: 1, target: target(1), action: 'delete' })
@@ -180,9 +180,9 @@ describe('reader edit layer', () => {
     const blocks = buildOriginalReaderBlocks(MARKDOWN, MAPPINGS, edits)
     expect(blocks.filter(block => block.role === 'content').map(block => [block.annotationKey, block.mappingIds])).toEqual([['content:2', ['m2']], ['content:0', ['m0']]])
     expect(blocks.map(block => block.role)).toEqual(buildOriginalReaderBlocks(MARKDOWN, MAPPINGS, { ...edits, order: undefined }).map(block => block.role))
-    const translated = ['第一段。', '第二段。', '期刊噪声。'].map((markdown, sourceIndex) => ({ sourceIndex, markdown, mappingIds: [`m${sourceIndex}`] }))
+    const translated = ['第一段。', '第二段。', '期刊噪聲。'].map((markdown, sourceIndex) => ({ sourceIndex, markdown, mappingIds: [`m${sourceIndex}`] }))
     expect(buildTranslatedReaderBlocks(MARKDOWN, translated.map(block => block.markdown).join('\n\n'), translated, MAPPINGS, edits)
-      .filter(block => block.role === 'content').map(block => block.markdown)).toEqual(['期刊噪声。', '第一段。'])
+      .filter(block => block.role === 'content').map(block => block.markdown)).toEqual(['期刊噪聲。', '第一段。'])
     // Chat reads chunks in the same order; export joins blocks in it.
     const chunk = (id: string, mappingIds: string[]) => ({ chunkId: id, sourceText: id, mappingIds }) as unknown as RagChunk
     expect(applyChunkEdits([chunk('c0', ['m0']), chunk('c0b', []), chunk('c1', ['m1']), chunk('c2', ['m2'])], file, await store.readingOrder(DOC)).map(item => item.chunkId))

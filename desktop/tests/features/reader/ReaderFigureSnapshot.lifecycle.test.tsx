@@ -118,7 +118,7 @@ describe('figure rendering lifecycle', () => {
     const view = render(<ReaderFigureSnapshot pdfUrl="retry.pdf" group={group} onRendered={() => undefined} onStateChange={state} />)
     await waitFor(() => expect(state).toHaveBeenCalledWith('failed'))
     expect(view.container.querySelector('[data-failed="true"]')).not.toBeNull()
-    fireEvent.click(view.getByText('重试整图'))
+    fireEvent.click(view.getByText('重試整圖'))
     await waitFor(() => expect(state).toHaveBeenCalledWith('ready'))
     expect(view.container.querySelector('[data-failed="true"]')).toBeNull()
     expect(renderPdf).toHaveBeenCalledTimes(2)

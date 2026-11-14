@@ -138,7 +138,7 @@ describe('reader figure groups', () => {
     ]
     const blocks = [
       block('content:119', ['label-a'], '![](images/a.jpg)  \n(a)'),
-      block('content:120', ['label-b', 'legend', 'caption'], '![](images/b.jpg)  \n(b)  \nDNS FNO F-FNO  \n图 A.1：资源使用。')
+      block('content:120', ['label-b', 'legend', 'caption'], '![](images/b.jpg)  \n(b)  \nDNS FNO F-FNO  \n圖 A.1：資源使用。')
     ]
 
     expect(buildReaderFigureGroups(blocks, mappings)).toEqual([expect.objectContaining({
@@ -151,7 +151,7 @@ describe('reader figure groups', () => {
       memberBlockIndexes: [0, 1],
       fallbackLegendText: 'DNS FNO F-FNO',
       status: 'complete',
-      captionMarkdown: '图 A.1：资源使用。'
+      captionMarkdown: '圖 A.1：資源使用。'
     })])
   })
 
@@ -194,11 +194,11 @@ describe('reader figure groups', () => {
     ]
     const translated = [
       block('content:1', ['chart-a', 'label-a'], '![](left.jpg)  \n（一）'),
-      block('content:2', ['chart-b', 'label-b', 'legend'], '![](right.jpg)  \n（二）  \n实线：模型 A；虚线：模型 B'),
-      block('content:3', ['caption'], '图 4：模型比较。')
+      block('content:2', ['chart-b', 'label-b', 'legend'], '![](right.jpg)  \n（二）  \n實線：模型 A；虛線：模型 B'),
+      block('content:3', ['caption'], '圖 4：模型比較。')
     ]
     expect(projectReaderFigureGroups(geometry, original)[0]).toMatchObject({ captionMarkdown: 'Figure 4: Comparison.' })
-    expect(projectReaderFigureGroups(geometry, translated)[0]).toMatchObject({ captionMarkdown: '图 4：模型比较。' })
+    expect(projectReaderFigureGroups(geometry, translated)[0]).toMatchObject({ captionMarkdown: '圖 4：模型比較。' })
   })
 
   it('stops at a table boundary instead of joining neighboring figures', () => {
@@ -351,7 +351,7 @@ describe('reader figure groups', () => {
     const maps = [
       mapping('a', 1, 'chart', [50, 100, 200, 200], 'a.jpg'),
       mapping('unknown', 2, 'image', [210, 100, 350, 200]),
-      mapping('caption', 3, 'image_caption', [50, 210, 350, 240], undefined, '图 4：完整图。')
+      mapping('caption', 3, 'image_caption', [50, 210, 350, 240], undefined, '圖 4：完整圖。')
     ]
     expect(buildReaderFigureGeometries(maps)[0]?.status).toBe('ambiguous')
   })
@@ -460,11 +460,11 @@ describe('reader figure groups', () => {
     const blocks = [
       block('prose', [], 'The filename a.jpg is mentioned here.'),
       block('image', ['a'], '![](images/a.jpg)'),
-      block('caption', ['caption'], '图 1：第一段。\n\n完整的第二段。')
+      block('caption', ['caption'], '圖 1：第一段。\n\n完整的第二段。')
     ]
     const [group] = projectReaderFigureGroups(geometry, blocks)
     expect(group?.memberBlockIndexes).toEqual([1, 2])
-    expect(group?.captionMarkdown).toBe('图 1：第一段。\n\n完整的第二段。')
+    expect(group?.captionMarkdown).toBe('圖 1：第一段。\n\n完整的第二段。')
   })
 
   it('projects translated graphical text by unchanged Markdown structure and preserves uncertain translations', () => {
@@ -476,13 +476,13 @@ describe('reader figure groups', () => {
     const geometry = buildReaderFigureGeometries(maps)
     const original = [block('content:0', ['a', 'legend'], 'Body stays.\n\n![](a.jpg)  \nControl; Treatment'),
       block('content:1', ['caption'], 'Figure 1: Treatment.')]
-    const translated = [block('content:0', ['a', 'legend'], '保留正文。\n\n![](a.jpg)  \n对照组；治疗组'),
-      block('content:1', ['caption'], '图 1：治疗。')]
+    const translated = [block('content:0', ['a', 'legend'], '保留正文。\n\n![](a.jpg)  \n對照組；治療組'),
+      block('content:1', ['caption'], '圖 1：治療。')]
     const [group] = projectReaderFigureGroups(geometry, translated, original)
     expect(group?.status).toBe('complete')
-    expect(group?.supportingTextsByBlock?.[0]).toContain('对照组；治疗组')
+    expect(group?.supportingTextsByBlock?.[0]).toContain('對照組；治療組')
     expect(group?.supportingTextsByBlock?.[0]).not.toContain('保留正文。')
-    translated[0]!.markdown = '保留正文。\n\n新增正文。\n\n![](a.jpg)  \n对照组；治疗组'
+    translated[0]!.markdown = '保留正文。\n\n新增正文。\n\n![](a.jpg)  \n對照組；治療組'
     expect(projectReaderFigureGroups(geometry, translated, original)[0]?.status).toBe('ambiguous')
   })
 
@@ -494,8 +494,8 @@ describe('reader figure groups', () => {
       mapping('c2', 5, 'image_caption', [50, 320, 450, 350], undefined, 'Figure 2: Second.')]
     const original = [block('one', ['a'], '![](a.jpg)'), block('shared', ['c1'], 'Figure 1: First.\n![](b.jpg)'),
       block('two', ['c2'], '![](c.jpg)\nFigure 2: Second.')]
-    const translated = [block('one', ['a'], '![](a.jpg)'), block('shared', ['c1'], '图 1：第一幅。\n![](b.jpg)'),
-      block('two', ['c2'], '![](c.jpg)\n图 2：第二幅。')]
+    const translated = [block('one', ['a'], '![](a.jpg)'), block('shared', ['c1'], '圖 1：第一幅。\n![](b.jpg)'),
+      block('two', ['c2'], '![](c.jpg)\n圖 2：第二幅。')]
     const before = JSON.stringify(original)
     const geometries = buildReaderFigureGeometries(maps)
     for (const blocks of [original, translated]) {
@@ -548,7 +548,7 @@ describe('reader figure display choice', () => {
       await mkdir(join(dir, 'reader'), { recursive: true })
       await writeFile(join(dir, 'reader', 'figure-display.v1.json'), '{broken')
       expect(await store.get(documentId)).toEqual({ choices: {} })
-      await expect(store.get('66666666-6666-4666-8666-666666666666')).rejects.toThrow('文档不存在')
+      await expect(store.get('66666666-6666-4666-8666-666666666666')).rejects.toThrow('文件不存在')
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

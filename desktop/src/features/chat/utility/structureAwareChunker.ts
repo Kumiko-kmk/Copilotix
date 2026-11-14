@@ -461,7 +461,7 @@ function contentTypeFor(node: AstNode): RagChunkContentType {
 
 function isCaption(node: AstNode): boolean {
   const value = visibleText(node).trim()
-  return /^(?:table|tab\.|figure|fig\.|图|表)\s*[\d一二三四五六七八九十]*[:：.、\s]/iu.test(value)
+  return /^(?:table|tab\.|figure|fig\.|圖|表)\s*[\d一二三四五六七八九十]*[:：.、\s]/iu.test(value)
 }
 
 function visibleText(node: AstNode): string {

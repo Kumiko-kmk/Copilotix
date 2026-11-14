@@ -39,8 +39,8 @@ interface CachedValidation {
 }
 
 const DEFAULT_PROBE: CredentialProbe = {
-  parser: async () => ({ ok: false, code: 'VALIDATION_UNAVAILABLE', message: '凭据验证服务尚未初始化' }),
-  provider: async () => ({ ok: false, code: 'VALIDATION_UNAVAILABLE', message: '凭据验证服务尚未初始化' })
+  parser: async () => ({ ok: false, code: 'VALIDATION_UNAVAILABLE', message: '憑據驗證服務尚未初始化' }),
+  provider: async () => ({ ok: false, code: 'VALIDATION_UNAVAILABLE', message: '憑據驗證服務尚未初始化' })
 }
 
 export class SettingsService {
@@ -119,15 +119,15 @@ export class SettingsService {
   async validateCredential(name: CredentialName, value?: string, options: { settings?: AppSettings; connectionId?: string } = {}): Promise<CredentialValidationResult> {
     const id: CredentialId = name === 'parser' ? 'parser' : options.connectionId ?? `${name}:default`
     if (id !== 'parser' && (!isKeyId(id) || credentialProvider(id) !== name)) {
-      return { state: 'invalid', errorCode: 'CREDENTIAL_FORMAT_INVALID', message: '密钥与服务商不匹配' }
+      return { state: 'invalid', errorCode: 'CREDENTIAL_FORMAT_INVALID', message: '金鑰與服務商不匹配' }
     }
     const validatingStored = value === undefined
     const candidate = validatingStored ? await this.vault.get(accountFor(id)) : value
     const normalized = candidate ? normalizeCredential(candidate) : null
     if (!normalized) {
       return validatingStored
-        ? { state: 'missing', message: '尚未配置凭据' }
-        : { state: 'invalid', errorCode: 'CREDENTIAL_FORMAT_INVALID', message: '凭据不能为空或包含控制字符' }
+        ? { state: 'missing', message: '尚未配置憑據' }
+        : { state: 'invalid', errorCode: 'CREDENTIAL_FORMAT_INVALID', message: '憑據不能為空或包含控制字元' }
     }
 
     const settings = internalProviderSettings(options.settings ?? await this.repository.getSettings(this.defaultOutputRoot))
@@ -150,7 +150,7 @@ export class SettingsService {
       }
       return validation
     } catch {
-      return { state: 'unknown', errorCode: 'CREDENTIAL_VALIDATION_UNAVAILABLE', message: '暂时无法验证服务，请检查网络后重试' }
+      return { state: 'unknown', errorCode: 'CREDENTIAL_VALIDATION_UNAVAILABLE', message: '暫時無法驗證服務，請檢查網路後重試' }
     }
   }
 
@@ -168,7 +168,7 @@ export class SettingsService {
    * Mark a stored credential invalid after a runtime 401/403 response. For a
    * model provider this persists the keys the runtime has rejected; the others stay usable.
    */
-  async invalidateCredential(name: CredentialName, errorCode = 'CREDENTIAL_INVALID', message = '凭据已失效，请重新验证'): Promise<void> {
+  async invalidateCredential(name: CredentialName, errorCode = 'CREDENTIAL_INVALID', message = '憑據已失效，請重新驗證'): Promise<void> {
     if (name === 'parser') return this.invalidateKey('parser', errorCode, message)
     const connections = normalizeConnections((await this.repository.getSettings(this.defaultOutputRoot)).modelConnections)
     for (const connection of connections) {
@@ -179,7 +179,7 @@ export class SettingsService {
   }
 
   /** Persist one key's rejection (reported by the shared model runtime) without touching its siblings. */
-  async invalidateKey(id: CredentialId, errorCode = 'CREDENTIAL_INVALID', message = '凭据已失效，请重新验证'): Promise<void> {
+  async invalidateKey(id: CredentialId, errorCode = 'CREDENTIAL_INVALID', message = '憑據已失效，請重新驗證'): Promise<void> {
     if (id !== 'parser' && !isKeyId(id)) return
     const value = await this.vault.get(accountFor(id))
     if (!value) {
@@ -245,11 +245,11 @@ export class SettingsService {
       const normalized = normalizeCredential(mutation.value)
       const result: CredentialValidationResult = normalized
         ? await this.validateCredential(name, normalized, { settings: candidateSettings, ...(id === 'parser' ? {} : { connectionId: id }) })
-        : { state: 'invalid', errorCode: 'CREDENTIAL_FORMAT_INVALID', message: '凭据不能为空或包含控制字符' }
+        : { state: 'invalid', errorCode: 'CREDENTIAL_FORMAT_INVALID', message: '憑據不能為空或包含控制字元' }
       if (result.state !== 'valid' || !normalized) {
         keyErrors[id] = {
           code: result.errorCode ?? (result.state === 'unknown' ? 'CREDENTIAL_VALIDATION_UNAVAILABLE' : 'CREDENTIAL_INVALID'),
-          message: result.message ?? (result.state === 'unknown' ? '暂时无法验证服务，请检查网络后重试' : '凭据验证失败')
+          message: result.message ?? (result.state === 'unknown' ? '暫時無法驗證服務，請檢查網路後重試' : '憑據驗證失敗')
         }
         continue
       }
@@ -265,14 +265,14 @@ export class SettingsService {
             fingerprint: fingerprint(entry.value!),
             configFingerprint: configFingerprint(credentialProvider(entry.id), candidateSettings),
             state: 'valid' as const,
-            message: '凭据验证成功'
+            message: '憑據驗證成功'
           }
           this.validations.set(entry.id, validation)
           await this.persistValidation(entry.id, validation)
         }
         if (entry.id !== 'parser') sharedModelRuntime.reset(entry.id)
       } catch {
-        keyErrors[entry.id] = { code: 'CREDENTIAL_STORAGE_FAILED', message: '凭据存储失败，原有凭据未改变，请稍后重试' }
+        keyErrors[entry.id] = { code: 'CREDENTIAL_STORAGE_FAILED', message: '憑據儲存失敗，原有憑據未改變，請稍後重試' }
       }
     }
 
@@ -288,7 +288,7 @@ export class SettingsService {
         await this.forget(removed.connectionId)
         sharedModelRuntime.reset(removed.connectionId)
       } catch {
-        keyErrors[removed.connectionId] = { code: 'CREDENTIAL_STORAGE_FAILED', message: '密钥删除失败，请稍后重试' }
+        keyErrors[removed.connectionId] = { code: 'CREDENTIAL_STORAGE_FAILED', message: '金鑰刪除失敗，請稍後重試' }
         connections.push(removed)
       }
     }
@@ -405,13 +405,13 @@ function fingerprint(value: string): string {
 }
 
 function validationFromHealth(result: HealthResult): CredentialValidationResult {
-  if (result.ok) return { state: 'valid', message: '凭据验证成功' }
+  if (result.ok) return { state: 'valid', message: '憑據驗證成功' }
   const code = typeof result.code === 'string' ? result.code : String(result.code ?? '')
-  const unavailable = code === 'VALIDATION_UNAVAILABLE' || code === 'NETWORK_UNAVAILABLE' || code === 'PROXY_AUTH_REQUIRED' || /^HTTP_(?:408|429|5\d{2})$/u.test(code) || /(?:timeout|network|socket|econn|temporar|不可达|超时|代理)/iu.test(result.message)
-  if (unavailable) return { state: 'unknown', errorCode: 'CREDENTIAL_VALIDATION_UNAVAILABLE', message: result.message || '暂时无法验证服务，请检查网络后重试' }
+  const unavailable = code === 'VALIDATION_UNAVAILABLE' || code === 'NETWORK_UNAVAILABLE' || code === 'PROXY_AUTH_REQUIRED' || /^HTTP_(?:408|429|5\d{2})$/u.test(code) || /(?:timeout|network|socket|econn|temporar|不可達|超時|代理)/iu.test(result.message)
+  if (unavailable) return { state: 'unknown', errorCode: 'CREDENTIAL_VALIDATION_UNAVAILABLE', message: result.message || '暫時無法驗證服務，請檢查網路後重試' }
   if (code === 'PROVIDER_CONFIGURATION_INVALID') {
-    return { state: 'invalid', errorCode: code, message: result.message || '服务地址或模型配置不可用' }
+    return { state: 'invalid', errorCode: code, message: result.message || '服務地址或模型配置不可用' }
   }
   const invalidCode = code === 'A0202' ? 'PARSER_TOKEN_INVALID' : code === 'A0211' ? 'PARSER_TOKEN_EXPIRED' : 'CREDENTIAL_INVALID'
-  return { state: 'invalid', errorCode: invalidCode, message: result.message || '凭据验证失败' }
+  return { state: 'invalid', errorCode: invalidCode, message: result.message || '憑據驗證失敗' }
 }

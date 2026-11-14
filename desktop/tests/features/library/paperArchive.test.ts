@@ -37,18 +37,18 @@ describe("paperArchive", () => {
     it('follows the category order and the order of papers within each category', () => {
       const [a, b, c, d] = [paper(october), paper(october), paper(october), paper(october)]
       const shelves = groupPapersByCategory([a!, b!, c!, d!], [
-        { id: 'c-operators', name: '神经算子', paperIds: [c!.id, a!.id] },
-        { id: 'c-attention', name: '注意力机制', paperIds: [b!.id, 'deleted-paper'] }
+        { id: 'c-operators', name: '神經運算元', paperIds: [c!.id, a!.id] },
+        { id: 'c-attention', name: '注意力機制', paperIds: [b!.id, 'deleted-paper'] }
       ])
-      expect(shelves.map((shelf) => shelf.label)).toEqual(['神经算子', '注意力机制', '待分类'])
+      expect(shelves.map((shelf) => shelf.label)).toEqual(['神經運算元', '注意力機制', '待分類'])
       expect(shelves[0]!.papers).toEqual([c, a])
-      // A paper imported after the categories were computed waits in 待分类.
+      // A paper imported after the categories were computed waits in 待分類.
       expect(shelves[2]!.papers).toEqual([d])
     })
 
-    it('adds papers the categories do not know to an existing 待分类 shelf', () => {
+    it('adds papers the categories do not know to an existing 待分類 shelf', () => {
       const [a, b] = [paper(october), paper(october)]
-      const shelves = groupPapersByCategory([a!, b!], [{ id: 'pending', name: '待分类', paperIds: [a!.id] }])
+      const shelves = groupPapersByCategory([a!, b!], [{ id: 'pending', name: '待分類', paperIds: [a!.id] }])
       expect(shelves.map((shelf) => [shelf.key, shelf.papers.length])).toEqual([['pending', 2]])
     })
 
@@ -88,11 +88,11 @@ describe("paperArchive", () => {
   describe('paper archive columns', () => {
     it('keeps all papers in a large category in one looping column', () => {
       const papers = Array.from({ length: 37 }, () => paper(october))
-      const columns = buildArchiveColumns(papers, [{ id: 'c-big', name: '神经算子', paperIds: papers.map((item) => item.id) }])
+      const columns = buildArchiveColumns(papers, [{ id: 'c-big', name: '神經運算元', paperIds: papers.map((item) => item.id) }])
       expect(columns).toHaveLength(1)
-      expect(columns.every((column) => column.category === '神经算子')).toBe(true)
+      expect(columns.every((column) => column.category === '神經運算元')).toBe(true)
       expect(columns[0]!.papers).toEqual(papers)
-      expect(columns[0]!.label).toBe('神经算子')
+      expect(columns[0]!.label).toBe('神經運算元')
       expect(columns[0]!.key).toBe('c-big')
       expect(paperAt(columns, { lane: 0, row: 37 })).toBe(papers[0])
       expect(paperAt(columns, { lane: 0, row: -1 })).toBe(papers[36])
@@ -101,8 +101,8 @@ describe("paperArchive", () => {
 
     it('keeps small categories as single columns', () => {
       const [a, b] = [paper(october), paper(october)]
-      const columns = buildArchiveColumns([a!, b!], [{ id: 'c-x', name: '扩散模型', paperIds: [a!.id] }, { id: 'c-y', name: '图网络', paperIds: [b!.id] }])
-      expect(columns.map((column) => [column.key, column.label])).toEqual([['c-x', '扩散模型'], ['c-y', '图网络']])
+      const columns = buildArchiveColumns([a!, b!], [{ id: 'c-x', name: '擴散模型', paperIds: [a!.id] }, { id: 'c-y', name: '圖網路', paperIds: [b!.id] }])
+      expect(columns.map((column) => [column.key, column.label])).toEqual([['c-x', '擴散模型'], ['c-y', '圖網路']])
     })
   })
 
@@ -156,34 +156,34 @@ describe("paperProfile", () => {
 
   const TRANSLATED = [
     '# 注意力就是一切',
-    '阿希什·瓦斯瓦尼∗ 谷歌大脑',
+    '阿希什·瓦斯瓦尼∗ 谷歌大腦',
     '## 摘要',
-    '主流的序列转换模型基于复杂的循环网络。',
+    '主流的序列轉換模型基於複雜的迴圈網路。',
     '## 1 引言',
-    '## 3 模型架构',
-    '## 3.1 编码器与解码器堆栈',
-    '## 参考文献'
+    '## 3 模型架構',
+    '## 3.1 編碼器與解碼器堆疊',
+    '## 參考文獻'
   ].join('\n\n')
 
   describe('paper profile', () => {
     it('preserves maths and code in archive abstracts and headings while plain projection stays compatible', () => {
-      const source = '# 模型 $x_i$\n\n## 摘要\n\n求解 $a < b$，使用 \\(\\alpha_i\\) 与 `x_i`。\n\n## 1 估计 $N_{eff}$'
+      const source = '# 模型 $x_i$\n\n## 摘要\n\n求解 $a < b$，使用 \\(\\alpha_i\\) 與 `x_i`。\n\n## 1 估計 $N_{eff}$'
       const profile = extractPaperProfile(source, source, true)
       expect(profile.translatedTitle).toBe('模型 $x_i$')
-      expect(profile.translatedAbstract).toBe('求解 $a < b$，使用 $\\alpha_i$ 与 `x_i`。')
-      expect(profile.sections).toEqual(['1 估计 $N_{eff}$'])
-      expect(cleanInline('变量 $x_i$ 与 `x_i`')).toBe('变量 x_i 与 x_i')
-      expect(extractPaperProfile(source, source).sections).toEqual(['1 估计 N_{eff}'])
+      expect(profile.translatedAbstract).toBe('求解 $a < b$，使用 $\\alpha_i$ 與 `x_i`。')
+      expect(profile.sections).toEqual(['1 估計 $N_{eff}$'])
+      expect(cleanInline('變數 $x_i$ 與 `x_i`')).toBe('變數 x_i 與 x_i')
+      expect(extractPaperProfile(source, source).sections).toEqual(['1 估計 N_{eff}'])
     })
     it('decodes Markdown escapes without stripping literal underscores or mathematical text', () => {
-      expect(cleanInline('在 x\\_i 与 y\\_j 上编码函数，参考\\[5\\]，**加粗**与`a_b`。')).toBe('在 x_i 与 y_j 上编码函数，参考[5]，加粗与a_b。')
-      expect(cleanInline('公式 $x_i + y_j$ 与 $a < b$。')).toBe('公式 x_i + y_j 与 a < b。')
+      expect(cleanInline('在 x\\_i 與 y\\_j 上編碼函式，參考\\[5\\]，**加粗**與`a_b`。')).toBe('在 x_i 與 y_j 上編碼函式，參考[5]，加粗與a_b。')
+      expect(cleanInline('公式 $x_i + y_j$ 與 $a < b$。')).toBe('公式 x_i + y_j 與 a < b。')
       expect(cleanInline('Literal \\\\_path and https://example.com/a_b_c', true)).toBe('Literal \\_path and https://example.com/a_b_c')
     })
     it('preserves abstract link destinations in autolink, Markdown and HTML forms', () => {
       const url = 'https://github.com/hojonathanho/diffusion'
-      for (const link of [`<${url}>`, `[代码](${url})`, `<a href="${url}">代码</a>`, `<${url}/some_code_here>`]) {
-        const translated = `# 扩散模型\n\n## 摘要\n\n我们展示了图像合成结果，实现可见 ${link}。\n\n## 引言`
+      for (const link of [`<${url}>`, `[程式碼](${url})`, `<a href="${url}">程式碼</a>`, `<${url}/some_code_here>`]) {
+        const translated = `# 擴散模型\n\n## 摘要\n\n我們展示了影象合成結果，實現可見 ${link}。\n\n## 引言`
         expect(extractPaperProfile('', translated).translatedAbstract).toContain(link.includes('some_code_here') ? `${url}/some_code_here` : url)
       }
     })
@@ -193,9 +193,9 @@ describe("paperProfile", () => {
       expect(profile.translatedTitle).toBe('注意力就是一切')
       expect(profile.authors).toBe('Ashish Vaswani Google Brain；Noam Shazeer Google Brain')
       expect(profile.abstract).toBe('The dominant sequence transduction models are based on complex recurrent networks. We propose a new simple network architecture, the Transformer.')
-      expect(profile.translatedAbstract).toBe('主流的序列转换模型基于复杂的循环网络。')
+      expect(profile.translatedAbstract).toBe('主流的序列轉換模型基於複雜的迴圈網路。')
       expect(profile.keywords).toEqual(['attention', 'sequence modeling', 'machine translation'])
-      expect(profile.sections).toEqual(['1 引言', '3 模型架构'])
+      expect(profile.sections).toEqual(['1 引言', '3 模型架構'])
     })
 
     it('counts figures, tables, equations and references from the source', () => {
@@ -235,7 +235,7 @@ describe("paperProfile", () => {
         expect(extractPaperProfile(`# Paper\n\nA. Author\n\n## ${heading}\n\n${abstract}`)).toMatchObject({authors: 'A. Author', abstract: null})
       }
       expect(extractPaperProfile('# Paper\n\nReceived: 6 July 2025\n\n' + 'Neural operators approximate PDE solution families with learned representations across multiple spatial scales. '.repeat(5)).authors).toBeNull()
-      expect(extractPaperProfile('# 中文论文\n\n张三，李四\n\n## 摘要\n\n本文研究具体问题。').authors).toBe('张三，李四')
+      expect(extractPaperProfile('# 中文論文\n\n張三，李四\n\n## 摘要\n\n本文研究具體問題。').authors).toBe('張三，李四')
     })
 
     it('returns empty facts for an empty document', () => {

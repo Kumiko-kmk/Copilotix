@@ -39,7 +39,7 @@ export class ZoteroExportService {
     for (const documentId of new Set(request.documentIds)) {
       const document = await this.deps.getDocument(documentId)
       if (!document) {
-        result.failed.push({ name: documentId, message: '论文不存在' })
+        result.failed.push({ name: documentId, message: '論文不存在' })
         continue
       }
       try {
@@ -68,7 +68,7 @@ export class ZoteroExportService {
           } catch (error) {
             // The item exists in Zotero now; record it so a retry does not create a second one.
             await this.record(document.outputDir, 'item')
-            throw new Error(`条目已在 Zotero 建立，但 PDF 未能附上：${error instanceof Error ? error.message : String(error)}`)
+            throw new Error(`條目已在 Zotero 建立，但 PDF 未能附上：${error instanceof Error ? error.message : String(error)}`)
           }
         }
         await this.record(document.outputDir, link ? 'note' : 'item')
@@ -86,16 +86,16 @@ export class ZoteroExportService {
 
 export function buildZoteroNoteHtml(content: ZoteroExportContent, link?: ZoteroLink): string {
   const parts = [`<h1>Copilotix：${escapeHtml(content.title)}</h1>`]
-  if (link) parts.push(`<p><a href="zotero://select/library/items/${link.itemKey}">打开 Zotero 原条目</a></p>`)
-  if (content.translatedTitle) parts.push('<h2>译名</h2>', `<p>${escapeHtml(content.translatedTitle)}</p>`)
-  if (content.summary) parts.push('<h2>AI 总结</h2>', `<p>${escapeHtml(content.summary)}</p>`)
+  if (link) parts.push(`<p><a href="zotero://select/library/items/${link.itemKey}">開啟 Zotero 原條目</a></p>`)
+  if (content.translatedTitle) parts.push('<h2>譯名</h2>', `<p>${escapeHtml(content.translatedTitle)}</p>`)
+  if (content.summary) parts.push('<h2>AI 總結</h2>', `<p>${escapeHtml(content.summary)}</p>`)
   const highlights = content.highlights.slice(0, MAX_HIGHLIGHTS)
   if (highlights.length > 0) {
-    parts.push('<h2>高亮</h2>', '<ul>', ...highlights.map((item) => `<li>${item.view === 'translated' ? '［译文］' : ''}${escapeHtml(clip(item.quote))}</li>`), '</ul>')
-    if (content.highlights.length > MAX_HIGHLIGHTS) parts.push(`<p>另有 ${content.highlights.length - MAX_HIGHLIGHTS} 条高亮未导出</p>`)
+    parts.push('<h2>高亮</h2>', '<ul>', ...highlights.map((item) => `<li>${item.view === 'translated' ? '［譯文］' : ''}${escapeHtml(clip(item.quote))}</li>`), '</ul>')
+    if (content.highlights.length > MAX_HIGHLIGHTS) parts.push(`<p>另有 ${content.highlights.length - MAX_HIGHLIGHTS} 條高亮未匯出</p>`)
   }
   if (content.notes.length > 0) {
-    parts.push('<h2>笔记</h2>')
+    parts.push('<h2>筆記</h2>')
     for (const note of content.notes) parts.push(`<blockquote>${escapeHtml(clip(note.quote))}</blockquote>`, `<p>${escapeHtml(note.body).replace(/\n/gu, '<br>')}</p>`)
   }
   return parts.join('')

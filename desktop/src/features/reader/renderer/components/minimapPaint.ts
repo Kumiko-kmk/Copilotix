@@ -49,7 +49,7 @@ export function paintMarkdownMinimap(
   for (const run of content.textRuns) {
     context.globalAlpha = run.tone === 'heading' ? 0.82 : run.tone === 'code' ? 0.62 : 0.48
     context.fillStyle = run.tone === 'body' ? mutedColor : textColor
-    const family = run.tone === 'code' ? 'Consolas, "SFMono-Regular", monospace' : 'Inter, "Microsoft YaHei UI", sans-serif'
+    const family = run.tone === 'code' ? 'Consolas, "SFMono-Regular", monospace' : 'Inter, "DFKai-SB", BiauKai, "Microsoft JhengHei", sans-serif'
     context.font = `${run.fontStyle} ${run.fontWeight} ${run.fontSize}px ${family}`
     context.fillText(run.text, run.left, run.baseline, run.width)
   }

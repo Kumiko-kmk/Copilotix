@@ -19,7 +19,7 @@ export function usePaperInsight(documentId: string, source?: PaperInsightSource)
     }
     const stop = source.subscribe((id, next) => { if (id === documentId) { updated = true; accept(next) } })
     source.get(documentId).then((next) => { if (!updated) accept(next) }, () => {
-      if (!updated) accept({ status: 'failed', error: '无法读取本地档案卡，请重试。' })
+      if (!updated) accept({ status: 'failed', error: '無法讀取本地檔案卡，請重試。' })
     })
     return () => { generation.current++; stop() }
   }, [documentId, source])
@@ -28,7 +28,7 @@ export function usePaperInsight(documentId: string, source?: PaperInsightSource)
     const version = generation.current
     setState({ status: 'generating' })
     source.generate(documentId).catch(() => {
-      if (generation.current === version) setState({ status: 'failed', error: '无法开始生成，请稍后重试。' })
+      if (generation.current === version) setState({ status: 'failed', error: '無法開始生成，請稍後重試。' })
     })
   }
   return { state, ready, generate }

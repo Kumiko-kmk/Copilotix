@@ -36,12 +36,12 @@ it('renders all legacy v1 fields and preserves navigation and saved data', async
   const original = JSON.stringify(insight)
   const onOpen = vi.fn()
   const onPage = vi.fn()
-  const view = render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-14T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="测试" fileNumber={1} phase="open" onPage={onPage} onClose={vi.fn()} onOpen={onOpen} insights={source} />)
-  fireEvent.click(await screen.findByRole('tab', { name: /AI 解读/u }))
+  const view = render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-14T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="測試" fileNumber={1} phase="open" onPage={onPage} onClose={vi.fn()} onOpen={onOpen} insights={source} />)
+  fireEvent.click(await screen.findByRole('tab', { name: /AI 解讀/u }))
   await vi.waitFor(() => expect(view.container.querySelectorAll('.paper-archive-insight .katex')).toHaveLength(6))
-  expect(view.container.textContent).toContain('论文内容已更新')
+  expect(view.container.textContent).toContain('論文內容已更新')
   expect(view.container.querySelector('p p, dd p, li p')).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: /打开阅读/u }))
+  fireEvent.click(screen.getByRole('button', { name: /開啟閱讀/u }))
   expect(onOpen).toHaveBeenCalledOnce()
   expect(JSON.stringify(insight)).toBe(original)
   expect(onPage).not.toHaveBeenCalled()
@@ -56,19 +56,19 @@ it('shows generated abstract, paper background, core work and discussion on four
     get: async () => ({ status: 'ready', brief, anchors: [{ id: 'E1', section: 'Paper', text: 'Original evidence.' }], stale: false, promptOutdated: false }),
     generate: async () => undefined, subscribe: () => () => undefined
   }
-  const view = render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-15T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="测试" fileNumber={1} phase="open" onPage={vi.fn()} onClose={vi.fn()} onOpen={vi.fn()} insights={source} />)
-  await screen.findByRole('tab', { name: /讨论/u })
+  const view = render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-15T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="測試" fileNumber={1} phase="open" onPage={vi.fn()} onClose={vi.fn()} onOpen={vi.fn()} insights={source} />)
+  await screen.findByRole('tab', { name: /討論/u })
   expect(screen.getAllByRole('tab')).toHaveLength(4)
   expect(screen.getByRole('tabpanel').textContent).toContain(briefGeneration.analysis.abstract)
   fireEvent.click(screen.getByRole('tab', { name: /背景/u }))
   expect(view.container.querySelectorAll('.paper-archive-reading-points > li')).toHaveLength(3)
-  fireEvent.click(screen.getByRole('tab', { name: /结论/u }))
+  fireEvent.click(screen.getByRole('tab', { name: /結論/u }))
   expect(view.container.querySelectorAll('.paper-archive-reading-points > li')).toHaveLength(3)
-  fireEvent.click(screen.getAllByText(/原文依据/u)[0]!)
+  fireEvent.click(screen.getAllByText(/原文依據/u)[0]!)
   expect(view.container.textContent).toContain('Original evidence.')
-  fireEvent.click(screen.getByRole('tab', { name: /讨论/u }))
+  fireEvent.click(screen.getByRole('tab', { name: /討論/u }))
   expect(screen.getByRole('tabpanel').textContent).toContain(briefGeneration.analysis.discussion.progress)
-  expect(view.container.textContent).not.toMatch(/研究进展以论文所述范围为准|依据提供的全文生成|全文已提供，部分证据仍缺失/u)
+  expect(view.container.textContent).not.toMatch(/研究進展以論文所述範圍為準|依據提供的全文生成|全文已提供，部分證據仍缺失/u)
   expect(view.container.querySelector('p p, h3 p, h4 p')).toBeNull()
 })
 
@@ -82,7 +82,7 @@ it('uses saved model authors only when the local byline is missing and the sourc
   const renderSource = (stale: boolean) => {
     const source: PaperInsightSource = { get: async () => ({ status: 'ready', brief, anchors: [], stale, promptOutdated: false }),
       generate: async () => undefined, subscribe: () => () => undefined }
-    return render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-16T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="测试" fileNumber={1} phase="open" onPage={vi.fn()} onClose={vi.fn()} onOpen={vi.fn()} insights={source} />)
+    return render(<ArchiveDetail paper={{ id: '00000000-0000-4000-8000-000000000001', displayName: 'Paper.pdf', originalName: 'Paper.pdf', createdAt: '2026-10-16T00:00:00Z', workflow: { status: 'completed', progress: 100, activeJobKind: null, error: null } }} category="測試" fileNumber={1} phase="open" onPage={vi.fn()} onClose={vi.fn()} onOpen={vi.fn()} insights={source} />)
   }
   let view = renderSource(false)
   await vi.waitFor(() => expect(view.container.querySelector('.paper-archive-fields dd')?.textContent).toBe('alice smith; bob jones'))
@@ -93,6 +93,6 @@ it('uses saved model authors only when the local byline is missing and the sourc
   view.unmount()
   query.data = { ...query.data, markdown }
   view = renderSource(true)
-  await screen.findByRole('tab', { name: /讨论/u })
-  expect(view.container.querySelector('.paper-archive-fields dd')?.textContent).toBe('未识别')
+  await screen.findByRole('tab', { name: /討論/u })
+  expect(view.container.querySelector('.paper-archive-fields dd')?.textContent).toBe('未識別')
 })

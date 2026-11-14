@@ -8,7 +8,7 @@ export class RagContentIndexJobRunner implements JobRunner {
 
   async run(input: JobRunnerInput): Promise<JobRunnerResult> {
     const revisionId = readRevisionId(input.job.payload)
-    if (!revisionId) throw new JobRunnerError('内容版本标识缺失', 'RAG_CONTENT_REVISION_REQUIRED', false)
+    if (!revisionId) throw new JobRunnerError('內容版本標識缺失', 'RAG_CONTENT_REVISION_REQUIRED', false)
     if (input.signal.aborted) throw abortError()
     await input.updateProgress(20, { ...input.job.checkpoint, phase: 'chunking', contentRevisionId: revisionId })
     try {
@@ -25,9 +25,9 @@ export class RagContentIndexJobRunner implements JobRunner {
       if (error instanceof JobRunnerError) throw error
       if (error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string' && typeof (error as { retryable?: unknown }).retryable === 'boolean') {
         const typed = error as { code: string; retryable: boolean; message?: string }
-        throw new JobRunnerError(typed.message ?? '内容索引失败', typed.code, typed.retryable)
+        throw new JobRunnerError(typed.message ?? '內容索引失敗', typed.code, typed.retryable)
       }
-      throw new JobRunnerError(error instanceof Error ? error.message : '内容索引失败', 'RAG_CONTENT_INDEX_FAILED', false)
+      throw new JobRunnerError(error instanceof Error ? error.message : '內容索引失敗', 'RAG_CONTENT_INDEX_FAILED', false)
     }
   }
 }

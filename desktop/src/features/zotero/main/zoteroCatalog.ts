@@ -70,10 +70,10 @@ export async function readLocalApiSnapshot(profile: ZoteroProfile, fetchImpl: ty
         signal: AbortSignal.timeout(LOCAL_API_TIMEOUT_MS)
       })
     } catch {
-      throw new ZoteroUnavailableError('Zotero 未运行')
+      throw new ZoteroUnavailableError('Zotero 未執行')
     }
-    if (response.status === 403) throw new ZoteroUnavailableError('Zotero 未开启“允许其他应用程序与 Zotero 通信”')
-    if (!response.ok) throw new ZoteroUnavailableError(`Zotero 本机接口返回 ${response.status}`)
+    if (response.status === 403) throw new ZoteroUnavailableError('Zotero 未開啟“允許其他應用程式與 Zotero 通訊”')
+    if (!response.ok) throw new ZoteroUnavailableError(`Zotero 本機介面返回 ${response.status}`)
     return await response.json() as T
   }
   const [collections, items] = await Promise.all([
@@ -149,7 +149,7 @@ export async function readSqliteSnapshot(profile: ZoteroProfile, tempRoot: strin
   try {
     await stat(source)
   } catch {
-    throw new ZoteroUnavailableError(`未找到 Zotero 数据库：${source}`)
+    throw new ZoteroUnavailableError(`未找到 Zotero 資料庫：${source}`)
   }
   const workDir = join(tempRoot, `zotero-snapshot-${randomUUID()}`)
   await mkdir(workDir, { recursive: true })
@@ -174,7 +174,7 @@ type Row = Record<string, unknown>
 function querySnapshot(database: DatabaseSync, profile: ZoteroProfile): Omit<ZoteroSnapshot, 'fallbackReason'> {
   const all = (sql: string, ...params: Array<string | number>): Row[] => database.prepare(sql).all(...params) as Row[]
   const library = all("SELECT libraryID FROM libraries WHERE type = 'user' ORDER BY libraryID LIMIT 1")[0]
-  if (!library) throw new ZoteroUnavailableError('Zotero 数据库中没有“我的文库”')
+  if (!library) throw new ZoteroUnavailableError('Zotero 資料庫中沒有“我的文庫”')
   const libraryID = Number(library.libraryID)
 
   const collections = all(`

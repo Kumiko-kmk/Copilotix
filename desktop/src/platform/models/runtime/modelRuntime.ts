@@ -6,7 +6,7 @@ export class ModelConnectionUnavailable extends Error {
   readonly code = 'MODEL_CONNECTION_UNAVAILABLE'
   readonly retryable = false
   constructor(readonly connectionId: string, readonly nextAllowedAt: number, readonly reason: string) {
-    super(reason === 'credentials' ? '模型凭据已失效，请重新验证' : '模型连接暂不可用，已跳过本次请求')
+    super(reason === 'credentials' ? '模型憑據已失效，請重新驗證' : '模型連線暫不可用，已跳過本次請求')
   }
 }
 interface Entry extends ConnectionHealth { config: string; probe?: Promise<void>; release?: () => void }

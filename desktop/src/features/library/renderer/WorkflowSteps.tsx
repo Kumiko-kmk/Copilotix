@@ -3,10 +3,10 @@ import type { DocumentSummary } from '../contract/documentSchemas'
 import { workflowSteps, workflowSummaryText, type WorkflowStepState } from './documentStatus'
 
 const STATE_TEXT: Record<WorkflowStepState, string> = {
-  done: '已完成', active: '进行中', waiting: '未开始', failed: '失败', partial: '部分完成'
+  done: '已完成', active: '進行中', waiting: '未開始', failed: '失敗', partial: '部分完成'
 }
 
-/** "上传 → 解析 → 翻译 n/总数", with the current step marked; the whole line is one status for screen readers. */
+/** "上傳 → 解析 → 翻譯 n/總數", with the current step marked; the whole line is one status for screen readers. */
 export default function WorkflowSteps(props: { workflow: DocumentSummary['workflow']; className?: string }): React.JSX.Element {
   const steps = workflowSteps(props.workflow)
   return (

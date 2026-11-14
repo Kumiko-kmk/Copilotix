@@ -56,7 +56,7 @@ export const BRIEF_COUNTS = {
 
 /** Fresh output (first try and repair alike) may miss a range by ±15% before a repair or fallback is requested (user decision 2026-10-22). */
 const TOLERANCE = { below: 0.85, above: 1.15 }
-const MISSING = /^原文未说明/u
+const MISSING = /^原文未說明/u
 const WHITESPACE = /\s/u
 const FULL_WIDTH = /[\p{Script=Han}\u3000-\u303f\uff00-\uffef]/u
 
@@ -73,20 +73,20 @@ export function displayLength(text: string): number {
 export const rangeText = (range: Range): string => range[0] ? `${range[0]}–${range[1]}字` : `≤${range[1]}字`
 
 /**
- * Problems with the lengths and counts of fresh output, phrased as repair hints. "原文未说明" is
+ * Problems with the lengths and counts of fresh output, phrased as repair hints. "原文未說明" is
  * always accepted as short: the model must never pad or invent to reach a minimum.
  */
 export function checkBriefLengths(content: PaperBriefContent): string[] {
   const problems: string[] = []
   const field = (path: string, value: string, [min, max]: Range): void => {
     const length = displayLength(value)
-    if (length > max * TOLERANCE.above) problems.push(`${path}：${length} 字，超过 ${max} 字上限，请精简`)
-    else if (min && length < min * TOLERANCE.below && !MISSING.test(value.trim())) problems.push(`${path}：${length} 字，少于 ${min} 字，请依据摘录补充具体内容（摘录确实没有时写“原文未说明”）`)
+    if (length > max * TOLERANCE.above) problems.push(`${path}：${length} 字，超過 ${max} 字上限，請精簡`)
+    else if (min && length < min * TOLERANCE.below && !MISSING.test(value.trim())) problems.push(`${path}：${length} 字，少於 ${min} 字，請依據摘錄補充具體內容（摘錄確實沒有時寫“原文未說明”）`)
   }
   // Lists that depend on what the paper states (limitations, open questions…) only have a maximum.
   const count = (path: string, items: readonly unknown[], [min, max]: Range, soft = false): void => {
-    if (!soft && items.length < min) problems.push(`${path}：${items.length} 项，至少 ${min} 项`)
-    if (items.length > max) problems.push(`${path}：${items.length} 项，至多 ${max} 项`)
+    if (!soft && items.length < min) problems.push(`${path}：${items.length} 項，至少 ${min} 項`)
+    if (items.length > max) problems.push(`${path}：${items.length} 項，至多 ${max} 項`)
   }
   if (content.analysis) {
     const analysis = content.analysis
@@ -95,14 +95,14 @@ export function checkBriefLengths(content: PaperBriefContent): string[] {
       const length = displayLength(value)
       if (!MISSING.test(value.trim()) && (length < min * TOLERANCE.below || length > max * TOLERANCE.above)) {
         const target = Math.round((min + max) / 2)
-        problems.push(`${path}：${length} 字，请调整为 ${min}–${max} 字；本轮目标 ${target} 字，需${length > max ? '删减' : '依据原文补充'}约 ${Math.abs(length - target)} 字`)
+        problems.push(`${path}：${length} 字，請調整為 ${min}–${max} 字；本輪目標 ${target} 字，需${length > max ? '刪減' : '依據原文補充'}約 ${Math.abs(length - target)} 字`)
       }
     }
     exact('analysis.abstract', analysis.abstract, ARCHIVE_LENGTHS.abstract)
     const background = backgroundPoints(analysis.background)
     if (!MISSING.test(analysis.background.trim())) {
       count('analysis.background', background, [3, 3])
-      if (background.some(item => !item.title)) problems.push('analysis.background：用三个“短标题：正文”段落分点，段落之间用两个换行分隔')
+      if (background.some(item => !item.title)) problems.push('analysis.background：用三個“短標題：正文”段落分點，段落之間用兩個換行分隔')
       background.forEach((item, index) => exact(`analysis.background.${index}`, item.text, ARCHIVE_LENGTHS.backgroundPoint))
       exact('analysis.background.total', background.map(item => item.text).join(''), ARCHIVE_LENGTHS.background)
     }

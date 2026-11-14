@@ -45,7 +45,7 @@ export function createReleaseLayout({ repositoryRoot, buildId, releaseName, rele
     releaseName,
     setupName: setupNameForRelease(releaseName),
     setupPath: join(root, `.release-next-${buildId}`, setupNameForRelease(releaseName)),
-    instructionsPath: join(root, `.release-next-${buildId}`, '安装说明.txt'),
+    instructionsPath: join(root, `.release-next-${buildId}`, '安裝說明.txt'),
     advancedDirectory: join(root, `.release-next-${buildId}`, 'advanced'),
     builderOutput: join(root, `.release-next-${buildId}`, 'builder'),
     runtimeDirectory: join(root, `.release-next-${buildId}`, 'artifacts', 'program'),
@@ -79,7 +79,7 @@ export function assertReleaseLayout(layout) {
   if (layout.artifactsRelativeDirectory !== `../release-artifacts/${stagingBuildId}`) throw new Error('Artifact reference does not match build id')
   assertExactChild(layout.stagingRoot, layout.stagedArtifactsDirectory, 'artifacts')
   assertChild(layout.stagingRoot, layout.builderOutput, 'builder output')
-  assertExactChild(layout.stagingRoot, layout.instructionsPath, '安装说明.txt')
+  assertExactChild(layout.stagingRoot, layout.instructionsPath, '安裝說明.txt')
   assertExactChild(layout.stagingRoot, layout.advancedDirectory, 'advanced')
   assertExactChild(layout.stagedArtifactsDirectory, layout.runtimeDirectory, 'program')
   assertExactChild(layout.stagingRoot, layout.launcherPath, 'uninstall.exe')

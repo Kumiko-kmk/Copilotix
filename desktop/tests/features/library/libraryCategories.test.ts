@@ -6,19 +6,19 @@ import { libraryCategoriesPageSchema, LIBRARY_CATEGORY_PAGE_SIZE, type LibraryCa
 
 const id = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const TOPICS = {
-  operators: '神经算子 求解 偏微分方程 傅里叶 算子学习 边界条件 网格 泛化 流体 物理信息',
-  attention: '注意力 机制 序列 翻译 编码器 解码器 自注意力 位置编码 词元 语言',
-  diffusion: '扩散 去噪 采样 生成模型 噪声 图像 似然 变分 马尔可夫链 先验'
+  operators: '神經運算元 求解 偏微分方程 傅立葉 運算元學習 邊界條件 網格 泛化 流體 物理資訊',
+  attention: '注意力 機制 序列 翻譯 編碼器 解碼器 自注意力 位置編碼 詞元 語言',
+  diffusion: '擴散 去噪 取樣 生成模型 噪聲 影象 似然 變分 馬爾可夫鏈 先驗'
 } as const
 
 function source(n: number, topic: keyof typeof TOPICS, extra = '', area: string | null = null): CategorySource {
   // Each paper repeats its topic words and adds a few of its own, as real papers do.
-  return { id: id(n), createdAt: `2026-10-${String(n).padStart(2, '0')}T00:00:00.000Z`, terms: categoryTerms(`${TOPICS[topic]} ${TOPICS[topic]} ${extra} 论文${n}专有术语${n}`), area }
+  return { id: id(n), createdAt: `2026-10-${String(n).padStart(2, '0')}T00:00:00.000Z`, terms: categoryTerms(`${TOPICS[topic]} ${TOPICS[topic]} ${extra} 論文${n}專有術語${n}`), area }
 }
 
 describe('library categories', () => {
   it('tokenises Chinese words and Latin words, without formulas or LaTeX commands', () => {
-    const terms = categoryTerms('Transformer 使用自注意力机制。$\\mathbf{x}$ \\lambda 傅里叶神经算子')
+    const terms = categoryTerms('Transformer 使用自注意力機制。$\\mathbf{x}$ \\lambda 傅立葉神經運算元')
     expect(terms.has('transformer')).toBe(true)
     expect(terms.has('注意力')).toBe(true)
     expect([...terms.keys()].some((term) => /mathbf|lambda/u.test(term))).toBe(false)
@@ -42,19 +42,19 @@ describe('library categories', () => {
 
   it('names a group after its file cards when they have one, and keeps unreadable papers aside', () => {
     const sources = [
-      ...[1, 2, 3].map((n) => source(n, 'operators', '', n === 2 ? '神经算子与偏微分方程' : null)),
+      ...[1, 2, 3].map((n) => source(n, 'operators', '', n === 2 ? '神經運算元與偏微分方程' : null)),
       ...[4, 5, 6].map((n) => source(n, 'attention')),
       { id: id(7), createdAt: '2026-10-07T00:00:00.000Z', terms: null, area: null }
     ]
     const categories = classifyLibrary(sources)
-    expect(categories.find((category) => category.paperIds.includes(id(1)))).toMatchObject({ name: '神经算子与偏微分方程', named: 'brief' })
-    expect(categories.at(-1)).toMatchObject({ id: 'pending', name: '待分类', named: 'pending', paperIds: [id(7)] })
+    expect(categories.find((category) => category.paperIds.includes(id(1)))).toMatchObject({ name: '神經運算元與偏微分方程', named: 'brief' })
+    expect(categories.at(-1)).toMatchObject({ id: 'pending', name: '待分類', named: 'pending', paperIds: [id(7)] })
   })
 
-  it('keeps a tiny library in one 全部论文 category, newest first like the interim view', () => {
-    const categories = classifyLibrary([source(1, 'operators', '', '神经算子'), source(2, 'attention')])
+  it('keeps a tiny library in one 全部論文 category, newest first like the interim view', () => {
+    const categories = classifyLibrary([source(1, 'operators', '', '神經運算元'), source(2, 'attention')])
     expect(categories).toHaveLength(1)
-    expect(categories[0]).toMatchObject({ name: '全部论文', paperIds: [id(2), id(1)] })
+    expect(categories[0]).toMatchObject({ name: '全部論文', paperIds: [id(2), id(1)] })
   })
 
   it('pages one revision and re-reads only papers whose text changed', async () => {

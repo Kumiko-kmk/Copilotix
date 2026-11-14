@@ -45,13 +45,13 @@ async function main() {
         await page.waitForFunction(ids => [...document.querySelectorAll('.markdown-block.active')].some(e => e.getAttribute('data-block-ids') === ids), candidate)
         await page.screenshot({ path: join(reportDir, 'reader-linked-paragraph.png') })
         result.linkingVerified = true
-        const pageNumber = await page.getByLabel('跳转到页', { exact: true }).innerText()
+        const pageNumber = await page.getByLabel('跳轉到頁', { exact: true }).innerText()
         const totalPages = Number(pageNumber.split('/')[1].trim())
-        await page.getByLabel('跳转到页', { exact: true }).click()
-        await page.getByLabel('PDF 页码', { exact: true }).fill(String(totalPages))
+        await page.getByLabel('跳轉到頁', { exact: true }).click()
+        await page.getByLabel('PDF 頁碼', { exact: true }).fill(String(totalPages))
         console.log('Checking PDF final page', totalPages)
         const jumpStarted = Date.now()
-        await page.getByLabel('PDF 页码', { exact: true }).press('Enter')
+        await page.getByLabel('PDF 頁碼', { exact: true }).press('Enter')
         await page.waitForFunction(last => {
           const canvas = document.querySelector(`[data-pdf-page="${last}"] canvas`)
           return canvas && canvas.width > 0

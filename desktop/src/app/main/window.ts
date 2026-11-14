@@ -72,7 +72,7 @@ export class AppShell {
     this.tray.setToolTip(app.getName())
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: `打开 ${app.getName()}`, click: () => this.show() },
+        { label: `開啟 ${app.getName()}`, click: () => this.show() },
         {
           label: '退出',
           click: () => {
@@ -141,7 +141,7 @@ export class AppShell {
   /** The window behind an IPC request, which must be one of the app's own. */
   requestWindow(event: IpcInvokeEventLike): BrowserWindow {
     const window = BrowserWindow.fromWebContents(event.sender as Electron.WebContents)
-    if (!window || !this.windows().includes(window)) throw new Error('窗口操作来源无效')
+    if (!window || !this.windows().includes(window)) throw new Error('視窗操作來源無效')
     return window
   }
 }
@@ -160,7 +160,7 @@ export function registerWindowIpc(ipc: IpcRegistrar, appShell: AppShell): void {
       else window.maximize()
     }
     else if (action === 'close') window.close()
-    else throw new Error('不支持的窗口操作')
+    else throw new Error('不支援的視窗操作')
     return windowState(window)
   })
   ipc.handle(windowChannels.openDocument, (_event, documentId) => { appShell.openDocumentWindow(documentId) })

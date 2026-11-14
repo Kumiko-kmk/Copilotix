@@ -128,7 +128,7 @@ export async function renderPdfFirstPage(url: string): Promise<DetailPage> {
       canvas.width = Math.round(viewport.width)
       canvas.height = Math.round(viewport.height)
       const context = canvas.getContext('2d', { alpha: false })
-      if (!context) throw new Error('无法创建论文首页画布')
+      if (!context) throw new Error('無法建立論文首頁畫布')
       await page.render({ canvas, canvasContext: context, viewport, background: 'rgb(255,255,255)' }).promise
       return { canvas, pages: document.numPages }
     } finally {
@@ -150,7 +150,7 @@ export function drawTextPage(title: string, abstract: string | null): DetailPage
   context.fillRect(0, 0, width, PAGE_PIXEL_HEIGHT)
   const margin = 110
   let y = 230
-  const font = '"Microsoft YaHei UI", "PingFang SC", Georgia, serif'
+  const font = '"DFKai-SB", BiauKai, "Microsoft JhengHei", Georgia, serif'
   context.fillStyle = '#1f1b16'
   context.font = `700 52px ${font}`
   y = wrapText(context, title, margin, y, width - margin * 2, 70, 4)
